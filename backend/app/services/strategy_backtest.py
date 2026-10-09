@@ -39,6 +39,10 @@ def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | 
     return "sell" if tp < entry < sl else None
 
 _MIN_TRADES = 10
+# The intraday mean_reversion_vwap backtest's per-bar window, unchanged by
+# STOCKS-HORIZON-T1 H1: intraday paths keep their windows (its anchored VWAP
+# is computed over the whole window, so the length moves its levels).
+_INTRADAY_SIGNAL_WINDOW = 350
 _MIN_WIN_RATE = 0.45
 _MIN_EXPECTANCY = 0.0
 
@@ -96,7 +100,7 @@ def run_strategy_backtest(
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
-        mean_reversion_vwap_daily_signal,
+        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -120,6 +124,7 @@ def run_strategy_backtest(
     if entry_start is not None and not isinstance(df.index, pd.DatetimeIndex):
         return _empty_result(strategy, direction, "entry_start needs dated bars")
     fn = _signal_fn
+    _window = _INTRADAY_SIGNAL_WINDOW if strategy == "mean_reversion_vwap" else SIGNAL_WINDOW_BARS
 
     # WFO's train_fold (walk_forward.py:212) passes ONLY the search-grid combo as
     # `params` — never the `active:` block — so any exit parameter absent from the
@@ -146,11 +151,12 @@ def run_strategy_backtest(
                 return
             if entry_start is not None and self.data.index[-1].date() < entry_start:
                 return  # warm-up bar: indicators prime, no entry (fix #2)
-            # Only the trailing window is needed (mean_reversion_bb needs ~225+ bars
-            # with trend_sma:200 headroom — the largest of the five strategies).
-            # Capping at 350 avoids rebuilding the full history every bar (was O(n²)
-            # over a 5-year scan per symbol).
-            start = max(0, n - 350)
+            # A daily signal gets exactly the window the live scan, Analysis and
+            # the watches give it: SIGNAL_WINDOW_BARS (STOCKS-HORIZON-T1 H1; was
+            # 350 here and 120 live). The cap also avoids rebuilding the full
+            # history every bar (was O(n²) over a 5-year scan per symbol); under
+            # it the slice starts at bar 0, never a negative index.
+            start = max(0, n - _window)
             slice_bars = [
                 {"open": float(self.data.Open[i]), "high": float(self.data.High[i]),
                  "low": float(self.data.Low[i]),   "close": float(self.data.Close[i]),

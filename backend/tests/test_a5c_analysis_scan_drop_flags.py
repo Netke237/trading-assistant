@@ -302,11 +302,14 @@ async def test_t4_multi_is_evaluated_for_real_and_backtested_like_the_scan(monke
     n_scan_calls = len(calls)
     core = await _analyze(**_MULTI)
 
-    # Both legs hand every variant the identical 120 daily bars, no current_price.
+    # Both legs hand every variant the identical last SIGNAL_WINDOW_BARS daily
+    # bars (STOCKS-HORIZON-T1 H1; all 300 here), no current_price.
+    from app.services.strategy_engine import SIGNAL_WINDOW_BARS
+    assert len(_BARS) < SIGNAL_WINDOW_BARS
     assert n_scan_calls == 3 and len(calls) == 6
     for c in calls:
-        assert len(c["bars"]) == 120
-        assert c["bars"][0] is _BARS[-120] and c["bars"][-1] is _BARS[-1]
+        assert len(c["bars"]) == len(_BARS)
+        assert c["bars"][0] is _BARS[0] and c["bars"][-1] is _BARS[-1]
         assert "current_price" not in c["kw"]
     assert [c["name"] for c in calls[:3]] == [c["name"] for c in calls[3:]]
 

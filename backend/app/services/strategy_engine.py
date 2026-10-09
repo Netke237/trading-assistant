@@ -4,6 +4,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal
 
+# STOCKS-HORIZON-T1 H1: every caller of a DAILY-bar strategy signal function
+# (live scan single + multi, Analysis, strategy watch entry and reversal, daily
+# composite confirmations, the backtest's per-bar slice, the tuner) hands it at
+# most the last SIGNAL_WINDOW_BARS bars ending at the evaluated bar. One number,
+# so a live signal and the backtest that validates it read the same window
+# (`_ema` seeds and `_rsi` smooths from the window start, so the window length
+# moves their values). Intraday paths keep their own windows. Every current
+# search-grid combination needs at most this many bars (`bars_needed`).
+SIGNAL_WINDOW_BARS = 400
+
 # ── Helpers (reuse same helpers as stock_scorer to avoid duplication) ─────────
 
 def _ema(values: list[float], period: int) -> list[float]:
@@ -1296,6 +1306,77 @@ def resolve_multi_signal(
         targets=targets,
         detail=detail,
     )
+
+
+# ── Bars needed (STOCKS-HORIZON-T1 H1) ───────────────────────────────────────
+
+# mean_reversion_multi's variants when params name none (the request default).
+_MULTI_DEFAULT_VARIANTS = ("mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap_daily")
+
+
+def _param(fn, params: dict, name: str):
+    """params[name], else the signal function's own default for it."""
+    if name in params and params[name] is not None:
+        return params[name]
+    import inspect
+    return inspect.signature(fn).parameters[name].default
+
+
+def _omm_bars_needed() -> int:
+    """compute_omm (require_choppy_regime) at its defaults: `len(closes) <
+    lookback + 2` returns None, and the current state ('Choppy', the only one
+    that passes) must have at least min_obs labels."""
+    from app.services.regime_omm import MIN_OBS, RETURN_LOOKBACK
+    return max(RETURN_LOOKBACK + 2, MIN_OBS)
+
+
+def bars_needed(strategy: str, params: dict | None = None) -> int:
+    """The smallest bar count at which EVERY length guard of ``strategy``'s
+    signal function can pass with ``params`` (missing keys = the function's
+    defaults). One bar fewer and the signal is always None. Read from the
+    guards themselves:
+
+    * pullback_ema: ``len(bars) < trend_ema + 10``; both MAs need their period.
+    * breakout_base: ``len(bars) < base_lookback + 5``.
+    * ma_crossover: ``len(bars) < slow + 5``, and each SMA series needs
+      ``lookback + 1`` values (``n - period + 1 >= lookback + 1``).
+    * mean_reversion_rsi: ``len(bars) < trend_sma + rsi_period + 5`` (the RSI
+      series' own ``>= 2`` values need only ``rsi_period + 3``).
+    * mean_reversion_bb: ``len(bars) < trend_sma + bb_period + 5``.
+    * mean_reversion_vwap_daily: ``len(bars) < vwap_lookback + 2``.
+    * mean_reversion_vwap (intraday): ``len(bars) < 30``.
+    * rsi / bb with ``require_choppy_regime``: also compute_omm's floor.
+    * mean_reversion_multi: the max over its variants (``params["variants"]``,
+      default the request's three), each with ``params["variant_params"][v]``.
+    """
+    p = dict(params or {})
+    if strategy == "pullback_ema":
+        fn = pullback_ema_signal
+        return max(_param(fn, p, "trend_ema") + 10, _param(fn, p, "ema_period"))
+    if strategy == "breakout_base":
+        return _param(breakout_base_signal, p, "base_lookback") + 5
+    if strategy == "ma_crossover":
+        fn = ma_crossover_signal
+        slow, fast, lookback = (_param(fn, p, k) for k in ("slow", "fast", "lookback"))
+        return max(slow + 5, fast + lookback, slow + lookback)
+    if strategy == "mean_reversion_rsi":
+        fn = mean_reversion_rsi_signal
+        rsi_period = _param(fn, p, "rsi_period")
+        need = max(_param(fn, p, "trend_sma") + rsi_period + 5, rsi_period + 3)
+        return max(need, _omm_bars_needed()) if _param(fn, p, "require_choppy_regime") else need
+    if strategy == "mean_reversion_bb":
+        fn = mean_reversion_bb_signal
+        need = _param(fn, p, "trend_sma") + _param(fn, p, "bb_period") + 5
+        return max(need, _omm_bars_needed()) if _param(fn, p, "require_choppy_regime") else need
+    if strategy == "mean_reversion_vwap_daily":
+        return _param(mean_reversion_vwap_daily_signal, p, "vwap_lookback") + 2
+    if strategy == "mean_reversion_vwap":
+        return 30
+    if strategy == "mean_reversion_multi":
+        variants = p.get("variants") or _MULTI_DEFAULT_VARIANTS
+        vparams = p.get("variant_params") or {}
+        return max(bars_needed(v, vparams.get(v) or {}) for v in variants)
+    raise ValueError(f"bars_needed: unknown strategy {strategy!r}")
 
 
 # ── Strategy 7: Pre-breakout setup scanner ────────────────────────────────────

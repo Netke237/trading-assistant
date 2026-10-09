@@ -63,6 +63,7 @@ from app.services.strategy_engine import (
     mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
     resolve_multi_signal,
+    SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
@@ -477,7 +478,7 @@ def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple
             {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
         )
         try:
-            sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
+            sig = fn(bars[-SIGNAL_WINDOW_BARS:], direction=req.direction, **variant_kwargs)
         except Exception:
             sig = None
         if sig is not None:
@@ -922,7 +923,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             signal_kwargs = _merge_strategy_params(
                 req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
             _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
-                         else bars[-120:])
+                         else bars[-SIGNAL_WINDOW_BARS:])
             # Pass live price so signal uses current price, not yesterday's close.
             _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
             try:
@@ -1420,7 +1421,7 @@ async def _process_stock(
                     _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
                 )
                 # Intraday strategies use intraday bars for both signal and backtest.
-                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-120:]
+                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-SIGNAL_WINDOW_BARS:]
                 _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
                 signal = signal_fn(signal_bars, direction=req.direction,
                                    current_price=_live_price, **signal_kwargs)

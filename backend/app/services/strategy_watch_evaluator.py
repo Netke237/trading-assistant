@@ -26,7 +26,7 @@ from app.services.scheduling_tz import MARKET_TZ
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
-    mean_reversion_bb_signal,
+    mean_reversion_bb_signal, SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_watch_store import strategy_watch_store
 from app.services.strategy_param_store import get_active, get_exit
@@ -387,7 +387,7 @@ async def _eval_strategy_watch(
         adopted = {**get_exit(key), **get_active(key, wdir)}
         params_override = w.get("params_override") or {}
         adopted.update(params_override)  # params_override wins
-        signal = fn(bars, direction=wdir, **adopted)
+        signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=wdir, **adopted)
     except Exception as exc:
         logger.warning("strategy-watch: %s signal failed for %s — %s", key, symbol, exc)
         return None
@@ -483,7 +483,7 @@ async def _eval_strategy_watch(
             try:
                 opp_params = {**get_exit(key), **get_active(key, opposite_dir)}
                 opp_params.update(params_override)
-                opp_signal = fn(bars, direction=opposite_dir, **opp_params)
+                opp_signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=opposite_dir, **opp_params)
             except Exception as exc:
                 logger.warning("strategy-watch: %s reversal signal failed for %s — %s",
                                 key, symbol, exc)
