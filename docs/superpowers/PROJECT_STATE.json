@@ -2168,8 +2168,8 @@
       "id": "TRADE-CARD-UI-FOLLOWUP-OPTIONS",
       "name": "Trade card UI follow-up, Options half: aligned order/exit values, selected-method recommendation, loss-budget label, alternative spacing, collapsed scoring evidence, score cards moved up (Options)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-09-trade-card-ui-followup-options-integration.md",
       "verify": {
@@ -2178,7 +2178,7 @@
         "pattern": "keepMounted\\?: boolean",
         "note": "PRESENCE ONLY: the follow-up's keepMounted CollapsibleSection prop exists. Behaviour is covered by keepMounted.test.tsx, collapsedEvidence.test.tsx, TradeCard tests and the Options e2e spec."
       },
-      "note": "2026-10-09 BUILT on claude/relaxed-fermat-sm9xru at d43931e2, NOT MERGED, CODE ROUND 1: 1 gate finding (F1), fix pending. Backlog TICKET-38, decision TICKET-38-OPTIONS-ONLY-2026-10-09. Narrowing of the TRADE-CARD-UI-FOLLOWUP plan (independent plan round 1 clean on that phase); no new behaviour, so no separate plan round. The original code round (4b06656a..bdf3bed2) does not carry over: base moved 141 commits. Path-limited git apply -3 of 4b06656a..origin/codex/trade-card-ui-followup, no merge/cherry-pick, so the Stocks commits stay unmerged for the later Stocks integration. 11 of 12 files byte-identical to the reviewed branch; step-7-trade-card/page.tsx removes only the decisionTarget portal plus one comment correction, P0A/P0B gates unchanged. Implementer: fresh subagent. Coordinator verification: typecheck clean; targeted Jest 13 suites/372 tests pass. Implementer: full Jest 219 suites/4873 tests pass; Options e2e 2/2 at 1200/1920 with mocked fonts (DejaVu metrics; production font metrics unverified). Excluded: TC-UI-07 and the Stocks half of TC-UI-06 (STOCK-DESIGN-GRILLING owner).",
+      "note": "2026-10-09 BUILT on claude/relaxed-fermat-sm9xru at d43931e2, NOT MERGED, CODE AUDIT CLEAN at code round 2 of 3 (R1: 1 display finding F1, fixed a8c3b4a4; R2: zero gate findings). Awaiting Kenneth's merge decision. Backlog TICKET-38, decision TICKET-38-OPTIONS-ONLY-2026-10-09. Narrowing of the TRADE-CARD-UI-FOLLOWUP plan (independent plan round 1 clean on that phase); no new behaviour, so no separate plan round. The original code round (4b06656a..bdf3bed2) does not carry over: base moved 141 commits. Path-limited git apply -3 of 4b06656a..origin/codex/trade-card-ui-followup, no merge/cherry-pick, so the Stocks commits stay unmerged for the later Stocks integration. 11 of 12 files byte-identical to the reviewed branch; step-7-trade-card/page.tsx removes only the decisionTarget portal plus one comment correction, P0A/P0B gates unchanged. Implementer: fresh subagent. Coordinator verification: typecheck clean; targeted Jest 13 suites/372 tests pass. Implementer: full Jest 219 suites/4873 tests pass; Options e2e 2/2 at 1200/1920 with mocked fonts (DejaVu metrics; production font metrics unverified). Excluded: TC-UI-07 and the Stocks half of TC-UI-06 (STOCK-DESIGN-GRILLING owner).",
       "audit_history": [
         {
           "round": 1,
@@ -2189,11 +2189,22 @@
           "findings": [
             "F1 (gate, display): TradeCard/index.tsx:2533 Barrier Race pick line prints round(pTargetFirst*100)% target first, contradicting the backend-allocated weightTargetFirst that the same row's edge uses and that BarrierRaceCard prints (types/domain.ts contract). Reviewer brute force: ~8% of k/2000 share rows differ. Display only; pick records targetOptionPrice correctly."
           ],
-          "fixes": [],
-          "outstanding": [
-            "F1"
+          "fixes": [
+            "F1 fixed in a8c3b4a4 by a fresh implementer: label uses weightPercents(o)[0]; regression test fails before, passes after"
           ],
+          "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-09",
+          "scope": "git diff f73952da..a8c3b4a4 (F1 fix only: TradeCard/index.tsx, TradeCard.methodPick.test.tsx, +19/-2) and interactions; range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ]
     }

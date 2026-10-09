@@ -34,7 +34,7 @@ The **Options** side merges without textual conflicts: TradeCard, Step 7 trade c
 
 ## Recommended follow-up (needs Kenneth's approval before anyone starts)
 
-Proposed **TICKET-38: Integrate the trade-card UI follow-up into current main.**
+Proposed **TICKET-38: Integrate the trade-card UI follow-up into current main.** — Kenneth chose option A (2026-10-09). Built on `claude/relaxed-fermat-sm9xru` (d43931e2 + F1 fix a8c3b4a4); code audit clean at code round 2 of 3; phase TRADE-CARD-UI-FOLLOWUP-OPTIONS in PROJECT_STATE. Not merged — awaiting Kenneth.
 - **Option A (recommended): Options-only now.** Bring in TC-UI-01 to TC-UI-05 and the Options half of TC-UI-06 on a new branch from current main. Leave out TC-UI-07 and the Stocks half of TC-UI-06, which go to STOCK-DESIGN-GRILLING. Run typecheck, Jest and the follow-up e2e spec. Then run a fresh independent code audit of the integration diff; the old clean round does not carry over.
 - **Option B: everything, later.** Wait until STOCK-DESIGN-GRILLING releases its claim, then integrate all seven tickets and redo the Stocks half against the S2 card.
 - Either way, keep the original branch and its audit record as provenance, and do not mark it shipped until an authorized merge.
