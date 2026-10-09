@@ -10,7 +10,7 @@ import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import type { ScoringHorizon } from '@/lib/horizonPresets';
+import type { ScoringHorizon, TunedHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -181,7 +181,7 @@ export interface StrategyWatchState {
   entry_price: number | null;
   stop_price: number | null;
   target_price: number | null;
-  last_event: 'entry' | 'exit_stop' | 'exit_target' | 'reversal' | null;
+  last_event: 'entry' | 'time_stop' | 'exit_stop' | 'exit_target' | 'reversal' | null;
   last_event_at: string | null;
 }
 
@@ -191,6 +191,10 @@ export interface StrategyWatch {
   strategy_key: string;
   direction: 'Bullish' | 'Bearish';
   params_override: Record<string, unknown>;
+  /** STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
+   *  whose hold time-stops it. Absent/null on a watch without a horizon. */
+  params_horizon?: TunedHorizon | null;
+  hold_max_days?: number | null;
   enabled: boolean;
   created_at: string;
   last_state: StrategyWatchState;
@@ -828,10 +832,12 @@ export const api = {
 
   getStrategyWatches: () =>
     get<StrategyWatch[]>('/api/strategy-watch/'),
-  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction }),
-  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction }),
+  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                     params_horizon: TunedHorizon | null = null) =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction, params_horizon }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                           params_horizon: TunedHorizon | null = null) =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction, params_horizon }),
   removeStrategyWatch: (id: string) =>
     del(`/api/strategy-watch/${id}`),
   setStrategyWatchEnabled: (id: string, enabled: boolean) =>

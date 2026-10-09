@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.schemas import Direction
+from app.services.horizon_profiles import TunedHorizon
 from app.services.strategy_watch_store import strategy_watch_store, VALID_STRATEGIES
 from app.services.strategy_watch_scheduler import strategy_watch_scheduler
 from app.services.strategy_watch_evaluator import set_enabled_and_expire
@@ -20,12 +21,16 @@ class AddWatch(BaseModel):
     strategy_key: str
     params_override: dict | None = None
     direction: Direction = "Bullish"
+    # STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
+    # whose hold time-stops it; None = the direction baseline, no time stop.
+    params_horizon: TunedHorizon | None = None
 
 
 class BulkAdd(BaseModel):
     symbols: list[str]
     strategy_key: str
     direction: Direction = "Bullish"
+    params_horizon: TunedHorizon | None = None
 
 
 class EnabledPatch(BaseModel):
@@ -52,7 +57,8 @@ async def list_watches() -> list[dict]:
 async def add_watch(body: AddWatch) -> dict:
     try:
         return strategy_watch_store.add_watch(
-            body.symbol, body.strategy_key, body.params_override, body.direction
+            body.symbol, body.strategy_key, body.params_override, body.direction,
+            params_horizon=body.params_horizon,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -63,7 +69,8 @@ async def add_watch(body: AddWatch) -> dict:
 async def bulk_add(body: BulkAdd) -> dict:
     if body.strategy_key not in VALID_STRATEGIES:
         raise HTTPException(status_code=400, detail=f"unknown strategy: {body.strategy_key}")
-    added = strategy_watch_store.add_watches_bulk(body.symbols, body.strategy_key, body.direction)
+    added = strategy_watch_store.add_watches_bulk(
+        body.symbols, body.strategy_key, body.direction, params_horizon=body.params_horizon)
     return {"added": len(added), "watches": added}
 
 
