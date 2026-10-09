@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import concurrent.futures
@@ -2205,6 +2206,79 @@ async def _execute_scan_core(
     return result
 
 
+# AUTOTRADE-FIRE-HYGIENE H1: run_scan's auto-fire runs
+# `auto_trader.maybe_fire_on_scan` here, and keeps the concurrent Future so a
+# cancelled request still records what the worker did (`_log_scan_fire_outcome`).
+# DEDICATED: not /fire's `_FIRE_EXECUTOR` and not the default pool the scan's
+# data fetches use. ONE worker, so a second manual scan's trigger QUEUES behind
+# the first; a queued call cancelled with its request never runs. The
+# AutoTrader lock and `expect`/identity checks stay the guards against /fire or
+# a re-arm racing it — this serialises scan triggers only. Non-daemon, joined at
+# interpreter exit like the default executor's.
+_SCAN_FIRE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="scan-auto-fire",
+)
+
+
+def _log_scan_fire_outcome(scan_id, cf: concurrent.futures.Future) -> None:
+    """Record the outcome of a `maybe_fire_on_scan` whose POST /scan was cancelled.
+
+    Runs as a `concurrent.futures` done-callback — in the worker thread when
+    the call finishes, or at once if it already has — so it is written even
+    while shutdown is cancelling every task. Writes ONE log line and nothing
+    else: no portfolio, risk or history row. Booking never started on this
+    path; the request's session is gone. MUST NOT RAISE (`add_done_callback`
+    would swallow it and lose the line): `cancelled()` first, `exception()`
+    before `result()`, and every field is formatted inside the guard. Logs
+    selected fields only, never a whole object (an adapter config may ride
+    along on one).
+    """
+    head = "scan auto-trade: POST /scan was cancelled"
+    try:
+        if cf.cancelled():
+            _log.warning("%s before maybe_fire_on_scan ran (scan %s); nothing "
+                         "was dispatched", head, scan_id)
+            return
+        exc = cf.exception()
+        if exc is not None:
+            detail = f"{type(exc).__name__}: {exc}"
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); it raised "
+                       "%s. Whether an order reached the broker is unknown and "
+                       "this scan booked nothing; check the broker and "
+                       "portfolio before acting", head, scan_id, detail)
+            return
+        fired = cf.result()
+        if fired is None:
+            # Not armed, stale or refused: the service's own diagnostics for
+            # that exit are authoritative, so this does not restate them.
+            _log.warning("%s while maybe_fire_on_scan ran (scan %s); it "
+                         "returned no order, so there was nothing to book",
+                         head, scan_id)
+            return
+        # The ORDER THE WORKER RETURNED — never the armed slot, which a re-arm
+        # may have replaced. Status is the broker's word, not interpreted: a
+        # rejected order is logged as rejected, not as a position.
+        order, strategy = fired.result, fired.strategy
+        fields = (
+            f"symbol={strategy.symbol} option_symbol={strategy.option_symbol} "
+            f"broker={order.broker} order_id={order.order_id!r} "
+            f"status={order.status!r} attempt_id={fired.attempt_id}"
+        )
+        _log.error("%s while maybe_fire_on_scan ran (scan %s); the broker "
+                   "returned an order outcome and booking never started, so "
+                   "it was NOT booked: %s (status as the broker reported it). "
+                   "Check the broker and portfolio before acting",
+                   head, scan_id, fields)
+    except Exception as fmt_exc:
+        try:
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); its outcome "
+                       "could not be described (%s) and was NOT booked; check "
+                       "the broker and portfolio before acting",
+                       head, scan_id, type(fmt_exc).__name__)
+        except Exception:
+            pass
+
+
 @router.post('/scan', response_model=ScanResult)
 async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> ScanResult:
     """Manual-trigger entry point — unchanged external behavior for the UI.
@@ -2244,12 +2318,26 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             await db.rollback()
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks()
-            fired = await asyncio.to_thread(
+            cf = _SCAN_FIRE_EXECUTOR.submit(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() resolves the server account configuration at dispatch
                 daily_risk_hooks=hooks,
             )
+            try:
+                fired = await asyncio.wrap_future(cf)
+            except asyncio.CancelledError:
+                # Cancelling the await does not stop a RUNNING worker; the
+                # broker call can still complete. `cf.cancel()` only stops a
+                # call still queued behind the one worker. The outcome is
+                # logged on the THREAD side of `cf` — an asyncio-side callback
+                # would see only "cancelled" during shutdown — and
+                # `add_done_callback` runs it at once if `cf` is already done.
+                # Nothing is booked: the request's session is going away.
+                cf.cancel()
+                cf.add_done_callback(
+                    functools.partial(_log_scan_fire_outcome, result.scan_id))
+                raise
             # O4 step 5: book the fired order, back ON the event loop with this
             # request's session (it never enters the worker thread). None on
             # every non-fire. `book_fired_order` never raises, pages its own
@@ -2263,7 +2351,7 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
                 else:
                     _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
     # `req`, not `_last_request`. The global is read AFTER the auto-trade block
-    # above, whose `await asyncio.to_thread(...)` is a synchronous broker call —
+    # above, whose awaited `_SCAN_FIRE_EXECUTOR` call is a synchronous broker call —
     # a window measured in seconds. A second overlapping manual scan (nothing
     # serializes two of them; see this function's docstring) completing inside
     # it replaces `_last_request` with ITS request, and this line would then
