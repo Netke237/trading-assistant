@@ -501,6 +501,23 @@ describe('TC-UI-02 selected recommendation', () => {
     expect(recommendation().queryByText(/6.24|40%|computed via: Monte Carlo/)).not.toBeInTheDocument();
   });
 
+  it('selected race labels target-first with the allocated weight, not the re-rounded raw share', async () => {
+    // Raw 0.35% rounds to 0%, but the backend's largest-remainder allocation
+    // gives target-first 1% — the weight edgePerContract and BarrierRaceCard use.
+    const [outcome] = estimate.race.outcomes;
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({ ...estimate, race: { ...estimate.race,
+      outcomes: [{ ...outcome, pTargetFirst: 0.0035, pStockStopFirst: 0, pPremiumStopFirst: 0.0935,
+        pNeither: 0.903, weightTargetFirst: 0.01, weightStockStopFirst: 0,
+        weightPremiumStopFirst: 0.09, weightNeither: 0.9 }],
+    } });
+    render(<TradeCard data={card} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await waitFor(() => expect(radio('Barrier Race')).toBeEnabled());
+    fireEvent.click(radio('Barrier Race'));
+    expect(recommendation().getByText(/\$7.25 option \(1% target first\)/)).toBeVisible();
+    expect(recommendation().queryByText(/0% target first/)).not.toBeInTheDocument();
+  });
+
   it.each(['arithmetic', 'monte_carlo', 'barrier_race'] as const)('missing selected %s clears persistence and retains a prompt instead of unrelated defaults', async (method) => {
     const onMethodPickChange = jest.fn();
     const data = method === 'arithmetic' ? card : { ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } };

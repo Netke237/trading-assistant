@@ -25,7 +25,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
-import { premiumStopPctFromDollars, money } from '@/lib/barrierRace';
+import { premiumStopPctFromDollars, money, weightPercents } from '@/lib/barrierRace';
 import { premiumStopDollarBounds } from '@/lib/premiumStop';
 import { TIME_STOP_DTE } from '@/lib/alertEngine';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
@@ -2530,7 +2530,7 @@ export function TradeCard({
                           {`T${Math.round(o.targetPct * 100)}% edge`}
                         </Text>
                         <Data size={13} tone="primary">
-                          {recommendationMethod === 'barrier_race' && `$${o.targetOptionPrice.toFixed(2)} option (${(o.pTargetFirst * 100).toFixed(0)}% target first) — `}
+                          {recommendationMethod === 'barrier_race' && `$${o.targetOptionPrice.toFixed(2)} option (${weightPercents(o)[0]}% target first) — `}
                           {o.edgePerContract != null ? money(o.edgePerContract) : '—'}
                           {o.rrStockStop != null ? ` at ${o.rrStockStop.toFixed(2)}x` : ''}
                         </Data>
