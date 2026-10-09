@@ -5,6 +5,7 @@ import concurrent.futures
 import dataclasses
 import functools
 import hashlib
+import json
 import logging
 import math
 import os
@@ -62,7 +63,8 @@ from app.services.strategy_engine import (
     mean_reversion_vwap_signal,
     mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
-    resolve_multi_signal,
+    merge_multi_params,
+    multi_signal,
     SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
@@ -248,9 +250,6 @@ def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) 
 
 _SCAN_DROP_PREFIX = "the scan would drop this: "
 _MIN_INTRADAY_BARS = 30
-# mean_reversion_multi is backtested through the RSI variant — a deterministic
-# proxy regardless of which variants fired.
-_MULTI_BT_STRATEGY = "mean_reversion_rsi"
 
 
 def _scan_drop_flag(gate: str, drop: dict) -> dict:
@@ -463,43 +462,44 @@ def _aligned_benchmark(benchmark: list[dict] | None, stock_bars: list[dict]) -> 
     return trimmed
 
 
-def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple[object | None, dict | None]:
-    """mean_reversion_multi's variant loop. Returns (signal, None) on a
-    confirmed setup, else (None, the scan's rejection dict)."""
-    valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
-    fired: list = []
-    for variant in valid_variants:
-        fn = _SIGNAL_FNS[variant]
+def _multi_params(req: StockScanRequest) -> dict:
+    """mean_reversion_multi's effective params shape for this request
+    (STOCKS-HORIZON-T1 H3): the YAML multi profile under the request's
+    variants, min_confirmations and per-variant fields. The live loop and the
+    backtest are handed this same object."""
+    variant_params: dict = {}
+    for variant in req.mean_reversion_variants:
+        kw = dict(_SIGNAL_KWARGS.get(variant, lambda r: {})(req))
         if variant == "mean_reversion_vwap_daily":
-            extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
-        else:
-            extra_kw = {}
-        variant_kwargs = _merge_strategy_params(
-            variant, req.direction,
-            {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
-        )
-        try:
-            sig = fn(bars[-SIGNAL_WINDOW_BARS:], direction=req.direction, **variant_kwargs)
-        except Exception:
-            sig = None
-        if sig is not None:
-            fired.append(sig)
-    if len(fired) < req.mean_reversion_min_confirmations:
+            kw.update(vwap_lookback=req.vwap_lookback, vwap_deviation_pct=req.vwap_deviation_pct)
+        variant_params[variant] = kw
+    return merge_multi_params(
+        req.direction,
+        get_active("mean_reversion_multi", req.direction),
+        {"variants": req.mean_reversion_variants,
+         "min_confirmations": req.mean_reversion_min_confirmations,
+         "variant_params": variant_params},
+    )
+
+
+def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict],
+                  params: dict | None = None) -> tuple[object | None, dict | None]:
+    """mean_reversion_multi's vote (strategy_engine.multi_signal) over
+    ``params`` (default ``_multi_params(req)``). Returns (signal, None) on a
+    confirmed setup, else (None, the scan's rejection dict)."""
+    if params is None:
+        params = _multi_params(req)
+    valid_variants = [v for v in params["variants"] if v in _SIGNAL_FNS]
+    fired: list = []
+    # Order-independent resolution (resolve_multi_signal): widest stop,
+    # tightest target, pooled ladder.
+    signal = multi_signal(bars[-SIGNAL_WINDOW_BARS:], direction=req.direction, params=params,
+                          signal_fns=_SIGNAL_FNS, fired_out=fired)
+    if len(fired) < params["min_confirmations"]:
         return None, {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
-    # Order-independent resolution: widest stop, tightest target,
-    # pooled ladder. Previously this took fired[0]'s levels verbatim,
-    # so reordering the variant checkboxes changed every level.
-    signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
     if signal is None:
         return None, {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
     return signal, None
-
-
-def _multi_bt_params(req: StockScanRequest) -> dict:
-    return _merge_strategy_params(
-        _MULTI_BT_STRATEGY, req.direction,
-        _SIGNAL_KWARGS.get(_MULTI_BT_STRATEGY, lambda r: {})(req),
-    )
 
 
 def _backtest_drop(symbol: str, bt_result) -> dict | None:
@@ -711,7 +711,12 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
-    params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
+    # Canonical JSON with sorted keys at every depth (STOCKS-HORIZON-T1 H3):
+    # mean_reversion_multi's params are nested, and a nested value or key
+    # order must change, or not change, the key the same way a flat one does.
+    params_hash = hashlib.md5(
+        json.dumps(params or {}, sort_keys=True, default=str).encode()
+    ).hexdigest()[:8]
     # commission is folded into the key (not just the run_strategy_backtest call)
     # so that editing strategy_params.yaml's costs.fee_pct/slippage_pct doesn't
     # leave a stale pre-edit BacktestResult (including passes_gate) served out of
@@ -916,9 +921,11 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     signal = None
     _bt_strategy = _bt_bars = _bt_params = None
     if req.strategy == "mean_reversion_multi":
-        signal, _drop = _multi_signal(symbol, req, bars)
+        _multi_shape = _multi_params(req)
+        signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
         if signal is not None:
-            _bt_strategy, _bt_bars, _bt_params = _MULTI_BT_STRATEGY, bars, _multi_bt_params(req)
+            # The backtest runs the same vote on the same shape object.
+            _bt_strategy, _bt_bars, _bt_params = "mean_reversion_multi", bars, _multi_shape
     else:
         signal_fn = _SIGNAL_FNS.get(req.strategy)
         if signal_fn:
@@ -1409,12 +1416,14 @@ async def _process_stock(
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             if req.strategy == "mean_reversion_multi":
-                signal, _drop = _multi_signal(symbol, req, bars)
+                _multi_shape = _multi_params(req)
+                signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
                 if _drop:
                     return _drop
-                _bt_strategy = _MULTI_BT_STRATEGY
+                # The backtest runs the same vote on the same shape object.
+                _bt_strategy = "mean_reversion_multi"
                 bt_bars = bars
-                _bt_params = _multi_bt_params(req)
+                _bt_params = _multi_shape
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:

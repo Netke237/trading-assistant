@@ -10,7 +10,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily", "mean_reversion_multi"]
 
 
 def normalize_direction(direction: str | None) -> Literal["Bullish", "Bearish"]:
@@ -184,7 +184,7 @@ def _run_backtest(
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
-        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS,
+        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -196,6 +196,10 @@ def _run_backtest(
         "mean_reversion_bb":     mean_reversion_bb_signal,
         "mean_reversion_vwap":   mean_reversion_vwap_signal,
         "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
+        # STOCKS-HORIZON-T1 H3: multi backtests its own vote at the combined
+        # levels; `params` is the merged multi params shape.
+        "mean_reversion_multi":
+            lambda bars, *, direction, **shape: multi_signal(bars, direction=direction, params=shape),
     }.get(strategy)
 
     if not _signal_fn:
@@ -224,7 +228,11 @@ def _run_backtest(
     #
     # The live scan already merges `exit:` via _merge_strategy_params, so for that
     # caller this is a no-op re-application of identical values.
-    effective_params = {**get_exit(strategy), **(params or {})}
+    #
+    # mean_reversion_multi: `params` is already the effective multi shape
+    # (merge_multi_params put each variant's exit block in), so no merge.
+    effective_params = (dict(params or {}) if strategy == "mean_reversion_multi"
+                        else {**get_exit(strategy), **(params or {})})
 
     # Entry bar of every trade the time exit closed; and the stop of the entry
     # placed on bar i-1, keyed by its only possible fill bar i (DAY orders: the

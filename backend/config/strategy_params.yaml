@@ -211,6 +211,27 @@ strategies:
     exit:
       rr_target_mult: 2.0
 
+  mean_reversion_multi:
+    # STOCKS-HORIZON-T1 H3: the multi params shape (today's frontend values).
+    # Each variant's effective params = its exit: + its direction active: +
+    # variant_params below + the request (merge_multi_params).
+    active:
+      bullish:
+        variants: [mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap_daily]
+        min_confirmations: 2
+        variant_params:
+          mean_reversion_vwap_daily:
+            vwap_lookback: 20
+            vwap_deviation_pct: 0.02
+      bearish:
+        variants: [mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap_daily]
+        min_confirmations: 2
+        variant_params:
+          mean_reversion_vwap_daily:
+            vwap_lookback: 20
+            vwap_deviation_pct: 0.02
+    exit: {}
+
   breakout_setup:
     active:
       bullish:

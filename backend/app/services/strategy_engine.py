@@ -1235,13 +1235,11 @@ def resolve_multi_signal(
     many times wider, so a 0.6R target can become a 0.06R target that no variant
     ever proposed. Half an R is the floor for a rung to survive that transplant.
 
-    KNOWN LIMITATION, recorded rather than hidden: nothing backtests this
-    resolution. ``stock_scan.py`` deliberately uses ``mean_reversion_rsi`` as the
-    canonical backtest proxy for ``mean_reversion_multi`` (so the gate is
-    order-independent), which means the RSI variant's own ladder is what the
-    Step-6 win rate measures, not the resolved one. That predates this change and
-    is unchanged by it; it is why the resolution rule is chosen to be
-    conservative rather than optimised.
+    The backtest measures this resolution (STOCKS-HORIZON-T1 H3): it runs
+    ``multi_signal`` per bar, so the Step-6 win rate is the vote's own trades at
+    these combined levels. Before H3 it used ``mean_reversion_rsi`` as a stand-in,
+    so the RSI variant's own ladder was what the gate measured; that limitation
+    is closed. The rule stays conservative rather than optimised.
 
     Returns None when ``fired`` is empty or the resolved risk is non-positive.
     """
@@ -1306,6 +1304,93 @@ def resolve_multi_signal(
         targets=targets,
         detail=detail,
     )
+
+
+# ── mean_reversion_multi: one params shape (STOCKS-HORIZON-T1 H3) ────────────
+# {"variants": [...], "min_confirmations": n, "variant_params": {"<variant>": {...}}}
+# — the same object for the live loop, the backtest, the profile and the tuner.
+
+def _multi_variant_fns() -> dict:
+    """The daily signal functions a multi variant can name, looked up at call
+    time (the same set the scan's _SIGNAL_FNS names)."""
+    return {
+        "pullback_ema":              pullback_ema_signal,
+        "breakout_base":             breakout_base_signal,
+        "ma_crossover":              ma_crossover_signal,
+        "mean_reversion_rsi":        mean_reversion_rsi_signal,
+        "mean_reversion_bb":         mean_reversion_bb_signal,
+        "mean_reversion_vwap":       mean_reversion_vwap_signal,
+        "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
+    }
+
+
+def merge_multi_params(direction: str, profile: dict | None, request_overrides: dict | None) -> dict:
+    """The effective multi params shape. ``variants`` / ``min_confirmations``:
+    the request's when set, else the profile's. ``variant_params[v]`` = the
+    variant's ``exit:`` block, then its DIRECTION BASELINE ``active:`` params,
+    then the multi profile's ``variant_params[v]``, then the request's
+    (``None`` = not set). The variant base is always the direction baseline,
+    never a tuned profile of the standalone strategy. Inputs are not mutated.
+    """
+    from app.services import strategy_param_store as store
+    profile = profile or {}
+    req = request_overrides or {}
+    out: dict = {}
+    for key in ("variants", "min_confirmations"):
+        value = req.get(key) if req.get(key) is not None else profile.get(key)
+        if value is not None:
+            out[key] = list(value) if key == "variants" else value
+    prof_vp = profile.get("variant_params") or {}
+    req_vp = req.get("variant_params") or {}
+    variant_params: dict = {}
+    for v in out.get("variants") or []:
+        merged = store.get_exit(v)
+        merged.update(store.get_active(v, direction))
+        merged.update(prof_vp.get(v) or {})
+        merged.update({k: val for k, val in (req_vp.get(v) or {}).items() if val is not None})
+        variant_params[v] = merged
+    out["variant_params"] = variant_params
+    return out
+
+
+def multi_signal(
+    bars: list[dict],
+    *,
+    direction: Literal["Bullish", "Bearish"],
+    params: dict,
+    signal_fns: dict | None = None,
+    fired_out: list | None = None,
+) -> StrategySignal | None:
+    """mean_reversion_multi's vote over the (already merged) params shape: each
+    variant runs on ``bars`` with ``variant_params[v]``; when at least
+    ``min_confirmations`` fire, ``resolve_multi_signal`` combines them.
+
+    A variant that raises counts as not fired; a name with no signal function
+    is skipped. ``mean_reversion_vwap`` (intraday) raises ``ValueError``: the
+    loop only evaluates daily bars. ``signal_fns`` overrides the name -> function
+    map (the scan passes its own); ``fired_out`` receives the fired signals.
+    """
+    variants = list(params["variants"])
+    if "mean_reversion_vwap" in variants:
+        raise ValueError("mean_reversion_vwap (intraday) is not supported in mean_reversion_multi")
+    fns = signal_fns if signal_fns is not None else _multi_variant_fns()
+    vparams = params.get("variant_params") or {}
+    fired: list[StrategySignal] = []
+    for v in variants:
+        fn = fns.get(v)
+        if fn is None:
+            continue
+        try:
+            sig = fn(bars, direction=direction, **(vparams.get(v) or {}))
+        except Exception:
+            sig = None
+        if sig is not None:
+            fired.append(sig)
+    if fired_out is not None:
+        fired_out.extend(fired)
+    if len(fired) < params["min_confirmations"]:
+        return None
+    return resolve_multi_signal(fired, strategy="mean_reversion_multi")
 
 
 # ── Bars needed (STOCKS-HORIZON-T1 H1) ───────────────────────────────────────

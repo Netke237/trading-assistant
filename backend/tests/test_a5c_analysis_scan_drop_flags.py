@@ -291,8 +291,8 @@ async def test_t4_multi_is_evaluated_for_real_and_backtested_like_the_scan(monke
     resolved: list = []
     real_multi = ss._multi_signal
 
-    def _spy_multi(symbol, req, bars):
-        out = real_multi(symbol, req, bars)
+    def _spy_multi(symbol, req, bars, params=None):
+        out = real_multi(symbol, req, bars, params)
         resolved.append(out[0])
         return out
     monkeypatch.setattr(ss, "_multi_signal", _spy_multi)
@@ -318,10 +318,11 @@ async def test_t4_multi_is_evaluated_for_real_and_backtested_like_the_scan(monke
     assert len(resolved) == 2 and resolved[0] == resolved[1] == core.signal
     assert not _flags(core, "signal")
 
-    # Backtested through the RSI proxy on the daily bars, same cache key as the scan.
+    # Backtested as multi's own vote on the daily bars, same cache key as the
+    # scan (STOCKS-HORIZON-T1 H3; was the mean_reversion_rsi proxy).
     assert len(spies["bt_keys"]) == 2
     (s_strat, s_n, s_t0, s_t1, s_key), (a_strat, a_n, a_t0, a_t1, a_key) = spies["bt_keys"]
-    assert s_strat == a_strat == "mean_reversion_rsi"
+    assert s_strat == a_strat == "mean_reversion_multi"
     assert (s_n, s_t0, s_t1) == (a_n, a_t0, a_t1) == (300, _BARS[0]["time"], _BARS[-1]["time"])
     assert s_key == a_key
     assert core.bt_result is not None
@@ -329,7 +330,7 @@ async def test_t4_multi_is_evaluated_for_real_and_backtested_like_the_scan(monke
 
 
 @pytest.mark.asyncio
-async def test_t4_multi_cache_miss_runs_the_rsi_proxy_backtest_in_both_legs(monkeypatch):
+async def test_t4_multi_cache_miss_runs_the_multi_backtest_in_both_legs(monkeypatch):
     """Code round 1 (F1): the cache stub above always answers, so nothing
     exercised the run_strategy_backtest CALL. On a miss, a wrong strategy there
     would be cached under the scan's key and poison later scans too."""
@@ -351,11 +352,13 @@ async def test_t4_multi_cache_miss_runs_the_rsi_proxy_backtest_in_both_legs(monk
     core = await _analyze(**_MULTI)
     _one_reject(core, "backtest", scan["reason"])
 
-    expected_params = ss._multi_bt_params(StockScanRequest(
+    # STOCKS-HORIZON-T1 H3: multi's own vote over its params shape (was the
+    # mean_reversion_rsi proxy with the rsi params).
+    expected_params = ss._multi_params(StockScanRequest(
         universe=["TEST"], direction="Bullish", horizon="Swing", **_MULTI))
     assert len(runs) == 2
     for r in runs:
-        assert r["strategy"] == "mean_reversion_rsi"
+        assert r["strategy"] == "mean_reversion_multi"
         assert r["bars"] is _BARS
         assert r["params"] == expected_params
 
@@ -378,7 +381,9 @@ async def test_t4_multi_too_few_confirmations(monkeypatch):
 async def test_t4_multi_no_valid_combined_levels(monkeypatch):
     _offline(monkeypatch)
     _multi_stubs(monkeypatch, {"mean_reversion_rsi", "mean_reversion_bb"}, [])
-    monkeypatch.setattr(ss, "resolve_multi_signal", lambda fired, strategy: None)
+    # The vote resolves inside strategy_engine.multi_signal (STOCKS-HORIZON-T1 H3).
+    import app.services.strategy_engine as se
+    monkeypatch.setattr(se, "resolve_multi_signal", lambda fired, strategy: None)
     scan = await _scan(**_MULTI)
     assert scan["reason"] == "mean_reversion_multi: variants produced no valid combined levels"
     core = await _analyze(**_MULTI)
