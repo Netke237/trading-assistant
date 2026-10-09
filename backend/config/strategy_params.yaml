@@ -40,6 +40,30 @@ basket:
   per_sector: 5
   symbols: []
 
+# Per-horizon tuner (STOCKS-HORIZON-T1 H8; strategy_param_store.get_tuning_config).
+tuning:
+  cost_per_leg: 0.0005
+  stress_cost_per_leg: 0.002
+  held_out_months: 12
+  exit_buffer_days: 14
+  windows:
+    Swing:      {train_months: 12, test_months: 3}
+    Position:   {train_months: 12, test_months: 3}
+    Quarterly:  {train_months: 12, test_months: 4}
+    SemiAnnual: {train_months: 16, test_months: 8}
+    Annual:     {train_months: 24, test_months: 12}
+  fire_rate_floor_per_day:
+    Swing: 2.0
+    Position: 1.0
+    Quarterly: 0.6
+    SemiAnnual: 0.4
+    Annual: 0.2
+  adoption: {ci_level: 0.95, min_oos_trades: 100, min_symbols: 20, bootstrap_resamples: 2000, seed: 7}
+  min_train_trades: 30
+  min_folds_not_thin: 4
+  basket: {per_sector: 10}
+  gates: {min_price: null, max_price: null}
+
 strategies:
   pullback_ema:
     active:

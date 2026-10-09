@@ -242,3 +242,79 @@ def get_composite_trigger_defaults() -> dict:
             },
         )
     )
+
+
+# ── Per-horizon tuner config (STOCKS-HORIZON-T1 H8) ───────────────────────────
+# The `tuning:` block's values come from ADR 0001 decision 4 (costs, fire-rate
+# floors) and decision STOCKS-HORIZON-T1-DESIGN-2026-10-05 (windows: train is
+# 2-4 x test; Annual's test of 12 months is under 2 x its 200-day hold, as
+# decided, and the report says so). Rationale lives here and in the plan:
+# adopt() rewrites the YAML with safe_dump, which drops comments.
+
+def _num(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _check_keys(node, expected: set[str], where: str) -> dict:
+    if not isinstance(node, dict):
+        raise ValueError(f"{where} must be a mapping, got {type(node).__name__}")
+    unknown = sorted(set(node) - expected, key=str)
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) {unknown}")
+    missing = sorted(expected - set(node))
+    if missing:
+        raise ValueError(f"{where}: missing key(s) {missing}")
+    return node
+
+
+def _require(ok: bool, where: str, rule: str, value) -> None:
+    if not ok:
+        raise ValueError(f"{where} must be {rule}, got {value!r}")
+
+
+def get_tuning_config() -> dict:
+    """The validated ``tuning:`` block (a deep copy). Unknown or missing keys
+    and out-of-range values raise ``ValueError`` naming the key."""
+    from app.services.horizon_profiles import TUNED_HORIZONS
+    data = _load()
+    if "tuning" not in data:
+        raise ValueError("strategy_params.yaml: missing the `tuning:` block")
+    cfg = copy.deepcopy(data["tuning"])
+    horizons = set(TUNED_HORIZONS)
+    _check_keys(cfg, {"cost_per_leg", "stress_cost_per_leg", "held_out_months", "exit_buffer_days",
+                      "windows", "fire_rate_floor_per_day", "adoption", "min_train_trades",
+                      "min_folds_not_thin", "basket", "gates"}, "tuning")
+    for k in ("cost_per_leg", "stress_cost_per_leg"):
+        _require(_num(cfg[k]) and 0 <= cfg[k] < 0.1, f"tuning.{k}", "a number in [0, 0.1)", cfg[k])
+    for k in ("held_out_months", "min_train_trades", "min_folds_not_thin"):
+        _require(_int(cfg[k]) and cfg[k] >= 1, f"tuning.{k}", "an integer >= 1", cfg[k])
+    _require(_int(cfg["exit_buffer_days"]) and cfg["exit_buffer_days"] >= 0,
+             "tuning.exit_buffer_days", "an integer >= 0", cfg["exit_buffer_days"])
+    _check_keys(cfg["windows"], horizons, "tuning.windows")
+    for h in TUNED_HORIZONS:
+        w = _check_keys(cfg["windows"][h], {"train_months", "test_months"}, f"tuning.windows.{h}")
+        for k in ("train_months", "test_months"):
+            _require(_int(w[k]) and w[k] >= 1, f"tuning.windows.{h}.{k}", "an integer >= 1", w[k])
+    floors = _check_keys(cfg["fire_rate_floor_per_day"], horizons, "tuning.fire_rate_floor_per_day")
+    for h in TUNED_HORIZONS:
+        _require(_num(floors[h]) and floors[h] >= 0, f"tuning.fire_rate_floor_per_day.{h}",
+                 "a number >= 0", floors[h])
+    a = _check_keys(cfg["adoption"], {"ci_level", "min_oos_trades", "min_symbols",
+                                      "bootstrap_resamples", "seed"}, "tuning.adoption")
+    _require(_num(a["ci_level"]) and 0 < a["ci_level"] < 1, "tuning.adoption.ci_level",
+             "a number in (0, 1)", a["ci_level"])
+    for k in ("min_oos_trades", "min_symbols", "bootstrap_resamples"):
+        _require(_int(a[k]) and a[k] >= 1, f"tuning.adoption.{k}", "an integer >= 1", a[k])
+    _require(_int(a["seed"]), "tuning.adoption.seed", "an integer", a["seed"])
+    b = _check_keys(cfg["basket"], {"per_sector"}, "tuning.basket")
+    _require(_int(b["per_sector"]) and b["per_sector"] >= 1, "tuning.basket.per_sector",
+             "an integer >= 1", b["per_sector"])
+    g = _check_keys(cfg["gates"], {"min_price", "max_price"}, "tuning.gates")
+    for k in ("min_price", "max_price"):
+        _require(g[k] is None or (_num(g[k]) and g[k] >= 0), f"tuning.gates.{k}",
+                 "null or a number >= 0", g[k])
+    return cfg
