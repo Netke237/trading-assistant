@@ -1547,3 +1547,89 @@ def test_per_stage_the_entrys_verify_probe_tracks_the_stage_count(repo):
     assert not re.search(pattern, reverted, re.M), (
         "the probe still certifies this shipped with the stage count reverted"
     )
+
+
+# --- STATE-PER-STAGE-CAP round 1 findings ----------------------------------
+
+@pytest.mark.parametrize("code_subjects", [
+    # F1: the repo's own code-round spellings, incl. the real cap subjects
+    # "A5 round 3 (code): not clean -- hard cap reached" and
+    # "ALERT-INDICATOR-ID-MAP code audit r3".
+    ["H round 1 (code)", "H round 2 (code)", "H round 3 (code): not clean -- hard cap reached"],
+    ["H code audit r1", "H code audit r2", "H code audit r3"],
+    ["H Code audit round 1", "H Code audit round 2", "H Code audit round 3"],
+    ["H plan round 3 fixes landed; code audit r3 not clean"],
+])
+def test_f1_round1_every_code_round_spelling_reaches_the_cap(repo, code_subjects):
+    _three_plan_rounds(repo)
+    for subject in code_subjects:
+        repo.commit(subject)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(6, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "drift" and "HARD CAP" in message and "code round 3" in message
+
+
+def test_f1_round1_the_paired_continuous_form_is_still_read_as_continuous(repo):
+    _three_plan_rounds(repo)
+    repo.commit("docs(state): H round 5 (code round 2)")
+    assert _mod.audit_bookkeeping_drift(
+        _staged(5, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"})) is None
+
+
+@pytest.mark.parametrize("subjects", [
+    # F2 reproduction A: three plan rounds, none clean, closed "clean".
+    ["docs(state): H plan round 1 NOT CLEAN", "docs(state): H plan round 2 NOT CLEAN",
+     "docs(state): H plan round 3 NOT CLEAN"],
+    ["docs(state): H plan round 1", "docs(state): H plan round 2",
+     "docs(state): H plan round 3 -- none of them clean"],
+])
+def test_f2_round1_clean_needs_a_subject_saying_the_plan_round_was_clean(repo, subjects):
+    for subject in subjects:
+        repo.commit(subject)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 3, "closed_by": "clean"}))
+    assert severity == "drift" and "HARD CAP" in message
+    assert "IGNORED" in message and "plan round 3 was clean" in message
+
+
+def test_f2_round1_plan_rounds_after_a_premature_clean_close_still_count(repo):
+    """F2 reproduction B: closed 'clean' at 1, then plan rounds 2-3 untagged."""
+    repo.commit("docs(state): H plan round 1 not clean")
+    repo.commit("docs(plan): H round 2 not clean")
+    repo.commit("docs(plan): H round 3 not clean")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 1, "closed_by": "clean"}))
+    assert severity == "drift" and "IGNORED" in message
+
+
+def test_f2_round1_a_genuinely_clean_plan_round_still_closes(repo):
+    repo.commit("docs(state): H plan round 1")
+    repo.commit("docs(state): H plan round 2 clean (no gate findings)")
+    repo.commit("docs(state): H round 3 (code round 1)")
+    repo.commit("docs(state): H round 4 (code round 2)")
+    assert _mod.audit_bookkeeping_drift(
+        _staged(4, plan_stage={"rounds": 2, "closed_by": "clean"})) is None
+
+
+@pytest.mark.parametrize("decisions", [None, 5, "SPLIT-H", {"id": "SPLIT-H"}])
+def test_f3_round1_a_malformed_decisions_list_refuses_instead_of_raising(repo, decisions):
+    _three_plan_rounds(repo)
+    state = _staged(3, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"})
+    state["decisions"] = decisions
+    severity, message = _mod.audit_bookkeeping_drift(state)
+    assert severity == "drift" and "IGNORED" in message
+
+
+@pytest.mark.parametrize("key", [7, "   "])
+def test_f3_round1_a_target_key_with_no_token_refuses_instead_of_raising(repo, key):
+    _three_plan_rounds(repo)
+    if isinstance(key, int):
+        state = dict(_state(active=key, phases=[{
+            "id": key, "name": "Seven", "audit_rounds": 3, "audit_clean": False,
+            "plan_stage": {"rounds": 3, "closed_by": "SPLIT-H"}}]), decisions=[_SPLIT])
+    else:
+        state = dict(_state(active=key, shipped=[{
+            "name": key, "audit_rounds": 3, "audit_clean": False,
+            "plan_stage": {"rounds": 3, "closed_by": "SPLIT-H"}}]), decisions=[_SPLIT])
+    severity, message = _mod.audit_bookkeeping_drift(state)
+    assert severity == "drift" and "IGNORED" in message

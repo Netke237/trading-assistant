@@ -172,8 +172,8 @@ def _round_hits(line: str) -> list[tuple[int, str | None]]:
     """Every round number one subject names, each with the stage word written
     before it ("plan" / "code", lower-cased) or None when there is none.
 
-    Only the per-stage cap (`_plan_stage`, `_stage_round_max`) reads the tag;
-    everything else reads the numbers alone. Every number in a range carries
+    Only the per-stage cap reads the tag, through `_staged_hits`, which also
+    gives untagged rounds a stage; everything else reads the numbers alone. Every number in a range carries
     its range's tag: "code rounds 1-2" is code rounds 1 and 2.
     """
     hits: list[tuple[int, str | None]] = []
@@ -677,8 +677,47 @@ def _pointer_target(state: dict) -> tuple[dict | None, str]:
     )
 
 
+_CODE_WORD_RE = re.compile(r"\b(?i:code)\b")
+_PLAN_WORD_RE = re.compile(r"\b(?i:plan)\b")
+# A subject saying the round was NOT clean: "not clean", "NONE of them clean".
+_NOT_CLEAN_RE = re.compile(r"\b(?i:not|never|none(?:\s+of\s+them)?)[\s-]+(?i:clean)\b")
+
+
+def _staged_hits(subject: str) -> list[tuple[int, str | None]]:
+    """`_round_hits`, with a stage given to the rounds that carry no stage word
+    of their own -- read only once a `plan_stage` holds.
+
+    Round 1 finding F1 of STATE-PER-STAGE-CAP: this repo spells code rounds
+    more ways than "code round N" -- "A5 round 3 (code): not clean -- hard cap
+    reached", "ALERT-INDICATOR-ID-MAP code audit r3", "Code audit round 2" --
+    and reading those as continuous numbering put a code stage at its cap
+    under "No drift". So an untagged round is:
+
+      - CONTINUOUS (None) when the same subject also carries a tagged "code
+        round K": that is the record's paired form, "round 4 (code round 1)";
+      - otherwise a CODE round, numbered from the stage, when "code" appears
+        anywhere in the subject;
+      - otherwise a PLAN round when "plan" does ("docs(plan): X round 4");
+      - otherwise CONTINUOUS.
+
+    Every doubt resolves toward reading the number higher, i.e. a false alarm,
+    the direction this probe accepts: "round 4 records the code fixes" reads
+    as code round 4.
+    """
+    hits = _round_hits(subject)
+    if any(stage == "code" for _, stage in hits):
+        inferred = None
+    elif _CODE_WORD_RE.search(subject):
+        inferred = "code"
+    elif _PLAN_WORD_RE.search(subject):
+        inferred = "plan"
+    else:
+        inferred = None
+    return [(n, stage or inferred) for n, stage in hits]
+
+
 def _plan_stage(
-    target: dict, key: str, declared: int | None, state: dict, subjects: list[str],
+    target: dict, key, declared: int | None, state: dict, subjects: list[str],
 ) -> tuple[int | None, str | None]:
     """Where this target's PLAN stage ended, read off its optional
     `plan_stage: {"rounds": N, "closed_by": "<decision id>" | "clean"}`.
@@ -690,13 +729,15 @@ def _plan_stage(
     where the cap starts counting, and nothing else.
 
     IT IS NOT AN ACKNOWLEDGEMENT FLAG, and every bound below is what keeps it
-    from becoming one. It can move the threshold by at most the cap itself, so
-    the code stage still trips at its own third round; it cannot claim more
-    rounds than the target declares it ran; the decision it cites must exist
-    and name this target; and a `plan round M` subject above N on this branch
-    contradicts it outright. Any of those, and the field is ignored -- the cap
-    counts from round 1, exactly as if it were absent -- and the reason is
-    returned so the caller can say so.
+    from becoming one. It can move the threshold by at most the cap itself; it
+    cannot claim more rounds than the target declares it ran; a decision it
+    cites must exist and name this target; "clean" must be backed by a subject
+    on this branch saying plan round N was clean (round 1 finding F2: unchecked,
+    one word silenced a plan stage at 3 rounds NOT clean); and a plan round
+    above N on this branch, as `_staged_hits` reads them, contradicts it
+    outright. Any of those, and the field is ignored -- the cap counts from
+    round 1, exactly as if it were absent -- and the reason is returned so the
+    caller can say so. What the code stage then trips on is `_stage_round_max`.
 
     Returns (N, None) when it holds, (None, None) when it is absent, and
     (None, reason) when it is present but refused.
@@ -724,20 +765,36 @@ def _plan_stage(
         return refused("audit_rounds is not a whole number to check it against")
     if rounds > declared:
         return refused(f"rounds is more than the {declared} audit_rounds the target declares")
+    staged = [(subject, _staged_hits(subject)) for subject in subjects]
     closed_by = raw.get("closed_by")
-    if closed_by != "clean":
-        token = re.compile(r"(?<![\w-])" + re.escape(key.split()[0]) + r"(?![\w-])")
+    if closed_by == "clean":
+        if not any(
+            (rounds, "plan") in hits and re.search(r"\b(?i:clean)\b", subject)
+            and not _NOT_CLEAN_RE.search(subject)
+            for subject, hits in staged
+        ):
+            return refused(
+                f'closed_by is "clean" but no subject on this branch says plan '
+                f"round {rounds} was clean"
+            )
+    else:
+        # Round 1 finding F3: both are hand-edited, and a traceback here is a
+        # crash in the SessionStart hook.
+        decisions = state.get("decisions")
+        if not isinstance(key, str) or not key.split() or not isinstance(decisions, list):
+            return refused("there is no target id or decisions[] list to check closed_by against")
+        name = key.split()[0]
         decision = next(
-            (d for d in state.get("decisions", [])
-             if isinstance(d, dict) and d.get("id") == closed_by and isinstance(closed_by, str)),
+            (d for d in decisions
+             if isinstance(d, dict) and isinstance(closed_by, str) and d.get("id") == closed_by),
             None,
         )
         if decision is None:
             return refused('closed_by must be "clean" or the id of an entry in decisions[]')
+        token = re.compile(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])")
         if not token.search(json.dumps(decision, ensure_ascii=False)):
-            return refused(f"decision {closed_by} does not name {key.split()[0]}")
-    later = [n for subject in subjects for n, stage in _round_hits(subject)
-             if stage == "plan" and n > rounds]
+            return refused(f"decision {closed_by} does not name {name}")
+    later = [n for _, hits in staged for n, stage in hits if stage == "plan" and n > rounds]
     if later:
         return refused(f"this branch's subjects name plan round {max(later)}, after it closed")
     return rounds, None
@@ -745,17 +802,19 @@ def _plan_stage(
 
 def _stage_round_max(subjects: list[str], plan_rounds: int) -> int:
     """The highest CODE-stage round these subjects reach, once the plan stage
-    closed at `plan_rounds`. "code round N" is code round N; an untagged round
-    is numbered continuously, as records number them ("round 4 (code round 1)"),
-    so it is round N - plan_rounds; "plan round N" is not a code round at all.
+    closed at `plan_rounds`, with stages as `_staged_hits` reads them: a code
+    round is its own number; a continuous one ("round 4" in "round 4 (code
+    round 1)", or a subject naming no stage) is N - plan_rounds; a plan round
+    is not a code round at all.
 
-    THE ACCEPTED COST: an untagged subject that numbers a code round from 1
-    reads `plan_rounds` too low. Tag code rounds in subjects -- the canonical
-    `docs(state): <ID> code round N` already does.
+    THE ACCEPTED COST: a subject that names NO stage word and numbers a code
+    round from 1 ("H round 3 not clean" meaning code round 3) reads
+    `plan_rounds` too low. Name the stage in subjects -- the canonical
+    `docs(state): <ID> code round N` does.
     """
     best = 0
     for subject in subjects:
-        for n, stage in _round_hits(subject):
+        for n, stage in _staged_hits(subject):
             if stage == "code":
                 best = max(best, n)
             elif stage is None:

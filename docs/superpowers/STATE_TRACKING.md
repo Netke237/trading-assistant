@@ -109,15 +109,20 @@ a green "No drift".
     per stage, `AUDIT-CAP-PER-STAGE-2026-09-25`). Add to the target's record
     `"plan_stage": {"rounds": N, "closed_by": "<decision id>"}` (or
     `"closed_by": "clean"` when a clean plan round closed it). The cap then
-    reads the **code** stage's round — `code round K` as written, an untagged
-    `round M` as `M - N`, `plan round …` not at all — and still fires at code
-    round 3 not clean. The field is **ignored** (cap counts from round 1, and
-    the output says why) unless `N` is a whole number 1–3, `N` ≤
-    `audit_rounds`, `closed_by` is `"clean"` or an id in `decisions[]` whose
-    text names the target, and no `plan round M` with `M > N` is on the branch.
-    Tag code-round subjects (`docs(state): <ID> code round K`): an untagged
-    subject numbering a code round from 1 reads too low. The undercount check
-    is unchanged.
+    reads the **code** stage's round and still fires at code round 3 not
+    clean. A round with no stage word of its own is read from its subject:
+    beside a `code round K` it is continuous (`round 4 (code round 1)` →
+    `4 - N`); otherwise any `code` in the subject makes it a code round as
+    written (`round 3 (code)`, `code audit r3`); otherwise any `plan` makes it
+    a plan round; otherwise it is continuous (`round M` → `M - N`). The field
+    is **ignored** (cap counts from round 1, and the output says why) unless
+    `N` is a whole number 1–3, `N` ≤ `audit_rounds`, `closed_by` is an id in
+    `decisions[]` whose text names the target **or** `"clean"` with a subject
+    on the branch saying plan round `N` was clean (not "not clean" / "none of
+    them clean"), and no plan round above `N` is on the branch. A subject that
+    names **no** stage and numbers a code round from 1 reads too low — name
+    the stage (`docs(state): <ID> code round K`). The undercount check is
+    unchanged.
   - It **clears** by going clean or by merging, never by an acknowledgement
     flag.
 - **When it cannot look, it says so.** No resolvable base, no git, or a
