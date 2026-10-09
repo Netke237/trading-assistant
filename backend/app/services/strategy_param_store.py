@@ -9,6 +9,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -33,23 +34,73 @@ def _load() -> dict:
     return data
 
 
-def get_active(strategy: str, direction: str = "Bullish") -> dict:
-    """Active params for a strategy + direction.
+def _active_block(strategy: str, direction: str) -> dict:
+    """The raw ``active[direction]`` dict (baseline keys + horizon sub-dicts).
 
     Supports both nested ``active: {bullish: {...}, bearish: {...}}``
     and legacy flat ``active: {...}`` (treated as the bullish set).
-
-    Returns a copy of the matched params dict, or empty dict if not found.
-    The caller should provide signal-function defaults if the strategy is unknown.
     """
-    active = _load().get("strategies", {}).get(strategy, {}).get("active", {})
+    active = _load().get("strategies", {}).get(strategy, {}).get("active", {}) or {}
     key = direction.lower()
     if key in ("bullish", "bearish") and (
         "bullish" in active or "bearish" in active
     ):
-        return dict(active.get(key, {}))
+        return active.get(key, {}) or {}
     # legacy flat active = bullish only
-    return dict(active) if key == "bullish" else {}
+    return active if key == "bullish" else {}
+
+
+def get_active(strategy: str, direction: str = "Bullish") -> dict:
+    """The DIRECTION BASELINE params for a strategy + direction.
+
+    Inside ``active.<direction>``, a key in ``TUNED_HORIZONS`` holds that
+    horizon's profile (STOCKS-HORIZON-T1 H4, ADR 0001 decision 3); every other
+    key is the baseline. Horizon sub-dicts are removed here, so callers that
+    predate the profiles see exactly the set they always saw.
+
+    Returns a deep copy, or an empty dict if not found. The caller should
+    provide signal-function defaults if the strategy is unknown.
+    """
+    from app.services.horizon_profiles import TUNED_HORIZONS
+    block = _active_block(strategy, direction)
+    return copy.deepcopy({k: v for k, v in block.items() if k not in TUNED_HORIZONS})
+
+
+def get_profile(
+    strategy: str, direction: str, horizon: str | None,
+) -> tuple[dict, Literal["tuned", "baseline"]]:
+    """The params a scan or watch reads for ``direction`` x ``horizon``.
+
+    ``({**baseline, **profile}, "tuned")`` when ``active.<direction>.<horizon>``
+    exists, else ``(baseline, "baseline")``; ``horizon=None`` -> baseline. For
+    ``mean_reversion_multi`` the merge is nested: ``variant_params`` merges per
+    variant, so a profile naming one variant field keeps the others.
+    """
+    baseline = get_active(strategy, direction)
+    if horizon is None:
+        return baseline, "baseline"
+    profile = _active_block(strategy, direction).get(horizon)
+    if not isinstance(profile, dict):
+        return baseline, "baseline"
+    profile = copy.deepcopy(profile)
+    merged = {**baseline, **profile}
+    if "variant_params" in profile:
+        base_vp = baseline.get("variant_params") or {}
+        prof_vp = profile.get("variant_params") or {}
+        merged["variant_params"] = {
+            v: {**(base_vp.get(v) or {}), **(prof_vp.get(v) or {})}
+            for v in {**base_vp, **prof_vp}
+        }
+    return merged, "tuned"
+
+
+def get_search_by_horizon(strategy: str, direction: str, horizon: str) -> dict:
+    """The tuner's grid for one cell (strategy x direction x tuned horizon):
+    ``strategies.<s>.search_by_horizon.<direction>.<horizon>``. Multi grids
+    address variant fields with dots (``mean_reversion_rsi.rsi_oversold``).
+    Empty dict when absent. The legacy ``search:`` grid is separate."""
+    sbh = _load().get("strategies", {}).get(strategy, {}).get("search_by_horizon", {}) or {}
+    return copy.deepcopy((sbh.get(direction.lower(), {}) or {}).get(horizon, {}) or {})
 
 
 def get_search_space(strategy: str) -> dict:
@@ -124,8 +175,13 @@ def get_job_retention() -> dict:
     return dict(_load().get("job_retention", {"max_completed": 100}))
 
 
-def adopt(strategy: str, params: dict, direction: str = "Bullish") -> None:
+def adopt(strategy: str, params: dict, direction: str = "Bullish",
+          horizon: str | None = None) -> None:
     """Archive then write ``active[direction]`` = params (atomic, backup-first).
+
+    ``horizon=None`` replaces the direction BASELINE and keeps every horizon
+    profile sub-dict (STOCKS-HORIZON-T1 H4). With a tuned horizon it writes
+    only ``active[direction][horizon]`` and leaves the baseline alone.
 
     Migrates a legacy flat ``active: {...}`` to nested ``{bullish: {...}}``
     on the first direction-keyed write so the file stays forward-compatible.
@@ -134,6 +190,9 @@ def adopt(strategy: str, params: dict, direction: str = "Bullish") -> None:
     Uses atomic write (tmp-then-replace) to prevent corruption on crash.
     """
     global _CACHE
+    from app.services.horizon_profiles import TUNED_HORIZONS
+    if horizon is not None and horizon not in TUNED_HORIZONS:
+        raise ValueError(f"adopt: {horizon!r} is not a tuned horizon")
     # Deep-copy so the in-memory cache is never mutated before the write succeeds.
     data = copy.deepcopy(_load())
 
@@ -150,7 +209,16 @@ def adopt(strategy: str, params: dict, direction: str = "Bullish") -> None:
     # Migrate legacy flat active → nested bullish on first nested write
     if active and not ({"bullish", "bearish"} & set(active.keys())):
         active = {"bullish": active}
-    active[direction.lower()] = copy.deepcopy(params)
+    current = active.get(direction.lower()) or {}
+    if horizon is None:
+        new_block = copy.deepcopy(params)
+        for h in TUNED_HORIZONS:
+            if h in current:
+                new_block[h] = current[h]
+    else:
+        new_block = dict(current)
+        new_block[horizon] = copy.deepcopy(params)
+    active[direction.lower()] = new_block
     strat["active"] = active
 
     # Write back to YAML using atomic write (tmp-then-replace)

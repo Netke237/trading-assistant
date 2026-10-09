@@ -10,7 +10,9 @@ reintroduce a lost-update race between concurrent requests).
 from __future__ import annotations
 
 import os
+import shutil
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +20,12 @@ import yaml
 from sqlalchemy import delete, select
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "scan_schedule.yaml"
+
+# File format version. 2 (STOCKS-HORIZON-T1 H4): every stocks entry's
+# resolved_request has had its strategy fields stripped and its params_horizon
+# set (horizon_profiles.migrate_saved_stock_request). A file without the key is
+# version 1.
+_SCHEMA_VERSION = 2
 
 
 class ScanScheduleStore:
@@ -32,6 +40,9 @@ class ScanScheduleStore:
         try:
             raw = yaml.safe_load(self._path.read_text()) or {}
             entries = raw.get("entries", [])
+            migrate = int(raw.get("version", 1) or 1) < _SCHEMA_VERSION
+            if migrate:
+                entries = [self._migrate_entry(e) for e in entries]
             loaded: dict[str, dict] = {}
             for entry in entries:
                 try:
@@ -41,8 +52,28 @@ class ScanScheduleStore:
                     continue  # malformed rows are dropped, not fatal
             with self._lock:
                 self._entries = loaded
+                if migrate:
+                    self._backup()
+                    self._save_locked()
         except Exception:
             pass
+
+    @staticmethod
+    def _migrate_entry(entry: object) -> object:
+        """v1 -> v2: a stocks entry's saved request loses its strategy fields
+        (old clients always sent them at frozen defaults, which would override
+        the backend profile forever) and gains params_horizon from its hold."""
+        from app.services.horizon_profiles import migrate_saved_stock_request
+        if (isinstance(entry, dict) and entry.get("mode") == "stocks"
+                and isinstance(entry.get("resolved_request"), dict)):
+            return {**entry, "resolved_request": migrate_saved_stock_request(entry["resolved_request"])}
+        return entry
+
+    def _backup(self) -> None:
+        """Copy the file aside before a migration rewrites it (as
+        strategy_param_store.adopt() does)."""
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.copy(self._path, self._path.with_suffix(f".bak.{stamp}-{uuid.uuid4().hex[:8]}.yaml"))
 
     def list(self) -> list[dict]:
         with self._lock:
@@ -67,7 +98,7 @@ class ScanScheduleStore:
         """Must be called with self._lock already held."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".yaml.tmp")
-        data = {"entries": list(self._entries.values())}
+        data = {"version": _SCHEMA_VERSION, "entries": list(self._entries.values())}
         tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
         os.replace(tmp, self._path)
 

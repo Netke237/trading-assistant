@@ -8,7 +8,8 @@ at creation, so a reversal can't be detected by comparing the primary signal
 (always evaluated in the watch's own fixed direction) against the armed state's
 direction -- those can never disagree. Instead, while armed (and neither stop nor
 target has hit), the evaluator also evaluates the signal function for the
-OPPOSITE direction, using that direction's own tuned params (get_active). If the
+OPPOSITE direction, using that direction's own params for the watch's params
+horizon (get_profile; no params_horizon = the direction baseline). If the
 opposite-direction signal fires, that's a genuine reversal and the watch re-arms
 in the new direction.
 """
@@ -29,7 +30,7 @@ from app.services.strategy_engine import (
     mean_reversion_bb_signal, SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_watch_store import strategy_watch_store
-from app.services.strategy_param_store import get_active, get_exit
+from app.services.strategy_param_store import get_exit, get_profile
 from app.services.notifications.dispatch import (
     _CHANNELS, notify_channels, read_notification_config, ready_channels,
 )
@@ -384,7 +385,9 @@ async def _eval_strategy_watch(
     close = float(bars[-1]["close"])
     wdir = w.get("direction", "Bullish")
     try:
-        adopted = {**get_exit(key), **get_active(key, wdir)}
+        # STOCKS-HORIZON-T1 H4: the profile for the watch's params horizon
+        # (absent -> the direction baseline, as before).
+        adopted = {**get_exit(key), **get_profile(key, wdir, w.get("params_horizon"))[0]}
         params_override = w.get("params_override") or {}
         adopted.update(params_override)  # params_override wins
         signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=wdir, **adopted)
@@ -481,7 +484,8 @@ async def _eval_strategy_watch(
             # reachable, not adding debounce) -- revisit if this proves noisy.
             opposite_dir = "Bearish" if sdir == "Bullish" else "Bullish"
             try:
-                opp_params = {**get_exit(key), **get_active(key, opposite_dir)}
+                opp_params = {**get_exit(key),
+                              **get_profile(key, opposite_dir, w.get("params_horizon"))[0]}
                 opp_params.update(params_override)
                 opp_signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=opposite_dir, **opp_params)
             except Exception as exc:

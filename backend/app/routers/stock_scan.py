@@ -68,8 +68,10 @@ from app.services.strategy_engine import (
     SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.horizon_profiles import hold_for_backtest
-from app.services.strategy_param_store import get_active, get_costs, get_exit
+from app.services.horizon_profiles import (
+    hold_for_backtest, migrate_saved_stock_request, resolve_params_horizon,
+)
+from app.services.strategy_param_store import get_active, get_costs, get_exit, get_profile
 from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.data.confidence_cache import generation as conf_generation
@@ -221,21 +223,38 @@ def _backtest_commission() -> float:
     return commission_for(get_costs())
 
 
-def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
-    """Exit policy, then adopted defaults for this direction, then per-request kwargs.
+def _params_horizon(req: StockScanRequest) -> str | None:
+    """The tuned horizon whose parameters this request reads (STOCKS-HORIZON-T1
+    H4): ``req.params_horizon``, else the tuned horizon nearest the request's
+    hold when the scoring horizon is not Intraday, else None (baseline)."""
+    return resolve_params_horizon(req.params_horizon, req.horizon, req.hold_max_days)
 
-    Precedence is deliberately exit < active < request: the exit block is a
+
+def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict,
+                           params_horizon: str | None = None) -> dict:
+    """Exit policy, then the profile for direction x params horizon, then
+    per-request kwargs.
+
+    Precedence is deliberately exit < profile < request: the exit block is a
     baseline the tuner may later override into `active:` (WFO's adopt() writes
-    there), and an explicit per-scan override always wins over both.
+    there), the profile (``get_profile``: the direction baseline, overlaid by
+    the tuned horizon's profile when one exists) is the adopted value, and an
+    explicit per-scan override (any non-None request field) wins over both.
 
     Note this widens `_backtest_key`'s inputs — `_bt_params` is part of the
     backtest cache key — so every cached BacktestResult is invalidated the first
     time this ships. That is correct: the exits genuinely changed.
     """
     merged = get_exit(strategy)
-    merged.update(get_active(strategy, direction))
+    merged.update(get_profile(strategy, direction, params_horizon)[0])
     merged.update({k: v for k, v in request_kwargs.items() if v is not None})
     return merged
+
+
+def _params_source(req: StockScanRequest) -> str:
+    """The card's params_source: "tuned" when a tuned profile exists for the
+    request's strategy x direction x params horizon, else "baseline"."""
+    return get_profile(req.strategy, req.direction, _params_horizon(req))[1]
 
 
 # ── A5c: scan-drop filters shared by _process_stock and _analyze_core ────────
@@ -464,18 +483,22 @@ def _aligned_benchmark(benchmark: list[dict] | None, stock_bars: list[dict]) -> 
 
 def _multi_params(req: StockScanRequest) -> dict:
     """mean_reversion_multi's effective params shape for this request
-    (STOCKS-HORIZON-T1 H3): the YAML multi profile under the request's
-    variants, min_confirmations and per-variant fields. The live loop and the
-    backtest are handed this same object."""
+    (STOCKS-HORIZON-T1 H3/H4): the multi profile for direction x params horizon
+    under the request's variants, min_confirmations and per-variant fields
+    (None = not set). The live loop and the backtest are handed this same
+    object."""
+    profile = get_profile("mean_reversion_multi", req.direction, _params_horizon(req))[0]
+    variants = (req.mean_reversion_variants if req.mean_reversion_variants is not None
+                else profile.get("variants") or [])
     variant_params: dict = {}
-    for variant in req.mean_reversion_variants:
+    for variant in variants:
         kw = dict(_SIGNAL_KWARGS.get(variant, lambda r: {})(req))
         if variant == "mean_reversion_vwap_daily":
             kw.update(vwap_lookback=req.vwap_lookback, vwap_deviation_pct=req.vwap_deviation_pct)
         variant_params[variant] = kw
     return merge_multi_params(
         req.direction,
-        get_active("mean_reversion_multi", req.direction),
+        profile,
         {"variants": req.mean_reversion_variants,
          "min_confirmations": req.mean_reversion_min_confirmations,
          "variant_params": variant_params},
@@ -522,11 +545,27 @@ def _reject_unsupported_multi_variants(req: StockScanRequest) -> None:
     # rejected here rather than left as a live API footgun for the next
     # caller (a future feature, a test, a script) that adds it. Called by
     # both run_stock_scan and analyze_stock (A5c: Analysis runs the loop too).
-    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
+    #
+    # STOCKS-HORIZON-T1 H4: both checks run on the MERGED shape (profile +
+    # request), since the request's multi fields are Optional. A request with
+    # 2 variants against a profile min_confirmations 3 is refused here rather
+    # than silently never firing.
+    if req.strategy != "mean_reversion_multi":
+        return
+    shape = _multi_params(req)
+    variants = shape.get("variants") or []
+    if "mean_reversion_vwap" in variants:
         raise HTTPException(
             status_code=422,
             detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
                    "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
+        )
+    min_conf = shape.get("min_confirmations")
+    if min_conf is None or min_conf > len(variants):
+        raise HTTPException(
+            status_code=422,
+            detail=f"mean_reversion_min_confirmations ({min_conf}) cannot exceed the number "
+                   f"of selected variants ({len(variants)})",
         )
 
 
@@ -688,8 +727,13 @@ async def restore_stock_from_db() -> None:
             # now refuse is worse than offering no replay. The result still
             # loads.
             try:
-                _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
-            except ValidationError as exc:
+                # STOCKS-HORIZON-T1 H4: a request saved before the strategy
+                # fields became Optional carries their frozen defaults; drop
+                # them so a replay follows the profile (idempotent; the row
+                # itself is rewritten by the next scan).
+                _last_stock_request = StockScanRequest.model_validate(
+                    migrate_saved_stock_request(json.loads(row.last_request_json)))
+            except (ValidationError, ValueError) as exc:
                 logger.warning(
                     "restore_stock_from_db: saved stock-scan request no longer "
                     "validates and was dropped (no Analysis replay until the "
@@ -930,7 +974,8 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         signal_fn = _SIGNAL_FNS.get(req.strategy)
         if signal_fn:
             signal_kwargs = _merge_strategy_params(
-                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                _params_horizon(req))
             _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
                          else bars[-SIGNAL_WINDOW_BARS:])
             # Pass live price so signal uses current price, not yesterday's close.
@@ -1431,6 +1476,7 @@ async def _process_stock(
                 signal_kwargs = _merge_strategy_params(
                     req.strategy, req.direction,
                     _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                    _params_horizon(req),
                 )
                 # Intraday strategies use intraday bars for both signal and backtest.
                 signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-SIGNAL_WINDOW_BARS:]
@@ -1605,6 +1651,8 @@ async def _process_stock(
                     growth_score=_fh.growth_score, quality_score=_fh.quality_score,
                     risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail,
                 ) if _fh else None,
+                params_horizon=_params_horizon(req),
+                params_source=_params_source(req),
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
