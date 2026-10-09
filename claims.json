@@ -23,14 +23,6 @@
       "expires_at": "2026-10-10T02:09:15Z",
       "note": "Resume after restart: H1+H2 built (#134 closed, #135 verified), H3 next, then integrated code audit",
       "task": "AUTOTRADE-FIRE-HYGIENE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/relaxed-fermat-sm9xru",
-      "claimed_at": "2026-10-09T23:18:45Z",
-      "expires_at": "2026-10-10T02:18:45Z",
-      "note": "Backlog ticket 30: reconcile trade-card follow-up 55e08e55 release status (read-only verification)",
-      "task": "TICKET-30-TRADE-CARD-RELEASE"
     }
   ]
 }
