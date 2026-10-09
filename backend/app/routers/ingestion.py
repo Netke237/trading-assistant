@@ -25,6 +25,7 @@ _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 class IngestRequest(BaseModel):
     symbols: list[str]
     years: int | None = Field(default=None, ge=1, le=20)
+    force_backfill: bool = False
 
 
 _UNIVERSE_PRESETS = {"SP500", "NDX100", "DOW30"}
@@ -48,7 +49,10 @@ async def trigger_ingest(req: IngestRequest) -> dict:
         except Exception:
             pass
     years = effective_years(req.years)
-    start_ingestion_task(symbols, years=years)
+    symbols = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
+    started = start_ingestion_task(symbols, years=years, force_backfill=req.force_backfill)
+    if started is False:
+        raise HTTPException(status_code=409, detail="Ingestion already running")
     return {"status": "started", "total": len(symbols), "years": years}
 
 

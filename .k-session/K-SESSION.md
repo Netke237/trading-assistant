@@ -4,7 +4,7 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan stage clean after two independent rounds; D2 retention #124 implemented/verified, atomic backfill #125 starts. Code audit not run.
+D1 plan stage clean after two independent rounds; D2 retention and coherent backfill/refresh/evidence implemented. Focused verification in progress; code audit not run.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -37,3 +37,5 @@ D1 plan stage clean after two independent rounds; D2 retention #124 implemented/
 - Checkpoint on this Windows host: set KSESSION_PYTHON=python to avoid the python3 Store alias; the newly installed hook supports this override.
 
 - Retention slice: 32 targeted tests passed on isolated Python 3.11; frontend typecheck clean. No live data calls.
+- Preserved original audit/trade retention tests; OHLCV tests moved to a separate file after a filename collision.
+- Strict provider adapter tests: 73 passed; selective seam/evidence tests: 77 passed. Coherent write/refresh/job suite: 51 passed, one legacy endpoint mock adapted before rerun.

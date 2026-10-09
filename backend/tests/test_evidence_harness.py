@@ -299,9 +299,14 @@ def test_bar_basis_check_is_not_filtered(monkeypatch):
         seen["rows"] = list(symbols)
         return {s: [] for s in symbols}
 
+    async def fake_load_history_states(symbols, **_):
+        assert list(symbols) == _STORED
+        return {}
+
     monkeypatch.setattr(bar_basis_check, "stored_symbols", _fake_stored_symbols)
     monkeypatch.setattr(bar_basis_check, "load_bars", fake_load_bars)
     monkeypatch.setattr(bar_basis_check, "load_basis_rows", fake_load_basis_rows)
+    monkeypatch.setattr(bar_basis_check, "load_history_states", fake_load_history_states)
     args = bar_basis_check.common_parser("x").parse_args([])
     report = asyncio.run(bar_basis_check._main(args))
     assert seen == {"bars": _STORED, "rows": _STORED}

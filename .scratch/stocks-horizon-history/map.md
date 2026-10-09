@@ -5,8 +5,8 @@ D1 #112 plan/audit -> D2 #113/#123 build/audit/PR -> D3 #114 mini PC execution.
 Repository numeric/persistence gate is authoritative. Plan clean: 2 independent rounds.
 
 ## Current Frontier
-- 02 / #125 atomic backfill: in-progress after #124 implementation acceptance.
-- 01 / #124: implemented and verified (32 tests); final closure awaits code audit.
+- 04 / #127: focused regression, temporary migration and broader verification in progress.
+- 01 / #124, 02 / #125 and 03 / #126: implemented; final closure awaits code audit.
 
 ## DAG
 #124 -> #125 -> #126 -> #127 -> #128 -> #114.

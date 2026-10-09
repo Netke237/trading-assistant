@@ -110,6 +110,30 @@ async def load_basis_rows(
     return out
 
 
+async def load_history_states(
+    symbols: Iterable[str], *, session_factory=None,
+) -> dict[str, dict]:
+    """Read each symbol's recorded seam separately from the seven-field basis rows.
+
+    SELECT only; no provider calls, writes, or missing-metadata inference.
+    """
+    from sqlalchemy import select
+    from app.models.ohlcv_daily import OhlcvHistoryStateModel as M
+
+    factory = _session_factory(session_factory)
+    out: dict[str, dict] = {}
+    async with factory() as db:
+        try:
+            for symbol in symbols:
+                result = await db.execute(select(M).where(M.symbol == symbol))
+                state = result.scalar_one_or_none()
+                if state is not None:
+                    out[symbol] = state.verified_seam()
+        finally:
+            await db.rollback()
+    return out
+
+
 def git_commit() -> str:
     try:
         sha = subprocess.run(

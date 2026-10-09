@@ -2,12 +2,11 @@
 
 Runs as a single idempotent operation:
   1. Batch Alpaca fetch for the whole universe.
-  2. Per-symbol gap-fill via the existing get_bars() fallback chain (Tiingo -> yfinance)
-     for symbols Alpaca didn't return or returned incomplete data for.
+  2. Per-symbol coherent older-prefix + current-suffix validation and atomic write.
   3. Prune rows older than `years` years to bound table size.
   4. Update the ingestion state singleton so callers can track progress.
 
-Entry point: `await run_ingestion(symbols, years=6)`
+Entry point: `await run_ingestion(symbols)` (configured horizon, default 17 years).
 """
 from __future__ import annotations
 
@@ -22,7 +21,8 @@ from sqlalchemy import delete
 from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
 from app.models.ohlcv_daily import OhlcvDailyModel
-from app.services.historical_store import _store_bars, get_bars, most_recent_trading_day
+from app.services.historical_store import most_recent_trading_day
+from app.services.history_backfill import update_history, HistorySeamMismatch
 from app.services.history_retention import effective_years
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,10 @@ class IngestionResult:
     pruned_rows:   int
     failed:        int
     errors:        list[str] = field(default_factory=list)
+    backfilled:    list[str] = field(default_factory=list)
+    seam_mismatch: list[str] = field(default_factory=list)
+    floor_reached: list[str] = field(default_factory=list)
+    seam_ratios:   dict[str, float] = field(default_factory=dict)
 
 
 def get_ingestion_state() -> dict:
@@ -82,15 +86,15 @@ async def _prune_old_rows(years: int) -> int:
 async def run_ingestion(
     symbols: list[str],
     years: int | None = None,
+    force_backfill: bool = False,
 ) -> IngestionResult:
     """Run a full ingestion pass for `symbols`.
 
-    Fetches up to `years` years of daily bars. Alpaca batch first; per-symbol
-    gap-fill (via get_bars fallback chain) for any symbols Alpaca missed.
-    Prunes rows older than `years` years when done.
+    Stage Alpaca, validate fallback history, and commit each coherent symbol.
     """
     global _state
     years = effective_years(years)
+    symbols = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
 
     _state.update({
         "status":         "running",
@@ -104,6 +108,14 @@ async def run_ingestion(
         "started_at":     datetime.now(timezone.utc).isoformat(),
         "finished_at":    None,
         "error":          None,
+        "years":          years,
+        "backfilled":     0,
+        "backfilled_symbols": [],
+        "seam_mismatch":  0,
+        "seam_mismatch_symbols": [],
+        "floor_reached":  0,
+        "floor_reached_symbols": [],
+        "seam_ratios":    {},
     })
 
     errors: list[str] = []
@@ -120,45 +132,44 @@ async def run_ingestion(
             try:
                 for i in range(0, len(symbols), _ALPACA_CHUNK):
                     chunk = symbols[i:i + _ALPACA_CHUNK]
-                    partial = await fetch_daily_bars_batch(chunk, fetch_start, fetch_end, client=alpaca_client)
+                    partial = await fetch_daily_bars_batch(chunk, fetch_start, fetch_end,
+                                                          client=alpaca_client, strict_adjustments=True)
                     alpaca_result.update(partial)
             except Exception as exc:
                 logger.warning("ingestion: Alpaca batch fetch failed — %s", exc)
         else:
             logger.info("ingestion: Alpaca unconfigured, skipping batch fetch")
 
-        # ── Step 2: Store Alpaca bars ─────────────────────────────────────────
-        async with AsyncSessionLocal() as db:
-            for sym, bars in alpaca_result.items():
-                if bars:
-                    try:
-                        await _store_bars(sym, bars, db)
-                        alpaca_count += 1
-                        _state["done"] += 1
-                    except Exception as exc:
-                        logger.warning("ingestion: store failed for %s — %s", sym, exc)
-                        errors.append(f"{sym}: store error — {exc}")
-                        _state["failed"] += 1
-            await db.commit()
-
-        # ── Step 3: Gap-fill missing symbols via historical_store.get_bars() ──
-        alpaca_symbols = set(s for s, bars in alpaca_result.items() if bars)
-        missing = [s for s in symbols if s not in alpaca_symbols]
-        for sym in missing:
+        # No suffix is persisted before its retained prefix has been validated.
+        for sym in symbols:
             _state["current_symbol"] = sym
             try:
-                bars = await get_bars(sym, fetch_start, fetch_end)
-                if bars:
+                result = await update_history(sym, fetch_start, fetch_end,
+                                              alpaca_bars=alpaca_result.get(sym, []),
+                                              force_backfill=force_backfill)
+                if alpaca_result.get(sym):
+                    alpaca_count += 1
+                else:
                     gapfill_count += 1
-                    logger.debug("ingestion: gap-filled %s (%d bars)", sym, len(bars))
+                for name in ("backfilled", "floor_reached"):
+                    if getattr(result, name):
+                        _state[name] += 1
+                        _state[name + "_symbols"].append(sym)
+            except HistorySeamMismatch as exc:
+                _state["seam_mismatch"] += 1
+                _state["seam_mismatch_symbols"].append(sym)
+                if exc.ratio is not None:
+                    _state["seam_ratios"][sym] = exc.ratio
+                _state["failed"] += 1
+                errors.append(f"{sym}: seam mismatch — {exc}")
             except Exception as exc:
-                logger.warning("ingestion: gap-fill failed for %s — %s", sym, exc)
-                errors.append(f"{sym}: gap-fill error — {exc}")
+                logger.warning("ingestion: history failed for %s — %s", sym, exc)
+                errors.append(f"{sym}: history error — {exc}")
                 _state["failed"] += 1
             _state["done"] += 1
 
         # ── Step 4: Prune old rows ─────────────────────────────────────────────
-        pruned = await _prune_old_rows(years)
+        pruned = await _prune_old_rows(years) if symbols else 0
         _state["pruned_rows"] = pruned
 
         _state.update({
@@ -191,16 +202,22 @@ async def run_ingestion(
         pruned_rows=_state.get("pruned_rows", 0),
         failed=_state["failed"],
         errors=errors,
+        backfilled=list(_state["backfilled_symbols"]),
+        seam_mismatch=list(_state["seam_mismatch_symbols"]),
+        floor_reached=list(_state["floor_reached_symbols"]),
+        seam_ratios=dict(_state["seam_ratios"]),
     )
 
 
-def start_ingestion_task(symbols: list[str], years: int | None = None) -> None:
+def start_ingestion_task(symbols: list[str], years: int | None = None,
+                         force_backfill: bool = False) -> bool:
     """Create an asyncio Task for run_ingestion (fire-and-forget).
 
     Must be called from inside a running event loop (FastAPI lifespan or endpoint).
     """
     global _task
-    if _state.get("status") == "running":
+    if (_task is not None and not _task.done()) or _state.get("status") == "running":
         logger.warning("ingestion: already running — ignoring new request")
-        return
-    _task = asyncio.create_task(run_ingestion(symbols, years=years))
+        return False
+    _task = asyncio.create_task(run_ingestion(symbols, years=years, force_backfill=force_backfill))
+    return True

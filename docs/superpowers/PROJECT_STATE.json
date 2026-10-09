@@ -2067,7 +2067,7 @@
     {
       "id": "STOCKS-HORIZON-HISTORY",
       "name": "Stocks horizon HISTORY: daily history back to about 2010 for today's S&P 500 + NDX 100, kept by the nightly job, seam on the current adjustment basis",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
