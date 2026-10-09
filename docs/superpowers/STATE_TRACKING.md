@@ -105,6 +105,28 @@ a green "No drift".
     clean): **drift** — *stop auditing and tell Kenneth*. It counts
     rounds continuously across a phase's stages and units, so a multi-unit
     package keeps `audit_clean` true while its latest round was clean.
+  - **Per stage, once the plan stage is closed** (audit_rule counts the cap
+    per stage, `AUDIT-CAP-PER-STAGE-2026-09-25`). Add to the target's record
+    `"plan_stage": {"rounds": N, "closed_by": "<decision id>"}` (or
+    `"closed_by": "clean"` when a clean plan round closed it). The cap then
+    reads the **code** stage's round and still fires at code round 3 not
+    clean. A round `M` with no stage word of its own is read from its
+    subject: continuous only when it is written side by side with a
+    `code round K` as one round — nothing but spaces, `(`, `[` or `=` between
+    them — and `M - N == K` (`round 4 (code round 1)`, `code round 2 =
+    round 5`); otherwise any `code` in the subject makes it code round `M`
+    (`round 3 (code)`, `code audit r3`, `code round 2 fixed; round 3 not
+    clean`, whatever `N` is); otherwise any `plan` makes it a
+    plan round; otherwise it is continuous (`round M` → `M - N`). The field
+    is **ignored** (cap counts from round 1, and the output says why) unless
+    `N` is a whole number 1–3, `N` ≤ `audit_rounds`, `closed_by` is an id in
+    `decisions[]` whose text names the target **or** `"clean"` with a subject
+    on the branch in the canonical shape `plan round N clean` ("clean" right
+    after the number; no `not` / `no` / `n't` / `never` / `none` / `without`
+    / `yet` anywhere in that subject), and no plan round above `N` is on the
+    branch. A subject with no `code` in it that numbers a code round from 1
+    reads too low — name the stage (`docs(state): <ID> code round K`). The
+    undercount check is unchanged.
   - It **clears** by going clean or by merging, never by an acknowledgement
     flag.
 - **When it cannot look, it says so.** No resolvable base, no git, or a
