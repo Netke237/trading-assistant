@@ -15,3 +15,11 @@ Mutations that must fail a test (plan 3g): M7, M8
 
 ## Findings
 (audit rounds recorded here)
+
+## Added 2026-10-09 (Kenneth): Tradier rate limiter is mandatory
+The fire gate's direct Tradier GET MUST take a token from the existing governor's `tradier` bucket
+(`backend/app/data/governor.py`, 120/min, capacity 15) and respect its circuit breaker. `fire()` is sync and
+runs the probe in a worker thread, while the governor is asyncio-based: add a thread-safe, non-blocking sync
+acquire (e.g. `try_acquire()` under a threading lock) rather than calling the async API from a foreign loop.
+No token / open circuit -> `"unavailable"` -> ArmPreservedError (nothing sent, armed state kept). A 429 counts as a
+failure for the circuit. Tests pin: no token -> no HTTP call and refusal; 429 -> refusal + failure recorded.

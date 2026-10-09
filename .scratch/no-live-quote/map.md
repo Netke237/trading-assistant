@@ -11,6 +11,7 @@ Branch for NLQ tickets: `claude/priceless-jennings-995ab7`. Branch for CL ticket
 | NLQ-5 | Final clearance: full regression, mutations table, state bookkeeping, report to Kenneth | NLQ-2, NLQ-3, NLQ-4 | open |
 | CL-1 | CONTRACT-LIQUIDITY-DTE: bring NLQ + main in, re-base plan r5, build fixes 1, 2, 4 | NLQ-5 | open |
 | CL-2 | CONTRACT-LIQUIDITY-DTE: final clearance + report | CL-1 | open |
+| TG-1 | Route every Tradier call through the rate limiter (separate, own plan) | NLQ-3 | open |
 | JOIN | Kenneth: merge NLQ to main, then CL; sync local main with origin/main | NLQ-5, CL-2 | waiting on Kenneth |
 
 ## Current Frontier

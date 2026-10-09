@@ -484,6 +484,16 @@ premise: volume resets to 0 at 08:00 ET, before any trade.
 - **The holiday calendar.** The session test has none; quote age covers holidays (3f). A calendar would also
   close the early-close residual. Separate task.
 
+- **Corroborating sample (Codex, 2026-10-08, branch `codex/tradier-quote-evidence-20261008` e312cc53, not merged):** two
+  production SPY 2026-10-16 chains at 16:00:24 and 16:15:50 ET, 474 rows each, 0 rows with `ask == 0`. Replayed
+  through NLQ-1's `classify_quote`: 0 live with the session clause. It also shows that **SPY (ETF) options keep
+  quoting until 16:15 ET** (fresher-side age 52 s at 16:15:50), so 16:00-16:15 ETF/index-option quotes are live
+  but read `session_closed` here. That errs toward refusing, never toward a stale quote reaching an order, and the
+  screener universes are stocks. A product-hours calendar (with the holiday calendar above) is a separate task.
+- **Tradier rate limit (Kenneth, 2026-10-09).** `governor.py`'s `tradier` bucket (120/min) is used by no Tradier
+  call today. The fire gate's new call must use it (ticket NLQ-3); routing every Tradier call through it is
+  ticket TG-1.
+
 ## 7. Bookkeeping when clean
 
 - Log decisions: the 3b label deviation (Q3), and the Q-A to Q-D answers.
