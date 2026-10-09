@@ -1824,3 +1824,23 @@ def test_negation_id_an_id_that_is_only_a_negation_word_is_not_stripped(repo, na
     severity, message = _mod.audit_bookkeeping_drift(
         _named(name, 3, {"rounds": 3, "closed_by": "clean"}))
     assert severity == "drift" and "IGNORED" in message
+
+
+# --- STATE-NEGATION-ID code round 1 finding G1 -----------------------------
+
+@pytest.mark.parametrize("name, last", [
+    # G1: cutting the id out of the subject took the N of "CAN'T" with an id
+    # CAN, and the `n't` negation with it. A negation that overlaps the id
+    # must still count.
+    ("CAN", "CAN: plan round 3 clean? CAN'T say -- 2 gate findings open"),
+    ("WON", "WON: plan round 3 clean? WON'T claim it -- 1 finding open"),
+    ("X-DON", "X-DON: plan round 3 clean? X-DON'T merge -- findings open"),
+])
+def test_g1_code_round1_a_negation_overlapping_the_id_still_counts(repo, name, last):
+    repo.commit(f"{name} plan round 1 not clean")
+    repo.commit(f"{name} plan round 2 not clean")
+    repo.commit(last)
+    for shipped in (False, True):
+        severity, message = _mod.audit_bookkeeping_drift(
+            _named(name, 3, {"rounds": 3, "closed_by": "clean"}, shipped))
+        assert severity == "drift" and "HARD CAP" in message and "IGNORED" in message

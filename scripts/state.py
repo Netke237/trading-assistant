@@ -681,23 +681,37 @@ _CODE_WORD_RE = re.compile(r"\b(?i:code)\b")
 _PLAN_WORD_RE = re.compile(r"\b(?i:plan)\b")
 # Any word that can turn "clean" into its opposite, anywhere in the subject.
 _NEGATION_RE = re.compile(r"\b(?i:not|no|never|none|without|yet|unclean)\b|(?i:n't)\b")
+# The same, matched at every start position (overlapping), as group 1.
+_NEGATION_ANYWHERE_RE = re.compile(r"(?=(" + _NEGATION_RE.pattern + r"))")
 
 
 def _negated(subject: str, name: str | None) -> bool:
-    """`_NEGATION_RE` on `subject` with the target's own id `name` taken out
-    first. STATE-NEGATION-ID: `\\bno\\b` matched the "NO" in NO-LIVE-QUOTE, so
+    """`_NEGATION_RE` on `subject`, discounting the target's own id `name`
+    within it. STATE-NEGATION-ID: `\\bno\\b` matched the "NO" in NO-LIVE-QUOTE, so
     "NO-LIVE-QUOTE: plan round 3 CLEAN" was refused as proof -- a false alarm.
 
-    Only that one id comes out, case-sensitively and as a whole token (no word
+    Only that one id is discounted, case-sensitively and as a whole token (no word
     character or hyphen on either side), so another id ("NO-GO"), a longer id
     starting with this one, or a lowercase spelling still reads as negation --
     false alarms, the safe direction. And an id that is nothing but a negation
-    word and punctuation ("NO", "NO-") is never taken out, or it would take the
+    word and punctuation ("NO", "NO-") is never discounted, or it would take the
     subject's real negation out with it.
+
+    The id is not cut out of the subject; a negation match is ignored only when
+    it lies wholly inside an id occurrence. Code round 1 finding G1: cutting it
+    out took the "N" of "CAN'T" with an id CAN, and the `n't` match with it.
+    Matches are found at every start position, so one inside the id cannot
+    swallow a negation that overlaps it.
     """
+    ids = []
     if name and re.search(r"[^\W_]", _NEGATION_RE.sub("", name)):
-        subject = re.sub(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])", " ", subject)
-    return bool(_NEGATION_RE.search(subject))
+        ids = [m.span() for m in
+               re.finditer(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])", subject)]
+    for hit in _NEGATION_ANYWHERE_RE.finditer(subject):
+        start, end = hit.start(1), hit.end(1)
+        if not any(s <= start and end <= e for s, e in ids):
+            return True
+    return False
 
 
 def _clean_plan_round_re(n: int) -> re.Pattern:
