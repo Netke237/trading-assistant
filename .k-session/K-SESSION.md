@@ -4,7 +4,7 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan stage clean after two independent rounds; D2 retention and coherent backfill/refresh/evidence implemented. Focused verification in progress; code audit not run.
+D1 plan stage clean after two independent rounds; D2 code audit round 1 found one PostgreSQL bind-limit defect. Bounded statements fixed; 8 SQLite/PostgreSQL semantic tests and 228 focused/legacy tests passed. Fresh fixes-only round 2 next; code audit remains unclean.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -39,3 +39,5 @@ D1 plan stage clean after two independent rounds; D2 retention and coherent back
 - Retention slice: 32 targeted tests passed on isolated Python 3.11; frontend typecheck clean. No live data calls.
 - Preserved original audit/trade retention tests; OHLCV tests moved to a separate file after a filename collision.
 - Strict provider adapter tests: 73 passed; selective seam/evidence tests: 77 passed. Coherent write/refresh/job suite: 51 passed, one legacy endpoint mock adapted before rerun.
+- Final pre-fix focused suite: 199 passed. Broad suite: 6436 passed, 2 skipped, 3 baseline failures reproduced unchanged on main; no unrelated fixes in this branch.
+- Code round 1 reviewed base aaa7102c to 058295df; one confirmed asyncpg parameter-limit finding. Fix preserves one transaction across bounded upsert statements; audit record stored in docs/superpowers/audits/2026-10-09-stocks-horizon-history-code.md.

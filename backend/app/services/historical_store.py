@@ -197,23 +197,26 @@ async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> set[da
         for b in bars
     ]
     insert = _dialect_insert()
-    stmt = insert(OhlcvDailyModel).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["symbol", "date"],
-        set_={
-            "open":         stmt.excluded.open,
-            "high":         stmt.excluded.high,
-            "low":          stmt.excluded.low,
-            "close":        stmt.excluded.close,
-            "volume":       stmt.excluded.volume,
-            "adj_factor":   stmt.excluded.adj_factor,
-            "split_factor": stmt.excluded.split_factor,
-            "div_cash":     stmt.excluded.div_cash,
-            "source":       stmt.excluded.source,
-            "fetched_at":   stmt.excluded.fetched_at,
-        },
-    )
-    await db.execute(stmt)
+    # Twelve binds per row: keep each statement below asyncpg's 32,767 limit.
+    # No commits here: both provider segments and every chunk share the caller's transaction.
+    for offset in range(0, len(rows), 500):
+        stmt = insert(OhlcvDailyModel).values(rows[offset:offset + 500])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "open":         stmt.excluded.open,
+                "high":         stmt.excluded.high,
+                "low":          stmt.excluded.low,
+                "close":        stmt.excluded.close,
+                "volume":       stmt.excluded.volume,
+                "adj_factor":   stmt.excluded.adj_factor,
+                "split_factor": stmt.excluded.split_factor,
+                "div_cash":     stmt.excluded.div_cash,
+                "source":       stmt.excluded.source,
+                "fetched_at":   stmt.excluded.fetched_at,
+            },
+        )
+        await db.execute(stmt)
     return {r["date"] for r in rows}
 
 
