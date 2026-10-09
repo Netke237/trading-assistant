@@ -1,0 +1,17 @@
+{
+  "file": "spy-20261016-after-close-20261008-001.json",
+  "raw_payload_sha256": "32b26448fe7e3e32f86584e59771275b3f4e1ff26c7e74854ff762a42afd802d",
+  "symbol": "SPY",
+  "expiration": "2026-10-16",
+  "operator": "authorized Codex session",
+  "environment": "production api.tradier.com; authenticated options endpoint verified",
+  "window": "after-close",
+  "capture_utc": "2026-10-08T20:00:24.027382+00:00",
+  "capture_new_york": "2026-10-08T16:00:24.027382-04:00",
+  "calendar_source": "exchange_calendars XNYS 4.13.2",
+  "open_utc": "2026-10-08T13:30:00+00:00",
+  "close_utc": "2026-10-08T20:00:00+00:00",
+  "early_close": false,
+  "row_count": 474,
+  "limitations": "Captured immediately after regular close; this does not establish behavior later overnight. Other three windows still missing."
+}

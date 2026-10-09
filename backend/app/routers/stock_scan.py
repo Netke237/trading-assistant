@@ -802,6 +802,10 @@ def evict_backtest_cache(symbols: Iterable[str]) -> int:
     return len(keys)
 
 
+from app.services.bars_changed import register_bars_listener
+register_bars_listener("stock_backtests", evict_backtest_cache)
+
+
 _INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
                   "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 

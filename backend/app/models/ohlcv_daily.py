@@ -14,7 +14,7 @@ class OhlcvDailyModel(OhlcvBase):
     """Persistent daily OHLCV bars.
 
     Composite primary key: (symbol, date).
-    open/high/low/close/volume store RAW (unadjusted) prices.
+    Tiingo/Alpaca store raw OHLC and volume; yfinance stores adjusted OHLC with factor 1.
     adj_factor: fully-adjusted / raw  (multiply raw_close × adj_factor for scanner input).
     split_factor: split-only adjustment factor.
     div_cash: dividend cash amount at this bar date.
@@ -39,3 +39,21 @@ class OhlcvDailyModel(OhlcvBase):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class OhlcvHistoryStateModel(OhlcvBase):
+    """Observed provider floor and exact seam verification, committed with daily bars."""
+    __tablename__ = "ohlcv_history_state"
+
+    symbol = Column(String(10), primary_key=True)
+    floor_requested_start = Column(Date, nullable=True)
+    floor_date = Column(Date, nullable=True)
+    floor_provider = Column(String(20), nullable=True)
+    floor_checked_at = Column(DateTime(timezone=True), nullable=True)
+    seam_date = Column(Date, nullable=True)
+    old_source = Column(String(20), nullable=True)
+    seam_signature = Column(String(64), nullable=True)
+
+    def verified_seam(self) -> dict:
+        return {"seam_date": self.seam_date, "old_source": self.old_source,
+                "seam_signature": self.seam_signature}
