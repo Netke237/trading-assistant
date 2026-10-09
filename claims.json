@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/state-per-stage-cap",
-      "claimed_at": "2026-10-09T10:48:35Z",
-      "expires_at": "2026-10-09T13:48:35Z",
-      "note": "Lane C #111: at-cap decision + finish",
-      "task": "STATE-PER-STAGE-CAP"
-    },
-    {
-      "agent": "claude",
       "branch": "main",
       "claimed_at": "2026-10-09T11:02:55Z",
       "expires_at": "2026-10-09T14:02:55Z",
