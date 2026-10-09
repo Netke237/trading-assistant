@@ -15,3 +15,10 @@ Mutations that must fail a test (plan 3g): M1, M2, M3, M10, M11
 
 ## Findings
 (audit rounds recorded here)
+
+### Code round 1 (2026-10-09) — NOT CLEAN, 2 gate findings, fixed
+- Reviewer: fresh independent subagent (bmad-review-adversarial-general), scope 55232a50..959f0221.
+- F1 gate 4: docstring claimed exact strike; matching truncates to int (pre-existing). Docstring fixed (c84556aa); exact-strike bug spun off as its own task.
+- F2 gate 1/2: missing quote -> $0 mark on Portfolio + persisted equity snapshot; widened by NLQ-1. Fixed c84556aa, 67a99f44, 0c605733 (quoteUnavailable, snapshot skip, '—', display totals exclude, exposure sums at entry price).
+- BELOW-GATE (logged, not fixed): yaml comment says 'NYSE session' though no holiday/early-close calendar (sandbox early-close residual 13:00-13:45); max_age_minutes 1e308 overflows to inf; NaN bid with fresh stamps reads live (Tradier JSON has no NaN); sandbox quoteAgeS excludes the 15-min lag.
+- Round 2 scope: git diff 5b14896e..0c605733 (fixes only) + interactions.
