@@ -436,7 +436,7 @@ export const api = {
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -452,6 +452,7 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
+    quote_live?: boolean | null;
     rr_target_r_multiple?: number;
     target_stock_price?: number;
     target_source?: TradeCardData['exit']['targetSource'];

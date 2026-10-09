@@ -182,7 +182,7 @@ beforeEach(() => {
   getReplies = [];
   (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
   (api.getContractQuote as jest.Mock).mockResolvedValue({
-    price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    quoteLive: true, price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
   });
   (api.postOptionOrder as jest.Mock).mockImplementation(async () => {
     callLog.push('order');

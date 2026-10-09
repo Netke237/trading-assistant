@@ -682,6 +682,68 @@ def _market_is_open(symbol: str) -> bool:
         return False
 
 
+def _option_quote_state(option_symbol: str) -> str:
+    """Probe one exact OCC row, outside the state lock, on a bounded deadline."""
+    import concurrent.futures
+    import time
+    import httpx
+    from app.data.option_symbol import to_occ
+    from app.data.governor import get_governor
+    from app.data.market import get_tradier_creds, _headers, intraday_feed_lag_seconds
+    from app.data.quote_liveness import classify_quote
+    from app.scoring.contract_validator import max_quote_age_seconds
+    from app.services.market_session import MARKET_TZ, _market_session_open
+
+    try:
+        occ = to_occ(option_symbol)
+        expiry = datetime.strptime(occ[-15:-9], "%y%m%d").date().isoformat()
+    except (ValueError, TypeError):
+        return "invalid_symbol"
+    if not _market_session_open(datetime.now(MARKET_TZ)):
+        return "session_closed"
+
+    governor = get_governor()
+    def probe() -> str:
+        token, base = get_tradier_creds()
+        if not token or not governor.try_acquire("tradier"):
+            return "unavailable"
+        try:
+            response = httpx.get(
+                f"{base.rstrip('/')}/v1/markets/options/chains",
+                params={"symbol": occ[:-15], "expiration": expiry, "greeks": "false"},
+                headers=_headers(token), timeout=2.5,
+            )
+            response.raise_for_status()
+            rows = response.json().get("options", {}).get("option", [])
+            if isinstance(rows, dict):
+                rows = [rows]
+            row = next((r for r in rows if r.get("symbol") == occ), None)
+            governor.record_success("tradier")
+            if row is None:
+                return "unavailable"
+            bid, ask = float(row.get("bid") or 0), float(row.get("ask") or 0)
+            if not math.isfinite(bid) or not math.isfinite(ask):
+                return "unavailable"
+            if ask <= 0:
+                return "one_sided"
+            return classify_quote(
+                bid, ask, row.get("bid_date"), row.get("ask_date"), now_s=time.time(),
+                session_open=True, feed_lag_s=intraday_feed_lag_seconds(),
+                max_age_s=max_quote_age_seconds(),
+            )[0]
+        except Exception:
+            governor.record_failure("tradier")
+            return "unavailable"
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return executor.submit(probe).result(timeout=3.0)
+    except Exception:
+        return "unavailable"
+    finally:
+        executor.shutdown(wait=False)
+
+
 _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 
@@ -2607,6 +2669,8 @@ class AutoTradeService:
                     "— armed state preserved for the next trigger"
                 )
             _symbol = self._state.strategy.symbol
+            _option_symbol = self._state.strategy.option_symbol
+            _probed_strategy = self._state.strategy
             # An unsupported arm is consumed even outside market hours. Take it
             # under the same lock as the identity check; record outside the lock.
             unvalidated = self._state.strategy.direction == "Bearish"
@@ -2627,6 +2691,14 @@ class AutoTradeService:
                 f"— armed state preserved for retry"
             )
 
+        _qs = _option_quote_state(_option_symbol)
+        if _qs != "live":
+            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
+            raise ArmPreservedError(
+                f"No live option quote for {_option_symbol} ({_qs}) "
+                "— armed state preserved for retry"
+            )
+
         with self._lock:
             # Re-check: another thread may have disarmed while we checked market.
             if not self._state.armed or self._state.strategy is None:
@@ -2641,6 +2713,8 @@ class AutoTradeService:
                     "AutoTrader re-armed since this attempt read it "
                     "— armed state preserved for the next trigger"
                 )
+            if self._state.strategy is not _probed_strategy or self._state.strategy.option_symbol != _option_symbol:
+                raise ArmPreservedError("AutoTrader re-armed during quote probe — armed state preserved for retry")
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None

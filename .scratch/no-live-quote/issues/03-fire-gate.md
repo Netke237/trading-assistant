@@ -1,6 +1,6 @@
 # NLQ-3 — Auto-trade fire gate
 
-Status: open
+Status: done — code round 1 clean
 Blocked by: NLQ-1
 Plan sections: 3d (incl. the conftest autouse fixture + real_quote_gate marker registration) of `docs/superpowers/plans/2026-09-30-no-live-quote-plan.md`
 Tests to add (plan 3g): T8
@@ -23,3 +23,5 @@ runs the probe in a worker thread, while the governor is asyncio-based: add a th
 acquire (e.g. `try_acquire()` under a threading lock) rather than calling the async API from a foreign loop.
 No token / open circuit -> `"unavailable"` -> ArmPreservedError (nothing sent, armed state kept). A 429 counts as a
 failure for the circuit. Tests pin: no token -> no HTTP call and refusal; 429 -> refusal + failure recorded.
+
+Round 1: fresh /root/nlq3_audit1, zero gate findings; 268 focused tests. Exact scope/report: docs/superpowers/audits/2026-10-10-no-live-quote-nlq3.md. M7/M8 behavioral failures verified; original bytes restored.

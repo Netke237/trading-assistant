@@ -50,10 +50,12 @@ export function scoreEvidenceFor(card: TradeCardData): {
  *  are recomputed asynchronously (a network round-trip) and merged in
  *  separately. Returns `card` unchanged when there's no override. */
 export function applyPickedContract(card: TradeCardData, picked: OptionContract | undefined): OverriddenCard {
-  if (!picked || picked.id === card.contract) return card;
+  if (!picked) return card;
+  if (picked.id === card.contract) return { ...card, noLiveQuote: picked.noLiveQuote ?? false };
   return {
     ...card,
     contract: picked.id,
+    noLiveQuote: picked.noLiveQuote ?? false,
     contractScore: picked.score,
     contractConfidence: picked.contractConfidence,
     // ROUND 6 finding 8. The breakdown has to move with the contract. Without
@@ -77,6 +79,7 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
       expiry:       picked.expiry,
       right:        picked.right,
       mid:          picked.price,
+      spread:       picked.spread,
       delta:        picked.delta,
       theta:        picked.theta,
       // Carry BOTH quantities across the override — `ivRank` is null on any

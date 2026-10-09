@@ -1,0 +1,41 @@
+FAIL app/(frame)/screener/step-7-trade-card/__tests__/no-live-quote.test.tsx (37.773 s)
+  ● T11 no live quote direct send › rechecks at send time and refuses MKT before saving when the session closes
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      204 |
+      205 | describe('T11 no live quote direct send', () => {
+    > 206 |   it.each(['LMT', 'MKT'] as const)('rechecks at send time and refuses %s before saving when the session closes', async (kind) => {
+          |                                   ^
+      207 |     await renderPage();
+      208 |     await waitFor(() => expect(screen.queryByLabelText('Confirm sending without a live quote')).not.toBeInTheDocument());
+      209 |     (api.getContractQuote as jest.Mock).mockResolvedValue({ price: 2.5, spread: 0.1, quoteLive: false, quoteState: 'session_closed' });
+
+      at ../../../../frontend/node_modules/jest-each/build/bind.js:47:15
+          at Array.forEach (<anonymous>)
+      at C:\GitHub\trading-assistant\.claude\worktrees\priceless-jennings-995ab7\frontend\app\(frame)../../../../../../screener/step-7-trade-card/__tests__/no-live-quote.test.tsx:206:35
+      at Object.<anonymous> (C:\GitHub\trading-assistant\.claude\worktrees\priceless-jennings-995ab7\frontend\app\(frame)../../../../../../screener/step-7-trade-card/__tests__/no-live-quote.test.tsx:205:1)
+
+  ● T11 no live quote direct send › A confirmation never covers B and returning to A clears it
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 1
+    Received array:  [{"contract": "BBB|155|2026-05-15|C", "direction": "Bullish", "dteTotal": 24, "entryDate": "2026-10-10", "entryPrice": 2.5, "exitPlan": null, "maxLossOverride": null, "orderLimitPrice": 3.3, "orderType": "LMT", "pickedAt": "2026-09-14T10:00:00.000Z", "pickedMethod": "ladder", "pickedRowOptionPrice": null, "pickedRowStockPrice": 160, "pickedStopBasis": "stock", "portfolioValue": 100000, "premiumStopDollar": null, "premiumStopPct": null, "qty": 1, "recId": "REC-1791584387201-B9OU", "scanStockPrice": 150, "stop": 120, "stopIsUserSet": false, "structuralStop": null, "symbol": "BBB", "targets": [], "tradeCardSnapshot": {"contractBreakdown": {"delta": 65, "dteFit": 80, "ivAttractiveness": 55, "liquidity": 75, "spread": 60}, "contractConfidence": "PASS", "contractScore": 70, "rrModel": "Heston repriced", "rrRatio": 2, "stockBreakdown": {"event": 80, "pullback": 80, "trend": 80, "trigger": 80, "volatility": 80}, "stockConfidence": "PASS", "stockScore": 80, "strike": 155}}]
+
+      230 |     await goNext();
+      231 |     await sendAndSettle();
+    > 232 |     expect(persistBodies()).toHaveLength(0);
+          |                             ^
+      233 |     expect(api.postOptionOrder).not.toHaveBeenCalled();
+      234 |     expect(screen.getByLabelText('Confirm sending without a live quote')).not.toBeChecked();
+      235 |     await goPrev();
+
+      at Object.<anonymous> (C:\GitHub\trading-assistant\.claude\worktrees\priceless-jennings-995ab7\frontend\app\(frame)../../../../../../screener/step-7-trade-card/__tests__/no-live-quote.test.tsx:232:29)
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 4 passed, 6 total
+Snapshots:   0 total
+Time:        40.453 s

@@ -10,6 +10,8 @@
  * made phantom positions that looked like fills.
  */
 
+import { contractKeyFor } from '@/lib/tradeCardOverride';
+import { quoteWarning } from '@/lib/quoteWarning';
 import { useMemo, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useRiskStore } from '@/lib/riskStore';
@@ -29,6 +31,7 @@ export interface DraftOrder {
 
 interface Props {
   cards:    TradeCardData[];
+  quoteWarningsByContract?: Record<string, string | null>;
   /** Feature 7 — the page-level shared per-symbol contracts map (same one fed
    *  into TradeCard's `contracts` prop and read by the quick-order/auto-trade
    *  paths), used only to SEED this dialog's row state. Editing the quantity
@@ -69,7 +72,7 @@ interface RowState {
   contracts: number;
 }
 
-export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, invalidationBySymbol, methodPickBySymbol, onClose, onSubmit }: Props) {
+export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBySymbol, overridesBySymbol, invalidationBySymbol, methodPickBySymbol, onClose, onSubmit }: Props) {
   const [rows, setRows] = useState<Record<string, RowState>>(() =>
     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1 }])),
   );
@@ -237,7 +240,7 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
             return (
               <div key={c.symbol} className={styles.row}>
                 <Data size={13} weight={500}>{c.symbol}</Data>
-                <Text size={12}>{c.contract}</Text>
+                <div><Text size={12}>{c.contract}</Text><Text size={11} tone="caution">{quoteWarningsByContract?.[contractKeyFor(c) ?? c.contract] ?? (quoteWarningsByContract && (contractKeyFor(c) ?? c.contract) in quoteWarningsByContract ? null : quoteWarning(null))}</Text></div>
                 <Data size={12} className={styles.right}>${mid.toFixed(2)}</Data>
                 <input
                   type="number"
