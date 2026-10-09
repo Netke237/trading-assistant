@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import yaml
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from app.services.config_health import config_health
+
+logger = logging.getLogger(__name__)
 
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
@@ -78,6 +81,37 @@ def contract_caution_threshold() -> float | int:
     as written (not int()-truncated): a 45.5 would otherwise print as 45 next
     to a rejected score of 45."""
     return _load_config()["contract_score_thresholds"]["caution"]
+
+
+# NO-LIVE-QUOTE: the fallback when quote_liveness.max_age_minutes is missing or
+# unusable. 30 is the shipped value (Kenneth, Q-A); see contract_rules.yaml.
+DEFAULT_QUOTE_MAX_AGE_MINUTES = 30
+_warned_quote_age: set[str] = set()
+
+
+def max_quote_age_seconds() -> float:
+    """quote_liveness.max_age_minutes from contract_rules.yaml, in SECONDS --
+    the oldest the fresher side of a chain row's quote may be and still count
+    as live (app/data/quote_liveness.classify_quote). Read through the same
+    cached loader as every other contract rule.
+
+    A missing block or key, a non-numeric value (a bool, a string, NaN/inf) or a
+    value <= 0 runs on DEFAULT_QUOTE_MAX_AGE_MINUTES and logs ONE warning per
+    distinct bad value (this is read once per chain fetch, so an unthrottled
+    warning would repeat for every name of every scan)."""
+    block = _load_config().get("quote_liveness")
+    val = block.get("max_age_minutes") if isinstance(block, dict) else None
+    if is_finite_rule_value(val) and val > 0:
+        return float(val) * 60.0
+    key = repr(val)
+    if key not in _warned_quote_age:
+        _warned_quote_age.add(key)
+        logger.warning(
+            "contract_rules.yaml quote_liveness.max_age_minutes is %s -- "
+            "using %d minutes", "missing" if val is None else f"unusable ({val!r})",
+            DEFAULT_QUOTE_MAX_AGE_MINUTES,
+        )
+    return float(DEFAULT_QUOTE_MAX_AGE_MINUTES) * 60.0
 
 
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:

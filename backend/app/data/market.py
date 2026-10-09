@@ -16,6 +16,8 @@ from typing import Literal, Optional
 import httpx
 import pandas as pd
 
+from app.data.quote_liveness import classify_quote
+from app.scoring.contract_validator import max_quote_age_seconds
 from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
 from app.services.audit import log_event
 
@@ -787,6 +789,44 @@ def _pick_expiration_without_window(
     return min(in_range, key=_off_band) if in_range else None  # min() keeps the first (shorter) on a tie
 
 
+def _quote_liveness_inputs() -> tuple[float, bool, float, float]:
+    """(now_s, session_open, feed_lag_s, max_age_s) for ONE chain fetch.
+
+    Taken once per fetch, before the row loop, so every row of a chain is
+    classified against the same instant and one fetch cannot straddle 16:00
+    row by row (NO-LIVE-QUOTE, plan 3a). The session test is the scheduler's
+    one, re-exported by market_session; imported HERE, at call time, because
+    importing market_session imports this module (through
+    strategy_watch_scheduler's chain), so a module-level import would be
+    circular.
+    """
+    from app.services.market_session import MARKET_TZ, _market_session_open
+    return (
+        _now(),
+        _market_session_open(datetime.now(MARKET_TZ)),
+        float(intraday_feed_lag_seconds()),
+        max_quote_age_seconds(),
+    )
+
+
+def _quote_keys(c: dict, bid: float, ask: float, q: tuple[float, bool, float, float]) -> dict:
+    """The three liveness keys every chain row carries: quoteState, quoteLive
+    and quoteAgeS (the fresher side's age in seconds, or None). Tradier's
+    `bid_date`/`ask_date` are epoch MILLISECONDS. Deliberately NOT `bid`/`ask`:
+    scan.py's bearish spread builder reads those keys off raw chain rows, and
+    adding them would silently switch that unaudited path on (plan section 2)."""
+    now_s, session_open, feed_lag_s, max_age_s = q
+    state, age_s = classify_quote(
+        bid, ask, c.get("bid_date"), c.get("ask_date"),
+        now_s=now_s, session_open=session_open, feed_lag_s=feed_lag_s, max_age_s=max_age_s,
+    )
+    return {
+        "quoteState": state,
+        "quoteLive": state == "live",
+        "quoteAgeS": round(age_s, 1) if age_s is not None else None,
+    }
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
@@ -856,6 +896,7 @@ def fetch_option_chain(
         dte = max(0, (exp_date - today).days)
 
         tradier_type = "call" if option_type == "C" else "put"
+        quote_inputs = _quote_liveness_inputs()
         result = []
         for c in contracts:
             if c.get("option_type") != tradier_type:
@@ -863,16 +904,18 @@ def fetch_option_chain(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            last = float(c.get("last") or 0)
-            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
-            if ask > 0:
-                mid = round((bid + ask) / 2, 2)
-                spread = round(ask - bid, 2)
-            elif last > 0:
-                mid = round(last, 2)
-                spread = 0.0
-            else:
+            # No ask (<= 0, or NaN) = no executable price for a buyer (FR-24
+            # "missing ask"): the row is DROPPED (NO-LIVE-QUOTE, Kenneth's Q-C).
+            # This replaced a fallback to the last trade price with a
+            # fabricated zero spread, which graded as a perfect spread. Its
+            # premise -- "outside market hours Tradier returns bid=0, ask=0" --
+            # was never observed: 0 of 4,868 measured rows had ask == 0, in or
+            # out of session (plan section 1). Off-hours rows carry the last
+            # close's real two-sided quotes; quoteState below marks them.
+            if not ask > 0:
                 continue
+            mid = round((bid + ask) / 2, 2)
+            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -913,6 +956,7 @@ def fetch_option_chain(
                 "volume": volume,
                 "open_interest": oi,
                 "score": 0,
+                **_quote_keys(c, bid, ask, quote_inputs),
             })
         # Enrich with IBKR IV Rank/Percentile if available
         _ibkr_iv = None
@@ -1584,6 +1628,7 @@ async def fetch_option_chain_async(
         dte = max(0, (exp_date - today).days)
 
         tradier_type = "call" if option_type == "C" else "put"
+        quote_inputs = _quote_liveness_inputs()
         result = []
         for c in contracts:
             if c.get("option_type") != tradier_type:
@@ -1591,16 +1636,18 @@ async def fetch_option_chain_async(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            last = float(c.get("last") or 0)
-            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
-            if ask > 0:
-                mid = round((bid + ask) / 2, 2)
-                spread = round(ask - bid, 2)
-            elif last > 0:
-                mid = round(last, 2)
-                spread = 0.0
-            else:
+            # No ask (<= 0, or NaN) = no executable price for a buyer (FR-24
+            # "missing ask"): the row is DROPPED (NO-LIVE-QUOTE, Kenneth's Q-C).
+            # This replaced a fallback to the last trade price with a
+            # fabricated zero spread, which graded as a perfect spread. Its
+            # premise -- "outside market hours Tradier returns bid=0, ask=0" --
+            # was never observed: 0 of 4,868 measured rows had ask == 0, in or
+            # out of session (plan section 1). Off-hours rows carry the last
+            # close's real two-sided quotes; quoteState below marks them.
+            if not ask > 0:
                 continue
+            mid = round((bid + ask) / 2, 2)
+            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -1641,6 +1688,7 @@ async def fetch_option_chain_async(
                 "volume": volume,
                 "open_interest": oi,
                 "score": 0,
+                **_quote_keys(c, bid, ask, quote_inputs),
             })
         # Enrich with IBKR IV Rank/Percentile if available (async-safe via to_thread)
         _ibkr_iv = None
@@ -1727,6 +1775,14 @@ async def fetch_contract_quote_async(
     Option format: SYMBOL|STRIKE|EXPIRY|C/P  (e.g. AAPL|185|2025-05-16|C)
     Stock format:  SYMBOL|STOCK               (e.g. BA|STOCK)
     Returns a dict with: price, delta, theta, ivRank — or None on failure.
+
+    An option quote is the chain row for exactly this STRIKE and EXPIRY, or
+    None. The chain fetch falls back to ANOTHER expiry when the requested one
+    is not listed (an expired or mistyped contract); that row is not this
+    contract's quote, so it is refused here, once, for every caller (it used to
+    be returned, and only get_option_quote checked). A contract whose ask is 0
+    has no row (the chain builder drops it), so it is None too -- every caller
+    already treats None as "quote unavailable".
     """
     try:
         parts = contract_id.split("|")
@@ -1747,7 +1803,9 @@ async def fetch_contract_quote_async(
         chain = await fetch_option_chain_async(
             client, symbol, expiry=expiry, option_type=right  # type: ignore[arg-type]
         )
-        return next((c for c in chain if c["strike"] == target_strike), None)
+        return next(
+            (c for c in chain if c["strike"] == target_strike and c["expiry"] == expiry), None,
+        )
     except Exception:
         return None
 
