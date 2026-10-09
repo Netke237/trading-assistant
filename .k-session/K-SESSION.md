@@ -4,7 +4,7 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan stage clean after two independent rounds; D2 code audit round 1 found one PostgreSQL bind-limit defect. Bounded statements fixed; 8 SQLite/PostgreSQL semantic tests and 228 focused/legacy tests passed. Fresh fixes-only round 2 next; code audit remains unclean.
+D1 plan stage clean after two independent rounds; D2 code audit round 1 found one PostgreSQL bind-limit defect. Bounded statements fixed; 8 SQLite/PostgreSQL semantic tests and 228 focused/legacy tests passed. Draft PR #130 is open. Original fixes-only round 2 was interrupted by the usage limit before a report; fresh replacement history_code_audit_r2_resumed is completing the same scope. Code audit remains unclean.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -14,9 +14,10 @@ D1 plan stage clean after two independent rounds; D2 code audit round 1 found on
 ## Next steps
 - [x] Plan round 2 clean over the two fixes and interactions (fb19f2f3).
 - [x] Published tracking #123 and build tickets #124 to #128.
-- [ ] Execute #124 retention, then #125 backfill, #126 refresh/evidence, #127 verification.
+- [x] Implement and verify #124 retention, #125 backfill, #126 refresh/evidence and #127 verification; ticket closure awaits final audit.
 - [ ] Run synthetic/mocked tests, fresh independent code audit, cap three code rounds.
-- [ ] Publish PR and release handoff at the merge approval gate.
+- [x] Publish draft PR #130.
+- [ ] Finalize audit record/PR and release handoff at the merge approval gate.
 
 ## Blockers / open questions
 - D3 operational work requires mini PC and D2 merge; intentionally remains pending.
@@ -41,3 +42,5 @@ D1 plan stage clean after two independent rounds; D2 code audit round 1 found on
 - Strict provider adapter tests: 73 passed; selective seam/evidence tests: 77 passed. Coherent write/refresh/job suite: 51 passed, one legacy endpoint mock adapted before rerun.
 - Final pre-fix focused suite: 199 passed. Broad suite: 6436 passed, 2 skipped, 3 baseline failures reproduced unchanged on main; no unrelated fixes in this branch.
 - Code round 1 reviewed base aaa7102c to 058295df; one confirmed asyncpg parameter-limit finding. Fix preserves one transaction across bounded upsert statements; audit record stored in docs/superpowers/audits/2026-10-09-stocks-horizon-history-code.md.
+
+- Resumed existing worktree and renewed its claim after handoff confirmation. Interrupted code round 2 produced no report; completing its exact 058295df..c188487b fix scope with a fresh independent replacement, preserving the stage cap.
