@@ -679,41 +679,65 @@ def _pointer_target(state: dict) -> tuple[dict | None, str]:
 
 _CODE_WORD_RE = re.compile(r"\b(?i:code)\b")
 _PLAN_WORD_RE = re.compile(r"\b(?i:plan)\b")
-# A subject saying the round was NOT clean: "not clean", "NONE of them clean".
-_NOT_CLEAN_RE = re.compile(r"\b(?i:not|never|none(?:\s+of\s+them)?)[\s-]+(?i:clean)\b")
+# Any word that can turn "clean" into its opposite, anywhere in the subject.
+_NEGATION_RE = re.compile(r"\b(?i:not|no|never|none|without|yet|unclean)\b|(?i:n't)\b")
 
 
-def _staged_hits(subject: str) -> list[tuple[int, str | None]]:
+def _clean_plan_round_re(n: int) -> re.Pattern:
+    """A subject saying plan round `n` came back clean, in the canonical shape
+    only: "clean" straight after the round's own number ("plan round 3 CLEAN",
+    "plan r3: clean"), never "clean up". Round 2 finding G1: "clean" anywhere
+    in the subject let "plan round 3 did not come back clean" and "4 gate
+    findings, tests clean" prove a clean close. The caller also refuses any
+    subject carrying `_NEGATION_RE`, so "plan round 3 clean? no" is not proof.
+    """
+    return re.compile(
+        r"\b(?i:plan)[\s-]+(?:(?i:round)[\s#-]*|r)" + str(n)
+        + r"(?!\d)\s*[:(\-–—]*\s*(?i:clean)\b(?!\s*-?\s*(?i:up)\b)"
+    )
+
+
+def _staged_hits(subject: str, plan_rounds: int) -> list[tuple[int, str | None]]:
     """`_round_hits`, with a stage given to the rounds that carry no stage word
-    of their own -- read only once a `plan_stage` holds.
+    of their own -- read only once a `plan_stage` holds, at `plan_rounds`.
 
     Round 1 finding F1 of STATE-PER-STAGE-CAP: this repo spells code rounds
     more ways than "code round N" -- "A5 round 3 (code): not clean -- hard cap
     reached", "ALERT-INDICATOR-ID-MAP code audit r3", "Code audit round 2" --
     and reading those as continuous numbering put a code stage at its cap
-    under "No drift". So an untagged round is:
+    under "No drift". So an untagged round M is:
 
-      - CONTINUOUS (None) when the same subject also carries a tagged "code
-        round K": that is the record's paired form, "round 4 (code round 1)";
-      - otherwise a CODE round, numbered from the stage, when "code" appears
-        anywhere in the subject;
-      - otherwise a PLAN round when "plan" does ("docs(plan): X round 4");
+      - CONTINUOUS (None) only when it PAIRS with a tagged "code round K" in
+        the same subject, M - plan_rounds == K: the record's form, "round 4
+        (code round 1)". Unpaired beside a tagged code round, it is a CODE
+        round M (round 2 finding G2: "code round 2 fixed; round 3 NOT CLEAN");
+      - otherwise a CODE round M when "code" appears anywhere in the subject;
+      - otherwise a PLAN round M when "plan" does ("docs(plan): X round 4");
       - otherwise CONTINUOUS.
 
-    Every doubt resolves toward reading the number higher, i.e. a false alarm,
-    the direction this probe accepts: "round 4 records the code fixes" reads
-    as code round 4.
+    WHICH WAY EACH RULE ERRS. The code-word rules read M at face value, so a
+    stray "code" ("round 4 records the code fixes") is a false alarm. The
+    pairing rule reads lower only when the subject states both numbers. The
+    plan-word rule and the last rule read lower, and silence a code round M
+    numbered from 1 in a subject naming no "code" -- the accepted cost
+    `_stage_round_max` states.
     """
     hits = _round_hits(subject)
-    if any(stage == "code" for _, stage in hits):
-        inferred = None
+    code_tags = {n for n, stage in hits if stage == "code"}
+    if code_tags:
+        inferred = "code"
     elif _CODE_WORD_RE.search(subject):
         inferred = "code"
     elif _PLAN_WORD_RE.search(subject):
         inferred = "plan"
     else:
         inferred = None
-    return [(n, stage or inferred) for n, stage in hits]
+    return [
+        (n, stage) if stage
+        else (n, None) if n - plan_rounds in code_tags
+        else (n, inferred)
+        for n, stage in hits
+    ]
 
 
 def _plan_stage(
@@ -732,8 +756,10 @@ def _plan_stage(
     from becoming one. It can move the threshold by at most the cap itself; it
     cannot claim more rounds than the target declares it ran; a decision it
     cites must exist and name this target; "clean" must be backed by a subject
-    on this branch saying plan round N was clean (round 1 finding F2: unchecked,
-    one word silenced a plan stage at 3 rounds NOT clean); and a plan round
+    on this branch saying plan round N was clean, in `_clean_plan_round_re`'s
+    canonical shape and with no negation word anywhere in it (round 1 finding
+    F2: unchecked, one word silenced a plan stage at 3 rounds NOT clean); and a
+    plan round
     above N on this branch, as `_staged_hits` reads them, contradicts it
     outright. Any of those, and the field is ignored -- the cap counts from
     round 1, exactly as if it were absent -- and the reason is returned so the
@@ -765,13 +791,13 @@ def _plan_stage(
         return refused("audit_rounds is not a whole number to check it against")
     if rounds > declared:
         return refused(f"rounds is more than the {declared} audit_rounds the target declares")
-    staged = [(subject, _staged_hits(subject)) for subject in subjects]
+    staged = [(subject, _staged_hits(subject, rounds)) for subject in subjects]
     closed_by = raw.get("closed_by")
     if closed_by == "clean":
+        clean_round = _clean_plan_round_re(rounds)
         if not any(
-            (rounds, "plan") in hits and re.search(r"\b(?i:clean)\b", subject)
-            and not _NOT_CLEAN_RE.search(subject)
-            for subject, hits in staged
+            clean_round.search(subject) and not _NEGATION_RE.search(subject)
+            for subject in subjects
         ):
             return refused(
                 f'closed_by is "clean" but no subject on this branch says plan '
@@ -807,14 +833,14 @@ def _stage_round_max(subjects: list[str], plan_rounds: int) -> int:
     round 1)", or a subject naming no stage) is N - plan_rounds; a plan round
     is not a code round at all.
 
-    THE ACCEPTED COST: a subject that names NO stage word and numbers a code
-    round from 1 ("H round 3 not clean" meaning code round 3) reads
-    `plan_rounds` too low. Name the stage in subjects -- the canonical
+    THE ACCEPTED COST: a subject with no "code" in it that numbers a code
+    round from 1 ("H round 3 not clean", or "H round 3 -- off the plan",
+    meaning code round 3) reads `plan_rounds` too low, or not at all. Name the stage in subjects -- the canonical
     `docs(state): <ID> code round N` does.
     """
     best = 0
     for subject in subjects:
-        for n, stage in _staged_hits(subject):
+        for n, stage in _staged_hits(subject, plan_rounds):
             if stage == "code":
                 best = max(best, n)
             elif stage is None:

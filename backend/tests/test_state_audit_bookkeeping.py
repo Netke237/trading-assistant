@@ -1604,7 +1604,7 @@ def test_f2_round1_plan_rounds_after_a_premature_clean_close_still_count(repo):
 
 def test_f2_round1_a_genuinely_clean_plan_round_still_closes(repo):
     repo.commit("docs(state): H plan round 1")
-    repo.commit("docs(state): H plan round 2 clean (no gate findings)")
+    repo.commit("docs(state): H plan round 2 clean (zero gate findings)")
     repo.commit("docs(state): H round 3 (code round 1)")
     repo.commit("docs(state): H round 4 (code round 2)")
     assert _mod.audit_bookkeeping_drift(
@@ -1633,3 +1633,73 @@ def test_f3_round1_a_target_key_with_no_token_refuses_instead_of_raising(repo, k
             "plan_stage": {"rounds": 3, "closed_by": "SPLIT-H"}}]), decisions=[_SPLIT])
     severity, message = _mod.audit_bookkeeping_drift(state)
     assert severity == "drift" and "IGNORED" in message
+
+
+# --- STATE-PER-STAGE-CAP round 2 findings ----------------------------------
+
+@pytest.mark.parametrize("last", [
+    # G1: each of these says plan round 3 was NOT clean.
+    "docs(state): H plan round 3 did not come back clean (2 gate findings)",
+    "docs(state): H plan round 3 not yet clean",
+    "docs(state): H plan round 3 isn't clean -- hard cap",
+    "docs(state): H plan round 3 wasn't clean either; plan-stage cap reached",
+    "docs(state): H plan round 3: 4 gate findings, tests clean",
+    "docs(state): H plan round 3 findings recorded; clean up the ledger",
+    "docs(state): H plan round 3 clean up",
+    "docs(state): H plan rounds 1-3: no clean round, plan-stage cap reached",
+])
+def test_g1_round2_clean_is_not_proved_by_a_subject_saying_not_clean(repo, last):
+    repo.commit("docs(state): H plan round 1 not clean")
+    repo.commit("docs(state): H plan round 2 not clean")
+    repo.commit(last)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 3, "closed_by": "clean"}))
+    assert severity == "drift" and "HARD CAP" in message and "IGNORED" in message
+
+
+def test_g1_round2_premature_clean_close_then_untagged_rounds_still_fires(repo):
+    """F2 reproduction B, re-opened by G1 with an untagged docs(state) prefix."""
+    repo.commit("docs(state): H plan round 1 did not come back clean")
+    repo.commit("docs(state): H round 2 not clean")
+    repo.commit("docs(state): H round 3 not clean")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 1, "closed_by": "clean"}))
+    assert severity == "drift" and "IGNORED" in message
+
+
+@pytest.mark.parametrize("clean_subject", [
+    "docs(state): H plan round 2 clean",
+    "docs(state): H plan round 2 CLEAN (zero gate findings)",
+    "H plan r2: clean",
+])
+def test_g1_round2_the_canonical_clean_subject_still_closes(repo, clean_subject):
+    repo.commit("docs(state): H plan round 1")
+    repo.commit(clean_subject)
+    repo.commit("docs(state): H round 3 (code round 1)")
+    repo.commit("docs(state): H round 4 (code round 2)")
+    assert _mod.audit_bookkeeping_drift(
+        _staged(4, plan_stage={"rounds": 2, "closed_by": "clean"})) is None
+
+
+@pytest.mark.parametrize("last", [
+    "docs(state): H code round 2 fixed; round 3 NOT CLEAN -- cap reached",
+    "fix: H code round 2 fixes; code audit round 3 not clean",
+])
+def test_g2_round2_an_unpaired_round_beside_a_code_tag_is_a_code_round(repo, last):
+    _three_plan_rounds(repo)
+    repo.commit("docs(state): H round 4 (code round 1) not clean")
+    repo.commit(last)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(6, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"}))
+    assert severity == "drift" and "code round 3" in message
+
+
+@pytest.mark.parametrize("subject", [
+    "docs(state): H round 5 (code round 2)",
+    "docs(state): H code round 2 (round 5)",
+])
+def test_g2_round2_a_paired_continuous_round_stays_continuous(repo, subject):
+    _three_plan_rounds(repo)
+    repo.commit(subject)
+    assert _mod.audit_bookkeeping_drift(
+        _staged(5, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"})) is None
