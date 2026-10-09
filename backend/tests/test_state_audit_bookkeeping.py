@@ -1739,3 +1739,88 @@ def test_h1_round3_side_by_side_numbers_still_pair_at_n1(repo, subject):
     repo.commit(subject)
     assert _mod.audit_bookkeeping_drift(
         _staged(3, plan_stage={"rounds": 1, "closed_by": "clean"})) is None
+
+
+# --- STATE-NEGATION-ID: a target's own id is not a negation word -----------
+#
+# `_NEGATION_RE`'s case-insensitive `\bno\b` matched the "NO" in NO-LIVE-QUOTE,
+# so the real subject "NO-LIVE-QUOTE: plan round 3 CLEAN; plan stage closed"
+# was refused as proof and state.py reported drift on a clean plan stage. A
+# false alarm, never a false all-clear -- and the fix must not become one.
+
+_G1_NOT_CLEAN = [
+    "docs(state): {id} plan round 3 did not come back clean (2 gate findings)",
+    "docs(state): {id} plan round 3 not yet clean",
+    "docs(state): {id} plan round 3 isn't clean -- hard cap",
+    "docs(state): {id} plan round 3 wasn't clean either; plan-stage cap reached",
+    "docs(state): {id} plan round 3: 4 gate findings, tests clean",
+    "docs(state): {id} plan round 3 findings recorded; clean up the ledger",
+    "docs(state): {id} plan round 3 clean up",
+    "docs(state): {id} plan rounds 1-3: no clean round, plan-stage cap reached",
+    "{id}: plan round 3 CLEAN? NO -- 2 gate findings",
+    "{id}: plan round 3 CLEAN -- NOT really, 1 finding open",
+]
+
+
+def _named(name, declared, plan_stage, shipped=False) -> dict:
+    target = {"audit_rounds": declared, "audit_clean": False, "plan_stage": plan_stage}
+    if shipped:
+        state = _state(active=name, shipped=[dict(target, name=name)])
+    else:
+        state = _state(active=name, phases=[dict(target, id=name, name="Phase " + name)])
+    return dict(state, decisions=[_SPLIT, _OTHER])
+
+
+def _nlq_rounds(repo, last):
+    repo.commit("NO-LIVE-QUOTE: plan round 1 (2 gate findings) fixed in plan r2")
+    repo.commit("NO-LIVE-QUOTE: plan round 2 (2 gate findings) fixed in plan r3")
+    repo.commit(last)
+
+
+@pytest.mark.parametrize("shipped", [False, True])
+def test_negation_id_the_targets_own_id_does_not_refuse_its_clean_close(repo, shipped):
+    """The real NO-LIVE-QUOTE subjects, verbatim from its branch."""
+    _nlq_rounds(repo, "NO-LIVE-QUOTE: plan round 3 CLEAN; plan stage closed")
+    stage = {"rounds": 3, "closed_by": "clean"}
+    assert _mod.audit_bookkeeping_drift(_named("NO-LIVE-QUOTE", 3, stage, shipped)) is None
+    repo.commit("docs(state): NO-LIVE-QUOTE code round 1 not clean")
+    repo.commit("docs(state): NO-LIVE-QUOTE code round 2 not clean")
+    assert _mod.audit_bookkeeping_drift(_named("NO-LIVE-QUOTE", 5, stage, shipped)) is None
+    repo.commit("docs(state): NO-LIVE-QUOTE code round 3 not clean")
+    severity, message = _mod.audit_bookkeeping_drift(_named("NO-LIVE-QUOTE", 6, stage, shipped))
+    assert severity == "drift" and "code round 3" in message and "IGNORED" not in message
+
+
+@pytest.mark.parametrize("last", _G1_NOT_CLEAN)
+def test_negation_id_a_not_clean_subject_is_still_refused_under_a_no_id(repo, last):
+    """G1 must not reopen: stripping the id leaves every real negation."""
+    _nlq_rounds(repo, last.format(id="NO-LIVE-QUOTE"))
+    severity, message = _mod.audit_bookkeeping_drift(
+        _named("NO-LIVE-QUOTE", 3, {"rounds": 3, "closed_by": "clean"}))
+    assert severity == "drift" and "HARD CAP" in message and "IGNORED" in message
+
+
+@pytest.mark.parametrize("last", [
+    # Only the target's OWN id is stripped, and only as a whole token: another
+    # id, a longer id that starts with this one, or a lowercase spelling still
+    # reads "no" -- a false alarm, the safe direction.
+    "NO-LIVE-QUOTE: plan round 3 CLEAN; NO-GO on the merge",
+    "NO-LIVE-QUOTE: plan round 3 CLEAN; see NO-LIVE-QUOTE-PLAN-STAGE-CLOSED",
+    "no-live-quote: plan round 3 clean",
+])
+def test_negation_id_only_the_targets_own_whole_id_is_stripped(repo, last):
+    _nlq_rounds(repo, last)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _named("NO-LIVE-QUOTE", 3, {"rounds": 3, "closed_by": "clean"}))
+    assert severity == "drift" and "IGNORED" in message
+
+
+@pytest.mark.parametrize("name", ["NO", "Not", "NO-", "-NEVER-"])
+def test_negation_id_an_id_that_is_only_a_negation_word_is_not_stripped(repo, name):
+    """A target named for a negation word would strip the negation itself."""
+    repo.commit(f"docs(state): {name} plan round 1")
+    repo.commit(f"docs(state): {name} plan round 2")
+    repo.commit(f"docs(state): {name} plan round 3 clean? {name} -- 2 gate findings")
+    severity, message = _mod.audit_bookkeeping_drift(
+        _named(name, 3, {"rounds": 3, "closed_by": "clean"}))
+    assert severity == "drift" and "IGNORED" in message

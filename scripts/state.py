@@ -683,13 +683,30 @@ _PLAN_WORD_RE = re.compile(r"\b(?i:plan)\b")
 _NEGATION_RE = re.compile(r"\b(?i:not|no|never|none|without|yet|unclean)\b|(?i:n't)\b")
 
 
+def _negated(subject: str, name: str | None) -> bool:
+    """`_NEGATION_RE` on `subject` with the target's own id `name` taken out
+    first. STATE-NEGATION-ID: `\\bno\\b` matched the "NO" in NO-LIVE-QUOTE, so
+    "NO-LIVE-QUOTE: plan round 3 CLEAN" was refused as proof -- a false alarm.
+
+    Only that one id comes out, case-sensitively and as a whole token (no word
+    character or hyphen on either side), so another id ("NO-GO"), a longer id
+    starting with this one, or a lowercase spelling still reads as negation --
+    false alarms, the safe direction. And an id that is nothing but a negation
+    word and punctuation ("NO", "NO-") is never taken out, or it would take the
+    subject's real negation out with it.
+    """
+    if name and re.search(r"[^\W_]", _NEGATION_RE.sub("", name)):
+        subject = re.sub(r"(?<![\w-])" + re.escape(name) + r"(?![\w-])", " ", subject)
+    return bool(_NEGATION_RE.search(subject))
+
+
 def _clean_plan_round_re(n: int) -> re.Pattern:
     """A subject saying plan round `n` came back clean, in the canonical shape
     only: "clean" straight after the round's own number ("plan round 3 CLEAN",
     "plan r3: clean"), never "clean up". Round 2 finding G1: "clean" anywhere
     in the subject let "plan round 3 did not come back clean" and "4 gate
     findings, tests clean" prove a clean close. The caller also refuses any
-    subject carrying `_NEGATION_RE`, so "plan round 3 clean? no" is not proof.
+    subject `_negated` flags, so "plan round 3 clean? no" is not proof.
     """
     return re.compile(
         r"\b(?i:plan)[\s-]+(?:(?i:round)[\s#-]*|r)" + str(n)
@@ -777,7 +794,8 @@ def _plan_stage(
     cannot claim more rounds than the target declares it ran; a decision it
     cites must exist and name this target; "clean" must be backed by a subject
     on this branch saying plan round N was clean, in `_clean_plan_round_re`'s
-    canonical shape and with no negation word anywhere in it (round 1 finding
+    canonical shape and with no negation word anywhere in it but the target's
+    own id (`_negated`; round 1 finding
     F2: unchecked, one word silenced a plan stage at 3 rounds NOT clean); and a
     plan round
     above N on this branch, as `_staged_hits` reads them, contradicts it
@@ -815,8 +833,9 @@ def _plan_stage(
     closed_by = raw.get("closed_by")
     if closed_by == "clean":
         clean_round = _clean_plan_round_re(rounds)
+        name = key.split()[0] if isinstance(key, str) and key.split() else None
         if not any(
-            clean_round.search(subject) and not _NEGATION_RE.search(subject)
+            clean_round.search(subject) and not _negated(subject, name)
             for subject in subjects
         ):
             return refused(
