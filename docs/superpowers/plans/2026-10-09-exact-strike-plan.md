@@ -1,6 +1,6 @@
-# EXACT-STRIKE — plan r1 (2026-10-09)
+# EXACT-STRIKE — plan r2 (2026-10-09)
 
-Status: PLAN, not audited. Nothing here is built. Claim: `EXACT-STRIKE` on
+Status: PLAN r2 (round 1: 1 gate finding, R1-1, fixed here). Not audit-clean. Nothing here is built. Claim: `EXACT-STRIKE` on
 `claude/intelligent-merkle-ba9f03`. Audit per `PROJECT_STATE.json` `audit_rule`
 (fresh independent gate-briefed adversarial reviewer per round, cap 3 rounds per
 stage).
@@ -30,7 +30,7 @@ consequences, each a wrong number or a wrong order:
 | D4 | `routers/scan.py` `contract=f"{symbol}\|{int(strike)}\|…"` → broker send (`option_symbol.pipe_to_occ`) | A card built from a 22.5 row sends OCC `…C00022000`: **the broker order is for the 22 contract**. |
 | D5 | `fetch_contract_quote_async` | Any stored id is matched by truncation; consumers `routers/portfolio.py` `get_portfolio` (marks + equity snapshot), `services/position_writer.py`, `routers/alerts.py`, `services/portfolio_alert_monitor.py`, `services/auto_trade_booking.py`, `routers/contracts.py` `GET /api/quote/option`. A stored `XYZ\|22.5\|…` (only reachable by hand today) gets the 22 row's price. |
 | D6 | `routers/contracts.py` `_parse_strikes` (`strikes=` integers only) and `GET /api/quote/option` (`strike: int`) | A fractional strike is a 422; the Watchlist cannot grade a fractional star. |
-| D7 | `frontend/lib/contractGrading.ts` `truncStrike` (`Math.trunc`) | Mirrors the backend truncation on purpose. Once the backend sends 22.5 rows, a `XYZ\|22.5\|…` star would request `strikes=22` and be graded with the 22 row's score/price unless this changes **in the same release** as the backend. |
+| D7 | `frontend/lib/contractGrading.ts` `truncStrike` and `frontend/lib/step6CardContract.ts` `missingCardContracts` (`Math.trunc`) | Both mirror the backend truncation on purpose. Once the backend sends 22.5 rows, a `XYZ\|22.5\|…` star would request `strikes=22` and be graded with the 22 row's score/price unless this changes **in the same release** as the backend. |
 
 `services/daily_risk_hooks.py` `opening_price` already avoids these helpers
 (quotes the exact OSI symbol) for this reason; it is not changed.
@@ -138,21 +138,33 @@ ES-4 ~200 (script) + tests.
    `C00022500`; `strikes=22.5` returns only the 22.5 row; `strikes=22.5x` is
    422; old `last_result_json` with integer strikes reloads.
 
-### ES-3 Frontend (`frontend/lib/contractGrading.ts`)
+### ES-3 Frontend (`frontend/lib/contractGrading.ts`, `frontend/lib/step6CardContract.ts`)
 
 1. Remove `truncStrike`; group strikes and match rows on the exact parsed
    `strike` (`Number(c.strike) === p.strike`). `STRIKE_RE` stays
    (`^\d+(\.\d+)?$`); `187.0` parses to 187 and matches the 187 row (I3).
-2. Update `lib/__tests__/contractGrading.test.ts` ("keeps a fractional strike
+2. `frontend/lib/step6CardContract.ts` (plan r2, audit R1-1):
+   `missingCardContracts` sends `strike: cd.strike` exactly (no `Math.trunc`),
+   so Step 6's rescue of a card contract cut by `max_price`/`limit` asks for
+   `strikes=[182.5]`, not 182 (which, against the exact backend, returns the
+   182 row or nothing, and `withCardContract`'s id gate then drops the card's
+   own contract from Step 6). Correct the field comment ("Truncated as the
+   backend truncates") and the `withCardContract` NOTE (ids carry
+   `int(strike)`) to the exact mechanism.
+3. Update `lib/__tests__/contractGrading.test.ts` ("keeps a fractional strike
    for the label and truncates it for matching" becomes exact matching) and
    `lib/__tests__/step3ParamReach.test.tsx` ("truncates a fractional strike as
-   the backend does"). Add the I2 golden-file Jest test against
-   `contractId`.
-3. `EditDrawer.tsx` `optionStrikeFromContract` comment (says the id "rounds
+   the backend does" now expects 182.5; add: a 182.5 card yields a request with
+   `strike: 182.5`, and `withCardContract` appends a fetched row with id
+   `XOM|182.5|…` but not one with id `XOM|182|…`). Add the I2 golden-file Jest
+   test against `contractId`. After the change, no `Math.trunc` / `Math.floor`
+   / `Math.round` is applied to a strike anywhere in `frontend/` outside tests
+   (grep-checked at build end).
+4. `EditDrawer.tsx` `optionStrikeFromContract` comment (says the id "rounds
    down any fractional strike"): correct the mechanism statement for new ids;
    legacy truncated ids still exist, so the fallback ordering it describes is
    kept.
-4. `npm run typecheck` clean; Jest for touched files.
+5. `npm run typecheck` clean; Jest for touched files.
 
 ### ES-4 Persisted-id migration check (read-only)
 
@@ -241,3 +253,25 @@ Wording, test hygiene, style and illustrative examples are not findings.
 `pytest` (Python 3.11 venv) for the touched modules + the full backend suite;
 `npm run typecheck`; Jest for touched files; `python3 scripts/state.py` no
 drift; then the code audit stage (round 1 = whole integrated diff).
+
+## 8. Audit log (plan stage)
+
+- **Round 1** (fresh independent subagent, bmad-review-adversarial-general,
+  gate-briefed; scope: whole plan r1 @ 646c6510 against code + NLQ b6f2259e):
+  **1 gate finding.** R1-1 — `frontend/lib/step6CardContract.ts:41`
+  `Math.trunc(cd.strike)` would drop a fractional card contract from Step 6's
+  rescue once the backend is exact; the plan omitted the file while telling the
+  implementer to edit its test. Fixed in r2 (ES-3.2/3.3, D7).
+- Round 1 below-gate, logged NOT fixed (per `audit_rule`), for the build to
+  consider: (a) ES-4 `DATABASE_URL` falls back to `sqlite+aiosqlite:///./dev.db`
+  and `.env` is cwd-relative (`backend/app/config.py`), so a wrong cwd reports a
+  false "clean" on an empty new file; (b) `parse_strike_text` is narrower than
+  frontend `STRIKE_RE`, so an odd star like `X|22.5001|…` 422s its whole
+  Watchlist group ("Could not load", no wrong number); (c) ES-4 omits
+  `position_alert_history.contract` and daily-risk `instrument` (history);
+  (d) D4's mechanism: Step 7 / AutoTradeArm build the order symbol from
+  `contractDetails.strike` via `contractId`
+  (`step-7-trade-card/page.tsx` ~1027-1033), not from `card.contract`; ES-2.4
+  fixes `ContractDetails.strike`, so the outcome holds; (e) an old
+  `last_result_json` with strike 0 would fail the `Strike` validator on
+  `/scan/last-run` reload (never observed from Tradier).
