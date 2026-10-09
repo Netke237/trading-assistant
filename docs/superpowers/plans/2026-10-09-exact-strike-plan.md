@@ -1,0 +1,243 @@
+# EXACT-STRIKE — plan r1 (2026-10-09)
+
+Status: PLAN, not audited. Nothing here is built. Claim: `EXACT-STRIKE` on
+`claude/intelligent-merkle-ba9f03`. Audit per `PROJECT_STATE.json` `audit_rule`
+(fresh independent gate-briefed adversarial reviewer per round, cap 3 rounds per
+stage).
+
+## 1. The defect (pre-existing, found by the NO-LIVE-QUOTE NLQ-1 code audit)
+
+Both option-chain builders in `backend/app/data/market.py`
+(`fetch_option_chain`, the dead sync twin, and `fetch_option_chain_async`)
+write the strike as an integer:
+
+```python
+strike = float(c.get("strike") or 0)
+"id": f"{symbol}|{int(strike)}|{target_exp}|{option_type}",
+"strike": int(strike),
+```
+
+`fetch_contract_quote_async` matches with `int(float(strike_str))`. A
+fractional strike (AAPL monthlies list 2.5-wide strikes such as 182.5; names
+under $25 list 0.5/2.5 strikes) is therefore truncated everywhere. Measured
+consequences, each a wrong number or a wrong order:
+
+| # | Path | What goes wrong |
+|---|---|---|
+| D1 | Chain dedup (`seen` set on `c["id"]`, end of both builders) | 22 and 22.5 share id `XYZ\|22\|…`; the second row in Tradier order is **dropped**, so one of the two contracts silently vanishes from the scan, Step 6 and the Watchlist. |
+| D2 | yfinance IV backfill (`yf_iv.get(float(c["strike"]))`) | A 22.5 row looks up the 22.0 key: wrong IV, or none. |
+| D3 | `routers/scan.py` `strike = float(contract.get("strike", price))` → Black–Scholes / Heston pricing, breakeven, targets, `ContractDetails.strike=int(strike)` | All computed with 22 instead of 22.5: wrong breakeven/targets/R:R on the trade card. |
+| D4 | `routers/scan.py` `contract=f"{symbol}\|{int(strike)}\|…"` → broker send (`option_symbol.pipe_to_occ`) | A card built from a 22.5 row sends OCC `…C00022000`: **the broker order is for the 22 contract**. |
+| D5 | `fetch_contract_quote_async` | Any stored id is matched by truncation; consumers `routers/portfolio.py` `get_portfolio` (marks + equity snapshot), `services/position_writer.py`, `routers/alerts.py`, `services/portfolio_alert_monitor.py`, `services/auto_trade_booking.py`, `routers/contracts.py` `GET /api/quote/option`. A stored `XYZ\|22.5\|…` (only reachable by hand today) gets the 22 row's price. |
+| D6 | `routers/contracts.py` `_parse_strikes` (`strikes=` integers only) and `GET /api/quote/option` (`strike: int`) | A fractional strike is a 422; the Watchlist cannot grade a fractional star. |
+| D7 | `frontend/lib/contractGrading.ts` `truncStrike` (`Math.trunc`) | Mirrors the backend truncation on purpose. Once the backend sends 22.5 rows, a `XYZ\|22.5\|…` star would request `strikes=22` and be graded with the 22 row's score/price unless this changes **in the same release** as the backend. |
+
+`services/daily_risk_hooks.py` `opening_price` already avoids these helpers
+(quotes the exact OSI symbol) for this reason; it is not changed.
+`data/option_symbol.py` `pipe_to_occ` is already exact
+(`round(float(strike_str) * 1000)`) and is not changed.
+
+## 2. Target representation
+
+One module, `backend/app/data/strike.py`, owns the representation:
+
+```python
+STRIKE_DP = 3  # OCC resolution: strike * 1000 is an integer
+
+def canonical_strike(raw) -> int | float:
+    """Finite positive strike rounded to 3 dp; an integral value is returned as
+    int (185.0 -> 185) so JSON and f-strings stay byte-identical to today for
+    integer strikes. Raises ValueError for non-finite, <= 0 or bool input."""
+
+def format_strike(raw) -> str:
+    """The strike text inside a contract id: str(canonical_strike(raw)).
+    185 / 185.0 / '185' / '185.0' -> '185';  22.5 / '22.50' -> '22.5'."""
+
+def parse_strike_text(text: str) -> int | float:
+    """Strike text from an id or query param -> canonical_strike. Accepts
+    ^\\d{1,5}(\\.\\d{1,3})?$ only (no sign, exponent, underscore, whitespace)."""
+```
+
+Invariants (each pinned by a test):
+
+- **I1 Byte identity for integer strikes.** For every integer strike every id
+  string and every JSON response is byte-identical to today: `"strike":185`,
+  never `185.0`; id `AAPL|185|2025-05-16|C`. Persisted ids, stars, alerts,
+  positions and armed auto-trade symbols keep matching with no migration.
+- **I2 Python/JS parity.** `format_strike(x)` equals JS `` `${x}` `` for every
+  wire value `x` the backend emits. Both use shortest round-trip decimal for
+  values in (0, 100000) at 3 dp, so `frontend/types/domain.ts` `contractId`
+  needs no change. A shared golden file
+  `backend/tests/fixtures/strike_format_golden.json`
+  (`[{"wire": 22.5, "text": "22.5"}, {"wire": 185, "text": "185"}, 7.125,
+  0.5, 1, 99999.999, …]`) is asserted by a pytest and by a Jest test that reads
+  the same file with `fs` (no copy of the table).
+- **I3 Exact matching.** Quote lookup and strike filtering compare
+  `canonical_strike` values; 22.5 never matches 22, `187.0` matches 187.
+- **I4 Wire type.** A shared Pydantic type
+  `Strike = Annotated[Union[int, float], AfterValidator(canonical_strike)]`
+  (smart-mode union keeps an int an int) replaces `strike: int` on
+  `OptionContract`, `ContractDetails` and `AlternativeContract`. Old persisted
+  `scan_sessions.last_result_json` (integer strikes) still validates.
+
+Chain rows whose strike is missing, non-finite or <= 0 are **dropped** (today
+they become strike 0, id `X|0|…`; Tradier has never been observed sending one,
+and `format_strike` must never emit `nan`).
+
+## 3. Tickets (one phase, one PR; built after NO-LIVE-QUOTE merges)
+
+All four land in one PR because D7 must ship with the backend (section 1).
+Estimated size: ES-1 ~150 lines + tests, ES-2 ~120 + tests, ES-3 ~40 + tests,
+ES-4 ~200 (script) + tests.
+
+### ES-1 Backend data layer (`backend/app/data/`)
+
+1. Add `strike.py` (section 2) + `tests/test_strike.py` (golden file, rejects
+   `-5`, `+5`, `1_000`, `1e3`, `nan`, `inf`, `0`, `True`, 6+ integer digits, 4+
+   decimals).
+2. Both chain builders: `strike = canonical_strike(c.get("strike"))` inside a
+   `try/except (TypeError, ValueError): continue`; `"id"` uses
+   `format_strike(strike)`; `"strike": strike`. Fixes D1, D2 (yfinance key
+   `float(c["strike"])` is now the exact value; `_yf_iv_for_chain` keys stay
+   `float(row["strike"])`, so 22.5 == 22.5).
+3. `fetch_contract_quote_async`: `target_strike = parse_strike_text(strike_str)`
+   (a malformed strike returns None, as any parse failure does today); match
+   `c["strike"] == target_strike and c["expiry"] == expiry` (the expiry clause
+   comes from NO-LIVE-QUOTE). Rewrite NLQ's docstring paragraph "STRIKE after
+   integer truncation … Callers must not use this helper to authorize money on
+   a fractional strike" to state exact matching. `daily_risk_hooks` keeps its
+   OSI quote (it needs `ask`, which the chain row does not carry).
+4. Tests (`tests/test_exact_strike_chain.py`): a mocked Tradier chain with
+   strikes 22, 22.5, 23 → three rows, ids `X|22|…`, `X|22.5|…`, `X|23|…`,
+   `strike` values `22`, `22.5`, `23` (types int, float, int); quote for
+   `X|22.5|…` returns the 22.5 row's price, for `X|22|…` the 22 row's; a chain
+   with only 22.5 returns None for `X|22|…`; `X|22.0|…` returns the 22 row.
+   yfinance backfill test: a 22.5 row with no Tradier IV gets the 22.5 key.
+
+### ES-2 Backend wire + routers
+
+1. `schemas/__init__.py`: `Strike` type on the three models (I4).
+2. `routers/contracts.py`: `_parse_strikes` → `set[int | float]` via
+   `parse_strike_text` (422 message "strikes must be comma-separated
+   strikes, e.g. 187 or 187.5"); `OptionContract(strike=…)` passes the row's
+   value (no `int()`); `GET /api/quote/option` `strike: str = Query(...)` parsed
+   with `parse_strike_text` (422 on bad text) and the id built with
+   `format_strike`.
+3. `scoring/contract_validator.py` `_contract_id`: `format_strike` (today it
+   would emit `22.5` already but `185.0` if a float ever reached it).
+4. `routers/scan.py`: the id at the card (`int(strike)` → `format_strike`),
+   `ContractDetails(strike=…)`, alternative `strike=int(alt_strike)` and
+   `int(float(_alt_sp.legs[0].strike))` → `canonical_strike`. The
+   `contract.get("strike", price)` fallback is unreachable (every chain row now
+   carries a valid strike or is dropped); replace it with `contract["strike"]`
+   so a stock price can never become a strike.
+5. Tests: integer-strike golden responses are byte-identical (I1) for
+   `/api/contracts`, `/api/quote/option`, a scan card; a 22.5 chain produces a
+   card whose `contract` is `X|22.5|…`, `contractDetails.strike == 22.5`,
+   breakeven computed from 22.5, and `pipe_to_occ(card.contract)` ends
+   `C00022500`; `strikes=22.5` returns only the 22.5 row; `strikes=22.5x` is
+   422; old `last_result_json` with integer strikes reloads.
+
+### ES-3 Frontend (`frontend/lib/contractGrading.ts`)
+
+1. Remove `truncStrike`; group strikes and match rows on the exact parsed
+   `strike` (`Number(c.strike) === p.strike`). `STRIKE_RE` stays
+   (`^\d+(\.\d+)?$`); `187.0` parses to 187 and matches the 187 row (I3).
+2. Update `lib/__tests__/contractGrading.test.ts` ("keeps a fractional strike
+   for the label and truncates it for matching" becomes exact matching) and
+   `lib/__tests__/step3ParamReach.test.tsx` ("truncates a fractional strike as
+   the backend does"). Add the I2 golden-file Jest test against
+   `contractId`.
+3. `EditDrawer.tsx` `optionStrikeFromContract` comment (says the id "rounds
+   down any fractional strike"): correct the mechanism statement for new ids;
+   legacy truncated ids still exist, so the fallback ordering it describes is
+   kept.
+4. `npm run typecheck` clean; Jest for touched files.
+
+### ES-4 Persisted-id migration check (read-only)
+
+`backend/scripts/check_contract_strikes.py` — **never writes**. Reads
+`DATABASE_URL` (same resolution as the app). Scans every persisted contract
+string:
+
+| Table.column | Holds |
+|---|---|
+| `portfolio_positions.contract` (+ trade-card snapshot JSON `strike`) | open positions |
+| `closed_positions.contract` | closed history |
+| `watched_contracts.contract_id` | stars |
+| `scan_sessions.last_result_json` (`contract`, `contractDetails.strike`, alternatives) | last scan |
+
+Reports, per row:
+
+- **NONCANONICAL** — strike text `!= format_strike(text)` (e.g. `187.0`,
+  `0187`). After ES-1 these still quote correctly (I3), but a string compare
+  against a new id (stars vs. Step 6 rows) would miss; listed for Kenneth.
+- **UNPARSEABLE** — not `SYMBOL|STRIKE|YYYY-MM-DD|C/P` or `SYMBOL|STOCK`.
+- **AMBIGUOUS (only with `--chain`, live Tradier, unexpired only)** — an
+  integer-strike id `X|k|E|R` where the chain for E lists a fractional strike
+  in `(k, k+1)`. Every chain-built id until now was truncated, so this row
+  *may* have been meant as the fractional contract. Rows that reached a broker
+  were ordered as `pipe_to_occ` of the truncated id, i.e. they **are** the k
+  contract and are correct; the risk is only manual/booked-without-broker
+  entries. The script cannot tell which; it lists them.
+- Summary counts; exit 0 (report only).
+
+Frontend `localStorage` (`bamendjou-auto-trade`, `bamendjou-alerts-v2`,
+legacy `bamendjou-portfolio-v1`, `bamendjou-watched-contracts-v1`) cannot be
+read by a backend script. Every producer of those ids was a truncating one, so
+they are integer-form and stay byte-identical (I1); the only exposure is the
+same AMBIGUOUS case, covered for stars and positions by the DB copy. Not
+scanned; stated in the report footer.
+
+**No automatic rewrite.** Changing a persisted id changes which contract is
+marked, alerted or ordered; any correction is Kenneth's call per row (Q-1).
+
+Where it runs: against the database the live app uses (Q-2). Tests use an
+aiosqlite DB seeded with each category.
+
+## 4. Coordination with NO-LIVE-QUOTE
+
+NO-LIVE-QUOTE (claim reassigned 2026-10-09 to `codex/no-live-quote-resumed`,
+not yet pushed; last pushed work is `claude/priceless-jennings-995ab7` @
+`b6f2259e`, NLQ-1 clean, NLQ-2..4 open) edits the same builder loops,
+`_quote_keys`, `fetch_contract_quote_async` (expiry clause + docstring),
+`routers/portfolio.py`, `scoring/contract_validator.py` and
+`schemas/__init__.py`. This plan was read against `b6f2259e`.
+
+- Plan audit runs now. **ES-1/ES-2 code is not started until NO-LIVE-QUOTE is
+  merged to main** (whichever branch carries it); then this branch rebases onto
+  main and builds on NLQ's versions (dropped no-ask rows, `quoteState` keys,
+  expiry clause kept). If NLQ's merged code differs from `b6f2259e` in these
+  files, the affected ES steps are re-checked before building.
+- ES-3 and ES-4 touch no NLQ file (NLQ edits `EditDrawer.tsx`; ES-3.3 is a
+  comment edit there and is done after the rebase).
+- AUTOTRADE-FIRE-HYGIENE (`claude/hopeful-rubin-64bowt`, #133-#137) H1 adds a
+  scan-fire executor in `routers/scan.py`: a different region from ES-2.4's
+  strike lines, textual merge only. Its H2 (booking) touches
+  `auto_trade_booking.py`, which this plan does not change (that file already
+  parses the strike with `float()`).
+- The claim is renewed while waiting; if it lapses it is re-taken at build
+  start.
+
+## 5. Gate briefing for the auditor
+
+Blocking only: a WRONG NUMBER shown to the user or sent on a broker order, or
+CORRUPT PERSISTED DATA. In this plan that means: any path where a fractional
+strike still truncates; any path where an integer strike's id/JSON changes
+bytes (breaks persisted matches); any path where the plan's matching would pair
+a contract with another contract's quote/score; any write to persisted data.
+Wording, test hygiene, style and illustrative examples are not findings.
+
+## 6. Open questions for Kenneth
+
+- **Q-1** AMBIGUOUS rows: report only and you correct by hand (recommended), or
+  should the plan add an explicit, per-row confirmed rewrite command?
+- **Q-2** Which database does the live app use — the mini PC's
+  `tradingassistant-db` container? ES-4 runs there, read-only, after you
+  confirm.
+
+## 7. Verification at build end
+
+`pytest` (Python 3.11 venv) for the touched modules + the full backend suite;
+`npm run typecheck`; Jest for touched files; `python3 scripts/state.py` no
+drift; then the code audit stage (round 1 = whole integrated diff).
