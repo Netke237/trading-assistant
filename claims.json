@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "codex/stocks-horizon-history",
       "claimed_at": "2026-10-09T07:32:43Z",
-      "expires_at": "2026-10-09T10:32:43Z",
+      "expires_at": "2026-10-09T13:20:39Z",
       "note": "D1 HISTORY plan audit then D2 synthetic/mocked build and code audit",
       "task": "STOCKS-HORIZON-HISTORY"
     }
