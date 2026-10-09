@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "claude/priceless-jennings-995ab7",
       "claimed_at": "2026-10-09T12:54:32Z",
-      "expires_at": "2026-10-09T15:54:32Z",
+      "expires_at": "2026-10-09T17:16:43Z",
       "note": "NLQ build per plan r3 + Kenneth Q-A..Q-D answers (k-ticket-coordinator); then CONTRACT-LIQUIDITY-DTE",
       "task": "NO-LIVE-QUOTE"
     }
