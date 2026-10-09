@@ -54,9 +54,12 @@ class IngestionResult:
     pruned_rows:   int
     failed:        int
     errors:        list[str] = field(default_factory=list)
-    backfilled:    list[str] = field(default_factory=list)
-    seam_mismatch: list[str] = field(default_factory=list)
-    floor_reached: list[str] = field(default_factory=list)
+    backfilled:    int = 0
+    seam_mismatch: int = 0
+    floor_reached: int = 0
+    backfilled_symbols:    list[str] = field(default_factory=list)
+    seam_mismatch_symbols: list[str] = field(default_factory=list)
+    floor_reached_symbols: list[str] = field(default_factory=list)
     seam_ratios:   dict[str, float] = field(default_factory=dict)
 
 
@@ -202,9 +205,12 @@ async def run_ingestion(
         pruned_rows=_state.get("pruned_rows", 0),
         failed=_state["failed"],
         errors=errors,
-        backfilled=list(_state["backfilled_symbols"]),
-        seam_mismatch=list(_state["seam_mismatch_symbols"]),
-        floor_reached=list(_state["floor_reached_symbols"]),
+        backfilled=_state["backfilled"],
+        seam_mismatch=_state["seam_mismatch"],
+        floor_reached=_state["floor_reached"],
+        backfilled_symbols=list(_state["backfilled_symbols"]),
+        seam_mismatch_symbols=list(_state["seam_mismatch_symbols"]),
+        floor_reached_symbols=list(_state["floor_reached_symbols"]),
         seam_ratios=dict(_state["seam_ratios"]),
     )
 

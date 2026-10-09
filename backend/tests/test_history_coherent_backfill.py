@@ -127,3 +127,27 @@ async def test_failure_between_writes_rolls_back_bars_and_metadata(factory, monk
     assert await snapshot(factory) == []
     async with factory() as db:
         assert await db.get(State, "TEST") is None
+
+
+@pytest.mark.asyncio
+async def test_production_refresh_refetches_the_older_span_and_revalidates_proof(factory, monkeypatch):
+    from app.services import history_backfill as history
+    from app.data import alpaca
+    monkeypatch.setattr(history, "_fetch_fallback", AsyncMock(return_value=bars()))
+    await history.update_history("TEST", START, END, alpaca_bars=bars(SEAM, source="alpaca"))
+    async with factory() as db:
+        state = await db.get(State, "TEST")
+        state.seam_signature = None
+        await db.commit()
+    fallback = AsyncMock(return_value=bars(factor=0.1))
+    monkeypatch.setattr(history, "_fetch_fallback", fallback)
+    monkeypatch.setattr(alpaca, "get_alpaca_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(alpaca, "fetch_daily_bars_single",
+                        AsyncMock(return_value=bars(SEAM, source="alpaca", factor=0.1)))
+    result = await hs.refresh_adjustments(["TEST"])
+    assert result["refreshed"] == ["TEST"] and not result["failed"]
+    assert fallback.call_args.args[1] == START
+    async with factory() as db:
+        adjusted = await hs._read_bars("TEST", START, END, db)
+        assert {row["close"] for row in adjusted} == {10.0}
+        assert await hs.find_stale_adjustment("TEST", db) is None

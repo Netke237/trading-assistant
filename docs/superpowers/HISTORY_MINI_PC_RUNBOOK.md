@@ -11,8 +11,8 @@ providers; it does not establish availability or correctness of live provider hi
    `python -m alembic -c migrations/alembic.ini upgrade head` before restarting the backend.
    Confirm head `c15d709a26b1` or a later descendant, and the deployed commit.
 2. Set `scheduling.history_years: 17` (or the chosen 1..20 retention) through
-   GET/PUT `/api/settings/scheduling` using the existing timezone returned by GET.
-   Confirm the actual route prefix in the deployed API schema. A smaller manual
+   GET/PUT `/settings/scheduling` using the existing timezone returned by GET.
+   A smaller manual
    request cannot shorten configured OHLCV retention. Audit/trade history retention
    is a separate setting.
 3. Trigger POST `/api/data/ingest` against that backend with:
