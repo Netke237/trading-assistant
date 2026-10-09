@@ -23,14 +23,6 @@
       "expires_at": "2026-10-09T21:32:11Z",
       "note": "Publish fire-hygiene tickets, implement H1-H3, integrated code audit",
       "task": "AUTOTRADE-FIRE-HYGIENE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-09T18:56:53Z",
-      "expires_at": "2026-10-09T22:55:50Z",
-      "note": "Resume NLQ-2 interrupted independent audit, then NLQ-3/4/5",
-      "task": "NO-LIVE-QUOTE"
     }
   ]
 }
