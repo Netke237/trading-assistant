@@ -1,7 +1,7 @@
 import type { Direction } from './domain';
 import type { Universe, CapUnit } from '@/lib/universeStore';
 import type { HorizonKey } from '@/lib/horizonPresets';
-import type { ScanParams } from '@/lib/scanParamsStore';
+import type { SavedScanParams } from '@/lib/scanParamsStore';
 import type { ConfidenceGate, FundamentalsGate, SpreadsConfig } from '@/lib/settingsStore';
 
 export interface SearchProfileUniverse {
@@ -45,7 +45,9 @@ export interface SearchProfile {
   // been chosen this session (see captureCurrentSnapshot); both fields are
   // always present together or both absent, never one alone.
   strategy?:       string;
-  strategyParams?: ScanParams;
+  // Plain settings plus only the strategy overrides that were set; an absent
+  // override follows the backend horizon profile (STOCKS-HORIZON-T1 H5).
+  strategyParams?: SavedScanParams;
 }
 
 export type SearchProfileSnapshot = Omit<SearchProfile, 'id' | 'name' | 'createdAt' | 'updatedAt'>;

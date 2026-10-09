@@ -269,7 +269,8 @@ def test_stock_scan_bearish_direction_threads_to_signal(stock_client):
     # A5: the backtest gate thresholds are in the key too — the request's
     # schema defaults (bt_min_trades=5, bt_min_win_rate=0.45).
     bt_key = _backtest_key("TSLA", "pullback_ema", "Bearish", bearish_bars, _fixed_params,
-                            commission=_backtest_commission(), min_trades=5, min_win_rate=0.45)
+                            commission=_backtest_commission(), min_trades=5, min_win_rate=0.45,
+                            hold_max_days=15)  # STOCKS-HORIZON-T1 H2: the Swing hold
     _BACKTEST_CACHE[bt_key] = (_pass_bt(), time.time() + _BACKTEST_TTL)
 
     try:

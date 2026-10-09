@@ -778,6 +778,12 @@ describe('EditDrawer per-position alert overrides', () => {
     expect(screen.queryByText(/3 DTE or less/)).not.toBeInTheDocument();
   });
 
+  it('STOCKS-HORIZON-T1 H6: shows the hold for TIME_STOP on a stock position that has one', () => {
+    render(<EditDrawer position={makeStockPosition({ holdMaxDays: 45 })} onClose={noop} onChange={noop} onRemove={noop} />);
+    expect(screen.getByText('Fires at held ≥ 45 days.')).toBeInTheDocument();
+    expect(screen.queryByText(/3 DTE or less/)).not.toBeInTheDocument();
+  });
+
   it('shows the 3-DTE threshold for TIME_STOP on an option position', () => {
     render(<EditDrawer position={makeOptionPosition()} onClose={noop} onChange={noop} onRemove={noop} />);
     expect(screen.getByText(/3 DTE or less/)).toBeInTheDocument();

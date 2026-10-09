@@ -192,7 +192,7 @@ async def test_b3_analysis_caches_under_its_own_thresholds(monkeypatch):
 
     await ss._analyze_core("TEST", StockAnalysisRequest(
         symbol="TEST", bt_min_trades=10, bt_min_win_rate=0.55))
-    assert keys and keys[0].endswith("|10|0.55")
+    assert keys and keys[0].endswith("|10|0.55|hold=15")  # H2: Swing hold in the key
     assert list(ss._BACKTEST_CACHE) == keys
 
 

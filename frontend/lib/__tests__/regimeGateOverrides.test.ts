@@ -59,7 +59,7 @@ const stocksBody = (scanOverrides: Ov) => buildStockScanRequestBody({
   universe: ['AAPL'], direction: 'Bullish', horizon: 'Swing',
   strategy: 'pullback_ema', params: PARAMS, requireReversal: false,
   scanOverrides, confidenceGate: CONFIDENCE_GATE,
-  accountSize: 50_000, riskPct: 0.01, holdMinDays: 5, holdMaxDays: 15,
+  accountSize: 50_000, riskPct: 0.01, holdMinDays: 5, holdMaxDays: 15, paramsHorizon: null,
 });
 
 describe('regimeGateOverridesFrom', () => {

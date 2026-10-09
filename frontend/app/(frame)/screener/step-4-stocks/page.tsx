@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
+import { useStrategyProfilesStore, profileView } from '@/lib/strategyProfilesStore';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useShallow } from 'zustand/shallow';
 import { StrategyParamsPanel, type StrategyParams } from '@/components/organisms/StrategyParamsPanel';
 import { MeanReversionConfirmPanel } from '@/components/molecules/MeanReversionConfirmPanel';
@@ -85,8 +87,8 @@ function panelParamsOf(s: ScanParams): StrategyParams {
     pullbackTrendEma: s.pullbackTrendEma, pullbackMaType: s.pullbackMaType,
     maCrossoverFast: s.maCrossoverFast, maCrossoverSlow: s.maCrossoverSlow,
     maCrossoverLookback: s.maCrossoverLookback, breakoutVolumeMult: s.breakoutVolumeMult,
-    rsiPeriod: s.rsiPeriod, rsiOversold: s.rsiOversold, rsiTrendSma: s.rsiTrendSma,
-    requireChoppyRegime: s.requireChoppyRegime ?? false,
+    rsiPeriod: s.rsiPeriod, rsiOversold: s.rsiOversold, rsiOverbought: s.rsiOverbought,
+    rsiTrendSma: s.rsiTrendSma, requireChoppyRegime: s.requireChoppyRegime,
     btMinTrades: s.btMinTrades, btMinWinRate: s.btMinWinRate,
     eventFilter: s.eventFilter, stockShortlistMax: s.stockShortlistMax,
   };
@@ -116,6 +118,18 @@ export default function Step4StocksPage() {
   const setVwapLookback             = useScanParamsStore((s) => s.setVwapLookback);
   const setVwapDeviationPct         = useScanParamsStore((s) => s.setVwapDeviationPct);
 
+  // STOCKS-HORIZON-T1 H5: the panel shows the backend horizon profile for
+  // direction x params horizon; the store and the panel hold overrides only.
+  const profiles       = useStrategyProfilesStore((s) => s.profiles);
+  const profilesFailed = useStrategyProfilesStore((s) => s.status === 'failed');
+  useEffect(() => { void useStrategyProfilesStore.getState().fetch(); }, []);
+  const paramsHorizon = context ? tunedParamsHorizon(context.horizonPreset, context.holdMax) : null;
+  const profile = useMemo(
+    () => (profiles ? profileView(profiles, direction, paramsHorizon) : null),
+    [profiles, direction, paramsHorizon],
+  );
+  const pv = profile?.values;
+
   const stockScanAt  = useScanStore((s) => s.stockScanAt);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -137,30 +151,59 @@ export default function Step4StocksPage() {
 
   const scanning = scanState === 'SCANNING';
 
+  // What the scan will use: the override, else the profile value (undefined
+  // when neither is in hand; the labels then fall back to generic text).
+  const eff = {
+    pullbackEmaPeriod:  params.pullbackEmaPeriod ?? pv?.pullbackEmaPeriod,
+    pullbackMaType:     params.pullbackMaType ?? pv?.pullbackMaType ?? 'EMA',
+    maCrossoverFast:    params.maCrossoverFast ?? pv?.maCrossoverFast,
+    maCrossoverSlow:    params.maCrossoverSlow ?? pv?.maCrossoverSlow,
+    rsiOversold:        params.rsiOversold ?? pv?.rsiOversold,
+    // 70 is strategy_engine.mean_reversion_rsi_signal's own default, which
+    // applies when neither an override nor the profile carries the key.
+    rsiOverbought:      params.rsiOverbought ?? pv?.rsiOverbought ?? 70,
+    rsiTrendSma:        params.rsiTrendSma ?? pv?.rsiTrendSma,
+    breakoutVolumeMult: params.breakoutVolumeMult ?? pv?.breakoutVolumeMult,
+  };
+  const n = (v: number | undefined, fallback: string) => (v === undefined ? fallback : String(v));
+  const multiVariants         = meanReversionVariants ?? pv?.meanReversionVariants ?? null;
+  const multiMinConfirm       = meanReversionMinConfirm ?? pv?.meanReversionMinConfirm ?? null;
+  const multiVwapLookback     = vwapLookback ?? pv?.vwapLookback ?? null;
+  const multiVwapDeviationPct = vwapDeviationPct ?? pv?.vwapDeviationPct ?? null;
+  const multiOverridden = meanReversionVariants !== null || meanReversionMinConfirm !== null
+    || vwapLookback !== null || vwapDeviationPct !== null;
+
+  const pullbackMa = eff.pullbackEmaPeriod === undefined
+    ? eff.pullbackMaType : `${eff.pullbackEmaPeriod}-${eff.pullbackMaType}`;
+  const fastSma  = `${n(eff.maCrossoverFast, 'fast')}-SMA`;
+  const slowSma  = `${n(eff.maCrossoverSlow, 'slow')}-SMA`;
+  const trendSma = eff.rsiTrendSma === undefined ? 'the trend SMA' : `${eff.rsiTrendSma}-SMA`;
+  const volSpike = eff.breakoutVolumeMult === undefined ? 'volume spike' : `volume spike (${eff.breakoutVolumeMult}×)`;
   const strategyLabel: Record<string, string> = {
-    pullback_ema:          `${bearish ? 'Bounce' : 'Pullback'} to ${params.pullbackEmaPeriod}-${params.pullbackMaType}`,
-    ma_crossover:          `MA Crossover ${params.maCrossoverFast}/${params.maCrossoverSlow}`,
-    mean_reversion_rsi:    `Mean Reversion RSI / ${params.rsiTrendSma}-SMA`,
+    pullback_ema:          `${bearish ? 'Bounce' : 'Pullback'} to ${pullbackMa}`,
+    ma_crossover:          eff.maCrossoverFast === undefined || eff.maCrossoverSlow === undefined
+      ? 'MA Crossover' : `MA Crossover ${eff.maCrossoverFast}/${eff.maCrossoverSlow}`,
+    mean_reversion_rsi:    eff.rsiTrendSma === undefined ? 'Mean Reversion RSI' : `Mean Reversion RSI / ${eff.rsiTrendSma}-SMA`,
     mean_reversion_bb:     'Mean Reversion BB',
     mean_reversion_vwap:   'Mean Reversion VWAP (15m)',
     breakout_base:         bearish ? 'Breakdown from tight base' : 'Breakout from tight base',
   };
   const entryLabel: Record<string, string> = bearish
     ? {
-        pullback_ema:          `Bounce to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in downtrend${requireReversal ? ' + reversal candle' : ''}`,
-        ma_crossover:          `${params.maCrossoverFast}-SMA crosses below ${params.maCrossoverSlow}-SMA`,
-        mean_reversion_rsi:    `RSI > 70 while below ${params.rsiTrendSma}-SMA`,
+        pullback_ema:          `Bounce to ${pullbackMa} in downtrend${requireReversal ? ' + reversal candle' : ''}`,
+        ma_crossover:          `${fastSma} crosses below ${slowSma}`,
+        mean_reversion_rsi:    `RSI > ${eff.rsiOverbought} while below ${trendSma}`,
         mean_reversion_bb:     'Price touches upper Bollinger Band + reversal signal',
         mean_reversion_vwap:   'Price deviates >1.5% above VWAP + reversal bar toward VWAP (15m bars)',
-        breakout_base:         `Break below N-day low after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
+        breakout_base:         `Break below N-day low after narrow range + ${volSpike}`,
       }
     : {
-        pullback_ema:          `Dip to ${params.pullbackEmaPeriod}-${params.pullbackMaType} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
-        ma_crossover:          `${params.maCrossoverFast}-SMA crosses above ${params.maCrossoverSlow}-SMA`,
-        mean_reversion_rsi:    `RSI < ${params.rsiOversold} while above ${params.rsiTrendSma}-SMA`,
+        pullback_ema:          `Dip to ${pullbackMa} in uptrend${requireReversal ? ' + reversal candle' : ''}`,
+        ma_crossover:          `${fastSma} crosses above ${slowSma}`,
+        mean_reversion_rsi:    `RSI < ${n(eff.rsiOversold, 'the oversold level')} while above ${trendSma}`,
         mean_reversion_bb:     'Price touches lower Bollinger Band + reversal signal',
         mean_reversion_vwap:   'Price deviates >1.5% below VWAP + reversal bar toward VWAP (15m bars)',
-        breakout_base:         `Break above N-day high after narrow range + volume spike (${params.breakoutVolumeMult}×)`,
+        breakout_base:         `Break above N-day high after narrow range + ${volSpike}`,
       };
 
   async function onRun() {
@@ -229,21 +272,44 @@ export default function Step4StocksPage() {
         params={params}
         setParams={setParams}
         onReset={() => setParams(panelParamsOf(useScanParamsStore.getState()))}
+        profile={profile}
+        profileUnavailable={profilesFailed}
+        customHorizon={context?.horizonPreset === 'Custom' ? paramsHorizon : null}
       />
 
       {activeStrategy === 'mean_reversion_multi' && (
-        <MeanReversionConfirmPanel
-          variants={meanReversionVariants}
-          minConfirmations={meanReversionMinConfirm}
-          vwapLookback={vwapLookback}
-          vwapDeviationPct={vwapDeviationPct}
-          onChange={(update) => {
-            if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
-            if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
-            if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
-            if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+        multiVariants !== null && multiMinConfirm !== null && multiVwapLookback !== null && multiVwapDeviationPct !== null ? (
+          <MeanReversionConfirmPanel
+            variants={multiVariants}
+            minConfirmations={multiMinConfirm}
+            vwapLookback={multiVwapLookback}
+            vwapDeviationPct={multiVwapDeviationPct}
+            onChange={(update) => {
+              if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
+              if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
+              if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
+              if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+            }}
+          />
+        ) : (
+          <Text size={11} tone="caution">
+            {'Signal confirmation: profile unavailable — the scan uses the backend\'s values'}
+          </Text>
+        )
+      )}
+      {activeStrategy === 'mean_reversion_multi' && multiOverridden && (
+        <button
+          type="button"
+          className={styles.resetProfileBtn}
+          onClick={() => {
+            setMeanReversionVariants(null);
+            setMeanReversionMinConfirm(null);
+            setVwapLookback(null);
+            setVwapDeviationPct(null);
           }}
-        />
+        >
+          Reset signal confirmation to profile
+        </button>
       )}
 
       <div className={styles.runRow}>
@@ -251,11 +317,11 @@ export default function Step4StocksPage() {
           type="button"
           className={styles.runBtn}
           onClick={onRun}
-          disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0)}
+          disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0)}
           title={
             !activeStrategy
               ? 'Select a strategy first'
-              : activeStrategy === 'mean_reversion_multi' && meanReversionVariants.length === 0
+              : activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0
               ? 'Select at least one confirmation signal'
               : undefined
           }

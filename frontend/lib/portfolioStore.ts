@@ -43,6 +43,8 @@ type BackendPosition = {
   pickedRowOptionPrice?: number | null;
   pickedStopBasis?: PickedStopBasis | null;
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- null = no hold. */
+  holdMaxDays?: number | null;
   alertOverrides?: AlertOverrides | null;
   targets: TargetLevel[];
   dteTotal: number | null;
@@ -93,6 +95,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    holdMaxDays: p.holdMaxDays ?? null,
     alertOverrides: p.alertOverrides ?? {},
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
@@ -362,6 +365,8 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    // STOCKS-HORIZON-T1 H6 -- the scan's hold (stock sends only); null = none.
+    holdMaxDays: p.holdMaxDays ?? null,
   };
 }
 
@@ -945,6 +950,10 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // ok path) kept `premiumStopDollar` on the row, and a v5 store never ran
       // the old unconditional clean-up again. Idempotent.
       if (version < 6 && ivClean.syncStatus === 'synced') delete ivClean.premiumStopDollar;
+      // v6 -> v7, STOCKS-HORIZON-T1 H6. `holdMaxDays` joins the persisted
+      // shape; a stored row predates the hold, so it has none (null = never a
+      // stock time stop) until the next sync reads the backend's value.
+      if (version < 7 && ivClean.holdMaxDays === undefined) ivClean.holdMaxDays = null;
       return ivClean;
     }),
   };
@@ -1470,7 +1479,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 6,
+      version: 7,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),
