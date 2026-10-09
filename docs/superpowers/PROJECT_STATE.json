@@ -2109,8 +2109,8 @@
       "id": "TIINGO-GOVERNOR",
       "name": "Tiingo history pacing, symbol budget and shared rate-limit cooldown",
       "status": "built",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_rounds": 1,
+      "audit_clean": true,
       "depends_on": [],
       "verify": {
         "kind": "present",
@@ -2118,7 +2118,7 @@
         "pattern": "get_governor\\(\\)\\.call\\(\"tiingo\", request, symbol=symbol\\)",
         "note": "Presence only; offline adapter/governor/fallback tests verify admission behavior."
       },
-      "note": "Follow-up from D3 #114. Async adapter and all callers integrated; shared429 cooldown and request-admission symbol budget implemented. Verification and fresh independent code audit pending; not ready to merge. Merged HISTORY audit record remains unchanged."
+      "note": "Follow-up from D3 #114. Independent code R1 clean: /root/tiingo_governor_audit_r1 reviewed b7c5b38c..c4addf9b, diff SHA256 dfc165d17d4b0628235b3691d47e974fa56bae3e570f3906103e7e4c0d3f6ffb; zero gate findings and verified whole-target scope. Independent offline tests 123 passed; author focused suite 169 passed / 6 PostgreSQL skips; frontend typecheck passed. Audit record docs/superpowers/audits/2026-10-09-tiingo-governor-code.md. PR132 pending merge; no deployment/live calls. Merged HISTORY audit record remains unchanged."
     }
   ],
   "already_shipped": [
