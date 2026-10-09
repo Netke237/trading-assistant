@@ -22,3 +22,8 @@ Mutations that must fail a test (plan 3g): M1, M2, M3, M10, M11
 - F2 gate 1/2: missing quote -> $0 mark on Portfolio + persisted equity snapshot; widened by NLQ-1. Fixed c84556aa, 67a99f44, 0c605733 (quoteUnavailable, snapshot skip, '—', display totals exclude, exposure sums at entry price).
 - BELOW-GATE (logged, not fixed): yaml comment says 'NYSE session' though no holiday/early-close calendar (sandbox early-close residual 13:00-13:45); max_age_minutes 1e308 overflows to inf; NaN bid with fresh stamps reads live (Tradier JSON has no NaN); sandbox quoteAgeS excludes the 15-min lag.
 - Round 2 scope: git diff 5b14896e..0c605733 (fixes only) + interactions.
+
+### Code round 2 (2026-10-09) — NOT CLEAN, 1 gate finding, fixed
+- Scope 5b14896e..0c605733. G1 gate 1: EditDrawer 'Current price' showed 0 for a flagged row. Fixed 0f14b77a.
+- BELOW-GATE: never-quotable open position stalls equity snapshots (nothing wrong persisted); entry-price exposure under-counts a risen position; domain.ts comment on 0 defaults; Aggregate Greeks add missing delta as 0 (pre-existing); manual mark on flagged row (now clears flag).
+- Round 3 (LAST for this ticket) scope: 2cb80ff6..0f14b77a.
