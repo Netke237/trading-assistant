@@ -10,19 +10,25 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-09T12:54:32Z",
-      "expires_at": "2026-10-09T17:16:43Z",
-      "note": "NLQ build per plan r3 + Kenneth Q-A..Q-D answers (k-ticket-coordinator); then CONTRACT-LIQUIDITY-DTE",
-      "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/intelligent-merkle-ba9f03",
       "claimed_at": "2026-10-09T14:22:31Z",
       "expires_at": "2026-10-09T17:22:31Z",
       "note": "Plan exact-strike representation end to end (chain rows, contract ids, quote matching, persisted-id migration check)",
       "task": "EXACT-STRIKE"
+    },
+    {
+      "agent": "claude",
+      "branch": "codex/no-live-quote-continuation",
+      "claimed_at": "2026-10-09T14:28:56Z",
+      "expires_at": "2026-10-09T17:28:56Z",
+      "note": "Kenneth reassigned: continue after NLQ-1 round 3; NLQ-2 backend grading and wiring, remaining ticket audits",
+      "previous": [
+        {
+          "branch": "claude/priceless-jennings-995ab7",
+          "claimed_at": "2026-10-09T12:54:32Z"
+        }
+      ],
+      "task": "NO-LIVE-QUOTE"
     }
   ]
 }
