@@ -13,3 +13,5 @@
 
 - [ ] Require actual complete adjusted counterparts; strict mode rejects an incomplete symbol and permits whole-window fallback.
 - [ ] Successful older-bar updates evict stock backtests as well as confidence, with the existing in-flight generation guard.
+
+**GitHub issue:** #125

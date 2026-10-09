@@ -1,6 +1,6 @@
 # Stocks horizon HISTORY: safe daily backfill and retention
 
-> D1 plan round 1: two gate findings, fixes written; independent fix-only round 2 next. No application code is built.
+> D1 plan stage CLEAN after two independent rounds. D2 code stage not audited; no application code is built yet.
 > Target STOCKS-HORIZON-HISTORY; roadmap D1 #112, D2 #113, mini PC D3 #114.
 
 ## Goal and boundaries
@@ -237,4 +237,7 @@ required audit skills and the repo numeric/persistence gate. Reviewed whole plan
 plus local spec/map/six tickets against aaa7102c (no application changes). Two
 findings: F1 ingestion omitted stock-backtest eviction after older-bar changes;
 F2 provider normalization hid missing adjusted data. Both fixed in R3 and the
-acceptance tests above. No findings deferred. Round 2 is fixes-only and pending.
+acceptance tests above. No findings deferred. Round 2 reviewer history_plan_audit_r2 independently reviewed
+exact plan/ticket-02 diff c76c94bf..fb19f2f36783b1e1e32efbd48ff4713345af883b
+and its provider/cache interactions: ZERO gate findings after recheck. Plan stage
+clean after 2 rounds; code stage remains outstanding.

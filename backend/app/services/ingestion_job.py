@@ -23,6 +23,7 @@ from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
 from app.models.ohlcv_daily import OhlcvDailyModel
 from app.services.historical_store import _store_bars, get_bars, most_recent_trading_day
+from app.services.history_retention import effective_years
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ def _should_ingest(last_date: date | None) -> bool:
 
 async def _prune_old_rows(years: int) -> int:
     """Delete rows older than `years` years. Returns number of rows deleted."""
-    cutoff = date.today() - timedelta(days=years * 365)
+    cutoff = date.today() - timedelta(days=effective_years(years) * 365)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             delete(OhlcvDailyModel).where(OhlcvDailyModel.date < cutoff)
@@ -80,7 +81,7 @@ async def _prune_old_rows(years: int) -> int:
 
 async def run_ingestion(
     symbols: list[str],
-    years: int = 6,
+    years: int | None = None,
 ) -> IngestionResult:
     """Run a full ingestion pass for `symbols`.
 
@@ -89,6 +90,7 @@ async def run_ingestion(
     Prunes rows older than `years` years when done.
     """
     global _state
+    years = effective_years(years)
 
     _state.update({
         "status":         "running",
@@ -192,7 +194,7 @@ async def run_ingestion(
     )
 
 
-def start_ingestion_task(symbols: list[str], years: int = 6) -> None:
+def start_ingestion_task(symbols: list[str], years: int | None = None) -> None:
     """Create an asyncio Task for run_ingestion (fire-and-forget).
 
     Must be called from inside a running event loop (FastAPI lifespan or endpoint).

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.services.ingestion_job import start_ingestion_task, get_ingestion_state
 from app.services.ingestion_schedule_store import ingestion_schedule_store
 from app.services import ingestion_scheduler
+from app.services.history_retention import effective_years
 
 router = APIRouter(prefix="/api/data", tags=["ingestion"])
 
@@ -23,7 +24,7 @@ _TIME_RE = re.compile(r"^\d{2}:\d{2}$")
 
 class IngestRequest(BaseModel):
     symbols: list[str]
-    years: int = Field(default=6, ge=1, le=10)
+    years: int | None = Field(default=None, ge=1, le=20)
 
 
 _UNIVERSE_PRESETS = {"SP500", "NDX100", "DOW30"}
@@ -46,8 +47,9 @@ async def trigger_ingest(req: IngestRequest) -> dict:
             symbols = list(dict.fromkeys(expanded))
         except Exception:
             pass
-    start_ingestion_task(symbols, years=req.years)
-    return {"status": "started", "total": len(symbols), "years": req.years}
+    years = effective_years(req.years)
+    start_ingestion_task(symbols, years=years)
+    return {"status": "started", "total": len(symbols), "years": years}
 
 
 @router.get("/ingest/status")

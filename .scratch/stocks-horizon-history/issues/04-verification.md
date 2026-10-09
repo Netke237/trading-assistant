@@ -10,3 +10,5 @@
 
 - [ ] No live provider or operational DB access in development checks.
 - [ ] Record tests, runtime version and D3 commands/counts/exclusion decision gate.
+
+**GitHub issue:** #127

@@ -4,7 +4,7 @@
 D1 plan audit and D2 synthetic/mocked build, code audit and PR; D3 live execution is reserved for the mini PC.
 
 ## Status
-D1 plan round 1 found two gate findings; plan fixes written; independent fixes-only round 2 next. No application code built.
+D1 plan stage clean after two independent rounds; D2 retention #124 implemented/verified, atomic backfill #125 starts. Code audit not run.
 
 ## Done
 - Read project state and coordinator/audit instructions; no initial state drift.
@@ -12,8 +12,9 @@ D1 plan round 1 found two gate findings; plan fixes written; independent fixes-o
 - Preserved inherited draft from origin/claude/stocks-horizon-t1 and wrote complete redesigned plan with six work packages.
 
 ## Next steps
-- [ ] Run fresh independent plan round 2 over the two fixes and interactions; cap three plan rounds.
-- [ ] Publish build tickets and execute the unblocked frontier after plan clean.
+- [x] Plan round 2 clean over the two fixes and interactions (fb19f2f3).
+- [x] Published tracking #123 and build tickets #124 to #128.
+- [ ] Execute #124 retention, then #125 backfill, #126 refresh/evidence, #127 verification.
 - [ ] Run synthetic/mocked tests, fresh independent code audit, cap three code rounds.
 - [ ] Publish PR and release handoff at the merge approval gate.
 
@@ -34,3 +35,5 @@ D1 plan round 1 found two gate findings; plan fixes written; independent fixes-o
 
 - Plan round 1 reviewer history_plan_audit_r1: ingestion backtest cache eviction and strict adjustment completeness fixed in the plan; not yet re-audited.
 - Checkpoint on this Windows host: set KSESSION_PYTHON=python to avoid the python3 Store alias; the newly installed hook supports this override.
+
+- Retention slice: 32 targeted tests passed on isolated Python 3.11; frontend typecheck clean. No live data calls.

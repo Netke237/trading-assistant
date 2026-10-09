@@ -10,3 +10,5 @@
 
 - [ ] Record exact reviewed diff, reviewer, fixes and outstanding findings.
 - [ ] Merge awaits user approval; audit-clean does not claim D3 executed.
+
+**GitHub issue:** #128

@@ -10,3 +10,5 @@
 
 - [ ] Old segment is refreshed with current adjustments; missing dates fail without partial commits.
 - [ ] Jump, action-age, NULL factor and unrecorded source mixtures still flag; full-span evidence stays SELECT-only.
+
+**GitHub issue:** #126

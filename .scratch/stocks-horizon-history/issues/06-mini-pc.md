@@ -10,3 +10,5 @@
 
 - [ ] Record counts, seam ratios and provider failures.
 - [ ] Update exclusions only following user decisions.
+
+**GitHub issue:** #114
