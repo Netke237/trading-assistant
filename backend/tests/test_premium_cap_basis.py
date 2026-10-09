@@ -83,7 +83,7 @@ def test_auditor_example_at_the_basis_is_not_approved_at_twelve():
 def _strategy(**over) -> ArmedStrategy:
     body = {
         "broker": "ibkr_paper", "symbol": "AAPL", "option_symbol": CONTRACT,
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing",
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15,
         "quantity": 12, "order_type": "LMT", "limit_price": 3.60, "entry_premium": 3.00,
         "stop": 180.0, "conid": None,
     }

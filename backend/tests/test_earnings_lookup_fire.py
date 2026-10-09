@@ -31,6 +31,7 @@ class _Strategy:
     symbol = "AAPL"
     horizon = "Swing"
     direction = "Bullish"
+    hold_max_days = None
 
 
 IN_30 = date.today() + timedelta(days=30)
@@ -362,3 +363,13 @@ def test_the_tradier_request_carries_a_tight_http_timeout(monkeypatch):
     t = seen["timeout"]
     assert t.read is not None and t.read < at._TRADIER_LOOKUP_DEADLINE_S
     assert t.connect is not None and t.connect < at._TRADIER_LOOKUP_DEADLINE_S
+
+
+def test_p0b_real_calendar_lookup_vetoes_inside_custom_hold(monkeypatch):
+    earnings = date.today() + timedelta(days=90)
+    _install_tradier(monkeypatch, report_date=earnings)
+    strategy = _Strategy()
+    strategy.horizon = "Position"
+    strategy.hold_max_days = 105
+    with pytest.raises(at.EventVetoError, match="hold window.*105d"):
+        at._apply_event_veto(strategy)

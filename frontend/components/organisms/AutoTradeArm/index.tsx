@@ -8,8 +8,9 @@ import { useAutoTradeStore, type AutoTradeMode } from '@/lib/autoTradeStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
-import { scoringHorizonFromLabel } from '@/lib/horizonPresets';
+import { sanitizeHoldDays, scoringHorizonFromLabel } from '@/lib/horizonPresets';
 import { regimeGateFromCard, MISSING_REGIME_GATE_SNAPSHOT_TITLE } from '@/lib/regimeGateOverrides';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { api } from '@/lib/api';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { armBookingFieldsFrom, classifyFireFailure } from '@/lib/armBookingFields';
@@ -294,9 +295,11 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
   const gateSnapshotMissing = regimeGate === null;
   /* Task 10c -- see the `armBlockedReason` prop doc. Fire now is blocked only
    * when the armed trade is this card's (or the server named no symbol). */
-  const armBlocked = armBlockedReason != null;
+  const bearishUnvalidated = isBearishUnvalidated(card.direction);
+  const effectiveArmBlockedReason = bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : armBlockedReason;
+  const armBlocked = effectiveArmBlockedReason != null;
   const fireBlocked = armBlocked && (armedSymbol == null || armedSymbol === card.symbol);
-  /* NOTE: the disclosure is the CALLER'S, not this component's, and that is a
+  /* NOTE: externally supplied refusal disclosures are the CALLER'S, and that is a
    * choice rather than an omission. Rendering the refusal sentence here too put
    * it on screen TWICE in one column -- step 7 already prints it a few rows
    * above, under the two direct buttons it also gates, and this control sits
@@ -311,7 +314,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
    *  the same tick as it closes the dialog, and a state flag read here would
    *  still be the stale `false`, re-opening the dialog forever. */
   async function handleArm(confirmedDuplicate = false) {
-    if (!broker) return;
+    if (!broker || isBearishUnvalidated(card.direction)) return;
     // Belt and braces beside the button's own `disabled`, on the same reading
     // of the same value -- an invariant on the function that submits the arm
     // request, not a second chance at a race it could not lose. Same shape as
@@ -346,6 +349,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
     setDupWarning(null);
     setWorking(true); setError(null); setFireNote(null);
     try {
+      const context = useScanStore.getState().context;
+      const { hold_max_days } = sanitizeHoldDays(context?.holdMin ?? 0, context?.holdMax ?? 0);
       await api.armAutoTrade({
         broker,
         symbol:          card.symbol,
@@ -376,7 +381,8 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         // label helper is the one place that mapping is defined. A null context
         // (nothing scanned this session) falls back to the helper's own default
         // rather than to a literal written here.
-        horizon:         scoringHorizonFromLabel(useScanStore.getState().context?.horizon),
+        horizon:         scoringHorizonFromLabel(context?.horizon),
+        hold_max_days,
         // The thresholds THIS CARD'S SCAN RESOLVED, off the card itself --
         // NOT the live Step-3 store. Arm-door round 1, F1: `scanOverrides` is
         // not persisted and survives a threshold edit or "Reset to defaults"
@@ -557,6 +563,10 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
         ))}
       </div>
 
+      {bearishUnvalidated && armBlockedReason !== BEARISH_UNVALIDATED_MESSAGE && (
+        <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+      )}
+
       {autoMode === 'armed' && (
         <div className={styles.armRow}>
           {!armed ? (
@@ -565,7 +575,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
               title={
                 // The veto wins, as on step 7's direct buttons: filling a
                 // field cannot cure it.
-                armBlocked ? (armBlockedReason as string)
+                armBlocked ? (effectiveArmBlockedReason as string)
                 : stopMissing ? MISSING_INVALIDATION_TITLE
                 : pickMissing ? MISSING_METHOD_PICK_TITLE
                 : gateSnapshotMissing ? MISSING_REGIME_GATE_SNAPSHOT_TITLE
@@ -592,7 +602,7 @@ export function AutoTradeArm({ card, broker, contracts = 1, premiumStopDollar = 
                 Disarm
               </button>
               <button type="button" className={styles.btn} onClick={handleFireNow} disabled={working || fireBlocked}
-                title={fireBlocked ? (armBlockedReason as string) : undefined}>
+                title={fireBlocked ? (effectiveArmBlockedReason as string) : undefined}>
                 Fire now
               </button>
             </>

@@ -32,7 +32,7 @@ CONTRACT = "AAPL|185|2026-12-18|C"
 def _arm_body(**over) -> dict:
     body = {
         "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": CONTRACT,
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing",
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15,
         "quantity": 1, "order_type": "LMT", "limit_price": 2.50, "entry_premium": 2.50,
     }
     body.update(over)

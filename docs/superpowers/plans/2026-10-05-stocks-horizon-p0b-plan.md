@@ -134,7 +134,11 @@ confidence/regime gates.
   bearish cards. Shortlist ranking already sorts CAUTION after PASS.
 - Stocks: in both functions, after the existing caps, a Bearish request caps `stock_status` at CAUTION (never lowers
   a REJECT) and appends `{"gate": "unvalidated", "status": "CAUTION", "detail": BEARISH_UNVALIDATED_MESSAGE}` to the
-  card's gate flags (find the `GateFlag` list the result carries; `_analyze_core` already builds `gate_flags`).
+  card's gate flags. `_analyze_core` already builds `gate_flags`; `_process_stock` does not yet carry them, so
+  add `PositionCardOut.gate_flags: list[GateFlag] = Field(default_factory=list)` (reuse the existing `GateFlag`
+  type) and the matching optional `PositionCardData.gate_flags` frontend wire field. Initialize the scan card
+  list empty and append the required Unvalidated flag for Bearish. Default-empty/optional makes older saved
+  cards readable; this is the carrier for the flag already required by B2, not a new gate or score change.
 - No candidate is dropped by this cap; funnel counts are unchanged.
 - Pre-breakout and fib scans emit setups, not statuses; untouched.
 
@@ -186,7 +190,10 @@ to the scan context's hold, including a **Custom 60-185** context (→ 185, not 
 send handler near line 1116 that already returns early on an earnings veto, and `api.postOptionOrder` near line 1215);
 the arm is `components/organisms/AutoTradeArm`. Stock sends all go through `lib/stockDirectSend.ts::sendStockSaveFirst`
 (save the Portfolio row first, then `api.postStockOrder` with `effect: 'OPEN'`), called from `StockPositionCard`,
-`StockSendDialog` and the Step-7 position-card page.
+`StockSendDialog` and the Step-7 position-card page. After audited STOCKS-STEP-MERGE-S2
+landed on main, the stock Step-7 page delegates its sends to these shared components; put the guard in those
+authoritative components and test the page through them, without recreating a separate submit path. Preserve the
+existing unavailable-C4-validation refusal and in-flight ownership/recovery gates. This changes wiring only, not B4 semantics.
 
 **Semantics.**
 

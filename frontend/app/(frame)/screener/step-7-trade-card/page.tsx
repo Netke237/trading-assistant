@@ -54,7 +54,8 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
-import { earningsGateFor, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { earningsGateFor, scanVetoDays, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 
 // Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
 // unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
@@ -603,6 +604,10 @@ export default function Step7Page() {
   const requestedPlanKeysRef = useRef<Record<string, string>>({});
 
   const scanResult          = useScanStore((s) => s.scanResult);
+  // STOCKS-HORIZON-P0B B7: the scan's hold, for the veto-window fallback on a
+  // result persisted before `event_window.veto_days` existed.
+  const scanContext         = useScanStore((s) => s.context);
+  const earningsVetoDays    = scanVetoDays(scanResult?.event_window, scanContext);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
   const pickedContracts     = useScanStore((s) => s.pickedContracts);
   const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
@@ -1112,11 +1117,12 @@ export default function Step7Page() {
    * another candidate's screen. */
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
-    if (!card || !selectedBroker) return;
+    if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
     // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
     // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
-    // scan's age), the same reading as `earningsVeto` below.
-    if (earningsGateFor(card, scanResult?.timestamp, scanResult?.event_window?.reject_days).veto) return;
+    // scan's age), the same reading as `earningsVeto` below. P0B B7: against
+    // the scan's veto window, max(reject_days, hold).
+    if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1318,10 +1324,13 @@ export default function Step7Page() {
   // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
   // is unknown -- every fire of it would be refused. The rail reads the same
   // helper.
+  // STOCKS-HORIZON-P0B B7: the window is the scan's veto window,
+  // `event_window.veto_days ?? max(reject_days, the scan's hold)`.
   const earningsGate = earningsGateFor(
-    effectiveCard, scanResult?.timestamp, scanResult?.event_window?.reject_days,
+    effectiveCard, scanResult?.timestamp, earningsVetoDays,
   );
   const earningsVeto = earningsGate.veto;
+  const bearishUnvalidated = isBearishUnvalidated(effectiveCard?.direction);
 
   const idx = symbols.indexOf(active);
 
@@ -1588,9 +1597,10 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
                   title={
-                    earningsVeto ? EARNINGS_VETO_MESSAGE
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1602,10 +1612,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
                   title={
-                    // The broker refusal wins: filling a field cannot cure it.
-                    marketBlocked != null ? marketBlocked
+                    // Direction and broker refusals cannot be cured by filling a field.
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : marketBlocked != null ? marketBlocked
                     : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
@@ -1618,6 +1629,9 @@ export default function Step7Page() {
               {/* Fix #3 (review). Said, not merely disabled; independent of the
                 * stop / pick refusals below for the same reason they are
                 * independent of each other. */}
+              {bearishUnvalidated && (
+                <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+              )}
               {earningsVeto && (
                 <Text size={11} tone="reject">
                   {EARNINGS_VETO_MESSAGE}
@@ -1668,7 +1682,7 @@ export default function Step7Page() {
                 * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
-                  armBlockedReason={earningsGate.armBlockedReason}
+                  armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path

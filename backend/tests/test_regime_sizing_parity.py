@@ -40,7 +40,7 @@ import pytest
 import app.routers.stock_scan as stock_scan
 import app.services.auto_trader as auto_trader
 from app.scoring.conviction_sizing import conviction_mult
-from tests.test_auto_trader import _fired_quantity
+from tests.test_auto_trader import _fired_quantity, _research_sized_quantity
 from tests.test_stock_scan_unmeasured_floor import _FULL_SHARES, _ON, _omm, _run
 
 # 50_000 * 1% = 500 risk, / (152 - 148) = 125 shares at full size — the card
@@ -132,14 +132,14 @@ def test_the_card_does_not_lose_a_share_on_an_exact_boundary():
     assert shares == 670
 
 
-# ── The headwind half is graded on the fire path (finding 7) ─────────────────
+# ── The headwind half remains graded for research (finding 7) ──────────────
 
-def test_the_fire_path_grades_the_opposed_half(mocker):
-    """At quantity=4, -20 and -40 both fire 1, so the existing bearish tests
-    cannot see the negative half being graded. At 10 they separate:
+def test_the_research_sizing_path_grades_the_opposed_half(mocker):
+    """At quantity=4, -20 and -40 both size to 1; at 10 they separate.
+    P0B refuses live Bearish orders, but preserves this research arithmetic:
     floor(10 x 0.475) = 4 vs floor(10 x 0.30) = 3."""
-    at_20 = _fired_quantity(mocker, direction="Bearish", conviction=-20, quantity=10)
-    at_40 = _fired_quantity(mocker, direction="Bearish", conviction=-40, quantity=10)
+    at_20 = _research_sized_quantity(mocker, conviction=-20, quantity=10)
+    at_40 = _research_sized_quantity(mocker, conviction=-40, quantity=10)
     assert (at_20, at_40) == (4, 3)
 
 

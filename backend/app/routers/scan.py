@@ -62,7 +62,7 @@ from app.data.market import (
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
+from app.scoring.stock_scorer import score_stock, StockScoreCard, Horizon, effective_event_window, effective_veto_days
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
 from app.data.universe_exclusions import ExclusionListError, filter_symbols
@@ -84,6 +84,7 @@ from types import SimpleNamespace
 from app.routers.stock_scan import (
     _regime_data_drop, _direction_conviction_drop, _rs_benchmark_candles, _aligned_benchmark,
 )
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -147,16 +148,25 @@ def _final_status(*statuses: str) -> str:
     return min(statuses, key=lambda s: _ORDER.get(s, 1))
 
 
-def _earnings_veto(card) -> bool:
-    """Fix #3: earnings inside the horizon's reject window is a VETO on the
-    options path, not a score penalty. 37 of 440 measured PASS setups stayed
-    PASS with earnings 3 days out. Dividends stay a penalty (D3)."""
+def _earnings_veto(card, veto_days: int) -> bool:
+    """Earnings inside max(reject, hold) vetoes options; dividends remain a score penalty."""
     r = next((r for r in card.rules if r.name == "event"), None)
     if r is None:
         return False
     days = r.detail.get("earnings_days")
-    reject = r.detail.get("reject_days")
-    return days is not None and reject is not None and days < reject
+    return days is not None and 0 <= days < veto_days
+
+
+def _resolve_earnings_veto_days(horizon, overrides, hold_max_days, reject_days) -> int:
+    """Keep a veto window if request resolution fails, using the event echo first."""
+    try:
+        return effective_veto_days(horizon, overrides, hold_max_days)
+    except Exception as exc:
+        _log.warning("earnings veto window unavailable: %s", exc)
+        if reject_days is not None:
+            return reject_days
+        from typing import get_args
+        return max(effective_veto_days(h, None, None) for h in get_args(Horizon))
 
 
 def _earnings_unknown_caps(card, symbol: str) -> bool:
@@ -546,6 +556,7 @@ async def _process_symbol(
     dte_bounds: tuple[int, int] | None = None,
     hold_min_days: int | None = None,
     hold_max_days: int | None = None,
+    veto_days: int | None = None,
     # The HOLDING preset key ("Swing", "Annual", "Custom", ...), NOT `horizon`
     # above — that one is the collapsed scoring horizon and cannot express
     # Quarterly/SemiAnnual/Annual/Custom. Only the repricing horizon reads it.
@@ -1212,12 +1223,19 @@ async def _process_symbol(
         _stock_stop, datetime.now(timezone.utc).isoformat(),
     )
 
+    # Production scans pass one precomputed window. Preserve direct callers by
+    # resolving from their own horizon/hold, with the same event-rule fallback.
+    if veto_days is None:
+        veto_days = _resolve_earnings_veto_days(
+            horizon, overrides, hold_max_days, rule_detail.get("event", {}).get("reject_days"),
+        )
+
     trade_card = TradeCardData(
         symbol=symbol,
         company=company,
         price=price,
         direction=direction,
-        status=card.status,
+        status=_final_status(card.status, "CAUTION" if direction == "Bearish" else "PASS"),
         stockScore=card.score,
         stockConfidence=card.status,
         stockExplanation=card.explanation,
@@ -1284,11 +1302,13 @@ async def _process_symbol(
         rrModel=rr.model_used,
         finalStatus=_final_status(
             card.status, contract_card.status, entry.quality_status,
-            "REJECT" if _earnings_veto(card) else "PASS",
+            "REJECT" if _earnings_veto(card, veto_days) else "PASS",
             # D4 amended 2026-10-03: unknown earnings caps a single stock.
             "CAUTION" if _earnings_unknown_caps(card, symbol) else "PASS",
+            "CAUTION" if direction == "Bearish" else "PASS",
         ),
-        earningsVeto=_earnings_veto(card),
+        unvalidatedReason=BEARISH_UNVALIDATED_MESSAGE if direction == "Bearish" else None,
+        earningsVeto=_earnings_veto(card, veto_days),
         earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
         isEtf=is_etf(symbol),
         earningsDays=rule_detail.get("event", {}).get("earnings_days"),
@@ -1842,6 +1862,13 @@ async def _execute_scan_core(
     except Exception as exc:
         _log.warning("SCAN %s event_window unavailable: %s", scan_id, exc)
 
+    veto_days = _resolve_earnings_veto_days(
+        req.horizon, req.overrides, req.hold_max_days,
+        _event_win.reject_days if _event_win is not None else None,
+    )
+    if _event_win is not None:
+        _event_win.veto_days = veto_days
+
     # The contract rules every symbol below is graded with (before the hold-days
     # DTE widening, which /api/contracts re-derives from the same hold days),
     # echoed on the result so Step 6's table grades with them too. Never
@@ -1905,6 +1932,7 @@ async def _execute_scan_core(
                 dte_bounds=_dte_bounds,
                 hold_min_days=req.hold_min_days,
                 hold_max_days=req.hold_max_days,
+                veto_days=veto_days,
                 horizon_preset=req.horizon_preset,
                 gate=gate,
                 atr_mult_target=_atr_target,

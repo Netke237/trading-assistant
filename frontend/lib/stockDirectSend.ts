@@ -1,5 +1,7 @@
 import { stockExecutionBlock, stockExecutionIdentity, useStockOrderOwnershipStore } from './stockExecutionSession';
 import { useScanStore } from './scanStore';
+import { BEARISH_UNVALIDATED_MESSAGE } from './unvalidated';
+import { EARNINGS_VETO_MESSAGE } from './earningsGate';
 /*
  * STOCK-SENDS (phase STOCK-SENDS-SAVE-FIRST-THEN-REAL-SHARES, Part A) — the ONE
  * way a Stocks-mode path sends a broker order: SAVE the position first, then send
@@ -34,7 +36,8 @@ export type StockSendOutcome =
   | { kind: 'placed'; orderId: string; qty: number; resizedFrom: number | null; message: string }
   /** Nothing saved, no order. Safe to retry. */
   | { kind: 'refused'; message: string }
-  /** Saved, the broker provably never received the order, the row was removed
+  /** Opening refusal saves nothing. After a save, the broker provably never
+   *  received the order, and the row was removed
    *  (or a NOT-REMOVED note says it could not be). No order exists. */
   | { kind: 'not-placed'; message: string }
   /** A note was pushed. `qty` is the quantity SENT (null when the save was
@@ -103,9 +106,17 @@ type StockSendArgs = {
   limitPrice: number | null;
   action: 'BUY' | 'SELL';
   addPosition: AddPosition;
+  /** STOCKS-HORIZON-P0B B7 — the caller's `stockEarningsGate(...).veto` for
+   *  this card: earnings inside the scan's veto window max(reject_days, hold).
+   *  Required, so no caller can forget it; refuses the ORDER even if a
+   *  disabled button is bypassed (Step 7's belt-and-braces early return). */
+  earningsVeto: boolean;
 };
 
 export async function sendStockSaveFirst(args: StockSendArgs): Promise<StockSendOutcome> {
+  if (args.action === 'SELL') return { kind: 'not-placed', message: BEARISH_UNVALIDATED_MESSAGE };
+  // Nothing saved, nothing claimed, no broker request.
+  if (args.earningsVeto) return { kind: 'refused', message: EARNINGS_VETO_MESSAGE };
   const validationBlock = stockExecutionBlock();
   if (validationBlock) return { kind: 'refused', message: validationBlock };
   const ownership = useStockOrderOwnershipStore.getState();

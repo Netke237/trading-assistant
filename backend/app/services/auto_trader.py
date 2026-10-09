@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.services.config_health import config_health
 from app.schemas import Direction, Horizon
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 
 if TYPE_CHECKING:
     # For `FiredOrder`'s annotation only: `execute_option_order` imports the
@@ -133,8 +134,12 @@ class RegimeHeadwindError(RuntimeError):
     """
 
 
+class UnvalidatedDirectionError(RuntimeError):
+    """Bearish auto-fire is refused while its direction remains Unvalidated."""
+
+
 class EventVetoError(RuntimeError):
-    """Fix #3: an earnings date inside the trade's horizon reject window -- or,
+    """An earnings date inside max(YAML reject, hold) -- or,
     for a SINGLE STOCK, an earnings date nobody knows (D4 amended 2026-10-03).
 
     The scan marks the first card REJECT; this refuses a fire for the same reason,
@@ -147,8 +152,8 @@ class EventVetoError(RuntimeError):
     ETFs (`app.data.etfs.is_etf`) have no earnings and are exempt; a symbol not
     in that curated set counts as a stock, which is the safe direction.
 
-    THE WINDOW IS THE HORIZON'S YAML ONE (scoring_rules.yaml
-    `horizons.<horizon>.event.reject_days`), NOT necessarily the scan's. A
+    THE WINDOW IS max(the horizon's YAML reject days, the arm's hold days),
+    with the horizon's own hold preset when the arm has no hold. A
     Step-3 `event_reject_days` override is not carried on the arm, so a scan run
     with a LOWERED override can still be refused here. That is deliberate: it
     errs toward refusing, and carrying the override is a follow-up.
@@ -294,12 +299,11 @@ def _fetch_earnings_date(symbol: str):
 
 
 def _apply_event_veto(strategy) -> None:
-    """Raise `EventVetoError` when earnings fall inside the horizon's reject
-    window, or when a single stock's earnings date is unknown.
+    """Raise `EventVetoError` inside max(YAML reject, hold), or on an unknown stock date.
 
     Same comparison as the scan's (`routers/scan.py::_earnings_veto`): `0 <=
-    days < reject_days`. The window, though, is the horizon's YAML reject window
-    (`effective_event_window(horizon, None)`), NOT the scan's effective one: a
+    days < veto_days`. The gate covers the arm's hold (or its horizon's preset)
+    and the horizon's YAML reject window. Unlike the scan, a
     Step-3 `event_reject_days` override is not carried on the arm, so a lowered
     override can still be refused here. Deliberate -- it errs toward refusing --
     and a follow-up will carry the override.
@@ -315,13 +319,13 @@ def _apply_event_veto(strategy) -> None:
 
     A trade with no horizon cannot say which window applies, and the regime gate
     abstains there. This one must not abstain: for a KNOWN future date it uses
-    the WIDEST reject window across every configured horizon (the `Horizon`
+    the WIDEST max(reject, hold) across every configured horizon (the `Horizon`
     literal is the source of truth, not a copied list), so a missing horizon can
     only make the veto stricter, never looser. Production cannot
     reach that branch (`ArmRequest.horizon` is required); direct constructors can.
     """
     from typing import get_args
-    from app.scoring.stock_scorer import Horizon, effective_event_window
+    from app.scoring.stock_scorer import DEFAULT_HOLD_MAX, Horizon, effective_event_window
     from app.data.etfs import is_etf
 
     def _unknown(why: str) -> None:
@@ -346,20 +350,25 @@ def _apply_event_veto(strategy) -> None:
     if days < 0:
         _unknown(f"last date on file {earnings} is past")
         return
+    def _window(horizon):
+        reject, _ = effective_event_window(horizon, None)
+        hold = (strategy.hold_max_days if strategy.hold_max_days is not None
+                else DEFAULT_HOLD_MAX[horizon])
+        return max(reject, hold), reject, hold
+
     if strategy.horizon is not None:
-        reject_days, _ = effective_event_window(strategy.horizon, None)
-        label = f"{strategy.horizon} YAML reject window"
+        veto_days, reject_days, hold_days = _window(strategy.horizon)
     else:
-        reject_days = max(effective_event_window(h, None)[0] for h in get_args(Horizon))
-        label = "widest YAML reject window"
+        veto_days, reject_days, hold_days = max(_window(h) for h in get_args(Horizon))
         logger.warning(
             "Event veto: the armed strategy for %s carries no horizon; "
-            "using the widest configured reject window (%dd)",
-            strategy.symbol, reject_days,
+            "using the widest configured hold window (%dd)",
+            strategy.symbol, veto_days,
         )
-    if days < reject_days:
+    if days < veto_days:
         raise EventVetoError(
-            f"earnings in {days}d is inside the {label} (<{reject_days}d)"
+            f"earnings in {days}d is inside the hold window "
+            f"(<{veto_days}d: max(reject {reject_days}d, hold {hold_days}d))"
         )
 
 
@@ -525,6 +534,8 @@ class ArmedStrategy:
     # construction sites; the cost of defaulting it would be a silent wrong
     # measurement, which is why it is None and not "Swing".
     horizon:                 Optional[Horizon] = None
+    # None preserves arms created before this field and direct constructors.
+    hold_max_days:           Optional[int] = None
     # The Step-3 Regime Gate thresholds AS THE SCAN RESOLVED THEM, snapshotted.
     # None means "the scan used the scoring_rules.yaml value", which is what an
     # untouched Step-3 control means. Frozen at arm for the reason `quantity`,
@@ -2048,13 +2059,26 @@ def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
     )
 
 
+def _alert_unvalidated_refusal(symbol: str, exc: Exception) -> None:
+    """Page a consumed bearish refusal, per symbol and as a discrete event."""
+    _alert_refusal(
+        symbol,
+        "unvalidated-direction refusal",
+        (f"Auto-trade REFUSED to fire {symbol}: {exc} "
+         "Nothing was sent and the auto-trader is disarmed."),
+        _per_symbol_rec_id("auto-trade-unvalidated", symbol),
+        "AUTO_TRADE_UNVALIDATED",
+        discrete=True,
+    )
+
+
 def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     """Alert an earnings-veto refusal (fix #3 part 2, EventVetoError).
 
     PER SYMBOL AND DISCRETE, for the headwind alert's reasons: one refusal per
     symbol, an event rather than a standing condition. Its own wording and type:
     nothing is misconfigured and the market did not move -- an earnings print is
-    inside the horizon's reject window, and the remedy is a decision (re-arm
+    inside the hold window, and the remedy is a decision (re-arm
     after the print, or not at all). When `exc.unknown` (D4 amended 2026-10-03:
     a single stock with no known earnings date) the wording says so instead of
     claiming a print is inside the window -- the remedy is to check the calendar.
@@ -2070,7 +2094,7 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     else:
         reason = (
             f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
-            f"trade's horizon reject window (the horizon's configured window; "
+            f"trade's hold window (max of the horizon's configured reject days and hold days; "
             f"a lowered Step-3 override is not carried on the arm). Nothing was sent and the auto-trader is "
             f"disarmed — re-arm after the announcement if you still want the "
             f"trade. {exc}"
@@ -2178,8 +2202,9 @@ _STATUS_STALE_BLOCKED = "stale_blocked"
 _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 # P3b: the bars to measure the regime could not be had (RegimeDataUnavailableError).
 _STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
-# Fix #3 part 2: earnings inside the horizon's reject window (EventVetoError).
+# Earnings inside max(YAML reject, hold) (EventVetoError).
 _STATUS_EVENT_VETO_BLOCKED = "event_veto_blocked"
+_STATUS_UNVALIDATED_BLOCKED = "unvalidated_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -2582,6 +2607,17 @@ class AutoTradeService:
                     "— armed state preserved for the next trigger"
                 )
             _symbol = self._state.strategy.symbol
+            # An unsupported arm is consumed even outside market hours. Take it
+            # under the same lock as the identity check; record outside the lock.
+            unvalidated = self._state.strategy.direction == "Bearish"
+            if unvalidated:
+                strategy = self._state.strategy
+                self._state.armed = False
+                self._state.strategy = None
+                self._consumed_attempts.append(attempt_id)
+
+        if unvalidated:
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Halt check outside lock — network call must not hold the lock.
         # Armed state is preserved: we haven't disarmed yet.
@@ -2611,6 +2647,11 @@ class AutoTradeService:
             # OWNERSHIP TAKEN — recorded inside the disarm's own lock
             # acquisition so the two cannot come apart. See the deque.
             self._consumed_attempts.append(attempt_id)
+
+        # Defensive for an arm created before deploy or by a direct constructor.
+        # Refuse before sizing/regime can fetch data or any broker is reached.
+        if strategy.direction == "Bearish":
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Vol-scaled sizing + the headwind gate, both on ONE measurement of
         # this symbol's own regime (SIZING-4), which therefore DOES make a
@@ -3217,6 +3258,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(strategy.symbol, exc)
         except EventVetoError as exc:
             _alert_event_veto_refusal(strategy.symbol, exc)
+        except UnvalidatedDirectionError as exc:
+            _alert_unvalidated_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
@@ -3292,13 +3335,20 @@ class AutoTradeService:
             # state read that computed it.
             self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
 
+    def _refuse_unvalidated(self, attempt_id: str, strategy: "ArmedStrategy") -> None:
+        self._record_refusal(attempt_id, strategy, _STATUS_UNVALIDATED_BLOCKED,
+                             BEARISH_UNVALIDATED_MESSAGE)
+        logger.error("AutoTrader fire REFUSED for %s %s — %s",
+                     strategy.symbol, strategy.direction, BEARISH_UNVALIDATED_MESSAGE)
+        raise UnvalidatedDirectionError(BEARISH_UNVALIDATED_MESSAGE)
+
     def _record_refusal(self, attempt_id: str, strategy: "ArmedStrategy",
                         status: str, error: str) -> None:
         """Append the refusal row `fire()` writes when it declines to send.
 
         The 9-key shape every refusal row has: no order id, zero premium at
         risk, stamped with `attempt_id` so `maybe_fire_on_scan` can correlate it.
-        Used by the earnings-veto blocks only; the older refusal blocks in
+        Used by the earnings-veto and Unvalidated blocks; older refusal blocks in
         `fire()` keep their own inline copies deliberately (audited code).
         """
         with self._lock:
@@ -3402,6 +3452,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(symbol, exc)
         elif status == _STATUS_EVENT_VETO_BLOCKED:
             _alert_event_veto_refusal(symbol, exc)
+        elif status == _STATUS_UNVALIDATED_BLOCKED:
+            _alert_unvalidated_refusal(symbol, exc)
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.
