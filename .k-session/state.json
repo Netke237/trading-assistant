@@ -4,7 +4,7 @@
   "branch": "claude/priceless-jennings-995ab7",
   "base": "main",
   "created_at": "2026-10-09T19:59:21+00:00",
-  "updated_at": "2026-10-09T20:01:46+00:00",
+  "updated_at": "2026-10-09T20:17:29+00:00",
   "saved_commit": "215aeafe",
   "log": [
     {
@@ -41,12 +41,20 @@
       "event": "checkpoint",
       "commit": "215aeafe",
       "note": "NLQ-2 review evidence and unresolved audit scope conflict"
+    },
+    {
+      "at": "2026-10-09T20:12:11+00:00",
+      "agent": "codex",
+      "handle": "anon",
+      "location": "local",
+      "event": "resume",
+      "commit": "10653f75"
     }
   ],
   "lock": {
     "holder": "codex@anon/local",
-    "since": "2026-10-09T20:01:25+00:00",
-    "heartbeat_at": "2026-10-09T20:01:46+00:00"
+    "since": "2026-10-09T20:12:11+00:00",
+    "heartbeat_at": "2026-10-09T20:17:29+00:00"
   },
   "schema_version": 1,
   "tool_version": "1.0.0"

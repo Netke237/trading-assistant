@@ -14,3 +14,6 @@ Implementers for NLQ-3 and NLQ-4 were stopped before edits. Await an explicit de
 Existing checkout fast-forwarded from 6ca99b40 to remote 215aeafe; clean beforehand. NO-LIVE-QUOTE claim renewed on the same branch. Python 3.11.9 and existing dependency environment verified. Sandboxed execution fails during helper setup; authorized shell commands work outside that sandbox. A coordinator rerun of test_state_audit_ownership.py and test_state_audit_bookkeeping.py progressed beyond 30% without failures, then was explicitly interrupted while stopping at the scope conflict. It has no completed result. Earlier 233 state-test errors remain unresolved; neither their cause nor a clean full rerun is claimed.
 
 Frontend `npm run typecheck` completed successfully before checkpoint. Only audit/state/session documentation changed.
+
+## Subsequent user authorization
+User explicitly approved the scoped approach in NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09. This exact completed independent review now qualifies as NLQ-2 code round 1 (clean). Historical interrupted attempt and initial scope conflict remain retained above. No new round was run to achieve this classification. Phase audit_clean remains false pending NLQ-3/4/5.

@@ -4,7 +4,7 @@
 Complete non-live option quote protections, then liquidity/DTE work in the recorded merge order; all merges require separate approval.
 
 ## Status
-Awaiting audit-cap scope decision. Code is unfinished and not ready to merge.
+User approved the scoped cap exception. NLQ-2 clean; NLQ-3/4 implementation resumed. Overall unfinished and not ready to merge.
 
 ## Done
 - Reconciled clean existing checkout with remote recovered commit 215aeafe via fast-forward.
@@ -14,19 +14,19 @@ Awaiting audit-cap scope decision. Code is unfinished and not ready to merge.
 - Frontend npm run typecheck passed before checkpoint. State-checker test rerun was interrupted without failures so far; no full result or root cause is claimed.
 
 ## Next steps
-- [ ] Resolve audit cap conflict before additional implementation or audits.
+- [x] Resolve audit cap conflict: NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09.
 - [ ] Complete investigation of interrupted review state-test errors.
-- [ ] Record NLQ-2 qualifying status only under the resolved scope.
+- [x] Record NLQ-2 code round 1 clean under the approved scope.
 - [ ] Implement/audit NLQ-3 fire gate with mandatory shared synchronous governor admission.
 - [ ] Implement/audit NLQ-4 labels, fresh send-time gate, contract confirmation and recompute warning.
 - [ ] NLQ-5 regressions, mutations, integration verification, automatic live evidence and report.
 - [ ] Continue CL-1/2 only after NLQ clearance; request reserved merge approval.
 
 ## Blockers / open questions
-The recovered map/spec give a three-round cap per ticket. docs/agents/ticket-orchestration.md says tickets are never audit targets; the phase owns its cap. state.py reports the phase cap exhausted despite NLQ-1 scope closure. An explicit scope exception or stop decision is pending. No fourth phase round or counter reset is allowed implicitly.
+The recovered map/spec give a three-round cap per ticket. docs/agents/ticket-orchestration.md says tickets are never audit targets; the phase owns its cap. state.py reports the phase cap exhausted despite NLQ-1 scope closure. The user explicitly approved the scoped exception in NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09. Checker cannot model scopes yet; keep its warning explained and retain history. No fourth round on any part or counter reset is authorized.
 
 ## Decisions
-- Keep audit_rounds 6 and audit_clean false until scope is resolved; preserve original interrupted review and NLQ-1 closure.
+- Count completed rounds continuously (currently 7), store per-part caps in audit_scopes, and keep overall audit_clean false until all remaining scopes and integration pass. Preserve interrupted attempt and NLQ-1 closure.
 - NLQ-first merge order, then liquidity/DTE; broad Tradier routing TG-1 is separate.
 - Quote threshold 30 minutes; no-ask rows dropped; direct send warning plus current-contract tick decided from a fresh send-time quote.
 
