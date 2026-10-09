@@ -1,6 +1,6 @@
 # Stocks + Pre-Breakout presentation — design proposal (STOCK-DESIGN-GRILLING)
 
-Status: **proposal, awaiting Kenneth's approval of the mockup.** No application code changed. No plan, audit or tickets yet.
+Status: **proposal 02, awaiting Kenneth's approval.** No application code changed. No plan, audit or tickets yet.
 
 ## Why this exists
 
@@ -8,7 +8,7 @@ The Options pages got an approved Options-style presentation (`../2026-10-03-tra
 
 ## Files
 
-- [preview.html](preview.html) — interactive offline mockup; toolbar switches Strategy / Backtest / Position / Pre-Breakout; "Information mapping" lists every current item and where it goes. Values are illustrative.
+- [preview.html](preview.html) — **proposal 02**, interactive offline mockup. Toolbar switches Strategy / Backtest / Position / Pre-Breakout; every element is tagged EXISTING / MOVED / NEW / BACKEND FIELD ("Tags on/off" hides them); "Information mapping" is a 66-row item-by-item table built from the current source. Values are illustrative.
 - [strategy.png](strategy.png), [backtest.png](backtest.png), [position.png](position.png), [prebreakout.png](prebreakout.png) — 1440px captures.
 
 ## Decisions (Kenneth, 2026-10-10)
@@ -24,6 +24,22 @@ The Options pages got an approved Options-style presentation (`../2026-10-03-tra
 | D7 | Backtest row detail | Inline details like Options Step 6: score factors, backtest stats vs thresholds, gates, actions (Open Position, Pin, Arm after-scan); no horizontal scroll |
 | D8 | Pre-Breakout row detail | All four: why it's a setup (each ratio vs threshold, trend filter), confidence breakdown, Fibonacci/pullback detail, mini chart |
 
+## Proposal 01 errors, corrected in 02 (Kenneth's review, 2026-10-10)
+
+Proposal 01 was not checked line by line against the code. It dropped existing items (R:R at T1, per-leg R:R and return %, most Arithmetic-plan lines, structural-stop details, two broker modes, status messages, the Backtest full-card Expand, the Pullback and Fib tables) and showed things that do not exist (per-leg win %, "Gain $", made-up labels and parameter names, "no Barrier Race for stocks" — the two-barrier race exists inside the Arithmetic plan, a per-row direction-floor check, a pre-checked exposure line, an "Above 20-EMA" column). 02 rebuilds every page from the source; nothing is removed.
+
+Monte Carlo already exists for stocks: the Estimate button (`/api/stocks/first-passage`) and the Arithmetic plan (`/api/stocks/exit-plan`, which also returns the race). The redesign calculates nothing new.
+
+## New items, each approved by Kenneth (2026-10-10, round 3)
+
+| Page | New item |
+|---|---|
+| Position | Stock Scorecard factor rows (backend field) · Pre-trade checklist from existing gates only · "Latest calculation" strip · Sharpe |
+| Backtest | Quick summary above the full card (full card kept) · Score and Confidence sort · summary strip of existing numbers |
+| Strategy | Market Sentiment strip · "Looks for" line per strategy (overlaps the Entry line — wording to confirm) · after-scan armed count |
+| Pre-Breakout | Confidence breakdown (backend field) · "Why it's a setup" inline (tooltips stay) · mini chart · Fib swing low/high (backend field) |
+| All | "How this page works" disclosures and section links (part of the Options layout, D2) |
+
 ## Constraints carried into the plan
 
 - Presentation only: every current information item and control is preserved (see the mapping drawer); no trading logic, sizing, gate or persistence change.
@@ -37,8 +53,8 @@ The Options pages got an approved Options-style presentation (`../2026-10-03-tra
 ## Open questions for the approval pass
 
 1. Mockup is light, like the Options proposal; production follows the app theme tokens (dark default). OK?
-2. Backtest table: grouping win % / trades / return / DD into one "Backtest" column — acceptable, or keep separate columns?
-3. Mini chart in Pre-Breakout: reuse the existing lightweight-charts candlestick component at small size — acceptable cost?
+2. "Looks for" wording per strategy (it repeats the Entry line).
+3. Approval of proposal 02 as the design to plan against.
 
 ## Next steps after approval
 
