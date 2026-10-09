@@ -665,3 +665,42 @@ describe('the printed figures agree with each other and with the verdict', () =>
     expect(checked).toBeGreaterThan(2000);
   });
 });
+
+// NO-LIVE-QUOTE NLQ-1 (round-1 F2): a position GET /api/portfolio got no quote
+// for carries a 0 currentPrice that is not a price. Exposure values it at its
+// entry (cost basis) through `exposureMark`, never 0, so the pre-trade check
+// cannot approve an order past the total-exposure cap on a $0 mark.
+describe('exposure of a position without a quote', () => {
+  // 6.20 x 100 x 20 = $12,400 at entry; with the card's $250 that is 25.3% of
+  // $50k, past the 25% cap. Valued at $0 it would be 0.5% and approved.
+  const flagged = () => makePosition({ entryPrice: 6.2, currentPrice: 0, contracts: 20,
+                                       pnlDollar: 0, pnlPct: 0, quoteUnavailable: true });
+
+  it('checkTradeRisk blocks when the flagged row at entry pushes total exposure over the cap', () => {
+    const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [flagged()], 0, null, undefined, pick());
+    expect(result.totalExposurePct).toBeCloseTo((12400 + 250) / 50000, 10);
+    expect(result.reasons).toContain('total_exposure_limit_reached');
+    expect(result.approved).toBe(false);
+  });
+
+  it('values a flagged row at entry even when it still carries a stale non-zero mark', () => {
+    const row = makePosition({ entryPrice: 6.2, currentPrice: 1, contracts: 20, quoteUnavailable: true });
+    expect(totalNotional([row])).toBeCloseTo(12400, 10);
+  });
+
+  it('values a row whose currentPrice is not a finite number > 0 at entry', () => {
+    for (const bad of [0, -1, NaN, Infinity]) {
+      expect(totalNotional([makePosition({ entryPrice: 6.2, currentPrice: bad, contracts: 20 })])).toBeCloseTo(12400, 10);
+    }
+  });
+
+  it('a quoted row is still valued at its live mark', () => {
+    expect(totalNotional([makePosition({ entryPrice: 6.2, currentPrice: 5, contracts: 20 })])).toBe(10000);
+  });
+
+  it('computePortfolioRiskMetrics counts the flagged row at entry too', () => {
+    const metrics = computePortfolioRiskMetrics([flagged()], DEFAULT_LIMITS, 0);
+    expect(metrics.totalExposurePct).toBeCloseTo(12400 / 50000, 10);
+    expect(metrics.largestConcentrationPct).toBeCloseTo(12400 / 50000, 10);
+  });
+});

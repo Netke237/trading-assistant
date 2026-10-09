@@ -1,7 +1,7 @@
 /*
  * Open-position totals shared by every screen that sums the portfolio
  * (Portfolio footer, Dashboard card, the Dashboard / Portfolio rails and
- * RailQuickLook).
+ * RailQuickLook), and the per-row mark the exposure checks value a row at.
  *
  * NO-LIVE-QUOTE NLQ-1: a position GET /api/portfolio got no quote for carries
  * `quoteUnavailable`, and its `currentPrice` / `pnlDollar` are 0 defaults, not
@@ -41,6 +41,21 @@ export function openTotals(positions: PortfolioPosition[]): OpenTotals {
     quoted: quoted.length,
     unquoted: positions.length - quoted.length,
   };
+}
+
+/** The price an EXPOSURE / notional computation values one open position at.
+ *
+ *  The live mark when there is one; otherwise the entry price (cost basis) --
+ *  for a row flagged `quoteUnavailable`, and defensively for any row whose
+ *  `currentPrice` is not a finite number > 0. Never 0: a $0 mark understates
+ *  exposure, and the pre-trade limit check (`checkTradeRisk`) would then
+ *  approve an order past `maxTotalExposurePct`. Unlike the DISPLAY totals
+ *  above, which leave such a row out and say so, a limit check must count it.
+ *  Used by lib/risk.ts (`totalNotional`, `computePortfolioRiskMetrics`) and
+ *  lib/riskStore.ts (`computeMetrics`). */
+export function exposureMark(p: PortfolioPosition): number {
+  if (!p.quoteUnavailable && Number.isFinite(p.currentPrice) && p.currentPrice > 0) return p.currentPrice;
+  return p.entryPrice;
 }
 
 /** The note shown beside a total that left positions out, or null when none were. */
