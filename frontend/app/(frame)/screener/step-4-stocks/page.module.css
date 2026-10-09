@@ -110,3 +110,16 @@
   border-color: var(--border-default);
   color: var(--text-primary);
 }
+
+/* STOCKS-HORIZON-T1 H5: drop the multi-signal overrides, follow the profile. */
+.resetProfileBtn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.resetProfileBtn:hover { border-color: var(--border-default); color: var(--text-primary); }

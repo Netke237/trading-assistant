@@ -4,9 +4,10 @@ import type { Direction } from '@/types/domain';
 import { stockExecutionBlock } from './stockExecutionSession';
 import { api, API_BASE_URL } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
-import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
@@ -271,24 +272,10 @@ function refreshLastStockScanMeta(token: number): void {
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
 
-/** Optional per-run param overrides (the page passes its locally-edited params). */
-export interface StockScanParamOverrides {
-  pullbackTolerancePct?: number;
-  pullbackEmaPeriod?: number;
-  pullbackTrendEma?: number;
-  pullbackMaType?: 'EMA' | 'SMA';
-  maCrossoverFast?: number;
-  maCrossoverSlow?: number;
-  maCrossoverLookback?: number;
-  breakoutVolumeMult?: number;
-  rsiPeriod?: number;
-  rsiOversold?: number;
-  rsiTrendSma?: number;
-  requireChoppyRegime?: boolean;
-  btMinTrades?: number;
-  btMinWinRate?: number;
-  stockShortlistMax?: number;
-}
+/** Optional per-run param overrides (the page passes its locally-edited
+ *  params). A `null` strategy field means "follow the backend profile" and
+ *  wins over a saved override, as the panel shows it (STOCKS-HORIZON-T1 H5). */
+export type StockScanParamOverrides = Partial<ScanParams>;
 
 /**
  * Run a stock scan with `strategy`, reading universe/direction/horizon from
@@ -352,6 +339,8 @@ export async function runStockScanWithContinuation(
       horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
       strategy,
       params: p,
+      // STOCKS-HORIZON-T1 H5: the backend profile the strategy fields follow.
+      paramsHorizon: context ? tunedParamsHorizon(context.horizonPreset, context.holdMax) : null,
       requireReversal,
       scanOverrides: rawOverrides,
       confidenceGate,

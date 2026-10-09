@@ -1,34 +1,108 @@
 'use client';
 
 import { Text } from '@/components/primitives';
+import type { OverrideField, ScanParams } from '@/lib/scanParamsStore';
+import type { ProfileView, TunedStrategy } from '@/lib/strategyProfilesStore';
+import type { TunedHorizon } from '@/lib/horizonPresets';
 import styles from './StrategyParamsPanel.module.css';
 
-export interface StrategyParams {
-  pullbackTolerancePct: number;
-  pullbackEmaPeriod: number;
-  pullbackTrendEma: number;
-  pullbackMaType: 'EMA' | 'SMA';
-  maCrossoverFast: number;
-  maCrossoverSlow: number;
-  maCrossoverLookback: number;
-  breakoutVolumeMult: number;
-  rsiPeriod: number;
-  rsiOversold: number;
-  rsiTrendSma: number;
-  requireChoppyRegime: boolean;
-  btMinTrades: number;
-  btMinWinRate: number;
-  eventFilter: 'include' | 'avoid' | 'only_pre_event';
-  stockShortlistMax: number;
-}
+type PanelOverride = Exclude<OverrideField,
+  'meanReversionVariants' | 'meanReversionMinConfirm' | 'vwapLookback' | 'vwapDeviationPct'>;
+
+/** The panel's slice of the scan params. Strategy fields are overrides of the
+ *  backend horizon profile: `null` = follow the profile (STOCKS-HORIZON-T1 H5). */
+export type StrategyParams = Pick<ScanParams,
+  PanelOverride | 'btMinTrades' | 'btMinWinRate' | 'eventFilter' | 'stockShortlistMax'>;
 
 interface Props {
   params: StrategyParams;
   setParams: React.Dispatch<React.SetStateAction<StrategyParams>>;
   onReset: () => void;
+  /** The backend profile for the scan's direction x params horizon; null when
+   *  none is in hand. */
+  profile: ProfileView | null;
+  /** True when the profile fetch failed: the panel shows overrides only. */
+  profileUnavailable: boolean;
+  /** For a Custom horizon, the tuned horizon whose settings the scan uses. */
+  customHorizon: TunedHorizon | null;
 }
 
-export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
+type Setter = Props['setParams'];
+
+function ResetToProfile({ field, label, params, setParams }: {
+  field: PanelOverride; label: string; params: StrategyParams; setParams: Setter;
+}) {
+  if (params[field] === null) return null;
+  return (
+    <button
+      type="button"
+      className={styles.fieldReset}
+      aria-label={`Reset ${label} to profile`}
+      onClick={() => setParams((p) => ({ ...p, [field]: null }))}
+    >
+      reset to profile
+    </button>
+  );
+}
+
+/** A numeric override input: shows the override if set, else the profile value
+ *  (empty when neither is known). Clearing the input drops the override. */
+function NumField({ field, label, hint, unit, scale = 1, decimals = 0, min, max, step, params, setParams, profile }: {
+  field: PanelOverride; label: string; hint: string; unit?: string; scale?: number; decimals?: number;
+  min: number; max: number; step: number;
+  params: StrategyParams; setParams: Setter; profile: ProfileView | null;
+}) {
+  const raw = (params[field] ?? profile?.values[field] ?? null) as number | null;
+  const f = 10 ** decimals;
+  const shown = raw === null ? '' : Math.round(raw * scale * f) / f;
+  return (
+    <label className={styles.paramLabel}>
+      <Text size={11} tone="dim">{label}</Text>
+      <Text size={10} tone="dim">{hint}</Text>
+      <div className={styles.paramInput}>
+        <input
+          type="number"
+          aria-label={label}
+          value={shown}
+          min={min} max={max} step={step}
+          onChange={(e) => {
+            const v = e.target.value;
+            setParams((p) => ({ ...p, [field]: v === '' ? null : Number(v) / scale }));
+          }}
+        />
+        {unit && <Text size={11} tone="dim">{unit}</Text>}
+        <ResetToProfile field={field} label={label} params={params} setParams={setParams} />
+      </div>
+    </label>
+  );
+}
+
+function SectionHeader({ title, blurb, strategy, profile }: {
+  title: string; blurb: string; strategy: TunedStrategy; profile: ProfileView | null;
+}) {
+  return (
+    <div className={styles.paramSection}>
+      <div className={styles.sectionTitle}>
+        <Text size={11} weight={500} tone="secondary">{title}</Text>
+        {profile && (
+          <span className={styles.sourceTag} data-testid={`profile-source-${strategy}`}>
+            <Text size={10} tone={profile.sources[strategy] === 'tuned' ? 'pass' : 'dim'}>
+              {profile.sources[strategy]}
+            </Text>
+          </span>
+        )}
+      </div>
+      <Text size={10} tone="dim">{blurb}</Text>
+    </div>
+  );
+}
+
+export function StrategyParamsPanel({
+  params, setParams, onReset, profile, profileUnavailable, customHorizon,
+}: Props) {
+  const maType = params.pullbackMaType ?? profile?.values.pullbackMaType ?? null;
+  const choppy = params.requireChoppyRegime ?? profile?.values.requireChoppyRegime ?? false;
+  const common = { params, setParams, profile };
   return (
     <details className={styles.paramsPanel}>
       <summary className={styles.paramsSummary}>
@@ -37,42 +111,28 @@ export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
 
       <div className={styles.paramsGrid}>
 
-        {/* ── Pullback to EMA ── */}
-        <div className={styles.paramSection}>
-          <Text size={11} weight={500} tone="secondary">Pullback to EMA</Text>
-          <Text size={10} tone="dim">Controls the &quot;Pullback to EMA&quot; strategy — how far a stock can be below the moving average and still qualify, and how the uptrend is confirmed.</Text>
+        <div className={styles.profileNote}>
+          <Text size={10} tone="dim">
+            Values follow the backend profile for this direction and horizon. An edit overrides it for this scan.
+          </Text>
+          {customHorizon && <Text size={11} tone="secondary">{`Custom: using ${customHorizon} settings`}</Text>}
+          {profileUnavailable && (
+            <Text size={11} tone="caution">{'Profile unavailable — the scan uses the backend\'s values'}</Text>
+          )}
         </div>
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">Pullback tolerance</Text>
-          <Text size={10} tone="dim">Max % below the EMA to still count as a pullback. ↑ Higher → deeper pullbacks qualify (more results) · ↓ Lower → only tight pullbacks pass (fewer)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={Math.round(params.pullbackTolerancePct * 100 * 10) / 10}
-              min={0.5} max={15} step={0.5}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, pullbackTolerancePct: Number(e.target.value) / 100 }))
-              }
-            />
-            <Text size={11} tone="dim">%</Text>
-          </div>
-        </label>
+        {/* ── Pullback to EMA ── */}
+        <SectionHeader
+          title="Pullback to EMA" strategy="pullback_ema" profile={profile}
+          blurb={'Controls the "Pullback to EMA" strategy — how far a stock can be below the moving average and still qualify, and how the uptrend is confirmed.'}
+        />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">Pullback EMA period</Text>
-          <Text size={10} tone="dim">The EMA the stock must pull back to. ↑ Higher → slower EMA used (e.g. 50), longer trend needed (fewer) · ↓ Lower → faster EMA, more setups (more)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.pullbackEmaPeriod}
-              min={5} max={200} step={5}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, pullbackEmaPeriod: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="pullbackTolerancePct" label="Pullback tolerance" unit="%" scale={100} decimals={1}
+          min={0.5} max={15} step={0.5}
+          hint="Max % below the EMA to still count as a pullback. ↑ Higher → deeper pullbacks qualify (more results) · ↓ Lower → only tight pullbacks pass (fewer)" />
+
+        <NumField {...common} field="pullbackEmaPeriod" label="Pullback EMA period" min={5} max={200} step={5}
+          hint="The EMA the stock must pull back to. ↑ Higher → slower EMA used (e.g. 50), longer trend needed (fewer) · ↓ Lower → faster EMA, more setups (more)" />
 
         <label className={styles.paramLabel}>
           <Text size={11} tone="dim">Pullback MA type</Text>
@@ -82,132 +142,54 @@ export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
               <button
                 key={t}
                 type="button"
-                className={`${styles.maToggleBtn} ${params.pullbackMaType === t ? styles.maToggleBtnActive : ''}`}
+                className={`${styles.maToggleBtn} ${maType === t ? styles.maToggleBtnActive : ''}`}
                 onClick={() => setParams((p) => ({ ...p, pullbackMaType: t }))}
               >
                 <Text size={11} weight={500}>{t}</Text>
               </button>
             ))}
+            <ResetToProfile field="pullbackMaType" label="Pullback MA type" params={params} setParams={setParams} />
           </div>
         </label>
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">Trend EMA period</Text>
-          <Text size={10} tone="dim">Longer EMA that defines whether the stock is in an uptrend at all. ↑ Higher → more established trend required (fewer) · ↓ Lower → shorter uptrends qualify (more)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.pullbackTrendEma}
-              min={10} max={500} step={10}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, pullbackTrendEma: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="pullbackTrendEma" label="Trend EMA period" min={10} max={500} step={10}
+          hint="Longer EMA that defines whether the stock is in an uptrend at all. ↑ Higher → more established trend required (fewer) · ↓ Lower → shorter uptrends qualify (more)" />
 
         {/* ── MA Crossover ── */}
-        <div className={styles.paramSection}>
-          <Text size={11} weight={500} tone="secondary">MA Crossover</Text>
-          <Text size={10} tone="dim">Controls the &quot;MA Crossover&quot; strategy — defines the two moving averages and how recently the crossover must have occurred.</Text>
-        </div>
+        <SectionHeader
+          title="MA Crossover" strategy="ma_crossover" profile={profile}
+          blurb={'Controls the "MA Crossover" strategy — defines the two moving averages and how recently the crossover must have occurred.'}
+        />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">MA crossover fast</Text>
-          <Text size={10} tone="dim">Short MA period. ↑ Higher → fewer, more deliberate crossover signals · ↓ Lower → more frequent but noisier crossovers</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.maCrossoverFast}
-              min={2} max={100} step={1}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, maCrossoverFast: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="maCrossoverFast" label="MA crossover fast" min={2} max={100} step={1}
+          hint="Short MA period. ↑ Higher → fewer, more deliberate crossover signals · ↓ Lower → more frequent but noisier crossovers" />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">MA crossover slow</Text>
-          <Text size={10} tone="dim">Long MA period. ↑ Higher → crossover requires a bigger trend reversal (fewer) · ↓ Lower → shorter moves trigger a signal (more)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.maCrossoverSlow}
-              min={5} max={300} step={5}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, maCrossoverSlow: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="maCrossoverSlow" label="MA crossover slow" min={5} max={300} step={5}
+          hint="Long MA period. ↑ Higher → crossover requires a bigger trend reversal (fewer) · ↓ Lower → shorter moves trigger a signal (more)" />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">MA crossover lookback</Text>
-          <Text size={10} tone="dim">How many bars back a crossover can still be counted as fresh. ↑ Higher → older crossovers qualify (more results) · ↓ Lower → only very recent crossovers (fewer)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.maCrossoverLookback}
-              min={1} max={30} step={1}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, maCrossoverLookback: Number(e.target.value) }))
-              }
-            />
-            <Text size={11} tone="dim">bars</Text>
-          </div>
-        </label>
+        <NumField {...common} field="maCrossoverLookback" label="MA crossover lookback" unit="bars" min={1} max={30} step={1}
+          hint="How many bars back a crossover can still be counted as fresh. ↑ Higher → older crossovers qualify (more results) · ↓ Lower → only very recent crossovers (fewer)" />
 
         {/* ── Mean Reversion RSI ── */}
-        <div className={styles.paramSection}>
-          <Text size={11} weight={500} tone="secondary">Mean Reversion RSI</Text>
-          <Text size={10} tone="dim">Controls the &quot;Mean Reversion RSI&quot; strategy — defines how oversold a stock must be and what uptrend baseline it must still sit above.</Text>
+        <SectionHeader
+          title="Mean Reversion RSI" strategy="mean_reversion_rsi" profile={profile}
+          blurb={'Controls the "Mean Reversion RSI" strategy — defines how oversold a stock must be and what uptrend baseline it must still sit above.'}
+        />
+        <div className={styles.sectionNote}>
+          <Text size={10} tone="dim">These RSI settings apply to the RSI strategy and to the RSI signal of Mean Reversion Multi-Signal.</Text>
         </div>
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">RSI period</Text>
-          <Text size={10} tone="dim">Bars used to calculate RSI. ↑ Higher → smoother, slower RSI reading · ↓ Lower → more sensitive, triggers faster</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.rsiPeriod}
-              min={2} max={50} step={1}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, rsiPeriod: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="rsiPeriod" label="RSI period" min={2} max={50} step={1}
+          hint="Bars used to calculate RSI. ↑ Higher → smoother, slower RSI reading · ↓ Lower → more sensitive, triggers faster" />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">RSI oversold level</Text>
-          <Text size={10} tone="dim">RSI must be below this to qualify as oversold. ↑ Higher → easier to trigger (less oversold needed), more results · ↓ Lower → deep oversold required, fewer results</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.rsiOversold}
-              min={10} max={50} step={1}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, rsiOversold: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="rsiOversold" label="RSI oversold level" min={10} max={50} step={1}
+          hint="Bullish: RSI must be below this to qualify as oversold. ↑ Higher → easier to trigger (less oversold needed), more results · ↓ Lower → deep oversold required, fewer results" />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">RSI trend SMA</Text>
-          <Text size={10} tone="dim">SMA the stock must be trading above to confirm it&apos;s still in an uptrend. ↑ Higher → only stocks in longer established uptrends qualify (fewer) · ↓ Lower → shorter uptrends allowed (more)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.rsiTrendSma}
-              min={20} max={500} step={10}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, rsiTrendSma: Number(e.target.value) }))
-              }
-            />
-          </div>
-        </label>
+        <NumField {...common} field="rsiOverbought" label="RSI overbought level" min={50} max={90} step={1}
+          hint="Bearish: RSI must be above this to qualify as overbought. ↓ Lower → easier to trigger, more results · ↑ Higher → deep overbought required, fewer results" />
+
+        <NumField {...common} field="rsiTrendSma" label="RSI trend SMA" min={20} max={500} step={10}
+          hint="SMA the stock must be trading above to confirm it's still in an uptrend. ↑ Higher → only stocks in longer established uptrends qualify (fewer) · ↓ Lower → shorter uptrends allowed (more)" />
 
         <label className={styles.paramLabel}>
           <Text size={11} tone="dim">Require Choppy regime (mean reversion RSI only)</Text>
@@ -215,36 +197,25 @@ export function StrategyParamsPanel({ params, setParams, onReset }: Props) {
           <div className={styles.paramInput}>
             <input
               type="checkbox"
-              checked={params.requireChoppyRegime}
+              checked={choppy}
               onChange={(e) =>
                 setParams((p) => ({ ...p, requireChoppyRegime: e.target.checked }))
               }
             />
             <Text size={11} tone="secondary">Require Choppy regime</Text>
+            <ResetToProfile field="requireChoppyRegime" label="Require Choppy regime" params={params} setParams={setParams} />
           </div>
         </label>
 
         {/* ── Breakout ── */}
-        <div className={styles.paramSection}>
-          <Text size={11} weight={500} tone="secondary">Breakout from Tight Base</Text>
-          <Text size={10} tone="dim">Controls the &quot;Breakout&quot; strategy — how much volume surge is required to confirm a genuine breakout above the base high.</Text>
-        </div>
+        <SectionHeader
+          title="Breakout from Tight Base" strategy="breakout_base" profile={profile}
+          blurb={'Controls the "Breakout" strategy — how much volume surge is required to confirm a genuine breakout above the base high.'}
+        />
 
-        <label className={styles.paramLabel}>
-          <Text size={11} tone="dim">Breakout vol multiplier</Text>
-          <Text size={10} tone="dim">Required volume as a multiple of average on the breakout day. ↑ Higher → only high-conviction volume spikes pass (fewer, stronger signals) · ↓ Lower → lower volume breakouts qualify (more)</Text>
-          <div className={styles.paramInput}>
-            <input
-              type="number"
-              value={params.breakoutVolumeMult}
-              min={1.0} max={3.0} step={0.05}
-              onChange={(e) =>
-                setParams((p) => ({ ...p, breakoutVolumeMult: Number(e.target.value) }))
-              }
-            />
-            <Text size={11} tone="dim">×</Text>
-          </div>
-        </label>
+        <NumField {...common} field="breakoutVolumeMult" label="Breakout vol multiplier" unit="×" decimals={2}
+          min={1.0} max={3.0} step={0.05}
+          hint="Required volume as a multiple of average on the breakout day. ↑ Higher → only high-conviction volume spikes pass (fewer, stronger signals) · ↓ Lower → lower volume breakouts qualify (more)" />
 
         {/* ── Backtest quality gate ── */}
         <div className={styles.paramSection}>

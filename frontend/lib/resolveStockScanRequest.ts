@@ -8,7 +8,7 @@ import type { ScanParams } from '@/lib/scanParamsStore';
 import type { ConfidenceGate } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
 import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
-import { sanitizeHoldDays } from '@/lib/horizonPresets';
+import { sanitizeHoldDays, type TunedHorizon } from '@/lib/horizonPresets';
 
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
 // Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
@@ -33,7 +33,13 @@ export interface ResolvedStockScanContext {
   /** Scoring horizon string, e.g. "Swing" (space-split, no "(Nd)" suffix). */
   horizon: string;
   strategy: string;
+  /** Strategy fields are overrides: `null` = follow the backend profile and
+   *  is not sent (STOCKS-HORIZON-T1 H5). */
   params: ScanParams;
+  /** The tuned horizon whose backend profile this scan reads — set by every
+   *  builder from tunedParamsHorizon(context preset, context holdMax); null
+   *  (Intraday, or no context) sends none. */
+  paramsHorizon: TunedHorizon | null;
   requireReversal: boolean;
   scanOverrides: Record<string, number | boolean | string>;
   confidenceGate: ConfidenceGate;
@@ -69,6 +75,7 @@ export interface StockScanRequestBody {
   breakout_volume_mult?: number;
   rsi_period?: number;
   rsi_oversold?: number;
+  rsi_overbought?: number;
   rsi_trend_sma?: number;
   require_choppy_regime?: boolean;
   bt_min_trades?: number;
@@ -99,6 +106,14 @@ export interface StockScanRequestBody {
   /** The scan's hold (B6). Optional on the wire: step-4-prebreakout's ad-hoc
    *  requests omit it, and the backend then uses the horizon's preset hold. */
   hold_max_days?: number;
+  /** STOCKS-HORIZON-T1 H5: which tuned horizon's backend profile the
+   *  strategy fields default to. Absent for Intraday. */
+  params_horizon?: TunedHorizon;
+}
+
+/** `{ [key]: value }` when the override is set, else nothing. */
+function override<K extends string, V>(key: K, value: V | null | undefined): Partial<Record<K, V>> {
+  return value === null || value === undefined ? {} : ({ [key]: value } as Record<K, V>);
 }
 
 export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockScanRequestBody {
@@ -126,19 +141,23 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     direction: ctx.direction,
     horizon: ctx.horizon,
     strategy: ctx.strategy,
-    pullback_tolerance_pct: p.pullbackTolerancePct,
-    pullback_ema_period: p.pullbackEmaPeriod,
-    pullback_trend_ema: p.pullbackTrendEma,
-    pullback_ma_type: p.pullbackMaType,
+    // Strategy fields: only the overrides the user set (STOCKS-HORIZON-T1
+    // H5); every other field takes the backend profile for params_horizon.
+    ...override('pullback_tolerance_pct', p.pullbackTolerancePct),
+    ...override('pullback_ema_period', p.pullbackEmaPeriod),
+    ...override('pullback_trend_ema', p.pullbackTrendEma),
+    ...override('pullback_ma_type', p.pullbackMaType),
     pullback_require_reversal: ctx.requireReversal,
-    ma_crossover_fast: p.maCrossoverFast,
-    ma_crossover_slow: p.maCrossoverSlow,
-    ma_crossover_lookback: p.maCrossoverLookback,
-    breakout_volume_mult: p.breakoutVolumeMult,
-    rsi_period: p.rsiPeriod,
-    rsi_oversold: p.rsiOversold,
-    rsi_trend_sma: p.rsiTrendSma,
-    require_choppy_regime: p.requireChoppyRegime ?? false,
+    ...override('ma_crossover_fast', p.maCrossoverFast),
+    ...override('ma_crossover_slow', p.maCrossoverSlow),
+    ...override('ma_crossover_lookback', p.maCrossoverLookback),
+    ...override('breakout_volume_mult', p.breakoutVolumeMult),
+    ...override('rsi_period', p.rsiPeriod),
+    ...override('rsi_oversold', p.rsiOversold),
+    ...override('rsi_overbought', p.rsiOverbought),
+    ...override('rsi_trend_sma', p.rsiTrendSma),
+    ...override('require_choppy_regime', p.requireChoppyRegime),
+    ...(ctx.paramsHorizon ? { params_horizon: ctx.paramsHorizon } : {}),
     bt_min_trades: p.btMinTrades,
     bt_min_win_rate: p.btMinWinRate,
     account_size: ctx.accountSize,
@@ -158,10 +177,10 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     min_stock_score: typeof rawOverrides.min_stock_score === 'number' ? rawOverrides.min_stock_score : undefined,
     hold_max_days: holdMax !== undefined && Number.isFinite(holdMax) ? holdMax : undefined,
     ...(ctx.strategy === 'mean_reversion_multi' ? {
-      mean_reversion_variants: p.meanReversionVariants,
-      mean_reversion_min_confirmations: p.meanReversionMinConfirm,
-      vwap_lookback: p.vwapLookback,
-      vwap_deviation_pct: p.vwapDeviationPct,
+      ...override('mean_reversion_variants', p.meanReversionVariants),
+      ...override('mean_reversion_min_confirmations', p.meanReversionMinConfirm),
+      ...override('vwap_lookback', p.vwapLookback),
+      ...override('vwap_deviation_pct', p.vwapDeviationPct),
     } : {}),
   };
 }

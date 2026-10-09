@@ -932,6 +932,10 @@ export const api = {
       '/api/config/event-thresholds'
     ),
 
+  // STOCKS-HORIZON-T1 H4/H5: per-horizon strategy parameter profiles.
+  // Untyped on purpose: lib/strategyProfilesStore.ts parseStrategyProfiles validates it.
+  getStrategyProfiles: () => get<unknown>('/api/config/strategy-profiles'),
+
   // DOCC-5: GET /api/config/health (DOCC-4). Always 200; parsed by lib/configHealth.ts.
   getConfigHealth: (signal?: AbortSignal) => get<unknown>('/api/config/health', signal),
 
