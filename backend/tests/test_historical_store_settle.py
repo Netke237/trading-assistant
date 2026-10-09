@@ -102,8 +102,10 @@ async def world(monkeypatch):
 
     monkeypatch.setattr(alpaca, "get_alpaca_client", _client)
     monkeypatch.setattr(alpaca, "fetch_daily_bars_single", _alpaca)
-    monkeypatch.setattr(hs, "fetch_historical_candles",
-                        lambda symbol, start, end: w.serve("tiingo", start, end, end_exclusive=False))
+    async def _tiingo(symbol, start, end):
+        return w.serve("tiingo", start, end, end_exclusive=False)
+
+    monkeypatch.setattr(hs, "fetch_historical_candles", _tiingo)
     monkeypatch.setattr(hs, "_yfinance_fetch",
                         lambda symbol, start, end: w.serve("yfinance", start, end, end_exclusive=True))
     yield w

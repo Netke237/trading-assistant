@@ -231,6 +231,9 @@ _REAL_STOCK_REASONS = [
     ("backtest gate: 38% win over 12 trades",             "failed_backtest"),
     ("confidence gate REJECT: 41% < 50%",                 "failed_backtest"),
     ("Shortlist cap: PASS score 53 confidence 60% ranked 4 of 7 (cap 3)", "failed_shortlist"),
+    # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from universe_exclusions.yaml,
+    # skipped before any per-symbol work. A data drop, like "no price data".
+    ("Excluded (data): price feed ended 2024-05-03; likely delisted", "failed_history"),
     ("unknown strategy wat",                              "other_rejected"),
 ]
 
@@ -485,3 +488,84 @@ def test_an_absent_or_null_sizing_block_now_fails_the_scan(stock_client, cfg):
         })
     assert r.status_code == 500, r.text
     assert "regime_sizing" in r.json()["detail"]
+
+
+# ── Universe exclusion list (STOCKS-HORIZON-P0A A2) ──────────────────────────
+#
+# A `scope: scan` symbol in config/universe_exclusions.yaml is skipped before
+# any per-symbol work, reported in `rejected` as "Excluded (data): <reason>",
+# counted in `scanned` and in `failed_history`, so the sum invariant holds. The
+# shipped file lists CTVA with scope scan (pinned by test_universe_exclusions.py).
+
+_BROKEN_LIST = "universe_exclusions.yaml: 'version' must be 1, got 2"
+
+
+def _post_stock_scan(stock_client, symbols, fake_process, *extra_patches, universe=()):
+    quotes = MagicMock(return_value={})
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.routers.stock_scan.fetch_quotes", quotes))
+        stack.enter_context(patch(
+            "app.routers.stock_scan.get_historical_bars", AsyncMock(return_value=_BARS)))
+        stack.enter_context(patch("app.routers.stock_scan._process_stock", fake_process))
+        for p in extra_patches:
+            stack.enter_context(p)
+        r = stock_client.post("/api/stock-scan", json={
+            "symbols": symbols, "universe": list(universe), "direction": "Bullish",
+            "horizon": "Swing", "strategy": "pullback_ema",
+        })
+    return r, quotes
+
+
+@pytest.mark.parametrize("typed", [True, False], ids=["typed", "preset"])
+def test_an_excluded_symbol_is_rejected_as_history_and_never_processed(stock_client, typed):
+    """Typed or from a preset, the filter runs on the FINAL symbol list."""
+    from app.data.universe_exclusions import load_exclusions
+
+    processed: list[str] = []
+
+    async def _fake_process(sym, *_a, **_kw):
+        processed.append(sym)
+        return {"symbol": sym, "reason": "REJECT score=20"}
+
+    if typed:
+        r, quotes = _post_stock_scan(stock_client, ["AAPL", "CTVA"], _fake_process)
+    else:
+        r, quotes = _post_stock_scan(
+            stock_client, None, _fake_process,
+            patch("app.data.universe_presets.expand_universe", return_value=["AAPL", "CTVA"]),
+            universe=["SP500"],
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert processed == ["AAPL"], "CTVA reached per-symbol work"
+    assert "CTVA" not in quotes.call_args.args[0], "CTVA reached the batch quote fetch"
+    reasons = {x["symbol"]: x["reason"] for x in body["rejected"]}
+    assert reasons["CTVA"] == f"Excluded (data): {load_exclusions()['CTVA'].reason}"
+
+    pipeline = body["pipeline"]
+    assert pipeline["failed_history"] == 1
+    assert pipeline["failed_score"] == 1
+    assert pipeline["other_rejected"] == 0, "the exclusion leaked into the residual"
+    assert _accounted(pipeline) == pipeline["scanned"] == 2
+
+
+def test_a_broken_exclusion_list_fails_the_stock_scan_before_any_symbol_work(stock_client):
+    """A broken list must not silently scan everything: named 500, nothing fetched."""
+    from app.data.universe_exclusions import ExclusionListError
+
+    processed: list[str] = []
+
+    async def _fake_process(sym, *_a, **_kw):
+        processed.append(sym)
+        return {"symbol": sym, "reason": "REJECT score=20"}
+
+    r, quotes = _post_stock_scan(
+        stock_client, ["AAPL"], _fake_process,
+        patch("app.data.universe_exclusions.load_exclusions",
+              side_effect=ExclusionListError(_BROKEN_LIST)),
+    )
+    assert r.status_code == 500, r.text
+    assert r.json()["detail"] == _BROKEN_LIST
+    assert processed == []
+    assert quotes.call_count == 0

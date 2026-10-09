@@ -242,7 +242,7 @@ async def test_stock_order_propagates_open_effect_to_broker_order():
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/broker/stock-order", json={
                 "broker": "ibkr_paper", "symbol": "AAPL",
-                "action": "SELL", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
+                "action": "BUY", "effect": "OPEN", "quantity": 1, "order_type": "MKT",
             })
     assert resp.status_code == 200
     assert captured["order"].effect == "OPEN"

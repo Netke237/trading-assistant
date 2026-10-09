@@ -27,6 +27,7 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
 
 from app.services.audit import new_rec_id
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.scoring.conviction_sizing import (
     SizingConfigError,
     conviction_mult,
@@ -50,7 +51,10 @@ from app.services.historical_store import get_bars as get_historical_bars
 # _atr is the SAME ATR(14) /contracts/exit-plan uses (contracts.py imports it
 # from here too) -- not strategy_engine's same-named one, which is a different
 # implementation. The two endpoints must build their ATR floor on one number.
-from app.scoring.stock_scorer import score_stock, _atr, resolve_rs_benchmark
+from app.scoring.stock_scorer import (
+    score_stock, _atr, resolve_rs_benchmark, effective_event_window, effective_veto_days,
+    Horizon as ScoringHorizon,
+)
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
@@ -99,6 +103,7 @@ from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundame
 from app.schemas import FundamentalsOut
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 from app.data.universe_presets import expand_universe, PresetUnavailableError
+from app.data.universe_exclusions import Exclusion, ExclusionListError, filter_symbols
 
 
 class PreBreakoutScanRequest(BaseModel):
@@ -345,6 +350,63 @@ def _min_score_drop(symbol: str, card, min_stock_score: float | None) -> dict | 
     return None
 
 
+# ── Earnings veto over the hold (STOCKS-HORIZON-P0B B6) ──────────────────────
+
+def _resolve_stock_veto_days(req) -> int:
+    """veto_days = max(reject_days, hold_max_days) for this request.
+
+    Never fails the scan; the same fail-toward-vetoing fallback as the options
+    scan (`scan._resolve_earnings_veto_days`): the event window's reject_days,
+    then the widest window over every horizon with no overrides."""
+    try:
+        return effective_veto_days(req.horizon, req.overrides, req.hold_max_days)
+    except Exception as exc:
+        logger.warning("stock earnings veto window unavailable: %s", exc)
+    try:
+        return effective_event_window(req.horizon, req.overrides)[0]
+    except Exception:
+        from typing import get_args
+        return max(effective_veto_days(h, None, None) for h in get_args(ScoringHorizon))
+
+
+async def _earnings_days_for(symbol: str) -> int | None:
+    """Days to the symbol's next earnings date, or None when unknown.
+
+    The fire path's lookup (`auto_trader._fetch_earnings_date`: Tradier
+    fundamentals, then yfinance, each under its own deadline, with failure
+    backoff), looked up at call time so the suite's patch on it lands. The
+    batch quote carries no earnings date. A raised lookup, None, or a past
+    date is UNKNOWN."""
+    from app.services import auto_trader
+    try:
+        found = await asyncio.to_thread(auto_trader._fetch_earnings_date, symbol)
+    except Exception as exc:  # noqa: BLE001 -- a failed lookup is unknown, never a crash
+        logger.warning("stock earnings lookup for %s failed: %s", symbol, exc)
+        return None
+    if found is None:
+        return None
+    try:
+        ev = found.date() if isinstance(found, datetime) else date.fromisoformat(str(found)[:10])
+    except (ValueError, TypeError):
+        return None
+    days = (ev - date.today()).days
+    return days if days >= 0 else None
+
+
+def _stock_earnings_veto(status: str, earnings_days: int | None, veto_days: int) -> tuple[str, dict | None]:
+    """(status, gate flag or None). Earnings inside the veto window cap the
+    status at CAUTION (a REJECT stays REJECT) and add an `earnings` flag.
+
+    UNKNOWN EARNINGS (None) IS NOT A VETO ON STOCKS. Decision D4's
+    unknown-date rule is an options auto-fire policy; extending it to the
+    stocks path was not decided (STOCKS-HORIZON-P0B B6)."""
+    if earnings_days is None or earnings_days >= veto_days:
+        return status, None
+    flag = {"gate": "earnings", "status": "CAUTION",
+            "detail": f"earnings in {earnings_days}d is inside the hold window (<{veto_days}d)"}
+    return ("CAUTION" if status == "PASS" else status), flag
+
+
 async def _rs_benchmark_candles(req) -> list[dict] | None:
     """The benchmark bars a relative_strength trend rule needs, or None.
 
@@ -514,6 +576,9 @@ def classify_stock_rejection(reason: str) -> str:
         or reason.startswith("price $")
         # P3a item 12: no 15-min regime bars is a data drop, like no price.
         or reason.startswith(_REGIME_DATA_PREFIX)
+        # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from
+        # universe_exclusions.yaml, dropped before any per-symbol work.
+        or reason.startswith("Excluded (data):")
     ):
         return "failed_history"
     if reason.startswith("REJECT score="):
@@ -542,6 +607,19 @@ def classify_stock_rejection(reason: str) -> str:
     if reason.startswith(_SHORTLIST_REASON_PREFIX):
         return "failed_shortlist"
     return "other_rejected"
+
+
+def _drop_excluded_symbols(symbols: list[str], label: str) -> tuple[list[str], list[Exclusion]]:
+    """Split a scan's FINAL symbol list (presets expanded, typed tickers
+    included) into (kept, excluded) by universe_exclusions.yaml's `scope: scan`
+    entries (STOCKS-HORIZON-P0A A2). Called before any per-symbol work. A
+    broken list is a named 500, logged once here: it must not silently scan
+    everything."""
+    try:
+        return filter_symbols(symbols, purpose="scan")
+    except ExclusionListError as e:
+        logger.error("%s aborted: universe exclusion list unusable: %s", label, e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 _BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
@@ -672,6 +750,10 @@ def evict_backtest_cache(symbols: Iterable[str]) -> int:
     return len(keys)
 
 
+from app.services.bars_changed import register_bars_listener
+register_bars_listener("stock_backtests", evict_backtest_cache)
+
+
 _INDEX_SYMBOLS = {"SPY", "QQQ", "DIA", "IWM", "SPX", "NDX", "VIX",
                   "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC"}
 
@@ -697,6 +779,8 @@ class _AnalyzeCore:
     daily_bars: list[dict]
     intraday_bars: list[dict]
     gate_flags: list[dict]
+    earnings_days: int | None = None
+    earnings_veto: bool = False
 
 
 async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
@@ -896,22 +980,46 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             await set_cached(_ck, _cached, bars_generation=_bars_gen)
         conf_val = _cached["confidence"]
-        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+        _min_samples = int(load_backtest_cfg(req.horizon)["min_samples"])
+        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                             min_samples=_min_samples)
+        _unvalidated = conf_val is None
         _below_reject = (conf_val is not None and req.confidence_reject_below is not None
                          and conf_val < req.confidence_reject_below)
         _below_caution = (conf_val is not None and req.confidence_caution_below is not None
                           and conf_val < req.confidence_caution_below)
         # Mirrors _process_stock's cap: CAUTION at most, never lowers a REJECT.
         # Applied below the reject threshold too (the scan drops the symbol
-        # there), so worse confidence can never read better than milder.
-        if (_below_reject or _below_caution) and card.status == "PASS":
+        # there), so worse confidence can never read better than milder. A
+        # missing confidence is Unvalidated and never PASSes (P0A A5).
+        if (_unvalidated or _below_reject or _below_caution) and card.status == "PASS":
             card = dataclasses.replace(card, status="CAUTION")
-        if _below_reject:
+        if _unvalidated:
+            gate_flags.append({"gate": "confidence", "status": "CAUTION",
+                               "detail": f"Unvalidated: {_cached['sample_size']} non-overlapping "
+                                         f"samples (< {_min_samples})"})
+        elif _below_reject:
             gate_flags.append({"gate": "confidence", "status": "REJECT",
                                "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
         elif _below_caution:
             gate_flags.append({"gate": "confidence", "status": "CAUTION",
                                "detail": f"{conf_val:.0f}% < {req.confidence_caution_below:.0f}%"})
+
+    if req.direction == "Bearish":
+        if card.status == "PASS":
+            card = dataclasses.replace(card, status="CAUTION")
+        gate_flags.append({"gate": "unvalidated", "status": "CAUTION",
+                           "detail": BEARISH_UNVALIDATED_MESSAGE})
+
+    # Earnings veto over the hold (B6), as the scan applies it. Unknown
+    # earnings is not a veto on stocks (see _stock_earnings_veto).
+    earnings_days = await _earnings_days_for(symbol)
+    _status, _earn_flag = _stock_earnings_veto(card.status, earnings_days,
+                                               _resolve_stock_veto_days(req))
+    if _status != card.status:
+        card = dataclasses.replace(card, status=_status)
+    if _earn_flag is not None:
+        gate_flags.append(_earn_flag)
 
     # Event proximity
     next_event_days = next_event_label = None
@@ -932,6 +1040,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         fundamentals=_fh, signal=signal, bt_result=bt_result, conf_val=conf_val, conf_txt=conf_txt,
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
         daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
+        earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
     )
 
 
@@ -1105,6 +1214,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
         sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,
         fundamentals=fundamentals_out,
         next_event_days=core.next_event_days, next_event_label=core.next_event_label,
+        earnings_days=core.earnings_days, earnings_veto=core.earnings_veto,
         rules=[RuleContribution(name=r.name, status=r.status, score=r.score, detail=r.detail or {})
                for r in card.rules],
         gate_flags=[GateFlag(**g) for g in core.gate_flags],
@@ -1139,6 +1249,7 @@ async def _process_stock(
     benchmark_closes: list[float],
     fund_gate: dict | None = None,
     rs_benchmark_candles: list[dict] | None = None,
+    veto_days: int | None = None,
 ) -> PositionCardOut | dict:
     # Resolved OUTSIDE the `try` below, which converts every exception into a
     # per-symbol rejection: a malformed threshold has to propagate as an error,
@@ -1149,6 +1260,10 @@ async def _process_stock(
     # callers (the test suite) screen on the real gate rather than silently
     # running with it disabled.
     _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
+    # The scan resolves the earnings veto window once and passes it in; a
+    # direct caller (the test suite) gets the same resolution here.
+    if veto_days is None:
+        veto_days = _resolve_stock_veto_days(req)
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -1356,9 +1471,15 @@ async def _process_stock(
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 await set_cached(_ck, _cached, bars_generation=_bars_gen)
             conf_val = _cached["confidence"]
-            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                                 min_samples=int(load_backtest_cfg(req.horizon)["min_samples"]))
 
             _SEVERITY = {"PASS": 0, "CAUTION": 1, "REJECT": 2}
+
+            # Missing confidence is Unvalidated: a PASS card becomes CAUTION
+            # (never lowers a REJECT) and the symbol is kept (P0A A5).
+            if conf_val is None and card.status == "PASS":
+                card = dataclasses.replace(card, status="CAUTION")
 
             if conf_val is not None and req.confidence_reject_below is not None:
                 if conf_val < req.confidence_reject_below:
@@ -1373,6 +1494,13 @@ async def _process_stock(
                 if conf_val < req.confidence_caution_below:
                     if _SEVERITY.get(card.status, 0) < _SEVERITY["CAUTION"]:
                         card = dataclasses.replace(card, status="CAUTION")
+
+            gate_flags = []
+            if req.direction == "Bearish":
+                if card.status == "PASS":
+                    card = dataclasses.replace(card, status="CAUTION")
+                gate_flags.append(GateFlag(gate="unvalidated", status="CAUTION",
+                                           detail=BEARISH_UNVALIDATED_MESSAGE))
 
             sizing_cfg = full_cfg.get("regime_sizing", {"enabled": False})
             _sizing = resolve_sizing(sizing_cfg)
@@ -1425,6 +1553,17 @@ async def _process_stock(
                         except (ValueError, TypeError):
                             pass
 
+            # Earnings veto over the hold (B6). Looked up only here, after
+            # every drop gate, so a dropped symbol costs no lookup. Never drops
+            # the candidate. Unknown earnings is not a veto on stocks (see
+            # _stock_earnings_veto).
+            earnings_days = await _earnings_days_for(symbol)
+            _status, _earn_flag = _stock_earnings_veto(card.status, earnings_days, veto_days)
+            if _status != card.status:
+                card = dataclasses.replace(card, status=_status)
+            if _earn_flag is not None:
+                gate_flags.append(GateFlag(**_earn_flag))
+
             return PositionCardOut(
                 symbol=symbol, company=company or symbol, price=price, direction=req.direction,
                 strategy=StrategySignalOut(
@@ -1441,13 +1580,14 @@ async def _process_stock(
                     confidence=bt_result.confidence, passes_gate=bt_result.passes_gate,
                     summary_text=bt_result.summary_text,
                 ),
-                stock_score=card.score, stock_status=card.status,
+                stock_score=card.score, stock_status=card.status, gate_flags=gate_flags,
                 shares=shares, dollar_risk=dollar_risk,
                 dollar_size=round(shares * signal.entry_price, 2),
                 sizing_basis=sizing_basis,
                 confidence=conf_val, confidence_text=conf_txt,
                 sector_rs_pct=sector_rs_pct,
                 next_event_days=next_event_days, next_event_label=next_event_label,
+                earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
                 sentiment=SentimentData(**regime_signal) if regime_signal else None,
                 fundamentals=FundamentalsOut(
                     score=_fh.score, quality_label=_fh.quality_label, risk_label=_fh.risk_label,
@@ -1555,6 +1695,10 @@ async def _execute_stock_scan_core(
             symbols = expand_universe(req.universe)
         except PresetUnavailableError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    # Excluded symbols go into `rejected` below and count in `scanned` and
+    # `failed_history`, so scanned == sum of buckets still holds.
+    symbols, _excluded = _drop_excluded_symbols(symbols, f"STOCK SCAN {scan_id}")
+    _scanned = len(symbols) + len(_excluded)
 
     # Direction-conviction floor, validated BEFORE the batch quote call and the
     # SPY benchmark fetch below — a malformed threshold must not cost a
@@ -1643,12 +1787,16 @@ async def _execute_stock_scan_core(
     # Fetched once for the whole universe; None unless the trend method is
     # relative_strength (see _rs_benchmark_candles).
     rs_benchmark_candles = await _rs_benchmark_candles(req)
+    # Earnings veto window, max(reject_days, hold), resolved once (B6).
+    veto_days = _resolve_stock_veto_days(req)
     tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
-                            rs_benchmark_candles=rs_benchmark_candles)
+                            rs_benchmark_candles=rs_benchmark_candles, veto_days=veto_days)
              for s in symbols]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
+    for _x in _excluded:
+        rejected.append({"symbol": _x.symbol, "reason": f"Excluded (data): {_x.reason}"})
     # gather keeps input order, so each raised exception is named by its symbol.
     for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
@@ -1708,11 +1856,11 @@ async def _execute_stock_scan_core(
         # gates remove the rest, and blaming "market structure" for that told
         # the user something the scan did not measure.
         _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
-        _rest = ("" if _dir_removed >= len(symbols)
+        _rest = ("" if _dir_removed >= _scanned
                  else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
             f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
-            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
+            f"removed {_dir_removed} of {_scanned}{_floor}{_rest}."
         )
     elif candidates and all(c.stock_status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -1724,7 +1872,7 @@ async def _execute_stock_scan_core(
         return classify_stock_rejection(r.get("reason", "") if isinstance(r, dict) else "")
 
     _pipeline = StockPipeline(
-        scanned=len(symbols),
+        scanned=_scanned,
         failed_history=sum(1 for r in rejected if _bucket(r) == "failed_history"),
         failed_score=sum(1 for r in rejected if _bucket(r) == "failed_score"),
         failed_signal=sum(1 for r in rejected if _bucket(r) == "failed_signal"),
@@ -1749,7 +1897,7 @@ async def _execute_stock_scan_core(
         scan_id=scan_id, timestamp=datetime.now(timezone.utc).isoformat(),
         candidates=candidates, rejected=rejected, pipeline=_pipeline,
         original_count=original_count, shortlist_truncated=shortlist_truncated,
-        direction_banner=_direction_banner,
+        direction_banner=_direction_banner, veto_days=veto_days,
     )
     return result
 
@@ -1799,6 +1947,13 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
 
     if not symbols_to_scan:
         return []
+
+    # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
+    # skipped and named in one INFO line.
+    symbols_to_scan, _excluded = _drop_excluded_symbols(symbols_to_scan, "fib-pullback scan")
+    if _excluded:
+        logger.info("fib-pullback scan: skipped %d excluded symbol(s): %s",
+                    len(_excluded), ", ".join(x.symbol for x in _excluded))
 
     scan_params: dict = dict(_FIB_DEFAULTS)
     if body.params_override:
@@ -1925,6 +2080,13 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
 
     if not symbols_to_scan:
         return []
+
+    # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
+    # skipped and named in one INFO line.
+    symbols_to_scan, _excluded = _drop_excluded_symbols(symbols_to_scan, "prebreakout scan")
+    if _excluded:
+        logger.info("prebreakout scan: skipped %d excluded symbol(s): %s",
+                    len(_excluded), ", ".join(x.symbol for x in _excluded))
 
     base_params = get_active("breakout_setup", body.direction)
     if body.params_override:

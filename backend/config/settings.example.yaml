@@ -19,6 +19,7 @@ scan:
 # setting. Any IANA timezone name.
 scheduling:
   timezone: Europe/Berlin
+  history_years: 17
 
 # Retention window (days) for scheduled-scan-run history rows
 # (ScheduledScanRunModel) — deliberately separate from history_retention_years

@@ -38,7 +38,9 @@ describe('confidenceTone', () => {
     expect(confidenceTone('low')).toBe('reject');
   });
 
-  it('returns "dim" for unknown tier', () => {
-    expect(confidenceTone('unknown')).toBe('dim');
+  // Missing confidence = Unvalidated (fewer than 20 non-overlapping setups),
+  // capped at CAUTION by the backend, so it reads in the caution tone.
+  it('returns "caution" for unknown tier (Unvalidated)', () => {
+    expect(confidenceTone('unknown')).toBe('caution');
   });
 });

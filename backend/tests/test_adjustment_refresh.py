@@ -57,6 +57,8 @@ async def factory(monkeypatch):
         await conn.run_sync(OhlcvBase.metadata.create_all)
     f = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False, autoflush=False)
     monkeypatch.setattr(hs, "AsyncSessionLocal", f)
+    from app.services import history_backfill
+    monkeypatch.setattr(history_backfill, "AsyncSessionLocal", f)
     yield f
     await engine.dispose()
 
@@ -211,7 +213,10 @@ async def test_refresh_adjustments_endpoint(factory, monkeypatch, conf_cache):
     async def fake(symbol, start, end):
         return [_bar(d, 100.0, adj=1.0) for d in DAYS]
 
-    monkeypatch.setattr(hs, "_fetch_window", fake)
+    from unittest.mock import AsyncMock
+    from app.data import alpaca
+    monkeypatch.setattr(alpaca, "get_alpaca_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(alpaca, "fetch_daily_bars_single", AsyncMock(return_value=await fake("SYM", DAYS[0], DAYS[-1])))
     monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
 
     app = FastAPI()
@@ -773,7 +778,10 @@ async def test_refresh_adjustments_endpoint_evicts_refreshed_symbols_backtests(
     async def fake(symbol, start, end):
         return [_bar(d, 100.0, adj=1.0) for d in DAYS]
 
-    monkeypatch.setattr(hs, "_fetch_window", fake)
+    from unittest.mock import AsyncMock
+    from app.data import alpaca
+    monkeypatch.setattr(alpaca, "get_alpaca_client", AsyncMock(return_value=object()))
+    monkeypatch.setattr(alpaca, "fetch_daily_bars_single", AsyncMock(return_value=await fake("AAPL", DAYS[0], DAYS[-1])))
     monkeypatch.setattr(hs, "_utcnow", lambda: _evening(DAYS[9]) + timedelta(days=2))
 
     app = FastAPI()

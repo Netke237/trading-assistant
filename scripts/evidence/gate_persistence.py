@@ -37,7 +37,7 @@ for _p in (REPO / "backend", REPO / "scripts"):
 from app.services.strategy_backtest import run_strategy_backtest  # noqa: E402
 from app.services.walk_forward import WARMUP_BARS, commission_for, slice_with_warmup  # noqa: E402
 from evidence._bars import (  # noqa: E402
-    common_parser, emit, load_bars, loaded_range, report_header, stored_symbols,
+    common_parser, emit, load_bars, loaded_range, report_header, evidence_symbols,
 )
 
 # The strategies run_strategy_backtest can replay on daily bars. mean_reversion_vwap
@@ -190,11 +190,12 @@ async def _main(args) -> str:
     from app.services.strategy_param_store import get_active, get_costs
 
     costs = get_costs()
-    symbols = args.symbols or await stored_symbols()
+    symbols, excluded = await evidence_symbols(
+        args.symbols, include_excluded=args.include_excluded)
     bars = await load_bars(symbols, args.start, args.end)
     header = report_header(
         "Gate persistence (H3)", symbols=symbols, start=args.start, end=args.end,
-        cost_model=cost_model(costs), loaded=loaded_range(bars),
+        cost_model=cost_model(costs), loaded=loaded_range(bars), excluded=excluded,
         extra={
             "Split": "each symbol's loaded bars at their midpoint (by bar count)",
             "Warm-up": f"{WARMUP_BARS} bars before the second half (WFO slice_with_warmup)",

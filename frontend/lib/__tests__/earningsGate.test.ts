@@ -1,5 +1,6 @@
 import {
   daysSinceScan, earningsGateFor, EARNINGS_VETO_MESSAGE, EARNINGS_UNKNOWN_ARM_MESSAGE,
+  scanVetoDays, stockEarningsGate,
 } from '@/lib/earningsGate';
 
 /* Audit round 1, F4 — the auditor's example. Monday 2026-10-05: a Swing scan
@@ -63,5 +64,79 @@ describe('earningsGateFor — F8: arming an unfireable card', () => {
   it('an ETF with unknown earnings may be armed', () => {
     const g = earningsGateFor({ earningsDays: null, earningsUnknown: true, isEtf: true }, MONDAY_SCAN, 21, MONDAY_LATER);
     expect(g.armBlockedReason).toBeNull();
+  });
+});
+
+/* STOCKS-HORIZON-P0B B7 — the veto window covers the hold: Step 7 and its rail
+ * judge earnings against `event_window.veto_days`, or, on a result persisted
+ * before B5, against max(reject_days, the scan's hold) -- the hold from
+ * ScanContext through sanitizeHoldDays, never the preset table. */
+describe('P0B B7 — scanVetoDays and the veto window', () => {
+  const POSITION = { reject_days: 30, caution_days: 60 };
+  const CUSTOM_60_185 = { horizonPreset: 'Custom', holdMin: 60, holdMax: 185 };
+
+  it('earningsGateFor with veto_days 60 and an aged distance of 40 vetoes', () => {
+    // Scanned Monday at 43d; Thursday it has aged to 40d. reject 30 alone would pass it.
+    const card = { earningsDays: 43, earningsVeto: false, earningsUnknown: false, isEtf: false };
+    const window = scanVetoDays({ ...POSITION, veto_days: 60 }, null);
+    expect(window).toBe(60);
+    const g = earningsGateFor(card, MONDAY_SCAN, window, THURSDAY);
+    expect(g).toMatchObject({ daysNow: 40, veto: true });
+    expect(earningsGateFor(card, MONDAY_SCAN, POSITION.reject_days, THURSDAY).veto).toBe(false);
+  });
+
+  it('uses veto_days when present, whatever the context says', () => {
+    expect(scanVetoDays({ ...POSITION, veto_days: 60 }, CUSTOM_60_185)).toBe(60);
+  });
+
+  it('falls back to max(reject_days, the scan hold) when veto_days is absent: Custom 60-185 -> 185', () => {
+    expect(scanVetoDays(POSITION, CUSTOM_60_185)).toBe(185);
+    expect(scanVetoDays({ ...POSITION, veto_days: null }, CUSTOM_60_185)).toBe(185);
+  });
+
+  it('keeps reject_days when it is the wider of the two (Swing 5-15 against reject 21)', () => {
+    expect(scanVetoDays({ reject_days: 21, caution_days: 45 }, { holdMin: 5, holdMax: 15 })).toBe(21);
+  });
+
+  it('sanitizes the hold the same way the scan request does (rounded, never below holdMin)', () => {
+    expect(scanVetoDays(POSITION, { holdMin: 60, holdMax: 44.6 })).toBe(60);
+    expect(scanVetoDays(POSITION, { holdMin: 0, holdMax: 59.6 })).toBe(60);
+  });
+
+  it("keeps today's reject_days when there is no hold, and nothing when there is no window", () => {
+    expect(scanVetoDays(POSITION, null)).toBe(30);
+    expect(scanVetoDays(POSITION, undefined)).toBe(30);
+    expect(scanVetoDays(undefined, CUSTOM_60_185)).toBeUndefined();
+  });
+});
+
+describe('P0B B7 — stockEarningsGate (the stocks adapter)', () => {
+  it('vetoes a card the stock scan flagged', () => {
+    expect(stockEarningsGate({ earnings_days: 40, earnings_veto: true }, MONDAY_SCAN, 60, MONDAY_LATER).veto).toBe(true);
+  });
+
+  it('ages earnings_days by the scan age and judges it against the scan veto window', () => {
+    // 63d at the scan, outside the 60d window; three days later 60d is still out, 61 at scan -> 58 is in.
+    expect(stockEarningsGate({ earnings_days: 63, earnings_veto: false }, MONDAY_SCAN, 60, THURSDAY).veto).toBe(false);
+    expect(stockEarningsGate({ earnings_days: 61, earnings_veto: false }, MONDAY_SCAN, 60, THURSDAY).veto).toBe(true);
+  });
+
+  it('unknown earnings is never a block on stocks', () => {
+    for (const c of [
+      { earnings_days: null, earnings_veto: false },
+      {},
+      // aged below zero: the print may have passed, the next date is unknown
+      { earnings_days: 2, earnings_veto: true },
+    ]) {
+      const g = stockEarningsGate(c, MONDAY_SCAN, 60, THURSDAY);
+      expect(g.veto).toBe(false);
+      expect(g.armBlockedReason).toBeNull();
+    }
+    expect(stockEarningsGate(null, MONDAY_SCAN, 60, THURSDAY).veto).toBe(false);
+  });
+
+  it('a pre-deploy result without veto_days still honours the card flag', () => {
+    expect(stockEarningsGate({ earnings_days: 40, earnings_veto: true }, MONDAY_SCAN, undefined, MONDAY_LATER).veto).toBe(true);
+    expect(stockEarningsGate({ earnings_days: 40, earnings_veto: false }, MONDAY_SCAN, undefined, MONDAY_LATER).veto).toBe(false);
   });
 });

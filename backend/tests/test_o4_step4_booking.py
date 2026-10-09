@@ -73,7 +73,7 @@ TARGETS = [{"label": "T1", "stockPrice": 196.0, "targetPrice": 3.5}]
 def _arm_body(**extra) -> dict:
     base = {
         "broker": "tastytrade_paper", "symbol": "AAPL", "option_symbol": CONTRACT,
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing",
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15,
         "quantity": 1, "order_type": "LMT", "limit_price": 2.50, "entry_premium": 2.50,
         "premium_stop_pct": 0.40,
         "stop": 180.0, "stop_is_user_set": False, "scan_stock_price": 190.0,

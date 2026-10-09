@@ -139,3 +139,24 @@ describe('T5 — account size stays the user\'s portfolio value', () => {
     expect(b.account_size).toBe(123_456);
   });
 });
+
+describe('B6 (STOCKS-HORIZON-P0B) — the scan\'s hold travels as hold_max_days', () => {
+  it('sends the context hold, not the preset table', async () => {
+    useScanStore.setState({
+      context: { universe: 'NDX100', direction: 'Bullish', horizon: 'Swing (5–15d)',
+        horizonPreset: 'Swing', holdMin: 5, holdMax: 15 },
+    } as never);
+    const b = await step34Body('pullback_ema');
+    expect(b.hold_max_days).toBe(15);
+  });
+
+  it('a Custom 60-185 context sends 185 (the Custom preset row says 15)', async () => {
+    useScanStore.setState({
+      context: { universe: 'NDX100', direction: 'Bullish', horizon: 'Position (60–185d)',
+        horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+    } as never);
+    const b = await step34Body('pullback_ema');
+    expect(b.horizon).toBe('Position');
+    expect(b.hold_max_days).toBe(185);
+  });
+});

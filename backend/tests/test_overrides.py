@@ -103,7 +103,8 @@ def test_stock_evidence_separates_gates_from_components(confidence, direction):
     caps = {c["name"]: c for c in e["caps"]}
     assert caps["confidence"]["detail"]["confidence"] == confidence
     assert caps["confidence"]["detail"]["sample_size"] == 17
-    assert caps["confidence"]["status"] == ("PASS" if confidence is None or confidence >= 60 else "REJECT" if confidence < 40 else "CAUTION")
+    # None caps at CAUTION (Unvalidated, STOCKS-HORIZON-P0A A5); it used to read PASS.
+    assert caps["confidence"]["status"] == ("CAUTION" if confidence is None else "PASS" if confidence >= 60 else "REJECT" if confidence < 40 else "CAUTION")
     assert caps["regime"]["status"] == "REJECT"
     assert caps["fundamentals"]["detail"]["safety_flags"] == ["negative_equity"]
     assert e["status"] == "REJECT" == card.status
