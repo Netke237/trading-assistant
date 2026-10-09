@@ -741,6 +741,7 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    unvalidatedReason: Optional[str] = None
     # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
     earningsVeto: bool = False
     # Unknown earnings (none on file, or only a past date). D4 amended
@@ -999,6 +1000,8 @@ class EventWindow(BaseModel):
     (scoring_rules.yaml horizon default, replaced by any request override)."""
     reject_days:  int
     caution_days: int
+    # Separate earnings gate; absent on results saved before hold-aware vetoes.
+    veto_days: Optional[int] = None
 
 
 class DteWindow(BaseModel):

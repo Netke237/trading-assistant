@@ -357,6 +357,10 @@ export async function runStockScanWithContinuation(
       confidenceGate,
       accountSize: sizing.accountSize,
       riskPct: sizing.riskPct,
+      // The scan context's hold, Custom included (B6): the backend's earnings
+      // veto window is max(reject_days, hold_max_days).
+      holdMinDays: context?.holdMin,
+      holdMaxDays: context?.holdMax,
     });
     building = false;
 

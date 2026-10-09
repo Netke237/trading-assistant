@@ -162,7 +162,9 @@ async def test_t1_conviction_floor_drop_mirrors_the_scan(monkeypatch):
     # Literal pin, hand-written (not built from the helper).
     assert _flags(core, "direction_conviction")[0]["detail"] == \
         "the scan would drop this: direction_conviction: trend 20 < 40 for Bearish Position"
-    assert core.card.status == "PASS"
+    # The direction-conviction flag does not cap the card; the independent
+    # P0B bearish Unvalidated gate now caps this otherwise-PASS verdict.
+    assert core.card.status == "CAUTION"
 
 
 @pytest.mark.asyncio

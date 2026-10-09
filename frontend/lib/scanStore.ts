@@ -121,7 +121,7 @@ export interface ScanResult {
   /** The earnings/dividend window the scan's event rule applied (horizon
    *  default, replaced by any Step-3 override). Absent on results from before
    *  2026-09-29. Step 5 gates on it. */
-  event_window?: { reject_days: number; caution_days: number };
+  event_window?: { reject_days: number; caution_days: number; veto_days?: number | null };
   /** The contract-rule overrides the scan graded contracts with (Step-3
    *  liquidity, spread, delta, IV and min-stock-score rules; `{}` when it
    *  overrode none). Absent, or null from the backend, on results from before

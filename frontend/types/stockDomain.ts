@@ -22,11 +22,18 @@ export interface PositionCardData {
   symbol: string; company: string; price: number; direction: string;
   strategy: StrategySignalData; backtest: BacktestData;
   stock_score: number; stock_status: Status;
+  gate_flags?: Array<{ gate: string; status: 'PASS' | 'CAUTION' | 'REJECT'; detail: string }>;
   shares: number; dollar_risk: number; dollar_size: number;
   confidence: number | null; confidence_text: string | null;
   sector_rs_pct?: number | null;
   next_event_days?: number | null;
   next_event_label?: string | null;
+  /** STOCKS-HORIZON-P0B B6: days to the next known earnings at scan time
+   *  (null = unknown), and whether they fall inside the scan's veto window
+   *  max(reject_days, hold_max_days). Optional: a result persisted before B6
+   *  has neither. Unknown earnings is never a block on stocks. */
+  earnings_days?: number | null;
+  earnings_veto?: boolean;
   sentiment?: SentimentData | null;
   fundamentals?: FundamentalsOut | null;
 }
@@ -55,6 +62,9 @@ export interface StockScanResult {
   original_count?: number;
   shortlist_truncated?: boolean;
   direction_banner?: string;
+  /** STOCKS-HORIZON-P0B B6: the earnings veto window this scan applied,
+   *  max(reject_days, hold_max_days). Absent on a result from before B6. */
+  veto_days?: number | null;
 }
 
 export interface StockFirstPassageTarget {

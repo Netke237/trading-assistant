@@ -146,3 +146,18 @@ describe('scheduleRiskIgnored', () => {
     expect(scheduleRiskIgnored({ mode: 'options', resolved_request: { universe: ['SP500'] } })).toBe(false);
   });
 });
+
+describe('resolveProfileToScanRequest — hold (stocks mode, STOCKS-HORIZON-P0B B6)', () => {
+  it('sends the profile hold as hold_max_days', () => {
+    const req = resolveProfileToScanRequest(stockProfile()) as StockScanRequestBody;
+    expect(req.hold_max_days).toBe(15);
+  });
+
+  it('a Custom 60-185 profile sends 185, not the Custom preset row', () => {
+    const req = resolveProfileToScanRequest(stockProfile({
+      horizonPreset: 'Custom', holdMin: 60, holdMax: 185,
+    })) as StockScanRequestBody;
+    expect(req.horizon).toBe('Position');
+    expect(req.hold_max_days).toBe(185);
+  });
+});

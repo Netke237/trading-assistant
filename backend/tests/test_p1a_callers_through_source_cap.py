@@ -26,7 +26,7 @@ from app.services.auto_trader import ArmedStrategy, AutoTradeService
 def _strategy(quantity: int) -> ArmedStrategy:
     body = {
         "broker": "ibkr_paper", "symbol": "AAPL", "option_symbol": "AAPL|185|2026-12-18|C",
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing",
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15,
         "quantity": quantity, "order_type": "LMT", "limit_price": 1.0, "entry_premium": 1.0,
         "stop": 180.0, "conid": None,
     }
