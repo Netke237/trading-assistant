@@ -321,21 +321,22 @@ sentiment is sized at the floor m.
 |---|---|---|---|---|---|---|---|---|---|
 | 10-01 | O1 | options Bear Position | 1 | 1 | — | — | (floor) | (floor) | (floor) |
 | 10-01 | O2 | options Bull Position | 4 | 0 | 33, 50, 67, 100 | 3 Fragile, 1 Stable | 0.983 | 0.985 | 0.987 |
-| 10-01 | O4 | options Bull Swing | 3 | 0 | 0, 14, 64 | 2 Fragile, 1 Stable | 0.780 | 0.807 | 0.835 |
+| 10-01 | O4 | options Bull Swing | 3 | 0 | 0, 14, 64 | 2 Fragile, 1 Stable | 0.780 | 0.808 | 0.835 |
 | 10-01 | S2 | stocks Bull Swing | 3 | 1 | −9, 0 | 2 Fragile | 0.555 | 0.611 | 0.666 |
 | 10-01 | S3 | stocks Bear Position | 1 | 0 | 50 | 1 Fragile | 1.000 | 1.000 | 1.000 |
 | 10-01 | S4 | stocks Bull Position | 9 | 0 | −67, −20, −20, 0, 11, 17, 25, 33, 43 | 9 Fragile | 0.651 | 0.695 | 0.738 |
 | 10-09 | O1 | options Bear Position | 1 | 0 | 50 | 1 Stable | 1.000 | 1.000 | 1.000 |
-| 10-09 | O2 | options Bull Position | 4 | 0 | 0, 50, 50, 67 | 2 Fragile, 2 Stable | 0.900 | 0.912 | 0.925 |
+| 10-09 | O2 | options Bull Position | 4 | 0 | 0, 50, 50, 67 | 2 Fragile, 2 Stable | 0.900 | 0.913 | 0.925 |
 | 10-09 | O4 | options Bull Swing | 3 | 0 | −20, 14, 75 | 2 Fragile, 1 Stable | 0.713 | 0.749 | 0.785 |
-| 10-09 | S2 | stocks Bull Swing | 13 | 1 | 0, 0, 10, 14, 20, 20, 25, 31, 33, 36, 38, 40 | 12 Fragile | 0.822 | 0.845 | 0.867 |
+| 10-09 | S2 | stocks Bull Swing | 13 | 1 | 0, 0, 10, 14, 20, 20, 25, 31, 33, 36, 38, 40 | 12 Fragile | 0.823 | 0.845 | 0.867 |
 | 10-09 | S3 | stocks Bear Position | 2 | 0 | −25, 71 | 1 Fragile, 1 Stable | 0.675 | 0.716 | 0.756 |
 | 10-09 | S4 | stocks Bull Position | 21 | 0 | −44, −14, 0 ×6, 12, 25, 25, 29, 29, 29, 33, 38, 40, 88, 100, 100, 100 | 20 Fragile, 1 Stable | 0.774 | 0.803 | 0.831 |
 
-The means cover the candidates with sentiment only. O3 and S1 had no candidates on either day.
-Day 1's A1 (2 candidates, no sentiment) is not a base scan and is not listed. Only one candidate
-over both days sits at the floor itself (day 1 S4, conviction −67) and one more on day 2
-(S4, −44): below −40 the ramp gives m. Everything else is above the floor, so moving m between
+The means cover the candidates with sentiment only, rounded half-up to 3 decimals. O3 and S1 had no candidates on either day.
+Day 1's A1 (2 candidates, no sentiment) is not a base scan and is not listed. Among candidates
+with sentiment, one sits at the floor on each day (day 1 S4, conviction −67; day 2 S4, −44):
+below −40 the ramp gives m. The three candidates with no sentiment (day 1 O1 and S2, day 2 S2)
+are also sized at m. Every other candidate is above the floor, so moving m between
 0.2 and 0.4 shifts these means by at most 0.11 (day 1 S2, 0.555 → 0.666). The proposal stays
 **keep 0.3** (§6); the table is for Kenneth's own choice.
 
@@ -364,8 +365,10 @@ over both days sits at the floor itself (day 1 S4, conviction −67) and one mor
 **Swing expiry gap, as predicted.** 2026-10-09 is a gap day (day 1's list above). Of the names that
 reached the chain fetch (`scanned − failed_data − failed_pre_screen`), O3 rejected 196 of 302 (65%)
 as `no option chain` and O4 95 of 186 (51%). The Position bases lost O1 14 of 286 (5%) and O2 15 of
-175 (9%). So both days have the same weekly-listed-only Swing population, and the pooled Swing IV
-rows compare like for like.
+175 (9%). This is consistent with the gap-day reading (the day-2 O4 picks use the 2026-10-30 weekly,
+not the Oct 16 monthly), though the shares differ from day 1 (61% / 40%) and the names reaching
+the fetch differ (O3 347 → 302, O4 112 → 186). The Swing populations are inferred, not shown,
+to be alike; the pooled Swing IV rows are labelled accordingly.
 
 ---
 
