@@ -15,14 +15,6 @@
       "expires_at": "2026-10-09T15:54:32Z",
       "note": "NLQ build per plan r3 + Kenneth Q-A..Q-D answers (k-ticket-coordinator); then CONTRACT-LIQUIDITY-DTE",
       "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/tiingo-governor",
-      "claimed_at": "2026-10-09T13:30:07Z",
-      "expires_at": "2026-10-09T16:30:07Z",
-      "note": "Route all Tiingo history requests through shared pacing and symbol budget",
-      "task": "TIINGO-GOVERNOR"
     }
   ]
 }
