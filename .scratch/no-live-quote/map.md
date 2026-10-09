@@ -4,7 +4,7 @@ Branch for NLQ tickets: `claude/priceless-jennings-995ab7`. Branch for CL ticket
 
 | ID | Title | Blocked by | Status |
 |---|---|---|---|
-| NLQ-1 | Data: quote classifier, config key, chain builders, quote expiry check (plan 3a) | — | open |
+| NLQ-1 | Data: quote classifier, config key, chain builders, quote expiry check (plan 3a) | — | done |
 | NLQ-2 | Backend grading + wire + recompute + scheduled notice (3b, 3c, 3e-backend, 3f) | NLQ-1 | open |
 | NLQ-3 | Auto-trade fire gate (3d) | NLQ-1 | open |
 | NLQ-4 | Frontend: Step 6/Watchlist tag, Step 7 warning + send-time gate + tick, recompute, ScanLog (3e) | NLQ-2 | open |
@@ -15,7 +15,8 @@ Branch for NLQ tickets: `claude/priceless-jennings-995ab7`. Branch for CL ticket
 | JOIN | Kenneth: merge NLQ to main, then CL; sync local main with origin/main | NLQ-5, CL-2 | waiting on Kenneth |
 
 ## Current Frontier
-- NLQ-1
+- NLQ-2
+- NLQ-3
 
 ## Rules
 - Audit per ticket: fresh independent subagent applying bmad-review-adversarial-general, gate-briefed;
