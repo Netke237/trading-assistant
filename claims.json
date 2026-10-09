@@ -4,8 +4,8 @@
       "agent": "claude",
       "branch": "claude/stocks-horizon-t1",
       "claimed_at": "2026-10-09T03:36:35Z",
-      "expires_at": "2026-10-09T06:36:35Z",
-      "note": "Plan audit + tickets for T1; build waits for P0B merge",
+      "expires_at": "2026-10-09T07:58:48Z",
+      "note": "T1 plan audit round 3 + tickets (taken over from main-PC session, Kenneth reassigned)",
       "task": "STOCKS-HORIZON-T1"
     }
   ]
