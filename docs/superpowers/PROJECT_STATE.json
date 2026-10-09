@@ -2119,6 +2119,26 @@
         "note": "Presence only; offline adapter/governor/fallback tests verify admission behavior."
       },
       "note": "Follow-up from D3 #114. Independent code R1 clean: /root/tiingo_governor_audit_r1 reviewed b7c5b38c..c4addf9b, diff SHA256 dfc165d17d4b0628235b3691d47e974fa56bae3e570f3906103e7e4c0d3f6ffb; zero gate findings and verified whole-target scope. Independent offline tests 123 passed; author focused suite 169 passed / 6 PostgreSQL skips; frontend typecheck passed. Audit record docs/superpowers/audits/2026-10-09-tiingo-governor-code.md. PR132 pending merge; no deployment/live calls. Merged HISTORY audit record remains unchanged."
+    },
+    {
+      "id": "AUTOTRADE-FIRE-HYGIENE",
+      "name": "Scan-trigger cancellation outcome ownership and accurate execution-context documentation",
+      "status": "not_started",
+      "audit_rounds": 1,
+      "audit_clean": true,
+      "plan_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      },
+      "depends_on": [],
+      "plan": "docs/superpowers/plans/2026-10-09-autotrade-fire-hygiene-plan.md",
+      "note": "2026-10-09 PLAN ROUND 1 CLEAN: fresh /root/fire_ticket_plan_audit reviewed exact file hashes in docs/superpowers/audits/2026-10-09-fire-horizon-ticketing-plan.md against a8fce005; zero numeric/persistence findings after recheck. Code not started; no code audit. Publication-ready H1-H3/coordinator bodies in .scratch/autotrade-fire-hygiene; GitHub issue API Forbidden, publication and assignment preflight pending. T1 existing #92/#93-103/#104 preserved; T2-T4 breakdowns are draft research/design work packages only.",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/routers/scan.py",
+        "pattern": "^_SCAN_FIRE_EXECUTOR\\s*=",
+        "note": "Presence only: proposed H1 scan-trigger executor, not implemented. Implementation must preserve this marker or update the probe to the actual owned helper; it does not verify behaviour."
+      }
     }
   ],
   "already_shipped": [
@@ -4403,7 +4423,10 @@
           "open_questions: P3c run_scan maybe_fire_on_scan cancellation gap"
         ],
         "summary": "Scan-triggered fire cancellation gap, stale docstrings. (entry_premium bound done by TRADING-REVIEW-FIXES-A-AUDIT, 2026-10-03.)",
-        "weight": "med"
+        "weight": "med",
+        "status": "plan_audit_clean; tracker publication blocked; implementation not started",
+        "plan": "docs/superpowers/plans/2026-10-09-autotrade-fire-hygiene-plan.md",
+        "ticket_map": ".scratch/autotrade-fire-hygiene/map.md"
       },
       {
         "id": "BROKER-ERROR-CLASSIFY",
