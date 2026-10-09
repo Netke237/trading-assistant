@@ -99,3 +99,6 @@ zzz_*
 # Per-horizon tuner disk cache (STOCKS-HORIZON-T1 H8): signal series and gate
 # masks, recomputable from stored bars.
 backend/data/tuning_cache/
+# Per-horizon tuner run outputs (STOCKS-HORIZON-T1 H10): per-cell JSON with
+# trade lists, written by backend/scripts/tune_horizons.py --data.
+backend/data/tuning_runs/
