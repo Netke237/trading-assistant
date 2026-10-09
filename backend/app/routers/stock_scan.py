@@ -1740,6 +1740,13 @@ async def _execute_stock_scan_core(
     today: unlike options mode, stock-mode scans compute no rank/score
     deltas (StockScanResult carries no `deltas` field), so there is nothing
     here to compute against it yet."""
+    # STOCKS-HORIZON-T1 F1: the scheduled runner reaches this core without
+    # run_stock_scan's check, and a stored schedule can turn invalid later (a
+    # profile change raising min_confirmations past its variants). Refuse it
+    # here so the run is recorded as an error with the reason, not as a
+    # 0-candidate success. For run_stock_scan this repeats a check that has
+    # already passed, so its HTTP behaviour is unchanged.
+    _reject_unsupported_multi_variants(req)
     scan_id = new_rec_id()
     # Deliberately NOT hoisted to the module-level import at line 57 — tests
     # patch `app.data.universe_presets.expand_universe` (not
