@@ -43,7 +43,7 @@ def _fresh_state() -> dict:
         "entry_price": None,
         "stop_price": None,
         "target_price": None,
-        "last_event": None,       # entry | exit_target | exit_stop | reversal
+        "last_event": None,       # entry | exit_target | exit_stop | time_stop | reversal
         "last_event_at": None,
     }
 
@@ -167,10 +167,18 @@ class StrategyWatchStore:
 
     def add_watch(self, symbol: str, strategy_key: str,
                   params_override: dict | None = None,
-                  direction: str = "Bullish") -> dict:
+                  direction: str = "Bullish",
+                  params_horizon: str | None = None) -> dict:
+        """``params_horizon`` (a tuned horizon, STOCKS-HORIZON-T1 H7) picks the
+        parameter profile the watch evaluates with and its hold: the watch
+        stores ``hold_max_days = HOLD_MAX_DAYS[params_horizon]`` (None without
+        a horizon) and time-stops once armed that many days."""
+        from app.services.horizon_profiles import HOLD_MAX_DAYS
         symbol = symbol.strip().upper()
         if strategy_key not in VALID_STRATEGIES:
             raise ValueError(f"unknown strategy: {strategy_key}")
+        if params_horizon is not None and params_horizon not in HOLD_MAX_DAYS:
+            raise ValueError(f"unknown params horizon: {params_horizon}")
         with self._lock:
             for w in self._watches:
                 # Composites carry no strategy_key and can never duplicate a
@@ -187,6 +195,8 @@ class StrategyWatchStore:
                 "strategy_key": strategy_key,
                 "direction": direction,
                 "params_override": dict(params_override or {}),
+                "params_horizon": params_horizon,
+                "hold_max_days": HOLD_MAX_DAYS[params_horizon] if params_horizon is not None else None,
                 "enabled": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_state": _fresh_state(),
@@ -196,11 +206,13 @@ class StrategyWatchStore:
         return dict(entry)
 
     def add_watches_bulk(self, symbols: list[str], strategy_key: str,
-                         direction: str = "Bullish") -> list[dict]:
+                         direction: str = "Bullish",
+                         params_horizon: str | None = None) -> list[dict]:
         added: list[dict] = []
         for sym in symbols:
             try:
-                added.append(self.add_watch(sym, strategy_key, direction=direction))
+                added.append(self.add_watch(sym, strategy_key, direction=direction,
+                                            params_horizon=params_horizon))
             except ValueError:
                 continue  # skip duplicates / blanks
         return added

@@ -452,6 +452,7 @@ def _matched_strategy_signals(
         mean_reversion_bb_signal,
         mean_reversion_vwap_signal,
         mean_reversion_vwap_daily_signal,
+        SIGNAL_WINDOW_BARS,
     )
 
     matched: list[str] = []
@@ -472,8 +473,12 @@ def _matched_strategy_signals(
         if len(bars) < _MIN_STRATEGY_BARS:
             logger.debug("_matched_strategy_signals: skipping %s — insufficient bars (%d)", key, len(bars))
             continue
+        # STOCKS-HORIZON-T1 H1: a daily key gets the scan's SIGNAL_WINDOW_BARS
+        # window; the intraday VWAP keeps 120 bars (its anchored VWAP spans the
+        # whole slice, so a longer one would move every reading).
+        window = 120 if _strategy_bar_type(key, interval) == "intraday" else SIGNAL_WINDOW_BARS
         for i in range(len(bars) - _MR_STRATEGY_LOOKBACK, len(bars)):
-            slice_bars = bars[max(0, i - 119): i + 1]
+            slice_bars = bars[max(0, i - window + 1): i + 1]
             try:
                 if call(slice_bars) is not None:
                     matched.append(key)

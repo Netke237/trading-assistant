@@ -208,8 +208,10 @@ def test_params_json_validation_error_exits(mod, fixture_db, monkeypatch, capsys
 def test_params_json_overlays_request_defaults(mod, monkeypatch):
     merged, layers = mod.build_params({"pullback_trend_ema": 120})
     assert merged["trend_ema"] == 120 and layers["trend_ema"] == "request"
-    # A partial overlay cannot let active's ema_period back in.
-    assert merged["ema_period"] == 50 and layers["ema_period"] == "request"
+    # STOCKS-HORIZON-T1 H4: request strategy fields default to None, so a
+    # field the overlay omits takes the YAML profile (bearish baseline 35),
+    # not the old schema default 50.
+    assert merged["ema_period"] == 35 and layers["ema_period"] == "active"
 
 
 # ── read-only contract on the Postgres path ──────────────────────────────────
