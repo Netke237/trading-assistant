@@ -105,3 +105,12 @@ Final code-stage tally: three completed independent rounds; one gate defect in
 R1, one in R2, both fixed; R3 zero. No outstanding gate findings. Plan-stage tally:
 two rounds, clean. Overall audit_rounds=5, audit_clean=true. PR #130 ready for
 review; merge requires user approval. D3 #114 operational execution is unrun.
+
+
+## Merge handoff
+
+PR #130 merged with user approval on 2026-10-09 at
+`aedb2f4227f7ced8d5014939a6e5b0e4f26ee527`; completed session files removed
+before merge. Local main fast-forwarded. Final pre-merge CI frontend/build/Jest
+and Playwright passed; backend 6,465 passed, 8 skipped, one unchanged commission
+fixture failure tracked in #129. D1/D2 complete; D3 #114 mini PC execution unrun.
