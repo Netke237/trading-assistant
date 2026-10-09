@@ -39,7 +39,7 @@ for _p in (REPO / "backend", REPO / "scripts"):
 from app.scoring.signal_confidence import evaluate_fire, load_backtest_cfg  # noqa: E402
 from app.scoring.stock_scorer import _atr, score_stock  # noqa: E402
 from evidence._bars import (  # noqa: E402
-    common_parser, emit, load_bars, loaded_range, report_header, stored_symbols,
+    common_parser, emit, load_bars, loaded_range, report_header, evidence_symbols,
 )
 
 WARMUP = 60            # compute_confidence's warm-up
@@ -267,11 +267,12 @@ def section(horizon: str, direction: str, stats: list[BucketStat],
 
 
 async def _main(args) -> str:
-    symbols = args.symbols or await stored_symbols()
+    symbols, excluded = await evidence_symbols(
+        args.symbols, include_excluded=args.include_excluded)
     bars = await load_bars(symbols, args.start, args.end)
     header = report_header(
         "Score calibration", symbols=symbols, start=args.start, end=args.end,
-        cost_model=COST_MODEL, loaded=loaded_range(bars),
+        cost_model=COST_MODEL, loaded=loaded_range(bars), excluded=excluded,
         extra={
             "Scoring mode": args.mode,
             "Replay": f"as compute_confidence: warm-up {WARMUP}, horizon history_years window",

@@ -23,6 +23,7 @@ if str(REPO / "backend") not in sys.path:
     sys.path.insert(0, str(REPO / "backend"))
 
 from app.data import confidence_cache  # noqa: E402
+from app.data.universe_exclusions import Exclusion, filter_symbols  # noqa: E402
 
 # T2 adds BARS_BASIS_VERSION; until it lands the header says the basis is unversioned.
 BARS_BASIS_VERSION = getattr(confidence_cache, "BARS_BASIS_VERSION", "unversioned")
@@ -67,6 +68,20 @@ async def stored_symbols(*, session_factory=None) -> list[str]:
             return sorted(r[0] for r in result.all())
         finally:
             await db.rollback()
+
+
+async def evidence_symbols(
+    requested: list[str] | None, *, include_excluded: bool = False, session_factory=None,
+) -> tuple[list[str], list[Exclusion]]:
+    """The symbols an evidence report reads: ``requested`` or every stored symbol, minus
+    both scopes of ``backend/config/universe_exclusions.yaml`` (``purpose="evidence"``).
+    ``include_excluded`` (the ``--include-excluded`` flag) skips the filter. Returns
+    ``(kept, excluded)``. ``bar_basis_check`` does not use this: it checks every symbol."""
+    symbols = list(requested) if requested else await stored_symbols(
+        session_factory=session_factory)
+    if include_excluded:
+        return symbols, []
+    return filter_symbols(symbols, purpose="evidence")
 
 
 async def load_basis_rows(
@@ -124,9 +139,15 @@ def report_header(
     loaded: tuple[str, str] | None = None,
     extra: dict[str, str] | None = None,
     now: datetime | None = None,
+    excluded: Iterable[Exclusion] = (),
 ) -> str:
     """Markdown header every harness report starts with."""
     symbols = list(symbols)
+    excluded = list(excluded)
+    excluded_shown = (
+        f"{len(excluded)} — " + ", ".join(f"{e.symbol} ({e.scope})" for e in excluded)
+        if excluded else "none"
+    )
     now = now or datetime.now(timezone.utc)
     shown = ", ".join(symbols) if len(symbols) <= 30 else (
         ", ".join(symbols[:30]) + f", ... ({len(symbols) - 30} more)"
@@ -137,6 +158,7 @@ def report_header(
         f"- Git commit: `{git_commit()}`",
         f"- Generated (UTC): {now.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
         f"- Symbols ({len(symbols)}): {shown or 'none'}",
+        f"- Excluded (universe_exclusions.yaml): {excluded_shown}",
         f"- Date range requested: {start} .. {end}",
         f"- Date range loaded: {f'{loaded[0]} .. {loaded[1]}' if loaded else 'no bars'}",
         f"- BARS_BASIS_VERSION: `{BARS_BASIS_VERSION}`",
@@ -164,6 +186,9 @@ def common_parser(description: str) -> argparse.ArgumentParser:
     )
     parser.add_argument("--symbols", nargs="+", default=None,
                         help="symbols to read (default: every symbol in ohlcv_daily)")
+    parser.add_argument("--include-excluded", action="store_true",
+                        help="keep symbols listed in backend/config/universe_exclusions.yaml "
+                             "(default: skip both scopes; bar_basis_check never skips)")
     parser.add_argument("--start", type=date.fromisoformat, default=date(1990, 1, 1),
                         help="first bar date, YYYY-MM-DD (default 1990-01-01)")
     parser.add_argument("--end", type=date.fromisoformat, default=date.today(),

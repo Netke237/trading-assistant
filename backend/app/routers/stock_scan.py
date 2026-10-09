@@ -99,6 +99,7 @@ from app.scoring.fundamentals_scorer import score_fundamentals as _score_fundame
 from app.schemas import FundamentalsOut
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 from app.data.universe_presets import expand_universe, PresetUnavailableError
+from app.data.universe_exclusions import Exclusion, ExclusionListError, filter_symbols
 
 
 class PreBreakoutScanRequest(BaseModel):
@@ -514,6 +515,9 @@ def classify_stock_rejection(reason: str) -> str:
         or reason.startswith("price $")
         # P3a item 12: no 15-min regime bars is a data drop, like no price.
         or reason.startswith(_REGIME_DATA_PREFIX)
+        # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from
+        # universe_exclusions.yaml, dropped before any per-symbol work.
+        or reason.startswith("Excluded (data):")
     ):
         return "failed_history"
     if reason.startswith("REJECT score="):
@@ -542,6 +546,19 @@ def classify_stock_rejection(reason: str) -> str:
     if reason.startswith(_SHORTLIST_REASON_PREFIX):
         return "failed_shortlist"
     return "other_rejected"
+
+
+def _drop_excluded_symbols(symbols: list[str], label: str) -> tuple[list[str], list[Exclusion]]:
+    """Split a scan's FINAL symbol list (presets expanded, typed tickers
+    included) into (kept, excluded) by universe_exclusions.yaml's `scope: scan`
+    entries (STOCKS-HORIZON-P0A A2). Called before any per-symbol work. A
+    broken list is a named 500, logged once here: it must not silently scan
+    everything."""
+    try:
+        return filter_symbols(symbols, purpose="scan")
+    except ExclusionListError as e:
+        logger.error("%s aborted: universe exclusion list unusable: %s", label, e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 _BACKTEST_CACHE: dict[str, tuple] = {}  # key → (BacktestResult, expires_at)
@@ -896,17 +913,25 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
             _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
             await set_cached(_ck, _cached, bars_generation=_bars_gen)
         conf_val = _cached["confidence"]
-        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+        _min_samples = int(load_backtest_cfg(req.horizon)["min_samples"])
+        conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                             min_samples=_min_samples)
+        _unvalidated = conf_val is None
         _below_reject = (conf_val is not None and req.confidence_reject_below is not None
                          and conf_val < req.confidence_reject_below)
         _below_caution = (conf_val is not None and req.confidence_caution_below is not None
                           and conf_val < req.confidence_caution_below)
         # Mirrors _process_stock's cap: CAUTION at most, never lowers a REJECT.
         # Applied below the reject threshold too (the scan drops the symbol
-        # there), so worse confidence can never read better than milder.
-        if (_below_reject or _below_caution) and card.status == "PASS":
+        # there), so worse confidence can never read better than milder. A
+        # missing confidence is Unvalidated and never PASSes (P0A A5).
+        if (_unvalidated or _below_reject or _below_caution) and card.status == "PASS":
             card = dataclasses.replace(card, status="CAUTION")
-        if _below_reject:
+        if _unvalidated:
+            gate_flags.append({"gate": "confidence", "status": "CAUTION",
+                               "detail": f"Unvalidated: {_cached['sample_size']} non-overlapping "
+                                         f"samples (< {_min_samples})"})
+        elif _below_reject:
             gate_flags.append({"gate": "confidence", "status": "REJECT",
                                "detail": f"{conf_val:.0f}% < {req.confidence_reject_below:.0f}%"})
         elif _below_caution:
@@ -1356,9 +1381,15 @@ async def _process_stock(
                 _cached = {"confidence": _res.confidence, "sample_size": _res.sample_size}
                 await set_cached(_ck, _cached, bars_generation=_bars_gen)
             conf_val = _cached["confidence"]
-            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol) if conf_val is not None else None
+            conf_txt = interpret(conf_val, sample_size=_cached["sample_size"], symbol=symbol,
+                                 min_samples=int(load_backtest_cfg(req.horizon)["min_samples"]))
 
             _SEVERITY = {"PASS": 0, "CAUTION": 1, "REJECT": 2}
+
+            # Missing confidence is Unvalidated: a PASS card becomes CAUTION
+            # (never lowers a REJECT) and the symbol is kept (P0A A5).
+            if conf_val is None and card.status == "PASS":
+                card = dataclasses.replace(card, status="CAUTION")
 
             if conf_val is not None and req.confidence_reject_below is not None:
                 if conf_val < req.confidence_reject_below:
@@ -1555,6 +1586,10 @@ async def _execute_stock_scan_core(
             symbols = expand_universe(req.universe)
         except PresetUnavailableError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    # Excluded symbols go into `rejected` below and count in `scanned` and
+    # `failed_history`, so scanned == sum of buckets still holds.
+    symbols, _excluded = _drop_excluded_symbols(symbols, f"STOCK SCAN {scan_id}")
+    _scanned = len(symbols) + len(_excluded)
 
     # Direction-conviction floor, validated BEFORE the batch quote call and the
     # SPY benchmark fetch below — a malformed threshold must not cost a
@@ -1649,6 +1684,8 @@ async def _execute_stock_scan_core(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     candidates, rejected = [], []
+    for _x in _excluded:
+        rejected.append({"symbol": _x.symbol, "reason": f"Excluded (data): {_x.reason}"})
     # gather keeps input order, so each raised exception is named by its symbol.
     for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
@@ -1708,11 +1745,11 @@ async def _execute_stock_scan_core(
         # gates remove the rest, and blaming "market structure" for that told
         # the user something the scan did not measure.
         _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
-        _rest = ("" if _dir_removed >= len(symbols)
+        _rest = ("" if _dir_removed >= _scanned
                  else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
             f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
-            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
+            f"removed {_dir_removed} of {_scanned}{_floor}{_rest}."
         )
     elif candidates and all(c.stock_status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -1724,7 +1761,7 @@ async def _execute_stock_scan_core(
         return classify_stock_rejection(r.get("reason", "") if isinstance(r, dict) else "")
 
     _pipeline = StockPipeline(
-        scanned=len(symbols),
+        scanned=_scanned,
         failed_history=sum(1 for r in rejected if _bucket(r) == "failed_history"),
         failed_score=sum(1 for r in rejected if _bucket(r) == "failed_score"),
         failed_signal=sum(1 for r in rejected if _bucket(r) == "failed_signal"),
@@ -1799,6 +1836,13 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
 
     if not symbols_to_scan:
         return []
+
+    # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
+    # skipped and named in one INFO line.
+    symbols_to_scan, _excluded = _drop_excluded_symbols(symbols_to_scan, "fib-pullback scan")
+    if _excluded:
+        logger.info("fib-pullback scan: skipped %d excluded symbol(s): %s",
+                    len(_excluded), ", ".join(x.symbol for x in _excluded))
 
     scan_params: dict = dict(_FIB_DEFAULTS)
     if body.params_override:
@@ -1925,6 +1969,13 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
 
     if not symbols_to_scan:
         return []
+
+    # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
+    # skipped and named in one INFO line.
+    symbols_to_scan, _excluded = _drop_excluded_symbols(symbols_to_scan, "prebreakout scan")
+    if _excluded:
+        logger.info("prebreakout scan: skipped %d excluded symbol(s): %s",
+                    len(_excluded), ", ".join(x.symbol for x in _excluded))
 
     base_params = get_active("breakout_setup", body.direction)
     if body.params_override:

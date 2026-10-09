@@ -31,7 +31,8 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 - Gate (paste into every auditor brief): a finding blocks only if it can put a **wrong number in front of a user or on a broker order**, or **corrupt persisted data**. A comment blocks only if it misstates mechanism (a competent reader acting on it would write a wrong change). Do not report anything else at all. Undecidable → not gate-level.
 - Only gate findings are fixed in-branch (by a fresh implementer). Everything else is logged against main.
 - Record each round in the phase entry: reviewer, exact diff range, findings, fixes, outstanding. Commit subjects for a round's record use `round N` (`state.py` counts them against `audit_rounds`); implementers never use `round N` in a subject.
-- Statuses: `not_started` → `in_progress` (built, auditing) → `shipped` only once merged with `audit_clean: true`.
+- Statuses: `not_started` → `in_progress` (implementation underway) → `built` (code exists, unmerged) → `shipped` only once merged with `audit_clean: true`. `built` applies whether the code audit is pending, has findings, or is clean; record that separately in `audit_rounds` / `audit_clean`. A clean audit does not mark an unmerged target shipped.
+- Presence probes check code existence, not merge or audit completion: `built`, `shipped`, and the legacy `shipped_unaudited` status expect the probe to confirm code exists. `not_started` and `in_progress` expect it not to confirm the completed target yet. A built target without `audit_clean: true` remains in the UNAUDITED warning, including under `--quiet`.
 
 ## Housekeeping
 

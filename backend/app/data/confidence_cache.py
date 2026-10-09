@@ -38,11 +38,13 @@ _TTL_SECONDS = 7 * 24 * 3600  # weekly
 # Basis version of the bar-derived values cached here, appended to every key so
 # a value computed on an older basis is never served (it simply misses and its
 # row expires under the TTL; no migration, no delete). Bump it whenever the bars
-# or the replay that produce a cached confidence change. It last moved to "b2"
+# or the replay that produce a cached confidence change. It moved to "b2"
 # for TRADING-REVIEW-PHASE-C: T1 (historical_store._read_bars scales open/high/
 # low by adj_factor like close) and T7 (the stock trigger honours
-# trigger.setup_window_bars). stock_scan._backtest_key carries the same token.
-BARS_BASIS_VERSION = "b2"
+# trigger.setup_window_bars); b3 for STOCKS-HORIZON-P0A A4: the confidence
+# replay counts non-overlapping fires. stock_scan._backtest_key carries the
+# same token.
+BARS_BASIS_VERSION = "b3"
 
 # L2 SQLite path — sits in backend/data/; overridable in tests via _DB_PATH.
 # BAMENDJOU_CONFIDENCE_CACHE_DB (when set and non-empty) replaces the default.

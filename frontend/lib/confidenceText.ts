@@ -17,6 +17,8 @@ export function confidenceTone(tier: ConfidenceTier): DataTone {
     case 'high':     return 'pass';
     case 'moderate': return 'caution';
     case 'low':      return 'reject';
-    default:         return 'dim';
+    // 'unknown' = Unvalidated: fewer than 20 non-overlapping setups. The
+    // backend caps such a card at CAUTION, so it reads in the caution tone.
+    default:         return 'caution';
   }
 }
