@@ -1,6 +1,6 @@
 # EXACT-STRIKE — plan r2 (2026-10-09)
 
-Status: PLAN r2 (round 1: 1 gate finding, R1-1, fixed here). Not audit-clean. Nothing here is built. Claim: `EXACT-STRIKE` on
+Status: PLAN r2. Plan stage CLOSED CLEAN at round 2 (round 1: 1 gate finding, R1-1, fixed in r2; round 2: zero). Nothing here is built; the code stage (cap 3 rounds) starts after the build. Claim: `EXACT-STRIKE` on
 `claude/intelligent-merkle-ba9f03`. Audit per `PROJECT_STATE.json` `audit_rule`
 (fresh independent gate-briefed adversarial reviewer per round, cap 3 rounds per
 stage).
@@ -275,3 +275,14 @@ drift; then the code audit stage (round 1 = whole integrated diff).
   fixes `ContractDetails.strike`, so the outcome holds; (e) an old
   `last_result_json` with strike 0 would fail the `Strike` validator on
   `/scan/last-run` reload (never observed from Tradier).
+- **Round 2** (fresh independent subagent, bmad-review-adversarial-general,
+  gate-briefed; scope: `git diff 646c6510..6cc3f005` of this file, the R1-1 fix
+  and its interactions): **CLEAN, zero gate findings.** Traced 182.5 from
+  `ContractDetails.strike` through `missingCardContracts`, `api.ts`
+  `strikes.join(',')`, `parse_strike_text`, `get_contracts` filtering and the
+  `withCardContract` id gate: exactly the 182.5 row; integer strikes unchanged.
+  Below gate, logged: (f) legacy saved-scan cards whose truncated id stood for
+  a fractional contract now rescue the exact integer row (consistent with the
+  order symbol; ES-4 AMBIGUOUS scope); (g) `step6CardContract.ts` lets strike 0
+  through its guard, the backend 422s it and the rescue is silently empty.
+- **Plan stage closed clean at round 2.**
