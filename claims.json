@@ -23,6 +23,14 @@
       "expires_at": "2026-10-10T02:09:15Z",
       "note": "Resume after restart: H1+H2 built (#134 closed, #135 verified), H3 next, then integrated code audit",
       "task": "AUTOTRADE-FIRE-HYGIENE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/relaxed-fermat-sm9xru",
+      "claimed_at": "2026-10-09T23:21:02Z",
+      "expires_at": "2026-10-10T02:21:02Z",
+      "note": "Integrate trade-card UI follow-up Options half (TC-UI-01..05, TC-UI-06 Options) into current main \u2014 Kenneth chose option A",
+      "task": "TICKET-38-TRADE-CARD-OPTIONS-INTEGRATION"
     }
   ]
 }
