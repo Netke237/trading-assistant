@@ -340,7 +340,8 @@ async def test_t4_multi_cache_miss_runs_the_rsi_proxy_backtest_in_both_legs(monk
     monkeypatch.setattr(ss, "_BACKTEST_POOL", None)        # default thread pool
     runs: list = []
 
-    def _spy_run(bars, *, strategy, direction, min_trades, min_win_rate, params, commission):
+    def _spy_run(bars, *, strategy, direction, min_trades, min_win_rate, params, commission,
+                 hold_max_days):
         runs.append({"strategy": strategy, "bars": bars, "params": params})
         return _bt(False)
     monkeypatch.setattr(ss, "run_strategy_backtest", _spy_run)

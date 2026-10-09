@@ -66,6 +66,7 @@ from app.services.strategy_engine import (
     SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
+from app.services.horizon_profiles import hold_for_backtest
 from app.services.strategy_param_store import get_active, get_costs, get_exit
 from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
@@ -706,7 +707,7 @@ async def restore_stock_from_db() -> None:
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None,
                    commission: float = 0.0, min_trades: int | None = None,
-                   min_win_rate: float | None = None) -> str:
+                   min_win_rate: float | None = None, hold_max_days: int | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
@@ -721,8 +722,9 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
     # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
     # hash (a hash of closes alone does not see a basis change in open/high/low).
+    # STOCKS-HORIZON-T1 H2: the time-exit hold too; it changes every trade's exit.
     return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
-            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}|hold={hold_max_days}")
 
 
 def _get_backtest_cached(key: str):
@@ -945,9 +947,10 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     conf_val = conf_txt = None
     if signal is not None:
         _bt_commission = _backtest_commission()
+        _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
         _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, _bt_bars, _bt_params,
                                  commission=_bt_commission, min_trades=req.bt_min_trades,
-                                 min_win_rate=req.bt_min_win_rate)
+                                 min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -955,7 +958,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=_bt_strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate, params=_bt_params,
-                                  commission=_bt_commission))
+                                  commission=_bt_commission, hold_max_days=_bt_hold))
             # A refresh that landed after this request read its bars has already
             # evicted the symbol: storing now would put the pre-refresh result back
             # for _BACKTEST_TTL. It is still this request's result (T6, HYG-P1-F2).
@@ -1432,9 +1435,10 @@ async def _process_stock(
                 _bt_params = signal_kwargs
 
             _bt_commission = _backtest_commission()
+            _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
             _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
                                      commission=_bt_commission, min_trades=req.bt_min_trades,
-                                     min_win_rate=req.bt_min_win_rate)
+                                     min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -1444,6 +1448,7 @@ async def _process_stock(
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
                         params=_bt_params, commission=_bt_commission,
+                        hold_max_days=_bt_hold,
                     ),
                 )
                 # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
