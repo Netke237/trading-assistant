@@ -1703,3 +1703,39 @@ def test_g2_round2_a_paired_continuous_round_stays_continuous(repo, subject):
     repo.commit(subject)
     assert _mod.audit_bookkeeping_drift(
         _staged(5, plan_stage={"rounds": 3, "closed_by": "SPLIT-H"})) is None
+
+
+# --- STATE-PER-STAGE-CAP round 3 finding H1 --------------------------------
+
+@pytest.mark.parametrize("plan_rounds, last", [
+    # H1: with the plan stage closed at 1 or 2, "round 3" minus the plan
+    # rounds equals the tagged code round, and pairing on that arithmetic
+    # alone read code round 3 as code round 2.
+    (1, "docs(state): H code round 2 fixed; round 3 NOT CLEAN -- cap reached"),
+    (1, "fix: H code round 2 fixes; code audit round 3 not clean"),
+    (1, "docs(state): H code round 2 fixed; code audit r3 not clean -- cap reached"),
+    (1, "H code round 2 - round 3 not clean"),
+    (2, "docs(state): H code round 1 fixed; round 3 NOT CLEAN"),
+])
+def test_h1_round3_only_side_by_side_numbers_pair(repo, plan_rounds, last):
+    for n in range(1, plan_rounds):
+        repo.commit(f"docs(state): H plan round {n}")
+    repo.commit(f"docs(state): H plan round {plan_rounds} clean")
+    repo.commit("docs(state): H code round 1 not clean")
+    repo.commit(last)
+    severity, message = _mod.audit_bookkeeping_drift(
+        _staged(plan_rounds + 3, plan_stage={"rounds": plan_rounds, "closed_by": "clean"}))
+    assert severity == "drift" and "code round 3" in message
+
+
+@pytest.mark.parametrize("subject", [
+    "docs(state): H round 2 (code round 1)",
+    "docs(state): H code round 2 (round 3)",
+    "docs(state): H code round 2 = round 3",
+    "H r3 [code r2]",
+])
+def test_h1_round3_side_by_side_numbers_still_pair_at_n1(repo, subject):
+    repo.commit("docs(state): H plan round 1 clean")
+    repo.commit(subject)
+    assert _mod.audit_bookkeeping_drift(
+        _staged(3, plan_stage={"rounds": 1, "closed_by": "clean"})) is None

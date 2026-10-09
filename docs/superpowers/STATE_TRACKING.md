@@ -111,10 +111,12 @@ a green "No drift".
     `"closed_by": "clean"` when a clean plan round closed it). The cap then
     reads the **code** stage's round and still fires at code round 3 not
     clean. A round `M` with no stage word of its own is read from its
-    subject: continuous only when it pairs with a `code round K` in the same
-    subject, `M - N == K` (`round 4 (code round 1)`); otherwise any `code` in
-    the subject makes it code round `M` (`round 3 (code)`, `code audit r3`,
-    `code round 2 fixed; round 3 not clean`); otherwise any `plan` makes it a
+    subject: continuous only when it is written side by side with a
+    `code round K` as one round — nothing but spaces, `(`, `[` or `=` between
+    them — and `M - N == K` (`round 4 (code round 1)`, `code round 2 =
+    round 5`); otherwise any `code` in the subject makes it code round `M`
+    (`round 3 (code)`, `code audit r3`, `code round 2 fixed; round 3 not
+    clean`, whatever `N` is); otherwise any `plan` makes it a
     plan round; otherwise it is continuous (`round M` → `M - N`). The field
     is **ignored** (cap counts from round 1, and the output says why) unless
     `N` is a whole number 1–3, `N` ≤ `audit_rounds`, `closed_by` is an id in

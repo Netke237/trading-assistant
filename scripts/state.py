@@ -697,6 +697,17 @@ def _clean_plan_round_re(n: int) -> re.Pattern:
     )
 
 
+# One round written with both its numbers side by side: "round 4 (code round
+# 1)" (m1, k1) or "code round 2 = round 5" (k2, m2). Only spaces, "(", "[" and
+# "=" may sit between them -- not ";", ",", a dash or a word, which is how a
+# subject moves on to a DIFFERENT round ("code round 2 fixed; round 3").
+_ROUND_WORD = r"(?:(?i:round)[\s#-]*|(?<![A-Za-z0-9])r)"
+_PAIR_RE = re.compile(
+    _ROUND_WORD + r"(?P<m1>\d+)[\s(\[=]*\b(?i:code)[\s-]+" + _ROUND_WORD + r"(?P<k1>\d+)(?!\d)"
+    r"|\b(?i:code)[\s-]+" + _ROUND_WORD + r"(?P<k2>\d+)[\s(\[=]*" + _ROUND_WORD + r"(?P<m2>\d+)(?!\d)"
+)
+
+
 def _staged_hits(subject: str, plan_rounds: int) -> list[tuple[int, str | None]]:
     """`_round_hits`, with a stage given to the rounds that carry no stage word
     of their own -- read only once a `plan_stage` holds, at `plan_rounds`.
@@ -707,26 +718,35 @@ def _staged_hits(subject: str, plan_rounds: int) -> list[tuple[int, str | None]]
     and reading those as continuous numbering put a code stage at its cap
     under "No drift". So an untagged round M is:
 
-      - CONTINUOUS (None) only when it PAIRS with a tagged "code round K" in
-        the same subject, M - plan_rounds == K: the record's form, "round 4
-        (code round 1)". Unpaired beside a tagged code round, it is a CODE
-        round M (round 2 finding G2: "code round 2 fixed; round 3 NOT CLEAN");
-      - otherwise a CODE round M when "code" appears anywhere in the subject;
+      - CONTINUOUS (None) only when it is written SIDE BY SIDE with a tagged
+        "code round K" as one round -- separated by nothing but spaces, "(",
+        "[" or "=" (`_PAIR_RE`) -- and M - plan_rounds == K: the record's form,
+        "round 4 (code round 1)", or "code round 2 = round 5";
+      - otherwise a CODE round M when "code" appears anywhere in the subject,
+        tagged code round beside it or not (round 2 finding G2, and round 3
+        finding H1: "code round 2 fixed; round 3 NOT CLEAN" is code round 3
+        whatever the plan stage's length -- pairing on the arithmetic alone
+        read it as code round 2 whenever the plan stage closed at round 1);
       - otherwise a PLAN round M when "plan" does ("docs(plan): X round 4");
       - otherwise CONTINUOUS.
 
     WHICH WAY EACH RULE ERRS. The code-word rules read M at face value, so a
     stray "code" ("round 4 records the code fixes") is a false alarm. The
-    pairing rule reads lower only when the subject states both numbers. The
-    plan-word rule and the last rule read lower, and silence a code round M
-    numbered from 1 in a subject naming no "code" -- the accepted cost
-    `_stage_round_max` states.
+    pairing rule reads lower only when the subject writes both numbers of one
+    round side by side. The plan-word rule and the last rule read lower, and
+    silence a code round M numbered from 1 in a subject naming no "code" --
+    the accepted cost `_stage_round_max` states.
     """
     hits = _round_hits(subject)
-    code_tags = {n for n, stage in hits if stage == "code"}
-    if code_tags:
-        inferred = "code"
-    elif _CODE_WORD_RE.search(subject):
+    paired = set()
+    for pair in _PAIR_RE.finditer(subject):
+        if pair["m1"]:
+            m, k = int(pair["m1"]), int(pair["k1"])
+        else:
+            m, k = int(pair["m2"]), int(pair["k2"])
+        if m - plan_rounds == k:
+            paired.add(m)
+    if _CODE_WORD_RE.search(subject):
         inferred = "code"
     elif _PLAN_WORD_RE.search(subject):
         inferred = "plan"
@@ -734,7 +754,7 @@ def _staged_hits(subject: str, plan_rounds: int) -> list[tuple[int, str | None]]
         inferred = None
     return [
         (n, stage) if stage
-        else (n, None) if n - plan_rounds in code_tags
+        else (n, None) if n in paired
         else (n, inferred)
         for n, stage in hits
     ]
