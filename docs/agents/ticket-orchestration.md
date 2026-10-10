@@ -34,6 +34,10 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 - Statuses: `not_started` → `in_progress` (implementation underway) → `built` (code exists, unmerged) → `shipped` only once merged with `audit_clean: true`. `built` applies whether the code audit is pending, has findings, or is clean; record that separately in `audit_rounds` / `audit_clean`. A clean audit does not mark an unmerged target shipped.
 - Presence probes check code existence, not merge or audit completion: `built`, `shipped`, and the legacy `shipped_unaudited` status expect the probe to confirm code exists. `not_started` and `in_progress` expect it not to confirm the completed target yet. A built target without `audit_clean: true` remains in the UNAUDITED warning, including under `--quiet`.
 
+## Source tag (Claude and Codex share one GitHub identity)
+
+Every tool authenticates as Kenneth's account, so GitHub shows the same author for all of them. Every issue body, issue comment, PR body and PR comment an agent writes **starts with its source tag**: `[claude]` or `[codex]` (add the role when useful, e.g. `[claude · coordinator]`, `[codex · implementer]`). An edit to a tracking issue's body adds a Log line with the tag. Untagged agent text is a housekeeping defect: tag it in the next update; do not rewrite history.
+
 ## Housekeeping
 
 - `python3 scripts/claim.py renew` every ~2h during the build loop (claims expire after 3h).
