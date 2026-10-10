@@ -50,14 +50,29 @@ Monte Carlo already exists for stocks: the Estimate button (`/api/stocks/first-p
   3. Fib swing high/low used for the retracement (for the fib detail and mini-chart lines).
 - The pre-trade checklist must not invent a rule: each line maps to an existing field or gate.
 
-## Open questions for the approval pass
+## Approval and build decisions (Kenneth, 2026-10-10)
 
-1. Mockup is light, like the Options proposal; production follows the app theme tokens (dark default). OK?
-2. "Looks for" wording per strategy (it repeats the Entry line).
-3. Approval of proposal 02 as the design to plan against.
+| # | Decision |
+|---|---|
+| D9 | Proposal 02 approved as is (incl. "Looks for"); real pages follow the app theme tokens |
+| D10 | Five phases, in order: P1 backend fields → P2 Position → P3 Backtest → P4 Strategy → P5 Pre-Breakout |
+| D11 | P1 reuses the audited `stock_scorer` evidence commit `08ce063c` (branch `codex/trade-card-qualification-presentation`) — one source of score factors |
+| D12 | Planning documents live on `main`; code on one feature branch per phase; merge only on Kenneth's go. Work continues from a cloud container |
 
-## Next steps after approval
+Recorded as decision `STOCK-PRESENTATION-2026-10-10` and backlog items `STOCK-PRES-P1…P5` in `PROJECT_STATE.json`. Umbrella tracking issue: **#144**.
 
-1. Reconcile with `codex/trade-card-qualification-presentation` (possible overlap on score components).
-2. Write the implementation plan → independent plan audit (repo `audit_rule`, 3-round cap) → tracking issue + tickets via k-ticket-coordinator.
-3. Build, integrated code audit, PR. No merge without Kenneth.
+## The path (per phase)
+
+1. Claim the phase id, cut branch `claude/stock-pres-pN-…` from `main`.
+2. Write the plan `docs/superpowers/plans/<date>-stock-pres-pN-plan.md`: tasks test-first, exact files, and **this phase's slice of the 66-row mapping as an acceptance checklist** (nothing removed, only approved NEW items).
+3. Plan audit: fresh gate auditor per round, cap 3 (`audit_rule`). Push the plan + audit record to `main`.
+4. Cut tickets under a new phase tracking issue (k-ticket-coordinator Start mode); link it from #144.
+5. Build loop, one fresh implementer per ticket, coordinator verifies.
+6. Coordinator checks the mapping slice item by item, then the code audit on `origin/main..branch` (cap 3), then a PR. Merge on Kenneth's go; tick the phase in #144.
+
+## Container notes
+
+- Needs `GH_TOKEN` (repo Issues + PRs read/write) — the coordinator stops without it.
+- Python 3.11 venv for backend tests (P1); frontend `npm ci` for typecheck/Jest.
+- `ticket-implementer` / `gate-auditor` agent types are absent in containers → the skill uses `general-purpose` with its briefs.
+- No browser in most containers → the visual check against `preview.html` is listed under "Needs Kenneth" in the phase issue.

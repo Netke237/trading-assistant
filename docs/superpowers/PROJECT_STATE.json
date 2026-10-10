@@ -1,6 +1,6 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
-  "updated": "2026-10-09",
+  "updated": "2026-10-10",
   "updated_by": "main: STATE-PER-STAGE-CAP merged (eca429ec).",
   "main": "STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": "main",
@@ -2466,6 +2466,11 @@
     }
   ],
   "decisions": [
+    {
+      "id": "STOCK-PRESENTATION-2026-10-10",
+      "q": "Stocks screener and Pre-Breakout do not look like the approved Options design (Kenneth 2026-10-10: \"that was not what I expected\"). STOCKS-STEP-MERGE-S2 excluded visual redesign; STOCK-DESIGN-GRILLING (claimed 2026-10-04) had produced nothing. What do we build, and how?",
+      "a": "Kenneth 2026-10-10, three grilling rounds + approval: build design proposal 02 (docs/superpowers/specs/2026-10-10-stock-presentation/preview.html, README.md D1-D11). All four pages (Strategy, Backtest, Position, Pre-Breakout) in the Options layout and parts; Pre-Breakout stays in place (no Position handoff until STOCKS-HORIZON-T4); no new calculations (Monte Carlo = existing /api/stocks/first-passage and /api/stocks/exit-plan, race included). NOTHING REMOVED: every item of the 66-row mapping stays on screen; Backtest Expand keeps the full card. NEW only as approved: Position scorecard factor rows, pre-trade checklist from existing gates only, Latest calculation strip, Sharpe; Backtest quick summary, Score/Confidence sort, summary strip; Strategy Market Sentiment strip, Looks-for line, after-scan count; Pre-Breakout confidence breakdown, why-it-is-a-setup inline, mini chart, Fib swing low/high; How-this-page-works + section links. Three additive backend fields (already computed, only sent). SPLIT into 5 phases per audit_rule batch size: P1 STOCK-PRES-P1-BACKEND-EVIDENCE (reuse audited stock_scorer evidence commit 08ce063c from codex/trade-card-qualification-presentation), P2 POSITION, P3 BACKTEST, P4 STRATEGY, P5 PREBREAKOUT; each: plan -> plan audit (cap 3) -> tickets under its own tracking issue -> build -> code audit (cap 3) -> PR, merge only on Kenneth go. Planning docs go to main; code on feature branches. Work continues from a cloud container. Umbrella tracking issue #144."
+    },
     {
       "id": "DOCC-2-DUPLICATE-PORT-RELATIONS-2026-09-29",
       "q": "DOCC-2 was built twice; main already has DOCC-2-OPTIONS-REGIME-FAIL-OPEN. Port the FAIL-CLOSED branch's extra relation checks onto main, or drop them?",
@@ -5365,6 +5370,73 @@
           "docs/adr/0001-stocks-parameters-per-horizon.md"
         ],
         "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery."
+      },
+      {
+        "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
+        "owner": "agent",
+        "status": "not_started",
+        "depends_on": [],
+        "covers": [
+          "decision STOCK-PRESENTATION-2026-10-10",
+          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+          "tracking issue #144"
+        ],
+        "summary": "Additive backend fields only, no calculation change: stock score factors on /api stock scan candidates (reuse audited stock_scorer evidence commit 08ce063c), Pre-Breakout confidence sub-scores, Fib swing low/high; frontend types."
+      },
+      {
+        "id": "STOCK-PRES-P2-POSITION",
+        "owner": "agent",
+        "status": "not_started",
+        "depends_on": [
+          "STOCK-PRES-P1-BACKEND-EVIDENCE"
+        ],
+        "covers": [
+          "decision STOCK-PRESENTATION-2026-10-10",
+          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+          "tracking issue #144"
+        ],
+        "summary": "Position page + StockPositionCard in the Options layout per proposal 02; every mapped item kept; approved NEW items only."
+      },
+      {
+        "id": "STOCK-PRES-P3-BACKTEST",
+        "owner": "agent",
+        "status": "not_started",
+        "depends_on": [
+          "STOCK-PRES-P1-BACKEND-EVIDENCE",
+          "STOCK-PRES-P2-POSITION"
+        ],
+        "covers": [
+          "decision STOCK-PRESENTATION-2026-10-10",
+          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+          "tracking issue #144"
+        ],
+        "summary": "Backtest page: summary strip, Score/Confidence sort, quick summary above the kept full-card Expand; all 17 columns kept."
+      },
+      {
+        "id": "STOCK-PRES-P4-STRATEGY",
+        "owner": "agent",
+        "status": "not_started",
+        "depends_on": [],
+        "covers": [
+          "decision STOCK-PRESENTATION-2026-10-10",
+          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+          "tracking issue #144"
+        ],
+        "summary": "Strategy page in the Options layout: Market Sentiment strip, Looks-for line, after-scan count; picker, params, run and pre-warm unchanged."
+      },
+      {
+        "id": "STOCK-PRES-P5-PREBREAKOUT",
+        "owner": "agent",
+        "status": "not_started",
+        "depends_on": [
+          "STOCK-PRES-P1-BACKEND-EVIDENCE"
+        ],
+        "covers": [
+          "decision STOCK-PRESENTATION-2026-10-10",
+          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+          "tracking issue #144"
+        ],
+        "summary": "Pre-Breakout page layout; row details (why it is a setup, confidence breakdown, mini chart, fib swing); three tables and all controls kept."
       }
     ]
   },
