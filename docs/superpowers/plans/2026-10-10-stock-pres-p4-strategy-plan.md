@@ -289,3 +289,26 @@ No fetch, no store write, no change to `MarketSentiment`.
 3. Visual check against `preview.html` at 1280 / 1440 / 1920, light + dark: no browser in this container
    → listed under "Needs Kenneth" on #149 unless a headless run is possible (`run` skill).
 4. `git merge origin/main`, re-run 2, then code audit round 1 on `origin/main..HEAD`.
+
+## Code round 1 fix (P4-C1) — Task 1 follow-up, one fresh implementer
+
+**Finding:** two Step 1 mounts can overlap: fetch A (slow) starts, the user leaves Step 1 mid-fetch, returns,
+fetch B starts and answers first; A answers last and its `.then` overwrites `regimeSentiment` with the older
+reading, so the Strategy strip shows numbers Step 1 no longer shows. The comment in `fetchRegime` ("never
+older than the latest request") misstates this.
+
+**Change (`frontend/app/(frame)/screener/step-1-regime/page.tsx` only, plus its test):** a module-level
+request counter — it must outlive the component, so not a ref: `let regimeSentimentRequestSeq = 0;`. In
+`fetchRegime`: `const seq = ++regimeSentimentRequestSeq;` before `setRegimeSentiment(null)`; in `.then` and
+`.catch`, call `setRegimeSentiment(...)` **only when `seq === regimeSentimentRequestSeq`**. Nothing else in
+the callbacks changes (`setRegimeData`, `setRegime`, `setRegimeDirection`, `setCombinedRegime`,
+`setOffline`, `setRegimeFetchFailed` keep their current unguarded behaviour — guarding them is outside this
+phase). Correct the comment to say the latest request wins.
+
+**Test first** (add to `step-1-regime/__tests__/regimeSentimentWrite.test.tsx`): two deferred `getRegime`
+promises A then B; render (A starts), `unmount()`, render again (B starts), resolve B with reading B, then
+resolve A with reading A → store holds B's sentiment; and the same with A **rejecting** last → store still
+holds B (an older failure must not clear a newer reading). Must fail before the change.
+
+**Commit:** `fix(step1): only the latest regime request writes the shared sentiment`
+
