@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/priceless-jennings-995ab7",
-      "claimed_at": "2026-10-09T20:12:30Z",
-      "expires_at": "2026-10-10T01:10:36Z",
-      "note": "Continue authorized NLQ scoped audits and integration",
-      "task": "NO-LIVE-QUOTE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/stock-presentation-design",
       "claimed_at": "2026-10-09T22:44:30Z",
       "expires_at": "2026-10-10T02:28:20Z",
@@ -23,14 +15,6 @@
       "expires_at": "2026-10-10T02:09:15Z",
       "note": "Resume after restart: H1+H2 built (#134 closed, #135 verified), H3 next, then integrated code audit",
       "task": "AUTOTRADE-FIRE-HYGIENE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/relaxed-fermat-sm9xru",
-      "claimed_at": "2026-10-09T23:24:32Z",
-      "expires_at": "2026-10-10T02:37:25Z",
-      "note": "Backlog ticket 26: reproduce/isolate flaky tests on current main (evidence; fixes only if evidence supports)",
-      "task": "TICKET-26-FLAKY-TESTS"
     },
     {
       "agent": "claude",
