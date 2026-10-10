@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/state-ledger-recon-2026-10-10-362eaf48",
-      "claimed_at": "2026-10-10T20:15:40Z",
-      "expires_at": "2026-10-10T23:27:36Z",
-      "note": "Board #159: PROJECT_STATE ledger reconciliation (docs only)",
-      "task": "STATE-LEDGER-RECON-2026-10-10"
-    },
-    {
-      "agent": "claude",
       "branch": "board/screen-labels-19-20-dba12b5f",
       "claimed_at": "2026-10-10T20:16:42Z",
       "expires_at": "2026-10-10T23:18:23Z",
