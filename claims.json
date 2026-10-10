@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/numeric-api-inputs-54c0ddc4",
       "claimed_at": "2026-10-10T19:28:10Z",
-      "expires_at": "2026-10-11T01:23:56Z",
+      "expires_at": "2026-10-11T01:31:12Z",
       "note": "Board #164: reject NaN/Infinity at the API boundary",
       "task": "NUMERIC-API-INPUTS"
     },
