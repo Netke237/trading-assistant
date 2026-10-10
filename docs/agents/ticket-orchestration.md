@@ -5,14 +5,14 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 ## Who does what
 
 - **Coordinator** = the session Kenneth is talking to. Only it edits `docs/superpowers/PROJECT_STATE.json`, the tracking issue, and runs audits.
-- **Implementer** = the `ticket-implementer` agent type where installed (user level), else `general-purpose` with the skill's implementer brief; one fresh subagent per ticket.
-- **Gate auditor** = the `gate-auditor` agent type where installed, else `general-purpose` with the skill's auditor brief; one fresh subagent per audit round, applying `.claude/skills/bmad-review-adversarial-general/SKILL.md`.
+- **Implementer** = the `ticket-implementer` agent type where installed (user level), else `general-purpose` with the implementer brief (skill `templates.md`, or the repo copy `docs/agents/agent-briefs.md`); one fresh subagent per ticket.
+- **Gate auditor** = the `gate-auditor` agent type where installed, else `general-purpose` with the auditor brief (skill `templates.md`, or `docs/agents/agent-briefs.md`); one fresh subagent per audit round, applying `.claude/skills/bmad-review-adversarial-general/SKILL.md`.
 
 ## Units
 
 - **Phase** (a `phases[]` entry in `PROJECT_STATE.json`, e.g. `STOCKS-STEP-MERGE-S1`) = the claim, the branch, the **audit target**, the round counter.
 - **Ticket** (a GitHub child issue) = one plan task = one build unit. Tickets are never audit targets.
-- One tracking issue per phase.
+- One tracking issue per phase. When the phase is a **board item** (`docs/agents/board.md`), the board item issue *is* that tracking issue: do not create another; START mode cuts the tickets as its sub-issues and records Tickets / Audit / Needs Kenneth / Log as **comments** on the item, never body edits (only the `**Branch:**` value changes). For board items, `board.md` wins on branches, claims, ownership, labels and tracking.
 
 ## Commands
 
@@ -22,7 +22,7 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 | Frontend tests | `cd frontend && npm run test` |
 | Backend tests | `cd backend && pytest` (Python **3.11** only — see `CLAUDE.md` "Backend runtime") |
 | State check | `python3 scripts/state.py` (on Windows: `python scripts/state.py`; `python3` there is the Microsoft Store stub) |
-| Claim | `python3 scripts/claim.py take|renew|release <ID>` (same Windows note) |
+| Claim | `python3 scripts/claim.py take <ID>` · `renew` (no id; renews this branch's claims) · `release <ID>` · `list` (same Windows note). Exit 1 = held by another branch; exit 2 = git/push failure → stop |
 
 ## Audit (from `PROJECT_STATE.json` → `audit_rule`)
 
