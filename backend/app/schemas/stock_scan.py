@@ -9,6 +9,10 @@ Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_revers
 
 
 class StockScanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422. Inherited by
+    # StockAnalysisRequest (pydantic merges a parent's config into a subclass).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     symbols:     Optional[list[str]] = None   # when set, scan only these tickers
     direction:   Literal["Bullish", "Bearish"]

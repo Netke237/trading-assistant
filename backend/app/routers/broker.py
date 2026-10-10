@@ -9,7 +9,7 @@ import uuid
 import logging
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.data.ibkr_paper import BrokerOrder
 from app.data.option_symbol import option_right
@@ -225,6 +225,9 @@ def _raise_if_awaiting_confirmation(result, rec_id: str, kind: str, symbol: str)
 
 
 class StockOrderRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: gt=0 alone accepts +inf; the limit must be finite.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     broker: BrokerKey
     symbol: str
     action: Literal["BUY", "SELL"]
@@ -245,6 +248,9 @@ class StockOrderRequest(BaseModel):
 
 
 class OptionOrderRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: gt=0 alone accepts +inf; the limit must be finite.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     broker: BrokerKey
     symbol: str
     option_symbol: str
