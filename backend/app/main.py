@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.request_guards import NonFiniteJsonGuard
 from app.routers.health import router as health_router
 
 from app.routers.watchlist          import router as watchlist_router
@@ -377,6 +378,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_exception_handler(RequestValidationError, request_validation_handler)
+
+    # NUMERIC-API-INPUTS T1: refuse NaN/Infinity/overflowing JSON numbers with a
+    # 422 before any endpoint runs. Added BEFORE CORSMiddleware on purpose:
+    # Starlette makes the last-added middleware outermost, so CORS wraps the
+    # guard and its 422 carries the CORS headers.
+    app.add_middleware(NonFiniteJsonGuard)
 
     app.add_middleware(
         CORSMiddleware,

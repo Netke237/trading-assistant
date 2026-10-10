@@ -7,11 +7,11 @@ from typing import Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas import (
     OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
-    FinalStopOut,
+    FinalStopIn,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     ContractExplanation,
 )
@@ -416,6 +416,9 @@ async def get_stock_quote(
 
 
 class RecomputePlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol: str
     direction: Literal["Bullish", "Bearish"]
     stock_price: float = Field(..., gt=0)
@@ -449,7 +452,9 @@ class RecomputePlanRequest(BaseModel):
     # round-tripped so a contract override cannot move it. See the endpoint
     # body for why this is echoed rather than re-derived. None = the card has
     # none, and the flat percentage applies.
-    final_stop: FinalStopOut | None = None
+    # FinalStopIn, the request-only subclass (NUMERIC-API-INPUTS T2): the
+    # response's TradeExit.finalStop stays FinalStopOut and serialises it as one.
+    final_stop: FinalStopIn | None = None
     # NO-LIVE-QUOTE (plan 3e): False when the premium/spread above did not come
     # from a live quote (the entry plan then reads CAUTION, "no live quote --
     # entry priced off the last close"). None = not stated: today's behaviour.
@@ -640,6 +645,9 @@ def _stop_cost_out(cost) -> Optional[StopCostOut]:
 
 
 class StructuralStopRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     stock_price: float = Field(..., gt=0)
@@ -755,6 +763,9 @@ async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
 
 
 class FirstPassageRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:             str
     direction:          Literal["Bullish", "Bearish"]
     stock_price:        float = Field(..., gt=0)
@@ -1025,6 +1036,9 @@ def _race_out(race: Optional[BarrierRaceResult]) -> Optional[BarrierRaceOut]:
 
 
 class ExitPlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     target_r_multiple: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]

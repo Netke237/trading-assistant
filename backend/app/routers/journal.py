@@ -36,6 +36,9 @@ _TRADE_ONLY_FIELDS = (
 # ── Pydantic request/response models ─────────────────────────────────────────
 
 class JournalEntryCreate(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float here is persisted; finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     # Literal, not `str` — a plain `str` let any value (e.g. 'garbage') fall
     # through both branches of the model_validator below with ZERO validation
     # applied, silently accepting a trade payload's full field set under a
