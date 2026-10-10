@@ -42,7 +42,7 @@ from app.schemas.stock_scan import (
 )
 from app.data.sector_map import sector_for_symbol
 from app.routers.regime import _ema as _regime_ema, compute_overall_regime
-from app.schemas import SentimentData, ScanSessionStatus
+from app.schemas import SentimentData, ScanSessionStatus, StockExplanation
 from app.data.market import (
     fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles,
     completed_intraday_bars,
@@ -275,6 +275,21 @@ def _scan_drop_flag(gate: str, drop: dict) -> dict:
     """The Analysis gate flag for a filter the scan drops on: REJECT, the
     scan's own reason behind a fixed prefix."""
     return {"gate": gate, "status": "REJECT", "detail": f"{_SCAN_DROP_PREFIX}{drop['reason']}"}
+
+
+def _stock_explanation_out(symbol: str, card) -> StockExplanation | None:
+    """STOCK-PRES-P1: the scorer's own evidence, validated for the wire. A
+    failed validation is logged and sent as None -- never drops the candidate.
+    getattr: a card without the attribute (a test double) is "no evidence",
+    not an exception that would drop the symbol from the scan."""
+    explanation = getattr(card, "explanation", None)
+    if explanation is None:
+        return None
+    try:
+        return StockExplanation.model_validate(explanation)
+    except ValidationError:
+        logger.warning("stock scan: %s score evidence failed validation; sent without it", symbol)
+        return None
 
 
 def _intraday_history_drop(symbol: str, strategy: str, intraday_bars: list[dict]) -> dict | None:
@@ -1662,6 +1677,7 @@ async def _process_stock(
                 ) if _fh else None,
                 params_horizon=_params_horizon(req),
                 params_source=_params_source(req),
+                stock_explanation=_stock_explanation_out(symbol, card),
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
