@@ -242,7 +242,15 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
   `useScanStore.setState({ stockScanFeedback: { error: 'Scan failed — x', notice: 'n' } })`, and "View
   Backtest results" when `stockScanResult` is set. The 7 strategy cards and "Parameters" are **not**
   inside it.
-- Existing `step-4-stocks/__tests__/*` stay green **without edits**.
+- Existing `step-4-stocks/__tests__/*` stay green **without edits — with one exception** (build-time amendment,
+  2026-10-10, implementer-reported plan defect): `__tests__/readableScanError.test.tsx` T5's last assertion
+  sweeps the **whole page** for `/could not|failed|Error|API \//i` after a clean success; the approved
+  How-this-page-works text ("…a failed scan stays here with its reason.") is always in the DOM (a closed
+  `<details>` keeps its text), so that sweep would match it. Scope only that assertion to the side column,
+  where the scan feedback now lives: `expect(within(screen.getByRole('complementary', { name: 'Scan actions'
+  })).queryByText(/could not|failed|Error|API \//i)).toBeNull();` (import `within`). No other assertion in
+  that file changes; T5's intent — no failure text survives a clean success — is unchanged. Test-only; no app
+  behaviour or approved wording changes.
 
 **Commit:** `feat(step4-stocks): Strategy page in the Options layout — how-to, Looks for, after-scan count`
 
