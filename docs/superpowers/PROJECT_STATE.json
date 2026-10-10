@@ -2517,7 +2517,7 @@
       "id": "NUMERIC-API-INPUTS",
       "name": "Reject NaN/Infinity at the API boundary: JSON guard for untyped payloads, allow_inf_nan=False on the request models, route-wide ratchet test",
       "status": "built",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2532,7 +2532,7 @@
         "pattern": "class NonFiniteJsonGuard",
         "note": "PRESENCE ONLY: the T1 JSON boundary guard exists. Behaviour is pinned by the T1-T3 tests."
       },
-      "note": "2026-10-10 board #164: BUILT on board/numeric-api-inputs-54c0ddc4 (T1 e42006a JSON guard #197, T2 a6fd5ea request models #198, T3 86f6b95 ratchet #199; full backend 7567 passed / 9 skipped / 0 failed on Python 3.11 before the main merge), NOT MERGED. Plan round 1 clean. origin/main merged before code round 1. Code audit pending.",
+      "note": "2026-10-10 board #164: BUILT on board/numeric-api-inputs-54c0ddc4 (T1 e42006a JSON guard #197, T2 a6fd5ea request models #198, T3 86f6b95 ratchet #199; full backend 7567 passed / 9 skipped / 0 failed on Python 3.11 before the main merge), NOT MERGED. Plan round 1 clean. origin/main merged before code round 1. Code round 1 (round 2 overall): 2 gate findings (F1 parse_int overflow, F2 ratchet nested-config walk); fixes pending.",
       "audit_history": [
         {
           "round": 1,
@@ -2548,6 +2548,23 @@
             "T3 'no allowlist' vs rr_ratios allowlist entry: moot once StockExitPlanRequest carries allow_inf_nan=False; the implementer adds the entry only if the leaf still shows."
           ],
           "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "git diff origin/main..d4e2f86a (merge-base = origin/main tip e765cf4f, verified by reviewer); an earlier round-1 attempt stopped on a usage limit before reporting and is not counted",
+          "findings": [
+            "F1 (gate): request_guards.py:103 hooks only parse_float; an integer literal of 309+ digits goes through parse_int, passes the guard, is persisted in untyped JSON columns (reproduced: PATCH /api/portfolio targets price 1e400 as an integer -> 200, stored, GET returns it, browser JSON.parse -> Infinity); docstring claims all overflowing numbers are refused",
+            "F2 (gate, comment/mechanism): test_request_finite_inventory.py:192 and docstring lines 15-17 carry a parent model's allow_inf_nan into nested models; pydantic does not, so a future nested float model without the config would pass the ratchet. Not live today (corrected walk: 0 accepting leaves)"
+          ],
+          "fixes": [],
+          "outstanding": [
+            "F1",
+            "F2"
+          ],
+          "clean": false
         }
       ],
       "plan_stage": {
