@@ -833,6 +833,8 @@ class _AnalyzeCore:
     gate_flags: list[dict]
     earnings_days: int | None = None
     earnings_veto: bool = False
+    # The hold passed to bt_result's backtest (hold_for_backtest; None = no hold).
+    bt_hold: int | None = None
 
 
 async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
@@ -1000,6 +1002,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
 
     # Backtest + confidence
     bt_result = None
+    _bt_hold = None
     conf_val = conf_txt = None
     if signal is not None:
         _bt_commission = _backtest_commission()
@@ -1097,6 +1100,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
         daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
         earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
+        bt_hold=_bt_hold,
     )
 
 
@@ -1252,7 +1256,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
             total_return_pct=round(bt.total_return_pct, 2),
             max_drawdown_pct=round(bt.max_drawdown_pct, 2), expectancy=bt.expectancy,
             sharpe=bt.sharpe, confidence=getattr(bt, 'confidence', None), passes_gate=bt.passes_gate,
-            summary_text=bt.summary_text)
+            summary_text=bt.summary_text, n_time_exits=bt.n_time_exits, hold_max_days=core.bt_hold)
 
     fundamentals_out = None
     if core.fundamentals is not None and not is_index:
@@ -1640,6 +1644,7 @@ async def _process_stock(
                     expectancy=bt_result.expectancy, sharpe=bt_result.sharpe,
                     confidence=bt_result.confidence, passes_gate=bt_result.passes_gate,
                     summary_text=bt_result.summary_text,
+                    n_time_exits=bt_result.n_time_exits, hold_max_days=_bt_hold,
                 ),
                 stock_score=card.score, stock_status=card.status, gate_flags=gate_flags,
                 shares=shares, dollar_risk=dollar_risk,

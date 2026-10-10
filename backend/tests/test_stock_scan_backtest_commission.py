@@ -28,6 +28,7 @@ def _fake_bt_result():
     bt.expectancy = 1.5
     bt.sharpe = 1.2
     bt.summary_text = "ok"
+    bt.n_time_exits = 0     # a real int: BacktestOut reads it (F2)
     return bt
 
 

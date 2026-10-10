@@ -256,6 +256,8 @@ export interface AnalysisBacktest {
   confidence: number | null;
   passes_gate: boolean;
   summary_text: string;
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
 
 export interface AnalysisSentiment {

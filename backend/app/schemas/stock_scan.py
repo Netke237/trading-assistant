@@ -141,6 +141,12 @@ class BacktestOut(BaseModel):
     confidence:       Optional[int]
     passes_gate:      bool
     summary_text:     str
+    # STOCKS-T1-FOLLOWUPS F2: trades the backtest closed on time (held the
+    # hold, neither stop nor target), and the hold it ran with. A new result
+    # always carries n_time_exits as an int; None = unknown (a row saved
+    # before these fields). hold_max_days None with an int count = no hold.
+    n_time_exits:     Optional[int] = None
+    hold_max_days:    Optional[int] = None
 
 
 class PositionCardOut(BaseModel):

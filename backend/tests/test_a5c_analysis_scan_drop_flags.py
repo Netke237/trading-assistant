@@ -56,7 +56,8 @@ class _Card:
 def _bt(passes: bool, summary: str = "38% win over 12 trades"):
     return types.SimpleNamespace(passes_gate=passes, summary_text=summary, n_trades=12,
                                  win_rate=0.38, total_return_pct=1.0, max_drawdown_pct=-2.0,
-                                 expectancy=0.1, sharpe=0.5, confidence=None)
+                                 expectancy=0.1, sharpe=0.5, confidence=None,
+                                 n_time_exits=0)
 
 
 def _offline(monkeypatch, *, conviction: int = 10, trend: int = 60, card_status: str = "PASS",
