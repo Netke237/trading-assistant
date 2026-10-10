@@ -7,6 +7,14 @@
       "expires_at": "2026-10-10T12:49:38Z",
       "note": "Board #146: P1 backend evidence fields (score factors, Pre-Breakout sub-scores, Fib swing)",
       "task": "STOCK-PRES-P1-BACKEND-EVIDENCE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/board-reconciliation",
+      "claimed_at": "2026-10-10T09:51:31Z",
+      "expires_at": "2026-10-10T12:51:31Z",
+      "note": "Board = single source of truth: migrate roadmap #105, markdown tickets 01-38 and open packages into Board #151",
+      "task": "BOARD-RECONCILIATION"
     }
   ]
 }
