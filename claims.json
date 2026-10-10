@@ -20,7 +20,7 @@
       "agent": "codex",
       "branch": "board/autotrade-fire-hygiene-merge-822b11ca",
       "claimed_at": "2026-10-10T20:57:28Z",
-      "expires_at": "2026-10-10T23:57:30Z",
+      "expires_at": "2026-10-11T00:29:20Z",
       "note": "User-approved merge of board #133, PR #201; integration pending",
       "task": "AUTOTRADE-FIRE-HYGIENE"
     },
