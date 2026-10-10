@@ -2586,7 +2586,7 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2602,7 +2602,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: inventory done (17 market.py sites + sectors, daily-risk quote, stream session, two probes, paper orders; only the fire gate used the governor; no 429 handling anywhere). Plan written; plan round 1: 2 gate findings fixed in the plan; plan round 2 pending. MERGE NEEDS KENNETH'S OK ON THE PROJECTED SCAN SLOWDOWN (TG-1).",
+      "note": "2026-10-10 board #169: inventory done (17 market.py sites + sectors, daily-risk quote, stream session, two probes, paper orders; only the fire gate used the governor; no 429 handling anywhere). Plan written; plan round 1: 2 gate findings fixed; plan round 2: 1 gate finding fixed; plan round 3 (cap) pending. MERGE NEEDS KENNETH'S OK ON THE PROJECTED SCAN SLOWDOWN (TG-1).",
       "audit_history": [
         {
           "round": 1,
@@ -2616,13 +2616,26 @@
           ],
           "fixes": "plan revised: float admit_timeout separate from the HTTP timeout, per-site budgets, TokenBucket reserve=3 with priority admission (A11 always priority; fire-path regime fetch via market.tradier_priority() ContextVar), async helper timeout default httpx.USE_CLIENT_DEFAULT; new T1/T2/T3 tests",
           "outstanding": "none at the gate; round 2 reviews only these fixes"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewed": "git diff 41cde651..1071fbd5 -- the plan (round-1 fixes) and their interactions",
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-auditor brief",
+          "gate_findings": 1,
+          "findings": [
+            "R2-G1: the tradier_priority() wrap covered only _fetch_scan_window_bars; Intraday fires use _fetch_intraday_regime_bars -> fetch_intraday_candles (A2), which under load falls back to yfinance regular-session bars -> different compute_omm conviction -> different headwind verdict / vol-sized quantity on the broker order"
+          ],
+          "fixes": "plan revised: _measure_trade_regime submits _with_tradier_priority(_fetch_bars, symbol) so both branches run inside tradier_priority() in the worker thread; priority admit_timeout 2.0 (A11 0.5); two-branch T3 test",
+          "outstanding": "none at the gate; round 3 (last plan round under the cap) reviews only this fix"
         }
       ],
       "plan_stage": {
-        "rounds": 1
+        "rounds": 2
       },
       "decisions": [
-        "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI."
+        "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI.",
+        "2026-10-10 Kenneth (chat): 'ok Go ahead' on the round-1 status -- proceed to tickets and build once the plan audit is clean."
       ]
     }
   ],
