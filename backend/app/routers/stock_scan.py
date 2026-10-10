@@ -124,6 +124,10 @@ class PreBreakoutResult(BaseModel):
     confidence: int
     direction: str
     metrics: dict
+    # STOCK-PRES-P1: evidence behind `confidence` and the Fib swing low/high
+    # (None when Fib was not used). Send-only, mirrors the route's row dict.
+    confidence_breakdown: dict | None = None
+    fib_swing: dict | None = None
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -2022,8 +2026,8 @@ class FibPullbackScanRequest(BaseModel):
 
 @router.post("/scan/fib-pullback")
 async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
-    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_signal."""
-    from app.services.strategy_engine import fibonacci_pullback_signal
+    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_detail."""
+    from app.services.strategy_engine import fibonacci_pullback_detail
 
     end = date.today()
     start = end - timedelta(days=365)
@@ -2098,7 +2102,7 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         if not bars:
             continue
         try:
-            at_level, dist_pct, level_hit = fibonacci_pullback_signal(
+            fib = fibonacci_pullback_detail(
                 bars,
                 body.direction,
                 fib_swing_lookback=scan_params["fib_swing_lookback"],
@@ -2107,6 +2111,7 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                 impulse_min_pct=scan_params["impulse_min_pct"],
                 retracement_recency_bars=scan_params["retracement_recency_bars"],
             )
+            at_level, dist_pct, level_hit = fib["at_level"], fib["dist_pct"], fib["label"]
         except Exception as exc:
             logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)
             continue
@@ -2144,6 +2149,8 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
             "fib_dist_pct": dist_pct,
             "at_level": at_level,
             "confidence": confidence,
+            # STOCK-PRES-P1: the swing low/high the Fib levels were measured from.
+            "fib_swing": {"low": fib["swing_low"], "high": fib["swing_high"]},
         })
 
     # Sort: at-level hits first, then by proximity ascending (closer = better rank).
@@ -2226,6 +2233,9 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
             "confidence": signal.confidence,
             "direction": signal.direction,
             "metrics": signal.metrics,
+            # STOCK-PRES-P1: evidence behind `confidence` + Fib swing low/high.
+            "confidence_breakdown": signal.confidence_breakdown,
+            "fib_swing": signal.fib_swing,
         })
 
     results.sort(key=lambda r: r["confidence"], reverse=True)
