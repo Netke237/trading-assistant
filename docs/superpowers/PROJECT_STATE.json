@@ -2586,7 +2586,7 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "in_progress",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2602,7 +2602,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation, recorded here). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Plan round 4 (new stage round 1): 1 gate finding R4-G1, fixed in plan r5; round 5 next. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
       "audit_history": [
         {
           "round": 1,
@@ -2640,6 +2640,22 @@
           ],
           "fixes": "NONE APPLIED -- plan stage at its cap (3 rounds); per audit_rule the auditing stops and Kenneth decides",
           "outstanding": "R3-G1 unresolved. Underlying tension: deadline-bound callers (fire-path regime fetch, earnings lookups) cannot both wait for a limiter slot and stay inside their deadlines when other priority traffic competes. Proposed redesign posted on #169."
+        },
+        {
+          "round": 4,
+          "stage": "plan",
+          "stage_round": 1,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "plan r4 at a6a959c5 (whole plan, first round of the second plan stage opened by decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10), checked against the named code",
+          "findings": [
+            "R4-G1 (gate): the 10 s bulk sync admission budget turns waiting into the yfinance fallback under scan load (~1-12% of admissions with 5-10 contenders); fetch_candles caches the fallback for the day (market.py:224) so a later fire's regime fetch reads yfinance bars with no Tradier call (R3-G1 through the cache), and scan-card Intraday regimes change"
+          ],
+          "fixes": [
+            "plan r5: bulk sync admission waits without limit; the four on-loop sync callers move to asyncio.to_thread with an overdraft safety net + AST ratchet; D5 corrected; below-gate notes: site F uses the overdraft, D's text and the price-probe cooldown outcome corrected"
+          ],
+          "outstanding": [],
+          "clean": false
         }
       ],
       "plan_stage": {
