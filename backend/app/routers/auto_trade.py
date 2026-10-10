@@ -73,7 +73,11 @@ class ArmRequest(BaseModel):
     # the product's client sends (AutoTradeArm/index.tsx) is a declared field;
     # a stale bundle sending anything else now fails at ARM, before anything is
     # armed -- the same rollout cost `direction` and `horizon` below accepted.
-    model_config = ConfigDict(extra='forbid')
+    #
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float on this body is
+    # finite or a 422 -- including the strings "NaN" / "1e999" pydantic would
+    # otherwise coerce. The fields' own bounds below are unchanged.
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
