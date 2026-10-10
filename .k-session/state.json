@@ -4,7 +4,7 @@
   "branch": "claude/priceless-jennings-995ab7",
   "base": "main",
   "created_at": "2026-10-09T19:59:21+00:00",
-  "updated_at": "2026-10-09T22:21:53+00:00",
+  "updated_at": "2026-10-10T19:22:41+00:00",
   "saved_commit": "e92e8a30",
   "log": [
     {
@@ -75,12 +75,21 @@
       "event": "checkpoint",
       "commit": "e92e8a30",
       "note": "NO-LIVE-QUOTE NLQ-3 clean; NLQ-4 round 1 race fixes under review"
+    },
+    {
+      "at": "2026-10-10T19:19:14+00:00",
+      "agent": "claude",
+      "handle": "anon",
+      "location": "cloud",
+      "event": "resume",
+      "commit": "25c2570e",
+      "note": "took over from codex@anon/local"
     }
   ],
   "lock": {
-    "holder": "codex@anon/local",
-    "since": "2026-10-09T21:29:48+00:00",
-    "heartbeat_at": "2026-10-09T22:21:53+00:00"
+    "holder": "claude@anon/cloud",
+    "since": "2026-10-10T19:19:14+00:00",
+    "heartbeat_at": "2026-10-10T19:22:41+00:00"
   },
   "schema_version": 1,
   "tool_version": "1.0.0"

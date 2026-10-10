@@ -4,7 +4,7 @@
 Complete non-live option quote protections, then liquidity/DTE work in recorded merge order. Merges to main require separate approval.
 
 ## Status
-Recovered and continuation confirmed. NLQ-1/2/3 clean; NLQ-4 round 1 found two gate races, fixes under fresh round 2 review. Overall unfinished and not ready to merge.
+Resumed 2026-10-10 by a cloud board-worker session (Board item #119, Kenneth's go in chat) on branch `board/no-live-quote-99ba51f7`, cut from `claude/priceless-jennings-995ab7` @ 25c2570e. NLQ-1/2/3 clean; NLQ-3 reviewed bytes re-verified against the commit. NLQ-4 round 1's interrupted round-2 review had no verdict: a fresh NLQ-4 code round 2 (fixes + interactions only, exact scope = 845a8fea..25c2570e on page.tsx + tradeCardOverride.test.ts, plus the race regression cases) is running. Remaining coordinator work is tracked in #194. Overall unfinished and not ready to merge.
 
 ## Done
 - Existing branch and 27 interrupted worktree changes recovered; NO-LIVE-QUOTE claim renewed.
@@ -37,8 +37,9 @@ Normal Windows sandbox runtime fails setup refresh. Authorized require_escalated
 - Fresh independent gate reviewers; only wrong displayed/order numbers, persisted corruption or actionable mechanism falsehoods qualify.
 - Coordinator owns state/audit records and commits. Round 1 whole ticket; later rounds previous fixes/interactions only; cap 3 per approved scope.
 - Frontend CSS Modules; npm run typecheck before every commit.
-- Branch claude/priceless-jennings-995ab7; integrate with merges, never rebase/force-push shared work.
+- Branch board/no-live-quote-99ba51f7 (Board rule: every take on a new branch; the old claude/priceless-jennings-995ab7 is left as is); integrate with merges, never rebase/force-push shared work.
 - Checkpoint after meaningful steps; release before stopping. No secrets, personal information or absolute paths in this directory.
 
 ## Notes for the next agent
+Tracking: GitHub #119 (comments) and #194 (NLQ-5). Trial merge of origin/main: textual conflicts only in .gitignore and PROJECT_STATE.json; 8 files changed on both sides (governor.py, schemas/__init__.py, test_scan_schedule.py, portfolio EditDrawer + test, lib/api.ts, portfolioStore.ts, types/domain.ts) are in NLQ-5's integration scope. The cloud container has no Windows sandbox issue; Python 3.11 venv works.
 Repository and saved audit diffs/hashes are authoritative. Full backend suite is running; collect .scratch/no-live-quote/backend-full.log. Round 2 reviewer is in flight; do not claim frontend clean until its verdict and scope are verified.
