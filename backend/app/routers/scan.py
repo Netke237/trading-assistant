@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
+import re
 import concurrent.futures
 from datetime import datetime, timezone
 
@@ -213,6 +215,14 @@ _SHORTLIST_STATUS_ORDER: dict[str, int] = {"PASS": 0, "CAUTION": 1}
 # Reason prefix for candidates trimmed by the shortlist cap. The funnel's
 # `_is_shortlist` bucket and the frontend's scanLogTotals both match on it.
 _SHORTLIST_REASON_PREFIX = "Shortlist cap:"
+# NO-LIVE-QUOTE (plan 3f): the per-name reason _process_symbol writes when
+# EVERY contract of the name was rejected for no_live_quote and for nothing
+# else -- the "all contracts rejected" counter below names one reason with its
+# count and no "; best contract score" tail (that tail needs a contract with no
+# reject reason). validate_contract's reject mode short-circuits a non-live row
+# to exactly ["no_live_quote"], so a mixed chain never matches. Counted into
+# ScanResult.noLiveQuoteNames, which the scheduled-scan notice reads.
+_NO_LIVE_QUOTE_ONLY_REASON = re.compile(r"contracts rejected: no_live_quote\(\d+\)")
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
@@ -2137,6 +2147,11 @@ async def _execute_scan_core(
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
     )
+    # NO-LIVE-QUOTE (plan 3f): names whose every contract had no live quote.
+    # Not a funnel bucket -- those names stay under failed_contracts.
+    _no_live_quote_names = sum(
+        1 for r in rejected if _NO_LIVE_QUOTE_ONLY_REASON.fullmatch(r.reason)
+    )
     _log.info(
         "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d direction_unmeasured=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
         scan_id, _pipeline.scanned, _pipeline.failed_data, _pipeline.failed_pre_screen,
@@ -2201,8 +2216,115 @@ async def _execute_scan_core(
         contract_rules=_contract_rules,
         rr_overrides=_rr_overrides,
         request_context=_request_context,
+        noLiveQuoteNames=_no_live_quote_names,
     )
     return result
+
+
+# AUTOTRADE-FIRE-HYGIENE H1: run_scan's auto-fire runs
+# `auto_trader.maybe_fire_on_scan` here, and keeps the concurrent Future so a
+# cancelled request still records what the worker did (`_log_scan_fire_outcome`).
+# DEDICATED: not /fire's `_FIRE_EXECUTOR` and not the default pool the scan's
+# data fetches use. ONE worker, so a second manual scan's trigger QUEUES behind
+# the first; a queued call cancelled with its request never runs. The
+# AutoTrader lock and `expect`/identity checks stay the guards against /fire or
+# a re-arm racing it — this serialises scan triggers only. Non-daemon, joined at
+# interpreter exit like the default executor's.
+_SCAN_FIRE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="scan-auto-fire",
+)
+
+
+def _fired_order_fields(fired) -> str:
+    """The returned order's own identity, for a diagnostic. Selected fields
+    only, never a whole object. May raise: callers format it inside a guard."""
+    order, strategy = fired.result, fired.strategy
+    return (
+        f"symbol={strategy.symbol} option_symbol={strategy.option_symbol} "
+        f"broker={order.broker} order_id={order.order_id!r} "
+        f"status={order.status!r} attempt_id={fired.attempt_id}"
+    )
+
+
+def _log_scan_booking_unconfirmed(scan_id, fired) -> None:
+    """AUTOTRADE-FIRE-HYGIENE H2: POST /scan was cancelled WHILE
+    `book_fired_order` was awaited.
+
+    The writer may already have committed the position (it commits before the
+    audit record, history link and pages that follow), and a cancelled
+    coroutine does not roll that back — so this says neither booked nor NOT
+    booked, and asks for nothing to be added. Runs ONCE, on the loop, in
+    run_scan's handler just before the re-raise; nothing books again. MUST NOT
+    RAISE: it would replace the CancelledError.
+    """
+    head = "scan auto-trade: POST /scan was cancelled"
+    try:
+        _log.error("%s while the fired order was being booked (scan %s); "
+                   "booking confirmation unavailable; check broker and "
+                   "portfolio before acting: %s (status as the broker "
+                   "reported it)", head, scan_id, _fired_order_fields(fired))
+    except Exception as fmt_exc:
+        try:
+            _log.error("%s while the fired order was being booked (scan %s); "
+                       "booking confirmation unavailable; check broker and "
+                       "portfolio before acting (order not describable: %s)",
+                       head, scan_id, type(fmt_exc).__name__)
+        except Exception:
+            pass
+
+
+def _log_scan_fire_outcome(scan_id, cf: concurrent.futures.Future) -> None:
+    """Record the outcome of a `maybe_fire_on_scan` whose POST /scan was cancelled.
+
+    Runs as a `concurrent.futures` done-callback — in the worker thread when
+    the call finishes, or at once if it already has — so it is written even
+    while shutdown is cancelling every task. Writes ONE log line and nothing
+    else: no portfolio, risk or history row. Booking never started on this
+    path; the request's session is gone. MUST NOT RAISE (`add_done_callback`
+    would swallow it and lose the line): `cancelled()` first, `exception()`
+    before `result()`, and every field is formatted inside the guard. Logs
+    selected fields only, never a whole object (an adapter config may ride
+    along on one).
+    """
+    head = "scan auto-trade: POST /scan was cancelled"
+    try:
+        if cf.cancelled():
+            _log.warning("%s before maybe_fire_on_scan ran (scan %s); nothing "
+                         "was dispatched", head, scan_id)
+            return
+        exc = cf.exception()
+        if exc is not None:
+            detail = f"{type(exc).__name__}: {exc}"
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); it raised "
+                       "%s. Whether an order reached the broker is unknown and "
+                       "this scan booked nothing; check the broker and "
+                       "portfolio before acting", head, scan_id, detail)
+            return
+        fired = cf.result()
+        if fired is None:
+            # Not armed, stale or refused: the service's own diagnostics for
+            # that exit are authoritative, so this does not restate them.
+            _log.warning("%s while maybe_fire_on_scan ran (scan %s); it "
+                         "returned no order, so there was nothing to book",
+                         head, scan_id)
+            return
+        # The ORDER THE WORKER RETURNED — never the armed slot, which a re-arm
+        # may have replaced. Status is the broker's word, not interpreted: a
+        # rejected order is logged as rejected, not as a position.
+        fields = _fired_order_fields(fired)
+        _log.error("%s while maybe_fire_on_scan ran (scan %s); the broker "
+                   "returned an order outcome and booking never started, so "
+                   "it was NOT booked: %s (status as the broker reported it). "
+                   "Check the broker and portfolio before acting",
+                   head, scan_id, fields)
+    except Exception as fmt_exc:
+        try:
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); its outcome "
+                       "could not be described (%s) and was NOT booked; check "
+                       "the broker and portfolio before acting",
+                       head, scan_id, type(fmt_exc).__name__)
+        except Exception:
+            pass
 
 
 @router.post('/scan', response_model=ScanResult)
@@ -2244,26 +2366,63 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             await db.rollback()
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks()
-            fired = await asyncio.to_thread(
+            cf = _SCAN_FIRE_EXECUTOR.submit(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() resolves the server account configuration at dispatch
                 daily_risk_hooks=hooks,
             )
-            # O4 step 5: book the fired order, back ON the event loop with this
-            # request's session (it never enters the worker thread). None on
-            # every non-fire. `book_fired_order` never raises, pages its own
-            # refusals and rolls back what it wrote, so `_upsert_session` below
-            # runs on a usable session either way.
-            if fired is not None:
-                from app.services.auto_trade_booking import book_fired_order
-                booking = await book_fired_order(fired, db)
-                if booking.booked:
-                    _log.info("scan auto-trade: fired order booked as %s", booking.rec_id)
-                else:
-                    _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
+            # AUTOTRADE-FIRE-HYGIENE H2: this block owns the fire's outcome
+            # until booking returns, and `phase` says how far it got, so a
+            # cancellation reports only what is known — once:
+            # - "worker_pending" / "booking_not_started": no await separates
+            #   delivery from the booking call, so a cancel at delivery is
+            #   raised by the worker await with `cf` already done. Either way
+            #   the H1 callback below logs the worker's outcome; booking never
+            #   started.
+            # - "booking_started": the writer may have committed; confirmation
+            #   unavailable, and nothing books again.
+            # - "booking_returned": no await follows inside the block; the
+            #   booked / NOT booked line was logged before `_upsert_session`,
+            #   so a cancel there leaves that known status standing.
+            phase = "worker_pending"
+            fired = None
+            try:
+                fired = await asyncio.wrap_future(cf)
+                phase = "booking_not_started"
+                # O4 step 5: book the fired order, back ON the event loop with
+                # this request's session (it never enters the worker thread).
+                # None on every non-fire. `book_fired_order` never raises,
+                # pages its own refusals and rolls back what it wrote, so
+                # `_upsert_session` below runs on a usable session either way.
+                # It lets CancelledError through — handled below.
+                if fired is not None:
+                    from app.services.auto_trade_booking import book_fired_order
+                    phase = "booking_started"
+                    booking = await book_fired_order(fired, db)
+                    phase = "booking_returned"
+                    if booking.booked:
+                        _log.info("scan auto-trade: fired order booked as %s", booking.rec_id)
+                    else:
+                        _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
+            except asyncio.CancelledError:
+                if phase in ("worker_pending", "booking_not_started"):
+                    # Cancelling the await does not stop a RUNNING worker; the
+                    # broker call can still complete. `cf.cancel()` only stops
+                    # a call still queued behind the one worker. The outcome is
+                    # logged on the THREAD side of `cf` — an asyncio-side
+                    # callback would see only "cancelled" during shutdown — and
+                    # `add_done_callback` runs it at once if `cf` is already
+                    # done. Nothing is booked: the request's session is going
+                    # away.
+                    cf.cancel()
+                    cf.add_done_callback(
+                        functools.partial(_log_scan_fire_outcome, result.scan_id))
+                elif phase == "booking_started":
+                    _log_scan_booking_unconfirmed(result.scan_id, fired)
+                raise
     # `req`, not `_last_request`. The global is read AFTER the auto-trade block
-    # above, whose `await asyncio.to_thread(...)` is a synchronous broker call —
+    # above, whose awaited `_SCAN_FIRE_EXECUTOR` call is a synchronous broker call —
     # a window measured in seconds. A second overlapping manual scan (nothing
     # serializes two of them; see this function's docstring) completing inside
     # it replaces `_last_request` with ITS request, and this line would then

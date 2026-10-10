@@ -1,0 +1,1849 @@
+'use client';
+
+/*
+ * Screener Step 7 — Trade Card.
+ * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
+ * opens a review dialog; submitting it saves every row to the Portfolio tagged
+ * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
+ * buttons do that. A tracked row still reserves its contract and symbol (the
+ * caps and the duplicate refusal count it), so tracking blocks a later send of
+ * the same card until the row is closed. Successful submits surface a
+ * bottom-right toast with a Portfolio link.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Title, Text } from '@/components/primitives';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
+import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
+import { CandidateNav } from '@/components/molecules/CandidateNav';
+import { quoteWarning } from '@/lib/quoteWarning';
+import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
+import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
+import { useRiskStore } from '@/lib/riskStore';
+import { contractId as buildContractId } from '@/types/domain';
+import { useScanStore } from '@/lib/scanStore';
+import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
+import { logAudit } from '@/lib/audit';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import type {
+  PortfolioPosition, TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride, MethodPick,
+} from '@/types/domain';
+import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
+import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
+import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
+import { useAutoTradeStore } from '@/lib/autoTradeStore';
+import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import {
+  checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
+  checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
+} from '@/lib/risk';
+import { api }               from '@/lib/api';
+import {
+  applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
+  rrOverridesForPlan, withCachedEstimate,
+  cacheStructural, cacheFirstPassage, cacheExitPlan,
+  type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
+} from '@/lib/tradeCardOverride';
+import { useTradeCardUiStore } from '@/lib/tradeCardUiStore';
+import { useDirectSendNotesStore, type DirectSendNote } from '@/lib/directSendNotesStore';
+import {
+  brokerLabelFor, classifyDirectFailure, contractLabelFor, directOrderBlock, directSendNoteText,
+  isNotFound, removeConfirmText, whyOf, type DirectOutcome,
+} from './directOrder';
+import styles from '../screener.module.css';
+import toastStyles from './toast.module.css';
+import paperStyles from './page.module.css';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { earningsGateFor, scanVetoDays, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+
+// Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
+// unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
+// @contextRail checklist so the rail and these buttons cannot disagree.
+
+function nowISOLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+function todayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function generateRecId(): string {
+  return 'REC-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+/** A positive number, else null. The router refuses `entryPrice` 0 (`gt=0`),
+ *  so a `0` scan mid must fall through to the next source, not be kept by `??`. */
+function positiveOrNull(x: number | null | undefined): number | null {
+  return x != null && x > 0 ? x : null;
+}
+
+/** Drop one row from the local store by rec_id. A `syncFromBackend` may have
+ *  copied a saved row in between the save and the broker's answer. */
+function dropLocal(recId: string): void {
+  usePortfolioStore.setState((s) => ({ positions: s.positions.filter((p) => p.recId !== recId) }));
+}
+
+/** Hard-DELETE one tracked row by rec_id, then drop it locally. Shared by the
+ *  auto-delete and a note's Remove (plan X1), so neither can skip the last
+ *  step: a sync whose GET started BEFORE the DELETE resolves after it and
+ *  writes the deleted row back, and a Close on that stale row then books a
+ *  phantom closed trade into History. A forced sync chains after the one in
+ *  flight, so its GET post-dates the DELETE; the row is dropped again after it.
+ *  Throws what the DELETE threw -- except a `→ 404` when `notFoundIsFinal`. */
+async function removeTrackedRow(recId: string, notFoundIsFinal: boolean): Promise<void> {
+  try {
+    await api.deletePortfolioPosition(recId);
+  } catch (e) {
+    if (!(notFoundIsFinal && isNotFound(e))) throw e;
+  }
+  dropLocal(recId);
+  void usePortfolioStore.getState().syncFromBackend(true).then(() => dropLocal(recId));
+}
+
+function addDirectNote(n: Parameters<ReturnType<typeof useDirectSendNotesStore.getState>['addNote']>[0]): void {
+  useDirectSendNotesStore.getState().addNote(n);
+}
+
+function positionFromOrder(
+  order: DraftOrder,
+  structuralStop: number | null = null,
+  exitPlan: ExitPlan | null = null,
+  // Feature 5 — the active pre-trade override for this symbol, read by the
+  // caller from the shared maxLossOverrideBySymbol cache (this is a module-
+  // level function, no closure access to component state).
+  maxLossOverride: MaxLossOverride | null = null,
+  // Piece 4 — the per-trade premium stop derived from the card's editable
+  // "Premium stop" dollar field. Module-level function, so the caller reads it
+  // the same way it reads maxLossOverride above.
+  // The card's "Premium stop" field holds a DOLLAR loss; the percentage is
+  // derived below against this path's own `mid`, so the stored fraction is
+  // always relative to the entryPrice actually persisted — which is exactly
+  // what the alert compares (`opt_price <= entry_price * (1 - pct)`).
+  premiumStopDollar: number | null = null,
+  // The card's editable Invalidation, resolved by the caller through
+  // `invalidationFor` (module-level function, no closure access to component
+  // state -- same shape as maxLossOverride above). Defaults to the card's own
+  // value so an untouched card behaves exactly as before.
+  invalidation: number | null = null,
+  // The card's editable Entry limit, resolved through `entryLimitFor`. Only
+  // reached as a fallback for `mid` below, but it must be the SAME value the
+  // broker order was placed at or the position's entry price disagrees with
+  // the order that created it.
+  entryLimit: number | null = null,
+  /** ROUND 10 finding 7 — the LIVE option mid, when the caller has one.
+   *
+   *  `buildPaperPosition` takes `livePrice` and prefers it; this path did not,
+   *  so the two send paths stored different `entryPrice` values for the same
+   *  card whenever a quote had been fetched — the denominator the premium stop
+   *  is derived against, and the threshold both alert engines compare. The
+   *  round-9 "two send paths cannot disagree" test could not see it: its
+   *  fixture set the contract-quote mock to exactly `contractDetails.mid`, so
+   *  live and scan were the same number. */
+  livePrice: number | null = null,
+  // Phase G (piece 5) — the pick resolved by the caller through
+  // `methodPickFor(o.card)`, same shape as every other field above: a
+  // module-level function has no closure access to component state. Absent
+  // send-path wiring for this was a confirmed gap as of build step 4 — the
+  // send GATE (§7.1) blocked an unpicked send, but nothing carried a made
+  // pick's actual VALUE into the created position, so a real send silently
+  // discarded the trader's decision regardless of whether the gate passed.
+  pick: MethodPick | null = null,
+): PortfolioPosition {
+  const c   = order.card;
+  const cd  = c.contractDetails;
+  const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid)
+    ?? positiveOrNull(entryLimit) ?? c.entry.limit;
+  const dte = cd?.dte ?? 24;
+  return {
+    symbol:        c.symbol,
+    contract:      c.contract,
+    direction:     c.direction,
+    entryDate:     todayISO(),
+    expiry:        cd?.expiry ?? new Date(Date.now() + dte * 86_400_000).toISOString().slice(0, 10),
+    dteRemaining:  dte,
+    dteTotal:      dte,
+    entryPrice:    mid,
+    currentPrice:  mid,
+    pnlDollar:     0,
+    pnlPct:        0,
+    stop:          invalidation ?? c.exit.invalidation,
+    // Non-null here means the caller resolved a TOUCHED field, so the stop is
+    // an absolute price the user typed and the backend must not re-anchor it.
+    stopIsUserSet: invalidation != null,
+    structuralStop,
+    exitPlan,
+    maxLossOverride,
+    // Sent as DOLLARS; the backend derives the fraction against the entry
+    // price it persists (which may be a live quote, not this `mid`).
+    premiumStopDollar,
+    // ...and as the user's own FRACTION of this `mid` (decision PREMIUM-STOP-
+    // FALLBACK-USER-FRACTION-2026-10-03): the writer stores it only when the
+    // dollar is unusable at the persisted entry (a total loss, or sub-cent),
+    // instead of the global. Same divisor as `entryPrice` above.
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
+    targets:       c.exit.targets,
+    status:        c.finalStatus,
+    // Both quantities travel to the position, kept apart
+    // (PHASE-A-NULL-IVRANK-2026-09-06). Dropping `iv` here would blank the
+    // portfolio's IV column for every position opened from a card until a
+    // live quote happened to refill it.
+    ivRank:        cd?.ivRank,
+    iv:            cd?.iv,
+    delta:         cd?.delta,
+    theta:         cd?.theta,
+    vega:          0.20,
+    contracts:     order.contracts,
+    // Fix #5: the basket places no broker order (D6); 'broker' made phantom positions count against real caps.
+    source:        'manual',
+    orderedAt:     nowISOLocal(),
+    recId:         generateRecId(),
+    tradeCardSnapshot: tradeCardSnapshotOf(c),
+    ...pickedFieldsFrom(pick),
+  };
+}
+
+interface ToastState {
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
+  // Positions whose requested size was auto-reduced by the backend's risk
+  // check to fit exposure limits — "SYMBOL: N contracts" per entry.
+  adjusted: string[];
+}
+
+export default function Step7Page() {
+  // The controlled method selector is portalled here; AutoTradeArm retains its
+  // original page ownership/predicate even while an override plan is pending.
+  const [decisionTarget, setDecisionTarget] = useState<HTMLDivElement | null>(null);
+  const [cards, setCards]         = useState<TradeCardData[]>([]);
+  const [active, setActive]       = useState<string>('');
+  const [basket, setBasket]       = useState<string[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [toast, setToast]         = useState<ToastState | null>(null);
+  const [recIdMap, setRecIdMap]   = useState<Record<string, string>>({});
+  // "Check structure" results captured from the active TradeCard, per CONTRACT
+  // (contractKeyFor, the key estimatesByContract / exitPlanByContract use). The
+  // structural LEVEL is a function of (symbol, direction, stock_price) only, but
+  // since B2 the cached response also carries `stopCost` -- the stop-vs-premium
+  // verdict priced against THIS contract's strike, DTE and premium -- so a
+  // symbol key would let contract A's verdict be spliced onto contract B's card
+  // (A8, open_questions[51]). A contract with no key (incomplete details) is
+  // never cached. Serves two readers: the order-send path (which
+  // needs just `.stop.price`) and the TradeCard restore path (which needs the whole
+  // level plus the price it was measured against, so the Exit Plan section can
+  // still show the restored level itself — the R:R-vs-structural-stop column is
+  // a separate matter: it never recomputes from a restore alone, only from a
+  // fresh Estimate click with both sides independently reconfirmed, see round 5
+  // of the plan's audit notes). Only ever populated for
+  // whichever symbol is/was the active card, since "Check structure" is a
+  // single-card, user-triggered action (see TradeCard's onStructuralStopChange doc
+  // comment). Undefined (never fetched/reset) leaves a symbol's entry untouched
+  // rather than clearing it, so navigating away and back to an already-checked
+  // candidate doesn't lose its captured level.
+  const [structuralByContract, setStructuralByContract] = useState<Record<string, CachedStructural>>({});
+  /** The cached structural stop LEVEL for the contract a card carries, or null. */
+  const structuralStopPriceFor = (c: TradeCardData): number | null => {
+    const k = contractKeyFor(c);
+    return k ? structuralByContract[k]?.stop?.price ?? null : null;
+  };
+  // "Estimate" (Monte Carlo first-passage) results, per CONTRACT — unlike the
+  // structural stop these ARE contract-specific (every optionPrice is
+  // premium*(1+pct) off that contract's own premium), so they're keyed by
+  // contractKeyFor, the same identity plansBySymbol tags its entries with.
+  const [estimatesByContract, setEstimatesByContract] = useState<Record<string, CachedFirstPassage>>({});
+  // "Compute Exit Plan" results, per CONTRACT — same reasoning as
+  // estimatesByContract: the plan's repricing/probability is computed off
+  // that contract's own strike/dte/premium, so it must be keyed by contract,
+  // not symbol.
+  const [exitPlanByContract, setExitPlanByContract] = useState<Record<string, CachedExitPlan>>({});
+  // Feature 7 — the single shared source of truth for "how many contracts" a
+  // given symbol's order carries. Keyed by SYMBOL (not contract): a contract
+  // switch within the same symbol should not reset a user's sizing choice. Fed into TradeCard's existing
+  // `contracts` prop (which already seeds `overlay.contracts` on mount and
+  // re-syncs via a `[initialContracts]` effect) and updated from the existing
+  // `onEditsChange` callback — no new prop/callback pair needed on TradeCard
+  // itself. Every order-placement path (quick Place Limit/Market, auto-trade
+  // arm, and SendToBrokerDialog's initial row seed) reads from this same map,
+  // fixing the pre-existing bug where each of those defaulted to a hardcoded
+  // 1 independent of what the card displayed.
+  // Named `orderContractsBySymbol` (not `contractsBySymbol`) to avoid
+  // colliding with the pre-existing scanStore selector of that name below
+  // (`Record<symbol, OptionContract[]>` — the picked-contract-per-symbol map,
+  // an unrelated concept that happens to share a plausible name).
+  const [orderContractsBySymbol, setOrderContractsBySymbol] = useState<Record<string, number>>({});
+  // Piece 4 — the card's editable "Premium stop" DOLLAR field, cached off the
+  // overlay channel that already carries `contracts`.
+  //
+  // Keyed by CONTRACT, not by symbol, unlike `orderContractsBySymbol` beside
+  // it. A contracts count is genuinely a decision about the underlying; a
+  // dollar premium stop is meaningful only against the premium of the one
+  // contract it was typed on. TradeCard resets its overlay on a contract
+  // change with a bare `setOverlay` that does not call `onEditsChange`, so a
+  // symbol-keyed map kept the PREVIOUS contract's dollar: edit the AAPL 190C
+  // ($5.20 mid, $3.12 stop), switch to the 200C ($4.00 mid), send, and the
+  // 200C was armed at 78% — or, on a cheaper contract, at a ratio above 1,
+  // which the router stores as NULL so the user's choice vanished silently.
+  // Same keying as `exitPlanByContract`/`estimatesByContract`, for the same
+  // reason.
+  // NULL means "the user has not touched this card's premium stop", which is a
+  // distinct state from any dollar amount and the reason this cache cannot
+  // simply hold `overlay.premiumStop`: the overlay is SEEDED with
+  // `exit.premiumStop` (the global percentage in dollars), the card reports its
+  // whole overlay on every patch, and the seed itself moves under an untouched
+  // field when `mergePlan` lands. Only the card knows which it is, so it tells
+  // us -- see `onEditsChange`'s `meta.touched.premiumStop`.
+  // PHASE G piece 5, build step 2 (spec §5). These four caches used to be
+  // `useState` on this page. They now live in ONE scan-stamped slice on
+  // scanStore, read through `selectCardEdits` -- which returns an EMPTY slice
+  // whenever the slice's `scan_id` stamp does not match the scan currently in
+  // the store, so a previous run's typed levels can never render on a card
+  // built from new prices.
+  //
+  // READ THE SLICE ONLY THROUGH THIS SELECTOR. `state.optionsCardEdits` read
+  // directly would skip the stamp check, which is the single defect this design
+  // exists to make impossible.
+  const cardEdits = useScanStore((s) => selectCardEdits(s, 'options'));
+  const setCardEdit = useScanStore((s) => s.setCardEdit);
+  const clearCardPick = useScanStore((s) => s.clearCardPick);
+  const premiumStopByContract = cardEdits.premiumStop;
+  // The card's editable INVALIDATION -- the underlying stock level that becomes
+  // `PortfolioPosition.stop` and drives STOP_REACHED. Keyed by SYMBOL, like
+  // `maxLossOverrideBySymbol` beside it and unlike `premiumStopByContract`
+  // (and `structuralByContract`, whose cached response carries a
+  // contract-priced stopCost): an invalidation is a price level on the
+  // UNDERLYING, so it is the same thesis whichever strike expresses it, while a
+  // dollar premium stop is meaningful only against one contract's premium.
+  //
+  // NULL means "untouched, use the card's own `exit.invalidation`" -- the same
+  // distinct state `premiumStopByContract` carries, for the same reason: the
+  // seed moves under an untouched field when `mergePlan` lands, so a cached
+  // seed would pin the stop to a level the plan has since replaced.
+  const invalidationBySymbol = cardEdits.invalidation;
+  // The card's editable ENTRY LIMIT -- the option premium posted as the broker
+  // order's `limit_price`. Contract-keyed for the same reason the premium stop
+  // is: it is a price for one contract, meaningless against another.
+  const entryLimitByContract = cardEdits.entryLimit;
+  /** Bumped in lockstep with clearing the three edit caches below, and handed
+   *  to TradeCard as `resetKey`. Without it the parent dropped a cached edit
+   *  while the card kept showing (and keeping touched) the same value -- the
+   *  card said $2.71 and the order said $6.00. See the prop's own note. */
+  const [scanEpoch, setScanEpoch] = useState(0);
+  const handleEditsChange = (
+    symbol: string,
+    cardContractKey: string | null,
+    overlay: EditOverlay,
+    meta: { touched: TouchedFields },
+  ) => {
+    setOrderContractsBySymbol((prev) =>
+      prev[symbol] === overlay.contracts ? prev : { ...prev, [symbol]: overlay.contracts },
+    );
+    // The identity-preserving guard these three carried inline now lives in
+    // `writeCardEdit` (lib/cardEdits.ts), for the same reason it existed here:
+    // the card reports its whole overlay on every patch, so an unchanged write
+    // must not produce a new object or every render re-triggers this cascade.
+    // `null` still means "untouched", which is why `meta.touched` gates each.
+    setCardEdit('options', 'invalidation', symbol,
+      meta.touched.invalidation ? overlay.invalidation : null);
+    if (!cardContractKey) return;
+    setCardEdit('options', 'premiumStop', cardContractKey,
+      meta.touched.premiumStop ? overlay.premiumStop : null);
+    setCardEdit('options', 'entryLimit', cardContractKey,
+      meta.touched.entryLimit ? overlay.entryLimit : null);
+  };
+  /** The cache key for the two CONTRACT-keyed edits (entry limit, premium
+   *  stop). `contractKeyFor` returns null whenever `contractDetails` is
+   *  missing a strike, an expiry or a right, and `handleEditsChange` used to
+   *  early-return on that null — so on such a card the user's typed entry
+   *  limit was displayed, then silently dropped: the card showed $2.71 while
+   *  `entryLimitFor` fell back to `card.entry.limit` and the button label AND
+   *  the posted `limit_price` were both $2.50. That is the display-vs-send
+   *  disagreement this whole branch exists to remove, re-entered through the
+   *  one code path that skipped the cache.
+   *
+   *  The fallback embeds `card.contract` (the display label the send path
+   *  already falls back to in `toOptionSymbol`), so it is still per-contract:
+   *  it cannot merge an edit made on one contract into another, which is the
+   *  property `contractKeyFor` exists to guarantee. Writer and both readers go
+   *  through this one function, so they cannot disagree about the key. */
+  const editKeyFor = (card: TradeCardData | undefined): string | null => {
+    const strict = contractKeyFor(card);
+    if (strict) return strict;
+    if (!card?.symbol || !card.contract) return null;
+    return `${card.symbol}|${card.contract}`;
+  };
+
+  // The ONE place either send path decides what to post. Reading the map is
+  // not enough on its own: the overlay is seeded with `exit.premiumStop`, which
+  // is the global percentage rendered in dollars rather than anything the user
+  // chose, and the card reports its whole overlay on every patch. See
+  // `premiumStopDollarToSend`.
+  const premiumStopDollarFor = (card: TradeCardData): number | null => {
+    const key = editKeyFor(card);
+    return premiumStopDollarToSend(key ? premiumStopByContract[key] : null);
+  };
+  // The ONE place every send path resolves the invalidation stop, so a position
+  // cannot be stored at a level different from the one the card was showing.
+  // Falls back to the card's own value, which is what an untouched field means
+  // -- and which stays live as `mergePlan` updates it, precisely because an
+  // untouched field caches `null` rather than a snapshot of the seed.
+  // NULLABLE since piece 3: `card.exit.invalidation` is null on a candidate
+  // restored from a scan session persisted before it, whose stored flat
+  // percentage the scanStore v15 migration stripped. The user can clear that by
+  // typing a stop, which lands in this same cache.
+  //
+  // EVERY send path refuses such a card as of DIRECT-SEND-STOP-GATE-2026-09-09,
+  // and it took a second build to get there. `missing_invalidation` is raised by
+  // `checkTradeRisk`, which runs ONLY in SendToBrokerDialog -- the basket path.
+  // The two DIRECT buttons ("Place Limit", "Right Now — Market") never called it
+  // and stored `PortfolioPosition.stop = null` instead. That was not a wrong
+  // number -- the field is already `number | null`, and both alert engines skip a
+  // null stop (alertEngine.ts's STOP_REACHED, the backend `alert_generator`'s
+  // `pos.stop is not None`) -- so it sat below the audit gate and was logged
+  // against main rather than widened into the piece-3 branch. What it DID mean is
+  // that a position opened that way armed no stop alert at all and looked
+  // entirely normal in the portfolio list, which is discovered at the worst
+  // possible moment. Kenneth chose the refusal over a marker on the position.
+  // `stopMissing` below is that gate, and AutoTradeArm takes the same check as a
+  // prop -- gating only these two would have moved the hole rather than closed
+  // it.
+  const invalidationFor = (card: TradeCardData): number | null =>
+    invalidationBySymbol[card.symbol] ?? card.exit.invalidation;
+  // Whether the value `invalidationFor` just returned was TYPED or inherited.
+  // The cache holds null for an untouched field precisely so these two can be
+  // told apart. The backend re-anchors a plan-derived stop by
+  // (live price - scanStockPrice) and must be told to skip that for a typed
+  // one: a $180 stop typed against a $200 quote on a stock scanned at $145
+  // was stored as $235, above spot, raising a Critical STOP_REACHED on the
+  // first backend scan for a stop the user believed was 10% away.
+  const invalidationIsUserSetFor = (card: TradeCardData): boolean =>
+    invalidationBySymbol[card.symbol] != null;
+  /** The RAW cache entry -- null while the field is untouched.
+   *
+   *  ROUND 10 finding 6. The basket path passed `invalidationFor(o.card)`,
+   *  which falls back to `card.exit.invalidation` and is therefore NEVER null,
+   *  so `positionFromOrder`'s `stopIsUserSet: invalidation != null` was true
+   *  for every basket position including ones nobody had edited. Two send
+   *  paths reported two different values of a flag whose entire job is to tell
+   *  the server whether a human typed the number -- and a `true` there tells
+   *  the router to skip re-anchoring a stop that IS plan-derived. Passing the
+   *  raw entry is also what `positionFromOrder` was written for: it applies
+   *  `invalidation ?? c.exit.invalidation` internally. */
+  const invalidationRawFor = (card: TradeCardData): number | null =>
+    invalidationBySymbol[card.symbol] ?? null;
+  // Likewise for the limit price every order path posts, and for the button
+  // label that promises it. A label showing one price while the order carries
+  // another is the same defect wearing a different hat.
+  const entryLimitFor = (card: TradeCardData): number => {
+    const key = editKeyFor(card);
+    return (key ? entryLimitByContract[key] : null) ?? card.entry.limit;
+  };
+  // Feature 5 — the shared pre-trade max-loss override cache, keyed by SYMBOL
+  // (a risk decision about the underlying, not exitPlanByContract). Fed into TradeCard's initialMaxLossOverride prop
+  // and updated from onMaxLossOverrideChange; also read by
+  // buildPaperPosition/positionFromOrder (to carry the override onto the
+  // created PortfolioPosition) and SendToBrokerDialog (so its own risk check
+  // knows about an active override and doesn't force a spurious extra
+  // confirmation click).
+  // Phase G piece 5 -- in the same stamped slice as the three above. It was the
+  // one edit cache the `[scanResult]` effect below forgot to clear (spec §5.1
+  // calls that "an omission, not a decision"); sharing one slice with one stamp
+  // is what makes forgetting it again impossible rather than merely fixed.
+  const maxLossOverrideBySymbol = cardEdits.maxLossOverride;
+  const handleMaxLossOverrideChange = (symbol: string, override: MaxLossOverride | null) => {
+    setCardEdit('options', 'maxLossOverride', symbol, override);
+  };
+  /** Phase G piece 5 (§6.2) — the trader's explicit exit-method pick, in the
+   *  SAME stamped slice as the four caches above and keyed by CONTRACT through
+   *  `editKeyFor`, like the entry limit and the premium stop and unlike the
+   *  invalidation: a pick names one target row out of one contract's plan, and
+   *  is meaningless against another's numbers.
+   *
+   *  Absent means NO PICK, which is a real state the send gate (build step 4)
+   *  reads. Going through `selectCardEdits` above is what makes a pick from a
+   *  previous scan absent rather than merely old — §7.4 leans on exactly that:
+   *  a stale pick is gone, so the gate refuses the send instead of stamping
+   *  last scan's price onto this scan's position. */
+  const methodPickByContract = cardEdits.picks;
+  const methodPickFor = (card: TradeCardData | undefined): MethodPick | null => {
+    const key = editKeyFor(card);
+    return (key ? methodPickByContract[key] : null) ?? null;
+  };
+  const handleMethodPickChange = (card: TradeCardData, pick: MethodPick | null) => {
+    const key = editKeyFor(card);
+    // No key, no write — and unlike the three typed prices this cannot silently
+    // drop an edit the card still displays, because `editKeyFor`'s fallback
+    // (`SYMBOL|contract`) returns null only when the card has neither a symbol
+    // nor a contract label, which is not a card.
+    if (!key) return;
+    // `picks` holds no nulls: a present key means a human picked, so clearing
+    // is a DELETE, not a stored null. See `clearCardPick`.
+    if (pick) setCardEdit('options', 'picks', key, pick);
+    else clearCardPick('options', key);
+  };
+  // Both write paths delegate to a pure reducer in lib/tradeCardOverride.ts,
+  // alongside the read side (withCachedEstimate) — the two rules they enforce are
+  // the highest-consequence logic in this feature and are unit-tested there rather
+  // than living as untestable inline closures here:
+  //   1. a `undefined`/`null` sentinel (reset on contract switch, or cleared at the
+  //      start of a re-run) is IGNORED, so an in-flight or failed re-run never
+  //      destroys the value already on screen;
+  //   2. an unchanged write returns the IDENTICAL `prev` object, which is what
+  //      breaks the render cascade — the callback props passed to TradeCard below
+  //      are fresh inline closures every render (matching this file's existing
+  //      style for onSendToBroker etc.) and TradeCard keeps a ref synced to them
+  //      via its own effect, so a write that always produced a new object would
+  //      re-render the parent on every TradeCard render, re-create the props,
+  //      re-fire that sync effect... unbounded. React skips the re-render on an
+  //      identical state reference, so a no-op call here is genuinely a no-op.
+  const handleStructuralStopChange = (
+    key: string | null,
+    stop: StructuralStop | null | undefined,
+    stockPrice: number | null,
+  ) => { if (key) setStructuralByContract((prev) => cacheStructural(prev, key, stop, stockPrice)); };
+  const handleFirstPassageChange = (
+    key: string | null,
+    estimate: FirstPassageEstimate | null | undefined,
+    context: FirstPassageContext | null,
+  ) => setEstimatesByContract((prev) => cacheFirstPassage(prev, key, estimate, context));
+  const handleExitPlanChange = (
+    key: string | null,
+    plan: ExitPlan | null | undefined,
+  ) => setExitPlanByContract((prev) => cacheExitPlan(prev, key, plan));
+
+  useEffect(() => {
+    setRecIdMap((prev) => {
+      const next: Record<string, string> = {};
+      for (const c of cards) {
+        next[c.symbol] = prev[c.symbol] || generateRecId();
+      }
+      return next;
+    });
+  }, [cards]);
+
+  const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
+  const [limitPlacing,   setLimitPlacing]     = useState(false);
+  const [marketPlacing,  setMarketPlacing]    = useState(false);
+  // Carries the contract label: a direct send's result can land after Prev/Next.
+  const [paperOrderId,   setPaperOrderId]     = useState<{ label: string; id: string } | null>(null);
+  const directNotes = useDirectSendNotesStore((s) => s.notes);
+  const [orderError,     setOrderError]       = useState<string | null>(null);
+  // A LIST, not one slot. Both writers below used to call `setSizeAdjustedNote`
+  // on the same string state, so an order that was BOTH size-reduced and had
+  // its premium stop dropped showed whichever landed second and silently lost
+  // the other -- two independent things the user needs to know about the same
+  // fill. Appending keeps both.
+  const [saveNotes, setSaveNotes] = useState<string[]>([]);
+  const addSaveNote = useCallback((note: string) => {
+    setSaveNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+  }, []);
+  // The BASKET's notes (A8, open_questions[61]). Kept apart from `saveNotes`
+  // because they have a different lifetime: a basket covers several symbols,
+  // so its "premium stop could not be applied" disclosures must survive
+  // Prev/Next -- the `[active]` effect used to destroy them on the first
+  // keystroke, before they could be read. Cleared only when the NEXT send of
+  // any kind starts (the three send paths below).
+  const [basketNotes, setBasketNotes] = useState<string[]>([]);
+  // The BASKET's failure banner (A8b), split out of `orderError` for the same
+  // reason as `basketNotes` above and with the same lifetime: the rejected rows
+  // were rolled back and the toast counts only placed orders, so this banner is
+  // the only record that an order was NOT saved. The state survives Prev/Next
+  // and a new scan landing, and is cleared only when the next send of any kind
+  // starts; it renders only while a card is shown (the `effectiveCard` block).
+  // Like `basketNotes` it is page state, so leaving Step 7 drops it.
+  // `orderError` keeps the direct paths' per-card lifetime (the `[active]`
+  // effect clears it).
+  const [basketError, setBasketError] = useState<string | null>(null);
+  const sizeNote = (adjustedQty: number) =>
+    `Size reduced to ${adjustedQty} contract${adjustedQty === 1 ? '' : 's'} to fit exposure limits. The order was sent for ${adjustedQty}.`;
+  // The one place the card can tell the user their premium stop did not survive
+  // the save-time re-anchor. The router logs it server-side and the position
+  // quietly inherits the global -- a TIGHTER stop than the one asked for.
+  // STOP-SEMANTICS -- the wording (and the reason it names) is shared with the
+  // Portfolio banner through `premiumStopDropText`.
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason, keptPct?: number) =>
+    premiumStopDropText(requested, reason, keptPct);
+  /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
+   *
+   * These used to be bare values, cleared at the top of the fetch effect. The
+   * effect has an early return ABOVE that clear (the override-already-claimed
+   * dedup gate), so on Next-then-Prev back to a candidate whose contract was
+   * user-picked in step 6, the effect re-ran, returned early, and left the
+   * OTHER candidate's quote standing. The AAA card then printed BBB's mid,
+   * `buildPaperPosition` stored it as AAA's entryPrice, and round 9's own
+   * `liveMid` prop carried it into the auto-trade arm request and into the
+   * card's premium-stop bounds -- so a $2.22 contract accepted a $7.00
+   * "premium stop" and the daily-loss gate booked the wrong premium entirely.
+   *
+   * Clearing before the early return would fix that one path. Keying fixes
+   * every path, including the next early return someone adds: a quote whose
+   * key does not match the card on screen is not this card's quote, and
+   * `liveQuoteForCard` below is the only thing any consumer may read. */
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null } | null>(null);
+  const [quoteConfirmation, setQuoteConfirmation] = useState<{ contractKey: string } | null>(null);
+  const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
+  const [fetchingQuote,  setFetchingQuote]    = useState(false);
+  // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
+  // the active card AND every overridden basket item share this one cache so a
+  // tracked basket row never falls back to an auto-pick's stale plan just
+  // because that symbol isn't the currently-active card. Each entry is tagged
+  // with the contract key it was computed for so a plan for contract A is never
+  // merged onto contract B while B's recompute is still in flight.
+  const [plansBySymbol, setPlansBySymbol]     = useState<Record<string, { key: string; plan: RecomputedPlanShape }>>({});
+  const [planErrors,    setPlanErrors]        = useState<Record<string, string>>({});
+  const [recomputeTick, setRecomputeTick]     = useState(0);   // bump to force a retry after a failure
+  // Tracks which (symbol -> contractKey) a recompute has already been fired for,
+  // so the effect below doesn't refire on every render — cleared per-symbol by
+  // retryPlan() to force a refetch after a failure.
+  const requestedPlanKeysRef = useRef<Record<string, string>>({});
+
+  const scanResult          = useScanStore((s) => s.scanResult);
+  // STOCKS-HORIZON-P0B B7: the scan's hold, for the veto-window fallback on a
+  // result persisted before `event_window.veto_days` existed.
+  const scanContext         = useScanStore((s) => s.context);
+  const earningsVetoDays    = scanVetoDays(scanResult?.event_window, scanContext);
+  const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
+  const pickedContracts     = useScanStore((s) => s.pickedContracts);
+  const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
+
+  useEffect(() => {
+    // A new scan invalidates every cached "Estimate" and "Check structure"
+    // result: both were computed against the previous run's prices (and, for
+    // the estimate, against that run's recomputed invalidation level), so
+    // carrying them forward would show pre-scan numbers on post-scan cards.
+    // NOTE this also clears the levels the order-send path reads — a structural
+    // stop checked before a scan no longer rides along into a position opened
+    // after it, which is the intended behaviour, not a side effect.
+    //
+    // In practice this line is belt-and-suspenders, not the primary guard:
+    // `setScanResult` has exactly two production callers (RunScanButton, on
+    // the separate step-3-direction route, and StoreHydration's mount-only
+    // effect), so the only way this effect ever runs with a genuinely NEW
+    // scanResult is if the user leaves this page to reach RunScanButton —
+    // which unmounts Step7Page and, with it, these two useState caches,
+    // independent of this call. Kept in case that ever stops being true (an
+    // in-place scan re-run added to this page, a live scan-result push), so
+    // this file doesn't silently rely on an invariant that lives elsewhere.
+    setEstimatesByContract({});
+    setStructuralByContract({});
+    setExitPlanByContract({});
+    // The per-symbol contract COUNT too (A8, open_questions[68]): a size typed
+    // against the previous run must not ride into the next run's order. Same
+    // belt-and-suspenders standing as the three caches above; on mount the
+    // map is already empty, so the mount run changes nothing.
+    setOrderContractsBySymbol({});
+    // THE FOUR EDIT CACHES ARE NOT CLEARED HERE, AND MUST NOT BE (Phase G piece
+    // 5, spec §5 / §5.1). They now live in one scan-stamped slice on scanStore,
+    // and the stamp already does this job: a new `scan_id` makes every older
+    // edit read as empty, by every path that lands a result rather than only
+    // the ones someone remembered to wire.
+    //
+    // Re-adding a reset call here would be worse than redundant -- it would be
+    // WRONG. This effect also runs on MOUNT, where `scanResult` has not changed
+    // at all, and on mount the slice may legitimately hold edits StoreHydration
+    // just restored alongside the very result they were stamped against. A
+    // blanket reset would destroy a restored pick on every page load, which is
+    // exactly what spec test 11b pins against.
+    //
+    // The three FETCHED caches above still clear, because they are still local
+    // `useState` and are not stamped by anything.
+    // The card must still reset with them:
+    setScanEpoch((n) => n + 1);
+    if (scanResult?.candidates?.length) {
+      setCards(scanResult.candidates);
+      if (scanResult.candidates[0]) setActive(scanResult.candidates[0].symbol);
+    } else {
+      setCards([]);
+      setActive('');
+    }
+  }, [scanResult]);
+
+  useEffect(() => {
+    if (active) setSelectedSymbol(active);
+  }, [active, setSelectedSymbol]);
+
+  // Clear paper order feedback when the user navigates to a different candidate.
+  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSaveNotes([]); }, [active]);
+
+  const addPosition = usePortfolioStore((s) => s.addPosition);
+  const incrementDaily = useRiskStore((s) => s.incrementDaily);
+
+  const cardIndex = useMemo(
+    () => Object.fromEntries(cards.map((c) => [c.symbol, c])),
+    [cards],
+  );
+  const symbols = cards.map((c) => c.symbol);
+
+  const card = cardIndex[active] ?? cards[0];
+
+  /** Resolve the picked (overridden) contract for any symbol, given the current
+   *  scanStore picks — used for the active card AND every basket item so both
+   *  paths apply the exact same override logic. */
+  function resolvePickedCard(symbol: string): OverriddenCard | undefined {
+    const raw = cardIndex[symbol];
+    if (!raw) return undefined;
+    const pid = pickedContracts[symbol];
+    const picked = pid ? contractsBySymbol[symbol]?.find((c) => c.id === pid) : undefined;
+    return applyPickedContract(raw, picked);
+  }
+
+  // The active card with the user-selected contract's details swapped in.
+  // NOTE: this only updates the Contract Details block — Entry/Exit/RR/targets
+  // are recomputed asynchronously (see the shared per-symbol effect below) and
+  // merged into `effectiveCard`, so the whole card describes the selected contract.
+  const pickedCard = card ? resolvePickedCard(card.symbol) : undefined;
+  const isOverride = !!pickedCard?._userOverride;
+
+  const liveQcd = pickedCard?.contractDetails;
+  const contractKey = contractKeyFor(pickedCard);
+  const currentContractKeyRef = useRef(contractKey);
+  const selectionEpochRef = useRef(0);
+  if (currentContractKeyRef.current !== contractKey) selectionEpochRef.current += 1;
+  currentContractKeyRef.current = contractKey;
+  useEffect(() => () => { currentContractKeyRef.current = null; }, []);
+  useEffect(() => { setQuoteConfirmation(null); }, [contractKey]);
+  // The looser key the three edit caches use — see editKeyFor. Declared from
+  // `effectiveCard` (not `pickedCard`) so it matches what the writer reports
+  // and what `entryLimitFor`/`premiumStopDollarFor` read on the send paths.
+
+  // The recompute is only valid for the contract it was computed for. This
+  // guards the 1–3 s window while navigating between two overridden contracts.
+  const activePlanEntry = pickedCard ? plansBySymbol[pickedCard.symbol] : undefined;
+  const planForThisContract = isOverride && activePlanEntry?.key === contractKey ? activePlanEntry.plan : null;
+  // For an overridden contract the plan must be loaded before Entry/Exit are
+  // trustworthy; ordering is gated on this so no order is ever placed on the
+  // auto-pick's Entry Plan for a contract the user swapped.
+  const planReady = !isOverride || !!planForThisContract;
+  const activePlanError = pickedCard ? planErrors[pickedCard.symbol] : undefined;
+
+  // Merge the recomputed Entry/Exit/RR into the overridden card once it arrives.
+  const effectiveCard = pickedCard && planForThisContract ? mergePlan(pickedCard, planForThisContract) : pickedCard;
+
+  // A8 (open_questions[64]). Publish the card this page SHOWS for the
+  // @contextRail checklist, which cannot read this component's state and used
+  // to grade the raw scan candidate -- the auto-pick -- beside a card showing
+  // the Step-6 pick. `rrPending` while `effectiveCard.rrRatio` is still the
+  // auto-pick's (override plan loading or failed). This page does not subscribe
+  // to the store, so publishing on every render of an overridden card (whose
+  // identity changes each render) re-renders the rail only, never this page.
+  const rrIdentity = effectiveCard ? `${effectiveCard.symbol}|${effectiveCard.contract}` : '';
+  const [rrStaleState, setRrStaleState] = useState<{ key: string; stale: boolean }>({ key: '', stale: false });
+  const onRrStaleChange = useCallback((stale: boolean) => {
+    setRrStaleState((prev) => prev.key === rrIdentity && prev.stale === stale ? prev : { key: rrIdentity, stale });
+  }, [rrIdentity]);
+  const rrStale = rrStaleState.key === rrIdentity && rrStaleState.stale;
+  const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
+  useEffect(() => {
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady, rrStale } : null);
+  }, [effectiveCard, planReady, rrStale, setRailCard]);
+  // Cleared on unmount, so a later visit never shows the previous visit's
+  // contract before its first publish.
+  useEffect(() => () => setRailCard(null), [setRailCard]);
+
+  /* DIRECT-SEND-STOP-GATE-2026-09-09. The two direct buttons' half of the
+   * refusal `checkTradeRisk` already raises as `missing_invalidation` on the
+   * basket path -- see the long note on `invalidationFor` for what it is for.
+   *
+   * Read through `invalidationFor`, NOT `effectiveCard.exit.invalidation`, and
+   * that is the whole point of the gate rather than an implementation detail:
+   * a stop the user has TYPED into the Invalidation field lives in
+   * `invalidationBySymbol`, and typing one is the single gesture that fixes a
+   * restored card. Gating on the card alone would refuse it forever, which is
+   * exactly the defect C2 gave `checkTradeRisk` its `resolvedInvalidation`
+   * parameter to avoid -- the same mistake, one screen along.
+   *
+   * `checkInvalidation` rather than a local `!= null`, so the direct paths and
+   * the basket cannot disagree about what counts as a stop (it also refuses 0
+   * and negatives). Null-safe on `effectiveCard` because the buttons render
+   * inside its own guard but the send handlers do not. */
+  const resolvedInvalidationForCard = effectiveCard ? invalidationFor(effectiveCard) : null;
+  const stopMissing = !checkInvalidation(resolvedInvalidationForCard);
+  const editKey = editKeyFor(effectiveCard);
+
+  /* Phase G piece 5, build step 4 (§7.1). Same shape as `stopMissing` above,
+   * one section along: `methodPickFor` is the same reader the card itself is
+   * wired to (§6.2), so this cannot disagree with what the Final
+   * Recommendation control shows as picked. Null-safe on `effectiveCard` for
+   * the same reason `stopMissing` is — the buttons render inside its own
+   * guard but the send handlers do not. */
+  const resolvedMethodPickForCard = effectiveCard ? methodPickFor(effectiveCard) : null;
+  const pickMissing = !checkMethodPick(resolvedMethodPickForCard);
+
+  // The card actually handed to <TradeCard>, with any cached "Estimate" /
+  // "Check structure" result for this contract spliced into exit.* — the same
+  // fields TradeCard reads for its initial state and its contract-change reset,
+  // so a Prev/Next round trip restores the Profit Targets rows (and the
+  // T1/T2/T3 inputs) without re-firing a single request. The R:R-vs-structural-
+  // stop column is NOT restored this way (round 5 audit, see the plan's notes):
+  // it requires both the structural stop and the estimate independently
+  // reconfirmed fresh in the SAME mount before it will compute, so a restored
+  // pair shows '—' until the user's next Estimate click.
+  // DELIBERATELY applied after mergePlan (which replaces `exit` wholesale and
+  // would otherwise discard the splice) and DELIBERATELY not used anywhere else:
+  // ordering, sizing and the order-send path all keep reading `effectiveCard`,
+  // so nothing about what gets sent to a broker depends on this display-only
+  // enrichment.
+  //
+  // On the memo's limits: for a NON-overridden card `effectiveCard` is a stable
+  // reference, so this genuinely holds `cardForDisplay` stable. For an OVERRIDDEN
+  // card `applyPickedContract` rebuilds the object every render, so both change
+  // identity every render regardless — already true of `effectiveCard` today, and
+  // safe because no effect inside TradeCard depends on `data`'s identity (the
+  // reset effect keys on data.symbol/data.contract, and the only whole-`data`
+  // dependencies there are useMemos that set no state). A new `data` reference
+  // therefore costs a recompute and can never re-trigger the reset that would
+  // wipe the values we just restored.
+  const cardForDisplay = useMemo(
+    () => withCachedEstimate(
+      effectiveCard,
+      contractKey ? estimatesByContract[contractKey] : undefined,
+      contractKey ? structuralByContract[contractKey] : undefined,
+      contractKey ? exitPlanByContract[contractKey] : undefined,
+    ),
+    [effectiveCard, contractKey, estimatesByContract, structuralByContract, exitPlanByContract],
+  );
+
+  // Every basket item, override-resolved and (if overridden) merged with its
+  // recomputed plan. `basketPlansPending` gates the whole "Track basket" flow
+  // so a tracked basket row can never be booked carrying an overridden contract
+  // whose Entry/Exit/RR still describe the auto-pick — the exact bug this
+  // recompute machinery exists to prevent. (Fix #5 / D6: the basket books
+  // Portfolio rows only; it places no broker order.)
+  // (resolveBasketCards is the same pure logic exercised directly in
+  // lib/__tests__/tradeCardOverride.test.ts.)
+  const { cards: basketCards, pending: basketPlansPending } = useMemo(
+    () => resolveBasketCards(basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract),
+    [basket, cardIndex, pickedContracts, contractsBySymbol, plansBySymbol, exitPlanByContract],
+  );
+
+  // Basket symbols (other than the active one, surfaced separately via
+  // activePlanError) whose override plan failed outright — each needs its own
+  // visible error + retry, or the basket stays silently stuck on "Computing…"
+  // with no way to recover short of navigating to make that symbol active.
+  const basketPlanErrors = basket
+    .filter((sym) => sym !== pickedCard?.symbol && planErrors[sym])
+    .map((sym) => ({ symbol: sym, error: planErrors[sym]! }));
+
+  /** Force a re-fetch of a symbol's plan after a failure (Retry button). */
+  function retryPlan(symbol: string) {
+    delete requestedPlanKeysRef.current[symbol];
+    setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+    setRecomputeTick((t) => t + 1);
+  }
+
+  // Live quote + recompute for the ACTIVE card, CHAINED in one effect rather
+  // than two separate ones. Two independent effects both keyed on `contractKey`
+  // — one setting liveQuote, one reading it to build the recompute premium —
+  // raced: they run in the same commit and read each other's PRE-update state,
+  // so the recompute fired using a stale liveQuote (from whatever contract was
+  // previously viewed), and requestedPlanKeysRef (keyed only on contractKey,
+  // not on which premium was used) then blocked the correct request from ever
+  // firing once the real quote arrived — silently caching a plan computed with
+  // the wrong premium, or (if the stale request lost a request race) getting
+  // aborted and never retried. Chaining removes the race: the recompute is
+  // fired directly off THIS fetch's own resolution, never off separately-read
+  // liveQuote state.
+  useEffect(() => {
+    if (!contractKey || !pickedCard?.symbol || !liveQcd?.strike || !liveQcd.expiry || !liveQcd.right) {
+      setLiveQuote(null);
+      setFetchingQuote(false);   // an in-flight fetch from a PRIOR invocation is aborted below (or never started for this one) — don't leave "Fetching…" stuck on if this invocation never issues a request of its own.
+      return;
+    }
+    const keyAtRequest = contractKey;
+    const symbol = pickedCard.symbol;
+    const isOverrideAtRequest = isOverride;
+
+    // Gate BEFORE issuing any request — mirrors the basket effect's own
+    // upfront ref check. `recomputeTick` is a dependency shared by every
+    // basket symbol's Retry button, so this effect can tear down and re-run
+    // for a reason that has nothing to do with the active symbol (retrying an
+    // unrelated basket item). Without this gate, that unrelated bump would
+    // spawn a fresh, redundant live-quote refetch here every time, and if
+    // THAT redundant fetch/recompute later got torn down mid-flight by yet
+    // another unrelated bump, its own (correctly-scoped) `settled` closure
+    // would still match the same ref key and delete what was actually an
+    // unrelated, already-completed claim — silently discarding/renumbering a
+    // perfectly valid cached plan. Skipping outright when this exact contract
+    // is already claimed (whether its own fetch already succeeded, or is
+    // still legitimately in flight under a DIFFERENT invocation) means no
+    // redundant invocation — and therefore no redundant settled/cleanup
+    // interaction — is ever created in the first place.
+    if (isOverrideAtRequest && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+      return;
+    }
+
+    const controller = new AbortController();
+    // Flips true the instant THIS invocation's own request settles (success,
+    // failure, or a same-key dedup skip) — read only in cleanup below, via
+    // closure, never via React state (whose read timing can't be trusted
+    // relative to when cleanup runs for an unrelated reason).
+    let settled = false;
+    setLiveQuote(null);
+    setLiveStockPrice(null);
+    setFetchingQuote(true);
+
+    // Fetch the contract's own quote AND a fresh stock quote in parallel —
+    // independent lookups, no reason to serialize them. Without the stock
+    // fetch, recomputePlan below would silently use pickedCard.price (the
+    // scan-time snapshot) even though the contract's premium/delta/spread are
+    // live — the Exit Plan's stock-price side stays stale while its
+    // option-price side doesn't.
+    Promise.all([
+      api.getContractQuote(pickedCard.symbol, liveQcd.strike, liveQcd.expiry, liveQcd.right as 'C' | 'P', controller.signal)
+        .catch(() => null),   // silently ignore — scan-time mid used as fallback below
+      api.getStockQuote(pickedCard.symbol, controller.signal)
+        .catch(() => null),   // silently ignore — scan-time price used as fallback below
+    ])
+      .then(([q, sq]) => {
+        if (!controller.signal.aborted) {
+          setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          if (sq) setLiveStockPrice({ symbol, price: sq.price });
+        }
+        return [q, sq] as const;
+      })
+      .then(([q, sq]) => {
+        if (controller.signal.aborted) { settled = true; return; }
+        setFetchingQuote(false);
+        if (!isOverrideAtRequest) { settled = true; return; }   // not overridden — no plan to recompute
+        if (requestedPlanKeysRef.current[symbol] === keyAtRequest) { settled = true; return; }   // claimed by a concurrent invocation while this quote was in flight
+        requestedPlanKeysRef.current[symbol] = keyAtRequest;
+
+        api.recomputePlan({
+          symbol,
+          direction:   pickedCard.direction,
+          stock_price: sq?.price ?? pickedCard.price,
+          strike:      liveQcd.strike,
+          dte:         liveQcd.dte,
+          premium:     q?.price ?? liveQcd.mid,
+          delta:       liveQcd.delta,
+          spread:      q?.spread ?? liveQcd.spread!,
+          quote_live:  q?.quoteLive ?? !pickedCard.noLiveQuote,
+          // PIECE 3 — round-trip the stop this card already resolved. The
+          // endpoint echoes it and builds the plan around it, so an override
+          // changes the CONTRACT and nothing about where the stock stop sits.
+          final_stop:  pickedCard.exit.finalStop ?? null,
+          ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
+          ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+          ...horizonFieldsFrom(useScanStore.getState().context),
+        }, controller.signal)
+          .then((plan) => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlansBySymbol((prev) => ({ ...prev, [symbol]: { key: keyAtRequest, plan } }));
+            setPlanErrors((prev) => { const next = { ...prev }; delete next[symbol]; return next; });
+          })
+          .catch(() => {
+            settled = true;
+            if (controller.signal.aborted) return;
+            setPlanErrors((prev) => ({ ...prev, [symbol]: 'Could not compute the plan for the selected contract. Ordering stays disabled until it succeeds.' }));
+          });
+      });
+
+    return () => {
+      controller.abort();
+      // Release this invocation's claim ONLY if its own request never settled
+      // (was still genuinely in flight when the abort hit). `recomputeTick` is
+      // a dependency shared by every basket symbol's retry, so this effect can
+      // tear down for a reason that has NOTHING to do with this symbol (e.g.
+      // the user retried a different, failed basket item) — if we released the
+      // claim unconditionally in that case, this symbol's successful plan
+      // would still be cached in plansBySymbol, but the re-run below would
+      // treat it as unclaimed and fire a redundant recomputePlan for it too,
+      // and if THAT incidental call happened to fail, it would overwrite a
+      // perfectly valid plan's status with a spurious error banner. Checking
+      // `settled` keeps a genuinely-completed request's claim intact, so an
+      // unrelated tick bump correctly no-ops for this symbol.
+      if (!settled && requestedPlanKeysRef.current[symbol] === keyAtRequest) {
+        delete requestedPlanKeysRef.current[symbol];
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contractKey, isOverride, recomputeTick]);
+
+  // Recompute Entry/Exit/RR/targets for every OVERRIDDEN BASKET item other than
+  // the active symbol (which the effect above owns exclusively — see the `sym
+  // === pickedCard?.symbol` skip below). Deliberately independent of liveQuote/
+  // contractKey: basket items don't have their own live-quote fetch, so there's
+  // no equivalent race here — each uses the picked contract's scan-time mid.
+  useEffect(() => {
+    const controller = new AbortController();
+    // Per-claim `settled` flags (closure, not React state — see the
+    // active-card effect's cleanup comment for why). `recomputeTick` is one
+    // dependency shared by every basket symbol's Retry button, so retrying
+    // symbol Y forces this whole effect to tear down and re-run even though
+    // symbols X/Z's requests may have already succeeded — cleanup must only
+    // release a claim that never actually settled, or X/Z would be silently
+    // refetched (and, if that incidental refetch happened to fail, show a
+    // false error banner for a contract that was already fine).
+    const claimedThisInvocation: { symbol: string; key: string; settled: () => boolean }[] = [];
+    for (const sym of basket) {
+      if (sym === pickedCard?.symbol) continue;   // owned by the active-card effect above
+      const resolved = resolvePickedCard(sym);
+      if (!resolved?._userOverride || !resolved.contractDetails) continue;
+      const key = contractKeyFor(resolved);
+      if (!key || requestedPlanKeysRef.current[sym] === key) continue;
+      requestedPlanKeysRef.current[sym] = key;
+      let settled = false;
+      claimedThisInvocation.push({ symbol: sym, key, settled: () => settled });
+      const cd = resolved.contractDetails;
+      api.recomputePlan({
+        symbol: sym,
+        direction: resolved.direction,
+        stock_price: resolved.price,
+        strike: cd.strike,
+        dte: cd.dte,
+        premium: cd.mid,
+        delta: cd.delta,
+        spread: cd.spread!,
+        quote_live: !resolved.noLiveQuote,
+        final_stop: resolved.exit.finalStop ?? null,
+          ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
+        ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+        ...horizonFieldsFrom(useScanStore.getState().context),
+      }, controller.signal)
+        .then((plan) => {
+          settled = true;
+          if (controller.signal.aborted) return;
+          setPlansBySymbol((prev) => ({ ...prev, [sym]: { key, plan } }));
+          setPlanErrors((prev) => { const next = { ...prev }; delete next[sym]; return next; });
+        })
+        .catch(() => {
+          settled = true;
+          if (!controller.signal.aborted) {
+            setPlanErrors((prev) => ({ ...prev, [sym]: 'Could not compute the plan for this basket contract.' }));
+          }
+        });
+    }
+    return () => {
+      controller.abort();
+      for (const { symbol, key, settled } of claimedThisInvocation) {
+        if (!settled() && requestedPlanKeysRef.current[symbol] === key) {
+          delete requestedPlanKeysRef.current[symbol];
+        }
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [basket, pickedContracts, contractsBySymbol, cardIndex, pickedCard?.symbol, recomputeTick]);
+
+  /** Build the pipe-delimited option id the OCC converter and broker adapters expect. */
+  function toOptionSymbol(card: TradeCardData): string {
+    const cd = card.contractDetails;
+    if (cd?.strike != null && cd.expiry && cd.right) {
+      return buildContractId(card.symbol, cd.strike, cd.expiry, cd.right);
+    }
+    return card.contract; // fallback (display label — broker may reject, best effort)
+  }
+
+  /** The exit plan a position booked from `card` carries. ONE expression for
+   *  the two paths that book from a single card -- `buildPaperPosition` and
+   *  the auto-trade arm request (O4 step 6) -- so an armed trade and a sent
+   *  trade cannot carry two different plans for one contract. */
+  function exitPlanFor(card: TradeCardData): ExitPlan | null {
+    const key = contractKeyFor(card);
+    return key ? exitPlanByContract[key]?.plan ?? null : null;
+  }
+
+  /** Build a paper position object without touching the store.
+   *  `livePrice` (the freshly-fetched mid for the active contract) takes
+   *  precedence over the scan-time mid so the entry price reflects the market
+   *  at fill time, not when the scan ran. The backend re-fetches again at save
+   *  time as the authoritative baseline; this keeps the local view correct
+   *  until the next portfolio sync. */
+  function buildPaperPosition(card: TradeCardData, orderType: 'LMT' | 'MKT', broker: string, orderId: string, livePrice?: number, contracts = 1): PortfolioPosition {
+    const cd  = card.contractDetails;
+    const mid = positiveOrNull(livePrice) ?? positiveOrNull(cd?.mid) ?? entryLimitFor(card);
+    const dte = cd?.dte ?? 24;
+    const brokerLabel = brokerLabelFor(broker);
+    const typeLabel   = orderType === 'LMT' ? 'Limit' : 'Market';
+    return {
+      symbol:        card.symbol,
+      contract:      toOptionSymbol(card),
+      direction:     card.direction,
+      entryDate:     todayISO(),
+      expiry:        cd?.expiry ?? '2026-12-31',
+      dteRemaining:  dte,
+      dteTotal:      dte,
+      entryPrice:    mid,
+      currentPrice:  mid,
+      pnlDollar:     0,
+      pnlPct:        0,
+      // The EDITED invalidation, not the card's original. This drives
+      // STOP_REACHED, so storing the original meant an edit from $195.80 to
+      // $193.00 sent the position out with a stop the user had replaced --
+      // and the alert then fired $2.80 early, at a level nothing on screen
+      // still showed.
+      stop:          invalidationFor(card),
+      // See invalidationIsUserSetFor: this path DOES send scanStockPrice, so
+      // without the flag the router shifted the typed stop by
+      // (live - scan) and stored a level the user never chose.
+      stopIsUserSet: invalidationIsUserSetFor(card),
+      structuralStop: structuralStopPriceFor(card),
+      exitPlan:      exitPlanFor(card),
+      maxLossOverride: maxLossOverrideBySymbol[card.symbol] ?? null,
+      // Piece 4 — MUST match what positionFromOrder produces for the same card,
+      // which is now true by construction: both call premiumStopDollarFor.
+      premiumStopDollar: premiumStopDollarFor(card),
+      // The user's own fraction of this `mid` -- see positionFromOrder.
+      premiumStopPct: premiumStopPctFromDollars(premiumStopDollarFor(card), mid) ?? null,
+      targets:       card.exit.targets,
+      status:        card.finalStatus,
+      ivRank:        cd?.ivRank,
+      iv:            cd?.iv,
+      delta:         cd?.delta,
+      theta:         cd?.theta,
+      vega:          0.20,
+      contracts,
+      source:        'paper',
+      sourceLabel:   `${brokerLabel} — ${typeLabel} (ID: ${orderId})`,
+      orderedAt:     nowISOLocal(),
+      recId:         generateRecId(),
+      scanStockPrice: card.price,
+      tradeCardSnapshot: tradeCardSnapshotOf(card),
+      // Phase G (piece 5) — see positionFromOrder's own comment on `pick`;
+      // this closure has direct access to methodPickFor, unlike that
+      // module-level function.
+      ...pickedFieldsFrom(methodPickFor(card)),
+    };
+  }
+
+  /* P1b-i (P1-CARD-SAVE-FIRST-SEND-TRIMMED-2026-09-25). Place Limit and Right
+   * Now — Market are ONE function. It SAVES the position first and only then
+   * sends the order, at the quantity the save approved. The old order (send,
+   * then save) left a live broker order untracked whenever the save was
+   * refused -- P1a's 5-contract cap made that refusal routine.
+   *
+   * Every branch that may leave a Portfolio row with no order behind it, or an
+   * order whose status is unknown, pushes a persistent note
+   * (`directSendNotesStore`) that outlives this card, and every message names
+   * the contract: Prev/Next stay enabled during a send, so a result can land on
+   * another candidate's screen. */
+  async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
+    const card = effectiveCard;
+    if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
+    // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
+    // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
+    // scan's age), the same reading as `earningsVeto` below. P0B B7: against
+    // the scan's veto window, max(reject_days, hold).
+    if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
+    // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
+    // `disabled` protects the button and this protects the ORDER -- anything
+    // that reaches this function by another route inherits the refusal.
+    // Exactly the shape SendToBrokerDialog.submit() uses beside its `disabled`.
+    if (!checkInvalidation(invalidationFor(card))) return;
+    // Phase G piece 5, build step 4 (§7.1). Same belt-and-braces shape.
+    if (!checkMethodPick(methodPickFor(card))) return;
+    // ROUND 10 finding 11 -- the notes are facts about ONE save, so clear them
+    // per order.
+    setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+    const broker = selectedBroker;
+    const blocked = directOrderBlock(orderType, broker);
+    if (blocked) { setOrderError(blocked); return; }
+    const setPlacing = orderType === 'LMT' ? setLimitPlacing : setMarketPlacing;
+    setPlacing(true);
+    setPaperOrderId(null);
+    let label = card.contract;
+    try {
+      const keyAtSend = contractKeyFor(card);
+      const selectionAtSend = selectionEpochRef.current;
+      const cdAtSend = card.contractDetails;
+      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent � contract details unavailable.'); return; }
+      const quoteController = new AbortController();
+      const quoteTimeout = setTimeout(() => quoteController.abort(), 8000);
+      let freshQuote: Awaited<ReturnType<typeof api.getContractQuote>> | null;
+      try {
+        freshQuote = await api.getContractQuote(card.symbol, cdAtSend.strike, cdAtSend.expiry, cdAtSend.right, quoteController.signal).catch(() => null);
+      } finally { clearTimeout(quoteTimeout); }
+      // Navigation during the probe cancels this send; neither quote nor tick can cross contracts.
+      if (currentContractKeyRef.current !== keyAtSend || selectionEpochRef.current !== selectionAtSend) return;
+      setLiveQuote(freshQuote ? { ...freshQuote, key: keyAtSend } : null);
+      if (freshQuote?.quoteLive !== true && quoteConfirmation?.contractKey !== keyAtSend) {
+        setOrderError('No order was sent � confirm the quote warning for this contract and click again.');
+        return;
+      }
+      // Captured ONCE; never re-read from `effectiveCard`, which may be another
+      // candidate by the time the broker answers.
+      label = contractLabelFor(card);
+      const brokerLabel = brokerLabelFor(broker);
+      // Floored defensively: `?? 1` alone only catches null/undefined, not 0,
+      // and the backend rejects quantity:0 with an opaque 422.
+      const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
+      // Every card-derived order argument is computed BEFORE the save, so a
+      // throw here happens before anything is written.
+      const optionSymbol = toOptionSymbol(card);
+      const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
+      const pos = buildPaperPosition(card, orderType, broker, 'pending', freshQuote?.price, contracts);
+      const recId = pos.recId;
+
+      // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
+      // note can only ever point at a row THIS send created.
+      if (usePortfolioStore.getState().positions.some((p) => p.contract === pos.contract)) {
+        setOrderError(`${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`);
+        return;
+      }
+
+      // Audit round 1, F1: the save carries the order it precedes, so the
+      // server judges the D5 premium cap at what this order can PAY -- the
+      // edited limit when it is above the mid, the ask for a market order --
+      // and not at `pos.entryPrice`, the mid it stores. `limitPrice` is the
+      // very value the order below posts.
+      const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
+      // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
+      // may still be running); or a 2xx whose body did not parse (the page
+      // cannot know whether the server resized). No order is sent. The create
+      // may still commit AFTER a delete lands, so the note is pushed whatever
+      // the delete answers, and `applyPersistedPosition` is never called here
+      // (its offline branch would re-POST).
+      const bare5xx = !saved.ok && !saved.offline && /^HTTP 5\d\d$/.test(saved.detail ?? '');
+      const unparsed2xx = saved.ok && saved.entryPrice == null;
+      if (saved.offline || bare5xx || unparsed2xx) {
+        setOrderError(unparsed2xx
+          ? `${label}: Portfolio saved it but its reply could not be read, so NO order was sent.`
+          : `${label}: Portfolio tracking could not be confirmed, so NO order was sent.`);
+        addDirectNote({ recId, kind: 'save-unconfirmed', label, brokerLabel, orderId: null });
+        dropLocal(recId);
+        try { await removeTrackedRow(recId, false); } catch { /* best effort; the note stays */ }
+        return;
+      }
+      if (!saved.ok) {
+        // The server answered no. Every refusal is raised before the commit or
+        // after a rollback, so nothing was written: no delete (on a 409 the
+        // only matching row is the user's real one), no note.
+        const detail = saved.detail ?? 'not saved';
+        setOrderError(/already exists/.test(detail)
+          ? `${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+          : `${label}: No order was sent — ${detail.replace(/\.$/, '')}.`);
+        return;
+      }
+
+      // Confirmed save. EVERYTHING from here sits in this try/catch: nothing
+      // after the save may reach the outer catch, which would leave a saved row
+      // with no note.
+      const orderQty = saved.adjustedQty ?? contracts;
+      const keepRow = (why: string, orderId: string | null) => {
+        // Note FIRST, row second: a throw can never leave a row without its note.
+        addDirectNote({ recId, kind: 'order-unknown', label, brokerLabel, orderId });
+        const banner = `${label}: Order status UNKNOWN (${why}).`;
+        setOrderError(banner);
+        try {
+          applyPersistedPosition(
+            saved, { ...pos, contracts: orderQty }, addPosition,
+            (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
+          );
+        } catch (e) {
+          setOrderError(`${banner} The local view failed to update: ${String(e)}`);
+        }
+      };
+      try {
+        let outcome: DirectOutcome;
+        try {
+          const res = await api.postOptionOrder({
+            broker,
+            symbol:        card.symbol,
+            option_symbol: optionSymbol,
+            action:        'BUY',
+            effect:        'OPEN',
+            quantity:      orderQty,
+            order_type:    orderType,
+            limit_price:   limitPrice,
+            tif:           'DAY',
+          });
+          outcome = classifyDirectFailure({ response: res });
+        } catch (e) {
+          outcome = classifyDirectFailure({ thrown: e });
+        }
+
+        if (outcome.verdict === 'delete') {
+          // Provably never received by the broker: remove the saved row.
+          try {
+            await removeTrackedRow(recId, true);
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}. The tracked position was removed.`);
+          } catch {
+            setOrderError(`${label}: Order NOT placed: ${outcome.why}.`);
+            addDirectNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null });
+          }
+          return;
+        }
+        if (outcome.verdict === 'keep') {
+          keepRow(outcome.why, outcome.orderId);
+          return;
+        }
+
+        const orderId = outcome.orderId;
+        try {
+          applyPersistedPosition(
+            saved,
+            { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
+            addPosition,
+            (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
+          );
+        } catch (e) {
+          setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
+        }
+        setPaperOrderId({ label, id: orderId });
+      } catch (e) {
+        // Unreachable by design (every call above is guarded); if it is ever
+        // reached, the order's fate is unknown and the row stays with a note.
+        keepRow(String(e), null);
+      }
+    } catch (e) {
+      // Only pre-save work reaches here: nothing was written, no order sent.
+      setOrderError(`${label}: No order was sent — ${String(e)}`);
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  const placeLimitPaper = () => placeDirectOrder('LMT');
+  const placeMarketNow  = () => placeDirectOrder('MKT');
+
+  /** A note's Remove button (P1B1-MINIMAL-REMOVE-2026-09-25): confirm, then
+   *  hard-DELETE exactly that note's rec_id -- never "the ${label} position". */
+  async function removeNoteRow(note: DirectSendNote) {
+    if (note.removing) return;
+    if (!window.confirm(removeConfirmText(note))) return;
+    const { patchNote, removeNote } = useDirectSendNotesStore.getState();
+    patchNote(note.recId, { removing: true, status: null });
+    try {
+      // A 404 is final only when the server had already answered this send's
+      // save before the note existed (ORDER-UNKNOWN, NOT-REMOVED). On
+      // SAVE-UNCONFIRMED the create may still be in flight, so it is not.
+      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+      removeNote(note.recId);
+    } catch (e) {
+      patchNote(note.recId, {
+        removing: false,
+        status: note.kind === 'save-unconfirmed' && isNotFound(e)
+          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
+          : `Remove failed: ${whyOf(e)}. Try again.`,
+      });
+    }
+  }
+
+  /* The keyed reads. Anything that wants "the live quote for the card on
+   * screen" goes through these; the raw state is never read directly, so a
+   * quote left standing for a different contract can only ever be ignored. */
+  const liveQuoteForCard = liveQuote && liveQuote.key === contractKey ? liveQuote : null;
+  const liveStockPriceForCard =
+    liveStockPrice && liveStockPrice.symbol === effectiveCard?.symbol
+      ? liveStockPrice.price
+      : null;
+
+  const marketBlocked = directOrderBlock('MKT', selectedBroker);
+
+  // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
+  // inside the scan's reject window (and forces finalStatus REJECT).
+  //
+  // Audit round 1, F4 (Kenneth 2026-10-03): that flag is a scan-time snapshot
+  // and the scan result is persisted, so a card reopened days later still
+  // carried the scan day's distance. `earningsGateFor` ages `earningsDays` by
+  // the scan's age in calendar days and re-judges it against the scan's own
+  // window; a distance aged below zero reads as UNKNOWN (D4), not a veto.
+  // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
+  // is unknown -- every fire of it would be refused. The rail reads the same
+  // helper.
+  // STOCKS-HORIZON-P0B B7: the window is the scan's veto window,
+  // `event_window.veto_days ?? max(reject_days, the scan's hold)`.
+  const earningsGate = earningsGateFor(
+    effectiveCard, scanResult?.timestamp, earningsVetoDays,
+  );
+  const earningsVeto = earningsGate.veto;
+  const bearishUnvalidated = isBearishUnvalidated(effectiveCard?.direction);
+
+  const idx = symbols.indexOf(active);
+
+  const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
+  const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
+
+  const togglePin = () => {
+    // Fix #3 (review). A vetoed card never enters the basket (un-pinning is fine).
+    if (earningsVeto && !basket.includes(active)) return;
+    setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
+  const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
+
+  const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
+    usePortfolioStore.getState().clearSyncError();
+    // Same reason as the two order paths: this submit's outcome, not the last
+    // one's. Basket notes are symbol-qualified because several land at once.
+    //
+    // ALL of them, matching placeDirectOrder. Clearing only
+    // the notes left the red banner standing: a basket that partly failed
+    // set its banner, and a second basket that fully succeeded then rendered
+    // "Some orders were not saved" over a submit in which everything was.
+    // `orderError` too: a direct path's error is about an earlier send, not
+    // this one (A8b split the basket's banner into `basketError`).
+    // NOT `paperOrderId` (P1b-i): the basket never sets it, so clearing it here
+    // only erased a direct send's still-true confirmation. NOT the direct-send
+    // notes either: they outlive every send until their row is removed.
+    setSaveNotes([]);
+    setBasketNotes([]);
+    setBasketError(null);
+    setOrderError(null);
+    let saved = 0, queued = 0;
+    const failures: string[] = [];
+    const adjusted: string[] = [];
+
+    for (const o of orders) {
+      // One canonical recId per order: addPosition syncs it to the backend
+      // (a single POST), so there is no second POST to conflict (409) with.
+      const recId = recIdMap[o.card.symbol] ?? generateRecId();
+      const structuralStop = structuralStopPriceFor(o.card);
+      const orderContractKey = contractKeyFor(o.card);
+      const orderExitPlan = orderContractKey ? exitPlanByContract[orderContractKey]?.plan ?? null : null;
+      const orderMaxLossOverride = maxLossOverrideBySymbol[o.card.symbol] ?? null;
+      const res = await addPosition({
+        ...positionFromOrder(
+          o, structuralStop, orderExitPlan, orderMaxLossOverride,
+          premiumStopDollarFor(o.card), invalidationRawFor(o.card), entryLimitFor(o.card),
+          // ROUND 10 finding 7 -- the LIVE mid, for the active symbol. The
+          // direct path uses `liveQuoteForCard?.price` and this path used the
+          // scan-time `contractDetails.mid`, so the two stored different
+          // entryPrices for the same card -- the denominator the premium stop
+          // is derived against and the threshold both alert engines compare.
+          // Only the active card has a fetched quote; the rest legitimately
+          // fall back to their scan mid.
+          o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null,
+          methodPickFor(o.card),
+        ),
+        recId,
+        // ROUND 10 finding 2 -- WITHOUT this the router never fetches the
+        // underlying, so neither the re-anchor nor the wrong-side guard runs
+        // on anything the basket sends.
+        scanStockPrice: o.card.price,
+      });
+
+      if (res.status === 'rejected') {
+        // Backend refused it and the optimistic row was dropped — a real failure.
+        failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
+        continue;
+      }
+      // ROUND 9 — the basket path could not report a dropped premium stop at
+      // all: `addPosition`'s result carried no premium-stop outcome, so the
+      // only two paths that told the user were placeLimitPaper and
+      // placeMarketNow. Same fallback, same silence, one of four create paths
+      // away. Symbol-qualified because a basket submits several at once.
+      if (res.premiumStopDropReason != null) {
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason, res.premiumStopKeptPct)}`;
+        setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+      }
+      if (res.status === 'pending') {
+        // Optimistically added but not yet confirmed by the backend. Don't count it
+        // toward the daily cap or write an APPROVE audit entry until it lands — a
+        // premature APPROVE that a later retry rejects would be a false audit trail.
+        queued++;
+        continue;
+      }
+      // status === 'ok' — confirmed saved by the backend.
+      incrementDaily();
+      saved++;
+      if (res.adjustedQty != null) {
+        adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
+      }
+      logAudit('APPROVE', recId, {
+        symbol: o.card.symbol,
+        contract: o.card.contract,
+        contracts: o.contracts,
+      });
+    }
+    setDialogOpen(false);
+    setBasket([]);
+
+    // Toast covers placed orders (saved or queued-for-retry); the red error banner
+    // covers hard rejections. They describe DIFFERENT orders, so both may show for
+    // a mixed basket — but a network-only submit shows just the toast (no
+    // contradictory red banner) with the queued count reported distinctly.
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
+      window.setTimeout(() => setToast(null), 6000);
+    }
+    if (failures.length) {
+      setBasketError(`Some orders were not saved — ${failures.join('; ')}`);
+    }
+  };
+
+  const basketEmpty = basket.length === 0;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
+
+  return (
+    <div className={`${styles.main} ${paperStyles.presentationPage}`}>
+      <div className={styles.stepHeader}>
+        <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
+        <Title as="h1" size={24}>Trade Card</Title>
+        <details className={paperStyles.pageExplanation}>
+          <summary>How this page works</summary>
+        <Text size={13} tone="secondary">
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
+        </Text>
+        </details>
+      </div>
+
+      {effectiveCard && <MarketSentiment s={effectiveCard.sentiment} compact />}
+
+      <CandidateNav
+        symbols={symbols}
+        activeSymbol={active}
+        basket={basket}
+        onPrev={goPrev}
+        onNext={goNext}
+        onSelect={setActive}
+        onTogglePin={togglePin}
+        onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
+      />
+
+      {cards.length === 0 && (
+        <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
+      )}
+
+      <div className={paperStyles.presentationLayout}>
+        <div className={paperStyles.cardColumn}>
+      {effectiveCard && (
+        <>
+          {effectiveCard._userOverride && (
+            <StatusBadge status="PENDING" label="User-selected" tooltip="Manually pinned as the active trade card — not a scoring verdict." />
+          )}
+          {/* For an overridden contract, don't render the card until its plan is
+              recomputed — otherwise the Exit Plan / R-R would briefly show the
+              auto-pick's numbers next to the selected contract. */}
+          {isOverride && !planReady ? (
+            <div aria-busy={!activePlanError}>
+              {activePlanError ? (
+                <>
+                  <Text size={12} tone="reject">{activePlanError}</Text>
+                  <button
+                    type="button"
+                    className={paperStyles.paperBtnMarket}
+                    onClick={() => retryPlan(effectiveCard.symbol)}
+                  >
+                    Retry
+                  </button>
+                </>
+              ) : (
+                <Text size={12} tone="secondary">Preparing the plan for your selected contract…</Text>
+              )}
+            </div>
+          ) : (
+            <TradeCard
+              showMarketSentiment={false}
+              decisionTarget={decisionTarget}
+              onRrStaleChange={onRrStaleChange}
+              data={cardForDisplay ?? effectiveCard}
+              recId={recIdMap[effectiveCard.symbol]}
+              onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
+              sendLabel={sendLabel}
+              sendDisabled={basketEmpty || basketPlansPending}
+              contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+              // `editKeyFor(effectiveCard)`, not the strict `contractKey`:
+              // the readers key off the effective card too, and a null key
+              // used to drop the edit entirely (see editKeyFor).
+              onEditsChange={(overlay, meta) => handleEditsChange(effectiveCard.symbol, editKeyFor(effectiveCard), overlay, meta)}
+              // Piece 4 — round-tripped like `contracts` above. The card's
+              // reset on a contract change does not call `onEditsChange`, so
+              // without this the field fell back to its seed while this cache
+              // kept the user's edit, and the two send paths posted a number
+              // the card was no longer showing.
+              // `editKeyFor`, matching the writer and both send-path readers.
+              // Keyed off the strict `contractKey` these restored nothing on a
+              // card whose contractDetails lack a strike/expiry/right, which is
+              // exactly the card whose edits used to be dropped entirely.
+              initialPremiumStop={editKey ? premiumStopByContract[editKey] ?? null : null}
+              // These two round-trip for the same reason the premium stop does:
+              // the card's reset on a candidate change would otherwise put the
+              // seed back on screen while these caches kept the edit, so the
+              // card showed $2.50 / $140.00 while the order went out at $2.71
+              // with a stop of 132.
+              initialEntryLimit={editKey ? entryLimitByContract[editKey] ?? null : null}
+              initialInvalidation={invalidationBySymbol[effectiveCard.symbol] ?? null}
+              // Anchors for the three fields' bounds. `data.price` and
+              // `contractDetails.mid` come off a scanResult that scanStore
+              // persists, so after a reload they can be days old; these two are
+              // the same numbers the "Live stock:" / "Live mid:" lines below
+              // are rendered from.
+              liveStockPrice={liveStockPriceForCard}
+              liveMid={liveQuoteForCard?.price ?? null}
+              resetKey={scanEpoch}
+              onStructuralStopChange={(stop, stockPrice) => handleStructuralStopChange(contractKey, stop, stockPrice)}
+              onFirstPassageChange={(estimate, context) => handleFirstPassageChange(contractKey, estimate, context)}
+              onExitPlanChange={(plan) => handleExitPlanChange(contractKey, plan)}
+              initialMaxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+              onMaxLossOverrideChange={(v) => handleMaxLossOverrideChange(effectiveCard.symbol, v)}
+              initialMethodPick={methodPickFor(effectiveCard)}
+              onMethodPickChange={(pick) => handleMethodPickChange(effectiveCard, pick)}
+            />
+          )}
+          {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
+            <Text size={11} tone="caution">
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
+            </Text>
+          )}
+          {basketPlanErrors.map(({ symbol, error }) => (
+            <div key={symbol} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <Text size={11} tone="reject">{symbol}: {error}</Text>
+              <button type="button" className={paperStyles.paperBtnMarket} onClick={() => retryPlan(symbol)}>
+                Retry {symbol}
+              </button>
+            </div>
+          ))}
+          {fetchingQuote && (
+            <Text size={11} tone="dim">Fetching live price…</Text>
+          )}
+          {quoteWarning(liveQuoteForCard) && (
+            <div role="status">
+              <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
+              <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => setQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
+            </div>
+          )}
+          {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
+          )}
+          {liveStockPriceForCard != null && !fetchingQuote && (
+            <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
+          )}
+        </>
+      )}
+
+        </div>
+
+      {/* Paper broker execution */}
+      {effectiveCard && (
+        <div className={paperStyles.paperSection}>
+          <Text size={14} weight={600}>Decision and execution</Text>
+          <div ref={setDecisionTarget} className={paperStyles.decisionAnchor} />
+          <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
+          {selectedBroker && (
+            <>
+              <div className={paperStyles.paperButtons}>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnLimit}
+                  onClick={placeLimitPaper}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
+                  title={
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
+                >
+                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
+                </button>
+                <button
+                  type="button"
+                  className={paperStyles.paperBtnMarket}
+                  onClick={placeMarketNow}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
+                  title={
+                    // Direction and broker refusals cannot be cured by filling a field.
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
+                    : pickMissing ? MISSING_METHOD_PICK_TITLE
+                    : undefined
+                  }
+                >
+                  {marketPlacing ? 'Placing…' : 'Right Now — Market'}
+                </button>
+              </div>
+              {/* Fix #3 (review). Said, not merely disabled; independent of the
+                * stop / pick refusals below for the same reason they are
+                * independent of each other. */}
+              {bearishUnvalidated && (
+                <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+              )}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
+              {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
+                * (title only -- see its armBlockedReason NOTE), so the
+                * unknown-earnings refusal is said here, beside the veto's.
+                * Manual sends stay enabled: D4 caps the card at CAUTION, it
+                * does not veto it. */}
+              {!earningsVeto && earningsGate.armBlockedReason && (
+                <Text size={11} tone="caution">
+                  {earningsGate.armBlockedReason}
+                </Text>
+              )}
+              {!planReady && (
+                <Text size={11} tone="caution">
+                  Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
+                </Text>
+              )}
+              {/* Said, not merely disabled. A greyed button with no reason
+                * beside it reads as a bug; the `title` above is a tooltip and
+                * a tooltip is not a disclosure. Rendered independently of
+                * `!planReady` rather than as its `else`, because the two are
+                * unrelated conditions and can hold at once -- an overridden
+                * contract still recomputing on a restored candidate -- and
+                * suppressing this one behind the other would hide the only
+                * refusal the user can actually act on. */}
+              {stopMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_INVALIDATION_MESSAGE}
+                </Text>
+              )}
+              {/* Phase G piece 5, build step 4 (§7.1). Independent of
+                * `stopMissing` above for the same reason that one is
+                * independent of `!planReady` — a card can be missing both a
+                * stop and a pick at once, and suppressing this behind the
+                * other would hide a refusal the user can act on right now. */}
+              {pickMissing && (
+                <Text size={11} tone="reject">
+                  {MISSING_METHOD_PICK_MESSAGE}
+                </Text>
+              )}
+              {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+                * Hiding it also hid Disarm for a strategy already armed; the
+                * veto now refuses Arm / Fire now inside the component, and the
+                * sentence is the one printed above. */}
+              {planReady && (
+                <AutoTradeArm
+                  armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
+                  // The same live quote TradeCard gets as `liveMid` and the
+                  // page prints as "Live mid" -- it was in scope here all
+                  // along and simply never handed down, leaving the arm path
+                  // (and the daily-loss gate behind it) on the scan-time mid.
+                  liveMid={liveQuoteForCard?.price ?? null}
+                  card={effectiveCard}
+                  broker={selectedBroker}
+                  contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+                  // Piece 4 — the same resolution both send paths use, so a
+                  // trade that is armed and a trade that is sent cannot end up
+                  // at two different premium stops.
+                  premiumStopDollar={premiumStopDollarFor(effectiveCard)}
+                  // Same resolution as every other send path, for the same
+                  // reason: an armed trade and a sent trade must not go out at
+                  // two different limit prices.
+                  entryLimit={entryLimitFor(effectiveCard)}
+                  // DIRECT-SEND-STOP-GATE-2026-09-09, and since O4 step 6 also
+                  // the booked stop: AutoTradeArm gates on this value AND posts
+                  // it as `stop`, so the fired trade is booked at the level
+                  // the card shows. The same resolution `stopMissing` is
+                  // derived from, passed rather than recomputed, so Arm and
+                  // the two direct buttons cannot refuse on two different
+                  // readings of one field.
+                  resolvedInvalidation={resolvedInvalidationForCard}
+                  // O4 step 6 -- the booking fields, each resolved by the SAME
+                  // expression `buildPaperPosition` uses for this card, so an
+                  // armed trade books what Place Limit would have stored.
+                  // `optionSymbol` is the booked `contract` (a unique column)
+                  // and what the broker receives; `stopIsUserSet` tells the
+                  // booking not to re-anchor a typed stop. Both are required
+                  // props for that reason.
+                  optionSymbol={toOptionSymbol(effectiveCard)}
+                  stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
+                  structuralStop={structuralStopPriceFor(effectiveCard)}
+                  exitPlan={exitPlanFor(effectiveCard)}
+                  maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+                  // Phase G piece 5, build step 4 (§7.1). The same resolution
+                  // `pickMissing` is derived from, passed rather than
+                  // recomputed, so Arm and the two direct buttons cannot
+                  // refuse on two different readings of one field.
+                  methodPick={resolvedMethodPickForCard}
+                />
+              )}
+            </>
+          )}
+          {/* OUTSIDE the `selectedBroker` gate, deliberately.
+            *
+            * ROUND 12 finding 2 -- the lines below are the ONLY channel for
+            * two things the basket path produces: the "premium stop could not
+            * be applied" disclosure (`droppedStopNote`, written by
+            * `handleSubmit` for every order the backend re-anchored) and the
+            * hard-rejection banner (`basketError` since A8b; `orderError`
+            * before it, on a failed save). The
+            * basket reaches `handleSubmit` through TradeCard's Send button,
+            * which never touches BrokerPicker -- so a user who pins a basket
+            * and sends it without selecting a paper broker got neither
+            * message. A required disclosure that renders only when an
+            * unrelated control happens to be set is a disclosure that does not
+            * exist.
+            *
+            * `paperOrderId` stays inside the gate above: only the two direct
+            * paths set it, and both require a selected broker. */}
+          {saveNotes.map((n) => (
+            <Text key={n} size={12} tone="caution">{n}</Text>
+          ))}
+          {basketNotes.map((n) => (
+            <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
+          ))}
+          {basketError && <Text size={12} tone="reject">{basketError}</Text>}
+          {orderError && <Text size={12} tone="reject">{orderError}</Text>}
+          {/* P1b-i -- the direct sends' persistent notes. Outside the broker
+            * gate like the lines above; each Remove acts on its own rec_id. */}
+          {directNotes.map((n) => (
+            <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
+              <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
+              <button
+                type="button"
+                className={paperStyles.directNoteRemove}
+                onClick={() => { void removeNoteRow(n); }}
+                disabled={n.removing}
+              >
+                {`Remove (${n.label})`}
+              </button>
+              {n.status && <Text size={11} tone="caution">{n.status}</Text>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      </div>
+
+      {dialogOpen && (
+        <SendToBrokerDialog
+          cards={basketCards}
+          quoteWarningsByContract={Object.fromEntries(basketCards.map((c) => {
+            const key = contractKeyFor(c);
+            return [key ?? c.contract, quoteWarning(key === contractKey ? liveQuoteForCard : null)];
+          }))}
+          contractsBySymbol={orderContractsBySymbol}
+          overridesBySymbol={maxLossOverrideBySymbol}
+          invalidationBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, invalidationFor(c)]),
+          )}
+          methodPickBySymbol={Object.fromEntries(
+            basketCards.map((c) => [c.symbol, methodPickFor(c)]),
+          )}
+          onClose={() => setDialogOpen(false)}
+          onSubmit={handleSubmit}
+        />
+      )}
+
+      {toast && (
+        <div className={toastStyles.toast} role="status" aria-live="polite">
+          <div>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
+            {toast.adjusted.length > 0 && (
+              <Text size={11} tone="caution">
+                Size reduced to fit exposure limits — {toast.adjusted.join(', ')}
+              </Text>
+            )}
+          </div>
+          <Link href="/portfolio" className={toastStyles.link}>
+            View Portfolio →
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}

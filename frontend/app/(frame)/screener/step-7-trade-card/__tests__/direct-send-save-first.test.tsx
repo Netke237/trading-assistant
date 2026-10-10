@@ -182,7 +182,7 @@ beforeEach(() => {
   getReplies = [];
   (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
   (api.getContractQuote as jest.Mock).mockResolvedValue({
-    price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    quoteLive: true, price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
   });
   (api.postOptionOrder as jest.Mock).mockImplementation(async () => {
     callLog.push('order');
@@ -502,6 +502,8 @@ describe('P1b-i — the green line and the entry price', () => {
     resetStores([makeCard('AAA', 0), makeCard('BBB')]);
     (api.getContractQuote as jest.Mock).mockRejectedValue(new Error('no quote'));
     await renderPage();
+    // NO-LIVE-QUOTE (plan 3e, Q-B (a)): a send with no live quote needs the tick.
+    fireEvent.click(await screen.findByLabelText('Confirm sending without a live quote'));
     await sendAndSettle();
     expect(persistBodies()[0]!.entryPrice).toBe(CARD_LIMIT);
 

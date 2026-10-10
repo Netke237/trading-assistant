@@ -32,7 +32,7 @@ from app.services.horizon_tuning.signals import SignalPoint
 # Bump whenever a signal function in strategy_engine.py changes what it
 # returns. tests/test_horizon_tuning_core.py pins strategy_engine.py's source
 # hash per version and fails with "bump SIGNAL_CACHE_VERSION" when it changes.
-SIGNAL_CACHE_VERSION = 1
+SIGNAL_CACHE_VERSION = 2
 
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "tuning_cache"
 

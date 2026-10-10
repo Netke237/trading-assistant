@@ -148,7 +148,8 @@ async def test_run_scheduled_entry_options_dispatches_to_core_and_records_succes
 
         with_patch_notify = []
 
-        async def _fake_notify(label, count):
+        # no_live_quotes: the NO-LIVE-QUOTE notice clause flag (plan 3f).
+        async def _fake_notify(label, count, *, no_live_quotes=False):
             with_patch_notify.append((label, count))
 
         monkeypatch.setattr(sss, "_notify_scan_schedule_success", _fake_notify)

@@ -75,3 +75,12 @@ weights:
   delta: 0.20        # delta in preferred zone
   dte: 0.15          # DTE in preferred band
   iv_rank: 0.15      # IV rank acceptability
+
+# Quote liveness (NO-LIVE-QUOTE). A chain row's quote counts as live only in the
+# NYSE session AND when its FRESHER side (the newer of bid_date / ask_date) is no
+# older than this. Measured 2026-10-05 in session: the fresher side was never
+# older than 27.3 min (0 of 741 two-sided rows over 30), so the margin is thin.
+# Read by app/data/market.py through contract_validator.max_quote_age_seconds();
+# a missing, non-numeric or <= 0 value runs on 30 and logs a warning.
+quote_liveness:
+  max_age_minutes: 30

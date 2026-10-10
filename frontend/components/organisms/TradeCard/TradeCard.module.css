@@ -238,6 +238,8 @@
 
 .scoreCardHeader {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   justify-content: space-between;
   align-items: center;
 }
@@ -485,19 +487,68 @@
   gap: var(--space-4);
 }
 
-.handlingGrid .orderStrip {
+.handlingGrid .orderStrip,
+.handlingGrid .planCard {
   grid-column: auto;
-  align-content: flex-start;
-  align-items: flex-start;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-4);
   gap: var(--space-3);
 }
 
+.handlingGrid .orderStrip {
+  gap: var(--space-2);
+}
+
 .handlingGrid .orderStrip > :first-child {
-  flex-basis: 100%;
+  margin-bottom: var(--space-1);
 }
 
 .handlingGrid .orderStripItem {
-  flex-basis: 100%;
+  display: block;
+  min-width: 0;
+}
+
+/* Shared columns for Order Entry (including Order type's KV) and Exit Plan.
+   Keep generic KV rows elsewhere on the card in their existing flex layout. */
+.handlingGrid .kvRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  column-gap: var(--space-3);
+  align-items: baseline;
+  align-content: center;
+  min-height: 28px;
+}
+
+.handlingGrid .kvRow > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.handlingGrid .kvRow > :nth-child(2) {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.handlingGrid .editInput {
+  box-sizing: border-box;
+}
+
+.handlingGrid .editRejected {
+  grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Remove the empty live region from grid sizing without hiding it from AT. */
+.handlingGrid .editRejectedEmpty {
+  position: absolute;
+  width: 0;
+  height: 0;
 }
 
 /* Stack methods according to the card's usable width, including the frame rail. */
@@ -579,3 +630,11 @@
   .identityFacts { grid-template-columns: minmax(0, 1fr); }
   .contractIdentity { border-left: 0; padding-left: 0; }
 }
+
+.scorePanelsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-4);
+}
+
+.scorePanelsGrid > * { min-width: 0; }
