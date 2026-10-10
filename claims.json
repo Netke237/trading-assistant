@@ -39,6 +39,14 @@
       "expires_at": "2026-10-10T23:57:09Z",
       "note": "User-approved merge of board #158, PR #195; integration pending",
       "task": "TRADE-CARD-UI-FOLLOWUP-OPTIONS"
+    },
+    {
+      "agent": "codex",
+      "branch": "board/stock-pres-p1-backend-evidence-merge-e405d5ba",
+      "claimed_at": "2026-10-10T20:57:17Z",
+      "expires_at": "2026-10-10T23:57:17Z",
+      "note": "User-approved merge of board #146, PR #192; integration pending",
+      "task": "STOCK-PRES-P1-BACKEND-EVIDENCE"
     }
   ]
 }
