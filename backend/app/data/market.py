@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import time
+import weakref
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -1336,15 +1337,43 @@ def _dividend_date_yf(symbol: str) -> Optional[date]:
     return _calendar_dates_yf(symbol)[1]
 
 
+def _loop_semaphore(
+    registry: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]", limit: int,
+) -> asyncio.Semaphore:
+    """The semaphore for the RUNNING event loop, created on first use.
+
+    On Python 3.11 an `asyncio.Semaphore` binds to the first event loop that
+    has to WAIT on it (`asyncio.mixins._LoopBoundMixin._get_loop`, reached from
+    `acquire()` only when the semaphore is locked). A process-wide singleton
+    therefore raised `RuntimeError: ... is bound to a different event loop` in
+    any later loop that contended on it (pytest-asyncio's loop per test, a
+    script calling `asyncio.run` twice), and the contending symbol was lost.
+    One semaphore per running loop keeps `limit` on every loop and never
+    raises that error. Two loops running at the same time each get their own
+    `limit`.
+
+    The registry is keyed weakly by the loop object, so a new loop that reuses
+    a dead loop's id never inherits its semaphore. A semaphore that has ever
+    been contended holds its loop in `Semaphore._loop`, so that entry stays in
+    the registry after its loop closes — a small, bounded cost in multi-loop
+    processes (tests, scripts). Call only from inside a coroutine.
+    """
+    loop = asyncio.get_running_loop()
+    sem = registry.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(limit)
+        registry[loop] = sem
+    return sem
+
+
 # Limits concurrent Yahoo Finance calendar fetches — prevents rate-limiting during batch scans
-_YF_CALENDAR_SEM: asyncio.Semaphore | None = None
+_YF_CALENDAR_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _get_yf_sem() -> asyncio.Semaphore:
-    global _YF_CALENDAR_SEM
-    if _YF_CALENDAR_SEM is None:
-        _YF_CALENDAR_SEM = asyncio.Semaphore(5)
-    return _YF_CALENDAR_SEM
+    return _loop_semaphore(_YF_CALENDAR_SEMS, 5)
 
 
 async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optional[date]]:
@@ -1447,14 +1476,13 @@ async def fetch_candles_async(
 
 # Lazy semaphore for candle pre-warm — wider than scan concurrency since candles are the
 # heaviest single call and pre-warming happens before the scan, not during it.
-_PREWARM_SEM: asyncio.Semaphore | None = None
+_PREWARM_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _get_prewarm_sem() -> asyncio.Semaphore:
-    global _PREWARM_SEM
-    if _PREWARM_SEM is None:
-        _PREWARM_SEM = asyncio.Semaphore(15)
-    return _PREWARM_SEM
+    return _loop_semaphore(_PREWARM_SEMS, 15)
 
 
 async def prewarm_candles_async(symbols: list[str]) -> int:
