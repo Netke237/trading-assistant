@@ -58,9 +58,14 @@ key, no `version` bump), every P1/P2/P3/P5 file, the scan request, the strategy 
   `pageSentiment: SentimentData | null` inline at render (~L140; `null` when there is no `regime.omm`),
   passed to the full `<MarketSentiment s={pageSentiment} />`. A failed fetch sets `regimeFetchFailed`.
 - `scanStore.stockAfterScanIntent: Record<string, boolean>` (not persisted; reset in `merge`) is set per
-  symbol by the position card's after-scan toggle. `runStockScanWithContinuation` books, after the next
-  scan, only armed candidates whose `stock_status === 'PASS'` (and only when no execution block applies)
-  to the paper portfolio (`lib/stockScan.ts` ~L367-395).
+  symbol by the position card's after-scan toggle. `runStockScanWithContinuation` would book, after the
+  next scan, armed candidates whose `stock_status === 'PASS'` to the paper portfolio — **but only when
+  `stockExecutionBlock()` returns null, and today it never does**: `lib/stockExecutionSession.ts` L109-111
+  returns `STOCK_VALIDATION_UNAVAILABLE` ("Unvalidated — research only. Strategy validation is unavailable;
+  broker sending and automatic arming are blocked.") unconditionally, so every armed PASS candidate is
+  skipped (`lib/stockScan.ts` ~L372-376) and nothing is booked. The position card's after-scan mode already
+  says so (`StockAutoTradeArm` L121-126: "After-scan intent saved for {symbol}. {stockExecutionBlock()}").
+  (Plan round 1 finding P4-A1.)
 - The Options "How this page works" pattern: `<details className={…pageExplanation}><summary>How this page
   works</summary>…</details>` (`step-7-trade-card/page.tsx` ~L1455, styles in its `page.module.css` L10-12).
 - Step 4 shows the default screener context rail (`@contextRail/screener/default.tsx`, QuickLook), so the
@@ -125,12 +130,21 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
    numbers after a reload — the strip then shows "loads on Step 1" instead). Initial value `null`. Do
    **not** add it to `partialize`; do **not** bump `version`; `merge` keeps `current`'s value, which is
    already what a field absent from the persisted blob gets — verify, do not change `merge`.
-2. Step 1: wrap the existing `pageSentiment` object in `useMemo(() => …, [regime, context?.horizon])`
-   (same fields, same values — behaviour of the full `MarketSentiment` unchanged). Add
-   `useEffect(() => { if (regime) setRegimeSentiment(pageSentiment); }, [regime, pageSentiment, setRegimeSentiment])`
-   — before the first response nothing is written (an earlier value from this session stays); a response
-   without `omm` writes `null`. In the fetch's `.catch`, also call `setRegimeSentiment(null)` (a failed
-   refresh must not leave an older reading on the Strategy strip). No other Step 1 change.
+2. Step 1: move the existing `pageSentiment` object literal into one module-level pure function in the
+   same file, `sentimentFromRegime(r: MarketRegime, horizon: string): SentimentData | null` (returns `null`
+   when `!r.omm`; otherwise exactly today's fields and values, with `horizon` as given). The page computes
+   `pageSentiment = useMemo(() => (regime ? sentimentFromRegime(regime, context?.horizon ?? 'Swing') :
+   null), [regime, context?.horizon])` — the full `MarketSentiment` shows exactly what it shows today.
+   The store is written **inside `fetchRegime`, not by an effect** (the fetch's callbacks still run after
+   the user leaves Step 1, as `setRegime` / `setCombinedRegime` already do; an effect on local state would
+   not, leaving the strip on an older reading than the regime verdict — plan round 1 finding P4-A2):
+   - at the start of `fetchRegime` (next to `setRegimeFetchFailed(false)`): `setRegimeSentiment(null)` —
+     the strip never shows a reading older than the latest request;
+   - in `.then(r => …)`, next to `setRegime(r.overall)`:
+     `setRegimeSentiment(sentimentFromRegime(r, useScanStore.getState().context?.horizon ?? 'Swing'))`;
+   - in `.catch`: `setRegimeSentiment(null)`.
+   Add `setRegimeSentiment` to `fetchRegime`'s `useCallback` deps. No effect writes the store. No other
+   Step 1 change.
 
 **Tests first (must fail before the change):**
 - store: initial `regimeSentiment` is `null`; `setRegimeSentiment(x)` stores `x`;
@@ -148,7 +162,11 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
   interpretation: 'Market conviction: Moderate', hmm_state: 'Trending', alignment: 'Aligned',
   insufficient_data: false }`;
   a response without `omm` (store pre-seeded with a non-null value) ends with `null`;
-  a rejected `getRegime` (pre-seeded non-null) ends with `null`.
+  a rejected `getRegime` (pre-seeded non-null) ends with `null`;
+  while `getRegime` is pending (store pre-seeded with reading A) `regimeSentiment` is `null`;
+  **unmount before the response** (pre-seeded with reading A; render, `unmount()`, then resolve the pending
+  promise with reading B): the store ends with B's sentiment, not A;
+  the full `MarketSentiment` (mocked; capture its `s` prop) receives the same object Step 1 passed before.
 
 **Commit:** `feat(step1): share the regime sentiment with the Stocks Strategy page (non-persisted)`
 
