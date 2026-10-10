@@ -2192,10 +2192,6 @@
       "status": "in_progress",
       "audit_rounds": 1,
       "audit_clean": false,
-      "plan_stage": {
-        "rounds": 1,
-        "closed_by": null
-      },
       "depends_on": [],
       "covers": [
         "decision STOCK-PRESENTATION-2026-10-10",

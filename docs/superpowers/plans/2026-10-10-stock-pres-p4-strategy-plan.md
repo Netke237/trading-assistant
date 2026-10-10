@@ -173,7 +173,8 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
 ### Task 2 — Strategy page in the Options layout + How this page works + Looks for + after-scan count
 
 **Files:** `frontend/app/(frame)/screener/step-4-stocks/page.tsx`, `page.module.css`, new
-`frontend/app/(frame)/screener/step-4-stocks/__tests__/presentationLayout.test.tsx`.
+`frontend/app/(frame)/screener/step-4-stocks/__tests__/presentationLayout.test.tsx` and
+`__tests__/afterScanUnblocked.test.tsx`.
 
 **Change (no logic change; every M-row element keeps its JSX, props, conditions and handlers):**
 1. Restructure the JSX into the target layout above. The side column is
@@ -204,10 +205,17 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
 
 4. **After-scan armed count** (M11): `const armedCount = useScanStore((s) =>
    Object.values(s.stockAfterScanIntent).filter(Boolean).length);` (a number selector — no new object per
-   render). Only when `armedCount > 0`, a side card titled "After-scan" with
-   `<Text size={12} tone="secondary">{armedCount} {armedCount === 1 ? 'symbol' : 'symbols'} armed — booked
-   to the paper portfolio only if they PASS on the next scan. Arming itself stays on the position
-   card.</Text>` (preview wording). Nothing is shown at 0 (no unapproved empty-state text).
+   render). Only when `armedCount > 0`, a side card titled "After-scan" with one
+   `<Text size={12} tone="secondary">` whose text depends on the existing execution block
+   (`import { stockExecutionBlock } from '@/lib/stockExecutionSession'`, called at render, never cached):
+   - `block = stockExecutionBlock()` non-null (**always, today**) →
+     `` `${armedCount} ${noun} armed. ${block} Arming itself stays on the position card.` ``
+     — the block sentence is the same text the position card's after-scan mode shows;
+   - `block` null (only once the block is lifted) → the approved preview sentence
+     `` `${armedCount} ${noun} armed — booked to the paper portfolio only if they PASS on the next scan. Arming itself stays on the position card.` ``
+   with `noun = armedCount === 1 ? 'symbol' : 'symbols'`. Kenneth chose this in the working session's chat,
+   2026-10-10, after plan round 1 finding P4-A1 ("Truthful, both cases"). Nothing is shown at 0 (no
+   unapproved empty-state text).
 5. CSS: `.layout` (two columns), `.stack` and `.side` (`display: flex; flex-direction: column; gap: 16px`),
    `.panel` (card: `padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px;
    background: var(--bg-surface); display: flex; flex-direction: column; gap: 12px`), `.cardTitle`,
@@ -220,9 +228,15 @@ new `frontend/lib/__tests__/scanStoreRegimeSentiment.test.ts` (next to the exist
 - "How this page works" is a `<summary>` and the explanation text above is in the document.
 - Bullish context: each of the 7 bullish "Looks for: …" lines is present; Bearish context
   (`context.direction: 'Bearish'`): each of the 7 bearish lines is present and no bullish-only line is.
-- `stockAfterScanIntent: { AAPL: true, MSFT: true, TSLA: false }` → "2 symbols armed — booked to the paper
-  portfolio only if they PASS on the next scan. Arming itself stays on the position card." ; `{ AAPL: true }`
-  → "1 symbol armed — …"; `{}` and `{ AAPL: false }` → no "After-scan" heading.
+- Real `stockExecutionBlock` (today's block): `stockAfterScanIntent: { AAPL: true, MSFT: true, TSLA: false }`
+  → exactly "2 symbols armed. Unvalidated — research only. Strategy validation is unavailable; broker sending
+  and automatic arming are blocked. Arming itself stays on the position card." (build the expected string
+  from the exported `STOCK_VALIDATION_UNAVAILABLE`), and the text "booked to the paper portfolio" is absent;
+  `{ AAPL: true }` → starts "1 symbol armed. "; `{}` and `{ AAPL: false }` → no "After-scan" heading.
+- In a separate test file (so the module mock does not leak),
+  `jest.mock('@/lib/stockExecutionSession', () => ({ ...jest.requireActual('@/lib/stockExecutionSession'),
+  stockExecutionBlock: () => null }))` with `{ AAPL: true, MSFT: true }` → "2 symbols armed — booked to the
+  paper portfolio only if they PASS on the next scan. Arming itself stays on the position card."
 - Inside `screen.getByRole('complementary', { name: 'Scan actions' })`: the "Run Stock Scan" button, the
   "Pre-warm history" button (unmocked `HistoryPrefetchRow`), a stock-feedback error and notice set via
   `useScanStore.setState({ stockScanFeedback: { error: 'Scan failed — x', notice: 'n' } })`, and "View
