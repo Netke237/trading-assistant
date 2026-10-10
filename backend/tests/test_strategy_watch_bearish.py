@@ -48,7 +48,7 @@ async def test_bearish_idle_signal_emits_entry_with_short_reason():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(100.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: _signal()}):
         events = await evaluate_all()
@@ -77,7 +77,7 @@ async def test_bearish_armed_close_below_stop_no_exit():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(104.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: None}):
         events = await evaluate_all()
@@ -97,7 +97,7 @@ async def test_bearish_armed_close_above_stop_triggers_exit_stop():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(106.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: None}):
         events = await evaluate_all()
@@ -119,7 +119,7 @@ async def test_bearish_armed_close_above_target_no_exit():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(91.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: None}):
         events = await evaluate_all()
@@ -139,7 +139,7 @@ async def test_bearish_armed_close_below_target_triggers_exit_target():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(89.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: None}):
         events = await evaluate_all()
@@ -205,7 +205,7 @@ async def test_legacy_watch_without_direction_defaults_bullish():
     with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=_bars(100.0)), \
-         patch("app.services.strategy_watch_evaluator.get_active", return_value={}), \
+         patch("app.services.strategy_watch_evaluator.get_profile", return_value=({}, "baseline")), \
          patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
                     {"pullback_ema": lambda bars, **k: _signal(direction="Bullish",
                                                                entry=100.0, stop=95.0,

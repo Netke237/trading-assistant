@@ -15,6 +15,7 @@ from app.database import get_db
 from app.schemas import Direction, PickedAt, PickedMethod, PickedStopBasis, Horizon
 from app.services.auto_trader import auto_trader, ArmedStrategy, RegimeGateConfigError
 from app.services.auto_trade_booking import book_fired_order
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.scoring.conviction_sizing import SizingConfigError
 
 # The detail prefix of POST /fire's sizing-config 500. Coupled on purpose to
@@ -72,7 +73,11 @@ class ArmRequest(BaseModel):
     # the product's client sends (AutoTradeArm/index.tsx) is a declared field;
     # a stale bundle sending anything else now fails at ARM, before anything is
     # armed -- the same rollout cost `direction` and `horizon` below accepted.
-    model_config = ConfigDict(extra='forbid')
+    #
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float on this body is
+    # finite or a 422 -- including the strings "NaN" / "1e999" pydantic would
+    # otherwise coerce. The fields' own bounds below are unchanged.
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
@@ -120,11 +125,20 @@ class ArmRequest(BaseModel):
     order_type:      Literal["MKT", "LMT"] = "LMT"
     # gt=0 -- ROUND 9, same reasoning as broker.py's two order schemas: a
     # non-positive limit is never a price, and this endpoint reaches a broker
-    # without passing through either of them.
-    limit_price:     Optional[float] = Field(default=None, gt=0)
+    # without passing through either of them. allow_inf_nan=False -- audit
+    # round 5, R5-F1: the JSON parser accepts `Infinity`/`NaN`, and a
+    # non-finite limit on a MKT arm reached the broker and then failed the
+    # booking's own schema, leaving a live order with no Portfolio row.
+    limit_price:     Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     conid:           Optional[int] = None
-    entry_premium:   float = 0.0   # set to actual option mid; exposure check is skipped if 0
-    portfolio_value: float = 50_000.0
+    # The option mid the position books and the D5 cap is judged from.
+    # REQUIRED and gt=0 -- audit round 2, R2-F2. It defaulted to 0.0 ("exposure
+    # check is skipped if 0"): an arm that omitted it reached
+    # `AutoTradeService.arm()`'s ValueError as a 500, and a zero premium was
+    # the one input that turned the fire-time cap check off. A 422 naming the
+    # field, at arm, is the loud failure `direction` and `horizon` already use.
+    entry_premium:   float = Field(..., gt=0, allow_inf_nan=False)
+    portfolio_value: float = 100_000.0  # Ignored compatibility field; server config is authoritative
     # Piece 4 — the per-trade premium stop from the card being armed. Omitted
     # or null inherits auto_trade.premium_stop_pct. Bounded here as well as on
     # the portfolio schemas: this endpoint reaches the same sizing arithmetic
@@ -191,6 +205,8 @@ class ArmRequest(BaseModel):
     # older client bundle, turns every Arm click into a 422. Both sides ship
     # together. Failing loudly at arm beats measuring the wrong window at fire.
     horizon:         Horizon
+    # Required actual scan hold; stale clients fail at arm rather than guessing.
+    hold_max_days:   int = Field(..., ge=0, le=3650)
     # The Step-3 Regime Gate thresholds this card's scan was run with. Omitted
     # or null means "the scan used the scoring_rules.yaml value", which is what
     # an untouched Step-3 control means -- so an omission is a real state here
@@ -238,6 +254,8 @@ class ArmRequest(BaseModel):
 @router.post("/arm")
 async def arm(req: ArmRequest) -> dict:
     """Arm the auto-trader with the given option order. Fires on next trigger."""
+    if req.direction == "Bearish":
+        raise HTTPException(status_code=422, detail=BEARISH_UNVALIDATED_MESSAGE)
     auto_trader.arm(ArmedStrategy(**req.model_dump()))
     return {"armed": True, "symbol": req.symbol, "option_symbol": req.option_symbol}
 
@@ -266,10 +284,13 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     # check + regime deadline + broker call) does not pin a connection;
     # `book_fired_order` checks one out again.
     await db.rollback()
+    from app.services.daily_risk_hooks import capture_daily_risk_hooks
+    hooks = capture_daily_risk_hooks()
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
-        portfolio_value=None,  # fire() reads portfolio_value from strategy under lock
+        daily_risk_hooks=hooks,
+        portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler
         # reads the armed slot, decides something about what it read (the 400

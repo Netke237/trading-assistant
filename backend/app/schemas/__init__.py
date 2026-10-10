@@ -151,7 +151,7 @@ class DeltaDetail(BaseModel):
 
 class IvRankDetail(BaseModel):
     iv_rank: float | None = None
-    # Which quantity `iv_rank` holds: "rank" (a true percentile from IBKR or
+    # Which quantity `iv_rank` holds: "rank" (an IV rank from IBKR or
     # tastytrade), "absolute" (implied volatility 0-100), or "none". Lets the
     # UI label the figure honestly rather than printing an absolute IV under
     # the words "IV rank" (PHASE-A-NULL-IVRANK-2026-09-06).
@@ -219,6 +219,103 @@ class WatchlistRow(BaseModel):
     nextEventLabel: Optional[str] = None
 
 
+class BlockerComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+    code: str
+    label: str
+    metric: str
+    observed: float | int | str | None = None
+    threshold: float | int | str
+    operator: str
+
+
+class ComponentExplanation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+    name: str
+    wire_name: str
+    raw_score: int
+    weight: float
+    contribution: float
+    lost_points: float
+    observed: float | int | None = None
+    observed_unit: str = ""
+    basis: Literal["rank", "absolute", "none"] | None = None
+    preferred_min: float | int | None = None
+    preferred_max: float | int | None = None
+    flags: list[str] = Field(default_factory=list)
+    volume: int | None = None
+    open_interest: int | None = None
+    preferred_volume_min: int | None = None
+    preferred_oi_min: int | None = None
+
+
+class ContractExplanation(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+    version: int = 1
+    contract_id: str
+    evaluated_at: str
+    outcome: Literal["blocked", "aggregate"]
+    score: int
+    status: Status
+    unrounded_score: float | None = None
+    rounded_score: int | None = None
+    pass_threshold: float
+    caution_threshold: float
+    weights: dict[str, float]
+    components: dict[str, ComponentExplanation]
+    largest_losses: list[ComponentExplanation]
+    blockers: list[BlockerComparison]
+    reject_reasons: list[str] = Field(default_factory=list)
+    soft_flags: list[str] = Field(default_factory=list)
+    soft_fail_count: int
+    max_soft_fail_count: int
+    hard_bounds: dict[str, float] = Field(default_factory=dict)
+    raw_inputs: dict[str, float | None] = Field(default_factory=dict)
+
+
+class StockComponentEvidence(BaseModel):
+    name: str
+    wire_name: str
+    raw_score: int
+    status: Status
+    measured: bool
+    weight: float
+    contribution: float
+    detail: dict
+    config: dict
+
+
+class StockCapEvidence(BaseModel):
+    name: str
+    status: Status
+    before: Status
+    after: Status
+    detail: dict
+    config: dict
+
+
+class StockExplanation(BaseModel):
+    """Read-only scan-time evidence; absent on legacy cards, never backfilled."""
+    version: Literal[1] = 1
+    symbol: str
+    direction: Direction
+    horizon: Horizon
+    scoring_mode: Literal["stock", "options"]
+    iv_basis: str
+    evaluated_at: str
+    score: int
+    status: Status
+    raw_status: Status
+    unrounded_score: float
+    rounding: Literal["python_round_ties_to_even"]
+    pass_threshold: float
+    caution_threshold: float
+    weights: dict[str, float]
+    components: dict[str, StockComponentEvidence]
+    caps: list[StockCapEvidence]
+    gate_config: dict[str, dict | None]
+
+
 # ── Contracts ────────────────────────────────────────────────────────────────
 
 class OptionContract(BaseModel):
@@ -235,7 +332,7 @@ class OptionContract(BaseModel):
     theta: float
     # TWO DIFFERENT QUANTITIES, either of which may be absent
     # (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   ivRank -- a TRUE PERCENTILE, where today's IV sits in this name's own
+    #   ivRank -- an IV RANK, where today's IV sits in this name's own
     #             52-week range. Only IBKR and tastytrade supply one, so it is
     #             None on most chains.
     #   iv     -- ABSOLUTE implied volatility, 0-100, for THIS strike.
@@ -256,6 +353,13 @@ class OptionContract(BaseModel):
     volume: int
     score: int
     contractConfidence: Status
+    explanation: Optional[ContractExplanation] = None
+    # NO-LIVE-QUOTE (plan 3c): /api/contracts grades in label mode, so a row
+    # whose quote is not live comes back capped at CAUTION with these set from
+    # the score card. quoteState: 'one_sided' | 'session_closed' | 'stale';
+    # None on a live row.
+    noLiveQuote: bool = False
+    quoteState: Optional[str] = None
 
 
 # ── Candles ──────────────────────────────────────────────────────────────────
@@ -405,6 +509,11 @@ class AlertItem(BaseModel):
     # None on every other alert type, and on any PREMIUM_STOP predating this
     # field -- the Alerts page falls back to resolving it live for those.
     premiumStopPct: Optional[float] = None
+    # PREMIUM_STOP only -- the side rule it fired under: 'short-stock' (fires
+    # on a RISE), 'long-stock' or 'option' (STOP-SEMANTICS-2026-10-02). Also
+    # selects the notifier's dedup key, so a short's rise-side fire never
+    # inherits dedup state written under the old fall-side rule.
+    stopSide: Optional[str] = None
 
 
 # ── Events ───────────────────────────────────────────────────────────────────
@@ -542,6 +651,15 @@ class FinalStopOut(BaseModel):
     computedAt: str
 
 
+class FinalStopIn(FinalStopOut):
+    """Request-only FinalStopOut (NUMERIC-API-INPUTS T2): the block a card
+    round-trips into POST /contracts/recompute-plan, where a non-finite
+    number is a 422. FinalStopOut itself stays unguarded: exit_plan.py builds
+    it and every response returns it. A FinalStopIn echoed into a
+    FinalStopOut-typed response field serialises with the parent's fields."""
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+
+
 class TradeExit(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     # PIECE 3: the resolved stock stop — the wider of the structural level and
@@ -555,6 +673,10 @@ class TradeExit(BaseModel):
     # ABSENT means "this card predates piece 3" — a scan session persisted
     # before it shipped, replayed through /scan/last-run. It must never render
     # as a computed stop; the card reads "not computed — re-run the scan".
+    stockStopLoss: float | None = None
+    stockStopLossAt: float | None = None
+    rrRiskBasis: Literal["premium_stop", "stock_stop", "full_premium"] | None = None
+    targetSource: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     finalStop: Optional[FinalStopOut] = None
 
 
@@ -584,6 +706,7 @@ class AlternativeContract(BaseModel):
     score:              int
     contractConfidence: Status
     contractBreakdown:  ContractScoreBreakdown
+    contractExplanation: Optional[ContractExplanation] = None
     rrRatio:            float
     rrModel:            RrModel
     reason:             str
@@ -619,10 +742,12 @@ class TradeCardData(BaseModel):
     stockScore: int
     stockConfidence: Status
     stockBreakdown: ScoreBreakdown
+    stockExplanation: Optional[StockExplanation] = None
     contract: str
     contractScore: int
     contractConfidence: Status
     contractBreakdown: ContractScoreBreakdown
+    contractExplanation: Optional[ContractExplanation] = None
     contractDetails: Optional[ContractDetails] = None
     entry: TradeEntry
     exit: TradeExit
@@ -631,6 +756,25 @@ class TradeCardData(BaseModel):
     rrRatio: float
     rrModel: RrModel
     finalStatus: Status
+    unvalidatedReason: Optional[str] = None
+    # Fix #3: earnings inside the reject window -> finalStatus REJECT and no send.
+    earningsVeto: bool = False
+    # Unknown earnings (none on file, or only a past date). D4 amended
+    # 2026-10-03: on a single stock (isEtf False) finalStatus is capped at
+    # CAUTION; an ETF is unaffected. The cap is display/ranking only -- the
+    # auto-trader never reads this card; its OWN fire-time lookup is what
+    # refuses (auto_trader._apply_event_veto; audit round 1, F7).
+    earningsUnknown: bool = False
+    # Membership in the curated ETF set (app/data/etfs.py). False for any
+    # symbol not in it -- the safe direction (treated as a stock).
+    isEtf: bool = False
+    # Days to EARNINGS alone (nextEventDays is the nearer of earnings/dividend).
+    earningsDays: Optional[int] = None
+    # NO-LIVE-QUOTE (plan 3c): carries a Step 6 pick's flag onto the card. A
+    # scan card is built only from contracts that were live WHEN THE SCAN RAN
+    # (reject mode), so the scan always leaves this False -- which is never
+    # proof that the quote is live now (the result is persisted).
+    noLiveQuote: bool = False
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None
@@ -682,6 +826,11 @@ class TradeCardData(BaseModel):
 # ── Scan ─────────────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422 -- also when a
+    # stored schedule entry is re-validated (the scheduler records a failed
+    # run; GET /api/scan-schedule skips the entry with a warning).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     direction:   Direction
     horizon:     Horizon
@@ -747,7 +896,7 @@ class ScanRequest(BaseModel):
     # Bearish spread construction params (used by Pass 2 for bearish candidates)
     spread_width:        float = 5.0
     short_leg_delta:     float = 0.30
-    iv_rank_threshold:   float = 50.0   # applies when a TRUE PERCENTILE is in hand
+    iv_rank_threshold:   float = 50.0   # applies when an IV RANK is in hand
     # Applies when only an ABSOLUTE IV is in hand, which is most chains. It is a
     # separate knob because 50% IV and the 50th percentile are different claims.
     # UNMEASURED, like the percentile seeds and Q7.
@@ -858,6 +1007,16 @@ class OptionsPipeline(BaseModel):
     # None-vs-0 distinction is what keeps that cheaper choice honest.
     failed_direction:  Optional[int] = None  # removed by the direction-conviction gate
     failed_shortlist:  Optional[int] = None  # trimmed by the shortlist cap (see original_count)
+    # The direction gate's "no data" removals (trend UNMEASURED), counted apart
+    # from failed_direction (a measured trend below the floor), as
+    # StockPipeline does. Removed right after the pre-screen, before the chain
+    # fetch -- so the funnel places this stage there, not beside
+    # failed_direction. None = a result stored before the field existed, whose
+    # failed_direction still includes these.
+    failed_direction_unmeasured: Optional[int] = None
+    # The direction-conviction floor THIS scan applied; None = exempt horizon
+    # (or a result stored before the field existed).
+    direction_min_trend: Optional[float] = None
     candidates:        int   # made it through everything, after every filter
 
 
@@ -866,6 +1025,8 @@ class EventWindow(BaseModel):
     (scoring_rules.yaml horizon default, replaced by any request override)."""
     reject_days:  int
     caution_days: int
+    # Separate earnings gate; absent on results saved before hold-aware vetoes.
+    veto_days: Optional[int] = None
 
 
 class DteWindow(BaseModel):
@@ -886,6 +1047,12 @@ class DteWindow(BaseModel):
 #      did not exist. A v1 blob is therefore indistinguishable from a piece-3
 #      scan whose bar feed was too thin to resolve a stop, so the basis is not
 #      recoverable and the blob is refused rather than relabelled.
+#   3  options R/R on the full-premium basis (Phase C T9, TRADING-REVIEW-
+#      PHASE-C-RR). Before it, `rrRatio` / `targets[].rrContribution` divided
+#      reward by the premium stop (premium x 0.60) or the captured stock-stop
+#      loss, and the field names did not change -- so a v2 ratio overstates
+#      reward per unit of real risk by at least 1/0.6 under the new reading.
+#      Refused, and the frontend's scanStore v18 branch discards its own copy.
 #
 # EVERY CONSUMER COMPARES, none tests `is None`. A stored result is trustworthy
 # only when its version is at least this one: `(blob.schema_version or 0) <
@@ -894,7 +1061,17 @@ class DteWindow(BaseModel):
 # the ONE bump that existed when it was written, so the next one was silently
 # exempt. Written as a comparison, the next bump is honoured everywhere for
 # free.
-SCAN_RESULT_SCHEMA_VERSION = 2
+SCAN_RESULT_SCHEMA_VERSION = 3
+
+
+class ScanRequestContext(BaseModel):
+    """The ScanRequest fields echoed on its ScanResult (see request_context)."""
+    universe:       list[str]
+    direction:      Direction
+    horizon:        Horizon
+    horizon_preset: Optional[str] = None
+    hold_min_days:  Optional[int] = None
+    hold_max_days:  Optional[int] = None
 
 
 class ScanResult(BaseModel):
@@ -931,6 +1108,23 @@ class ScanResult(BaseModel):
     # contract_rules.yaml's. {} = the scan overrode nothing. None = absent:
     # a result from before 2026-09-29, or the recording failed.
     contract_rules: Optional[dict[str, float]] = None
+    # The Reward/Risk overrides (rr_* keys) this scan priced its plans with,
+    # exactly as config_loader.effective_rr_overrides validated them. Step 7's
+    # recompute-plan sends these back rather than live scanOverrides, which can
+    # be edited after the scan (STEP3-PARAM-REACH). {} = the scan overrode
+    # none. None = absent: a result from before 2026-10-02, or recording failed.
+    rr_overrides: Optional[dict[str, float]] = None
+    # The request fields this result was produced from, so a result restored
+    # from /api/scan/last into an empty browser (no persisted ScanContext) can
+    # rebuild the direction and hold days Steps 5-7 read, instead of falling
+    # back to Bullish / Swing (STEP3-PARAM-REACH). None = a result from before
+    # 2026-10-02.
+    request_context: Optional[ScanRequestContext] = None
+    # NO-LIVE-QUOTE (plan 3f): how many rejected names were rejected only
+    # because none of their contracts had a live quote (reason exactly
+    # "contracts rejected: no_live_quote(N)"). The scheduled-scan notice reads
+    # this rather than parsing reasons. 0 on results persisted before it.
+    noLiveQuoteNames: int = 0
 
 
 class ScanSessionStatus(BaseModel):
@@ -977,7 +1171,10 @@ class ScanSessionStatus(BaseModel):
 # ── Portfolio persistence ─────────────────────────────────────────────────────
 
 class PortfolioPositionCreate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float is persisted, so
+    # each is finite or a 422. Also reached by auto_trade_booking._build_body,
+    # whose existing except refuses the booking instead of writing the value.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     recId: str = Field(alias="rec_id")
     symbol: str
@@ -1006,7 +1203,7 @@ class PortfolioPositionCreate(BaseModel):
     exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     targets: list[dict] = []
     dteTotal: Optional[int] = Field(alias="dte_total", default=None)
-    portfolioValue: float = Field(alias="portfolio_value", default=50000.0)
+    portfolioValue: float = Field(alias="portfolio_value", default=100000.0, description="Deprecated compatibility field; server account value is authoritative")
     scanStockPrice: Optional[float] = Field(alias="scan_stock_price", default=None)
     tradeCardSnapshot: Optional[dict] = Field(alias="trade_card_snapshot", default=None)
     # Feature 5 (TradeCard Exit-Plan Restructure) — pre-trade max-loss override
@@ -1074,11 +1271,25 @@ class PortfolioPositionCreate(BaseModel):
     pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0, allow_inf_nan=False)
     pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
     pickedAt: Optional[PickedAt] = Field(alias="picked_at", default=None)
+    # STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, sent by the
+    # stock sends. None (options, older clients) = no hold, no time stop.
+    holdMaxDays: Optional[int] = Field(alias="hold_max_days", default=None, ge=0)
+    # Audit round 1, F1 -- the order this save is about to place, so the D5
+    # premium cap is judged at the price the order can FILL at
+    # (`portfolio_risk.premium_cap_basis`): max(mid, limit) for LMT, the ask
+    # (mid + half the live spread) for MKT. Create-only transport, never
+    # stored. Both None means no order follows the save (a tracked basket row,
+    # an older client): the cap is judged at the mid, as before. The stored
+    # entry price is unaffected either way.
+    orderType: Optional[Literal["LMT", "MKT"]] = Field(alias="order_type", default=None)
+    orderLimitPrice: Optional[float] = Field(alias="order_limit_price", default=None, gt=0, allow_inf_nan=False)
 
     def __init__(self, **data):
         # Support both camelCase and snake_case field names
         mapped = {}
         aliases = {
+            "order_type": "orderType",
+            "order_limit_price": "orderLimitPrice",
             "rec_id": "recId",
             "entry_price": "entryPrice",
             "entry_date": "entryDate",
@@ -1105,6 +1316,7 @@ class PortfolioPositionCreate(BaseModel):
             "picked_row_option_price": "pickedRowOptionPrice",
             "picked_stop_basis": "pickedStopBasis",
             "picked_at": "pickedAt",
+            "hold_max_days": "holdMaxDays",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v
@@ -1129,10 +1341,9 @@ class PortfolioPositionUpdate(BaseModel):
     `exclude_unset=True` still means an omitted `qty` key never touches this
     field at all.
 
-    `portfolioValue` is only required by the router when `qty` is being
-    increased (it re-runs the exposure gate in that case, same as
-    `POST /api/portfolio`); a `qty` decrease or an edit that never sends `qty`
-    doesn't need it.
+    `portfolioValue` is retained for wire compatibility and ignored. Quantity
+    increases re-run the exposure gate against server account configuration;
+    decreases and edits without a quantity increase bypass that gate.
 
     `exitPlan`, `maxLossOverride`, `activeTpMethod`, `resolvedTpPrice`/
     `resolvedTpUpdatedAt`, and `alertOverrides` are Phase 0 scaffolding for
@@ -1142,7 +1353,8 @@ class PortfolioPositionUpdate(BaseModel):
     `exitPlan`/`maxLossOverride`/`alertOverrides` follow the exclude_unset
     pattern so `{"exitPlan": null}` can still explicitly clear a previously
     computed value."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): persisted; finite or a 422.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
@@ -1188,10 +1400,14 @@ class PortfolioPositionSchema(BaseModel):
     currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
+    # True when GET /portfolio got no quote for this position (NO-LIVE-QUOTE
+    # NLQ-1 round-1 F2). currentPrice / pnlDollar / pnlPct then hold their 0.0
+    # defaults, which are NOT a price: the table renders "—" instead.
+    quoteUnavailable: bool = False
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
-    # A TRUE PERCENTILE, or None when no rank source answered. Before
+    # An IV RANK, or None when no rank source answered. Before
     # 2026-09-06 this field carried the ABSOLUTE IV instead, so the portfolio
     # table printed an absolute level under "IV RANK"; the absolute figure now
     # rides in `iv` and the two are labelled apart
@@ -1218,6 +1434,8 @@ class PortfolioPositionSchema(BaseModel):
     pickedRowOptionPrice: Optional[float] = None
     pickedStopBasis: Optional[PickedStopBasis] = None
     pickedAt: Optional[str] = None
+    # STOCKS-HORIZON-T1 H6 -- None = no hold (never a stock time stop).
+    holdMaxDays: Optional[int] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -1250,12 +1468,14 @@ class PortfolioPositionSchema(BaseModel):
             pickedRowOptionPrice=obj.picked_row_option_price,
             pickedStopBasis=obj.picked_stop_basis,
             pickedAt=obj.picked_at,
+            holdMaxDays=getattr(obj, "hold_max_days", None),
         )
 
 
 class ClosePositionRequest(BaseModel):
     """Body for POST /api/portfolio/{rec_id}/close."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): exitPrice is persisted.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     qtyToClose: Optional[int] = None        # None -> close the whole position
     exitPrice: Optional[float] = None       # None -> server fetches the live quote
     exitDate: Optional[str] = None          # None -> today (YYYY-MM-DD)

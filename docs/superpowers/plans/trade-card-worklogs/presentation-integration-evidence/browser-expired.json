@@ -1,0 +1,7 @@
+{
+  "scenario": "expired",
+  "errors": [],
+  "results": [
+    "expiry refusal has no race shortcut"
+  ]
+}

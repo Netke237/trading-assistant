@@ -1,0 +1,29 @@
+{
+  "baseline": "ac39b841",
+  "feature_baseline": "1c8b94ff",
+  "build": "Next15.5.23 optimized next build and next start",
+  "temporary_patch": "const isOpen = expanded === candidate.symbol changed to const isOpen = true in isolated source copies only; product one-open-symbol source untouched",
+  "cpu": "AMD EPYC 9V74 80-Core Processor; 5 exposed vCPUs; cgroup quota4 CPUs",
+  "memory": "32GiB cgroup limit",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "versions": {
+    "node": "22.23.3",
+    "python": "3.11.16",
+    "chromium": "151.0.7922.173"
+  },
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "measurement": "Browser event dispatch to two requestAnimationFrame callbacks; excludes driver and network. Five fresh contexts/state. p95 nearest rank(max of5). Cached mount supplement starts at final fixture chain fetch response and ends at200rows plus two rAF callbacks.",
+  "isolation": "source git archives; shared read-only node_modules symlink; own .next outputs; servers3102/3103. No worktree and no root .next or3001 operations.",
+  "cgroup": {
+    "cpu_max": "400000 100000 (4CPU quota)",
+    "memory_max_bytes": 34359738368,
+    "cpuset": "0-4"
+  },
+  "diagnostic_after": "d3d2657a73b05dca97dbd0dea78df28897457850",
+  "final_after": "9a0ad23f8ba1df8db04516aa62547d43a0ed1bf3",
+  "clean_tracing": "Playwright action/network traces; snapshots:false/screenshots:false to exclude DOM snapshot visitNode overhead",
+  "previous_performance_after": "3db610f58a9e686fd37b866b94c64d7c0c23b868"
+}

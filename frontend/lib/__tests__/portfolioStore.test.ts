@@ -667,6 +667,26 @@ describe('portfolioStore', () => {
   });
 
   describe('account value for backend POSTs', () => {
+    it('audit round 1 F1: persistPosition carries the order it precedes, so the server judges the premium cap at the fill basis', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-F1-1' }, undefined, { orderType: 'LMT', limitPrice: 3.6 });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.orderType).toBe('LMT');
+      expect(body.orderLimitPrice).toBe(3.6);
+      // The stored entry is untouched: the basis judges the cap only.
+      expect(body.entryPrice).toBe(abt.entryPrice);
+    });
+
+    it('audit round 1 F1: a save with no order sends no order fields (judged at the mid)', async () => {
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+      (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
+      await persistPosition({ ...abt, recId: 'REC-F1-2' });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.orderType).toBeUndefined();
+      expect(body.orderLimitPrice).toBeUndefined();
+    });
+
     it('persistPosition sends the configured account value, not the sum of premiums', async () => {
       const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
       (global as unknown as { fetch: jest.Mock }).fetch = fetchMock;
@@ -1257,7 +1277,9 @@ describe('portfolioStore', () => {
       );
 
       expect(result.rejected).toBe(false);
-      expect(onDropped).toHaveBeenCalledWith(4.5);
+      // STOP-SEMANTICS: the reason travels with it. No entryPrice in this
+      // response, so the reason is honestly 'unknown'.
+      expect(onDropped).toHaveBeenCalledWith(4.5, 'unknown', undefined);
     });
 
     it('does NOT report a drop when the server applied the stop, or when none was asked for', () => {
@@ -1614,7 +1636,9 @@ describe('portfolioStore', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
       const [, init] = (global.fetch as jest.Mock).mock.calls[0];
       // portfolioValue: 50000 is set on useRiskStore in the outer beforeEach.
-      expect(JSON.parse(init.body)).toEqual({ qty: 3, portfolioValue: 50000 });
+      // A size edit also carries the row's rungs (open question 54, X1), so a
+      // cap from an intermediate size is healed by the next size keystroke.
+      expect(JSON.parse(init.body)).toEqual({ qty: 3, portfolioValue: 50000, targets: pos.targets });
     });
 
     it('does not call the backend for a patch with no persistable fields', async () => {
@@ -1682,6 +1706,203 @@ describe('portfolioStore', () => {
       const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-ADJ');
       expect(updated?.contracts).toBe(2);
       expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('2 contracts');
+    });
+
+    it('adopts the stored (scaled) rungs when a soft-reduced qty raise sent rungs with it (open question 54, C2)', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-RUNG', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        adjustedQty: 150,
+        targets: [{ stockPrice: 55, contractsToSell: 75 }, { stockPrice: 60, contractsToSell: 75 }],
+      }));
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          contracts: 200,
+          targets: [{ stockPrice: 55, contractsToSell: 100 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(600);
+      });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-RUNG')!;
+      expect(updated.contracts).toBe(150);
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([75, 75]);
+    });
+
+    it('does not undo a newer rung edit already IN FLIGHT behind the resized raise (delta review B1)', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-PATCH-INFLIGHT', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      const bodies: Record<string, unknown>[] = [];
+      let resolveFirst!: () => void;
+      let resolveSecond!: () => void;
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        if (bodies.length === 1) {
+          return new Promise((resolve) => {
+            resolveFirst = () => resolve(jsonResponse({
+              adjustedQty: 150,
+              targets: [{ stockPrice: 55, contractsToSell: 75 }, { stockPrice: 60, contractsToSell: 75 }],
+            }));
+          });
+        }
+        // The backend caps the targets-only edit at the 150 held: 90/100 -> 71/79.
+        return new Promise((resolve) => {
+          resolveSecond = () => resolve(jsonResponse({
+            qty: 150,
+            targets: [{ stockPrice: 55, contractsToSell: 71 }, { stockPrice: 60, contractsToSell: 79 }],
+          }));
+        });
+      });
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          contracts: 200,
+          targets: [{ stockPrice: 55, contractsToSell: 100 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // PATCH 1 in flight
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 90 }, { stockPrice: 60, contractsToSell: 100 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // PATCH 2 in flight, waiting
+      expect(bodies).toHaveLength(1);
+
+      await act(async () => { resolveFirst(); await jest.advanceTimersByTimeAsync(0); });
+      expect(bodies).toHaveLength(2);   // PATCH 2 sent, its response held back
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')!;
+      expect(mid.contracts).toBe(150);
+      // The newer edit is not wiped by PATCH 1's (older) stored rungs ...
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([90, 100]);
+
+      await act(async () => { resolveSecond(); await jest.advanceTimersByTimeAsync(0); });
+      // ... nor by PATCH 2's capped response: what the user typed stays on
+      // screen (X1), and the notice says it was stored scaled down.
+      const end = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-INFLIGHT')!;
+      expect(end.targets.map((t) => t.contractsToSell)).toEqual([90, 100]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('more than the 150 held');
+    });
+
+    it('keeps typed rungs when the server caps a targets-only PATCH, and says so', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-CAP', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 5, targets: [] });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        qty: 5,
+        targets: [{ stockPrice: 55, contractsToSell: 3 }, { stockPrice: 60, contractsToSell: 2 }],
+      }));
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 4 }, { stockPrice: 60, contractsToSell: 4 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(600); });
+
+      const updated = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-PATCH-CAP')!;
+      expect(updated.targets.map((t) => t.contractsToSell)).toEqual([4, 4]);
+      expect(usePortfolioStore.getState().lastSyncError?.detail).toContain('more than the 5 held');
+    });
+
+    it('X1: a rung typed mid-edit is not overwritten by the cap, so the next keystroke is saved as typed', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-X1-RUNG', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 100,
+        targets: [{ stockPrice: 55, contractsToSell: 50 }, { stockPrice: 60, contractsToSell: 50 }],
+      });
+      act(() => { usePortfolioStore.setState({ positions: [pos], lastSyncError: null }); });
+      const bodies: Record<string, unknown>[] = [];
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        // The backend caps 60/50 of 100 to 55/45; 60/40 fits and is stored as sent.
+        const sent = body.targets as { contractsToSell: number }[];
+        const sum = sent.reduce((a, t) => a + t.contractsToSell, 0);
+        const stored = sum > 100 ? [{ stockPrice: 55, contractsToSell: 55 }, { stockPrice: 60, contractsToSell: 45 }] : sent;
+        return Promise.resolve(jsonResponse({ qty: 100, targets: stored }));
+      });
+
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: [{ stockPrice: 55, contractsToSell: 60 }, { stockPrice: 60, contractsToSell: 50 }],
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });   // pause: PATCH 1 settles
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-X1-RUNG')!;
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([60, 50]);   // not 55/45
+
+      // The drawer builds the next keystroke from the store: rung 2 -> 40.
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', {
+          targets: mid.targets.map((t, i) => (i === 1 ? { ...t, contractsToSell: 40 } : t)),
+        });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      expect((bodies[1].targets as { contractsToSell: number }[]).map((t) => t.contractsToSell)).toEqual([60, 40]);
+    });
+
+    it('X1: an intermediate size that capped the rungs is healed by the next size keystroke', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({
+        recId: 'REC-X1-QTY', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 60,
+        targets: [{ stockPrice: 55, contractsToSell: 30 }, { stockPrice: 60, contractsToSell: 30 }],
+      });
+      act(() => { usePortfolioStore.setState({ positions: [pos], lastSyncError: null }); });
+      const bodies: Record<string, unknown>[] = [];
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        bodies.push(body);
+        const stored = body.qty === 6
+          ? [{ stockPrice: 55, contractsToSell: 3 }, { stockPrice: 60, contractsToSell: 3 }]
+          : body.targets;
+        return Promise.resolve(jsonResponse({ qty: body.qty, targets: stored }));
+      });
+
+      // Retyping 60: the field passes through 6, and a pause lets that PATCH settle.
+      act(() => { result.current.updatePosition('AAA|STOCK', { contracts: 6 }); });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      const mid = usePortfolioStore.getState().positions.find((p) => p.recId === 'REC-X1-QTY')!;
+      expect(mid.targets.map((t) => t.contractsToSell)).toEqual([30, 30]);   // the cap is not written back
+
+      act(() => { result.current.updatePosition('AAA|STOCK', { contracts: 60 }); });
+      await act(async () => { await jest.advanceTimersByTimeAsync(700); });
+      // The final size edit resends the local rungs, so the server stores 30/30 again.
+      expect(bodies[1]).toMatchObject({ qty: 60 });
+      expect((bodies[1].targets as { contractsToSell: number }[]).map((t) => t.contractsToSell)).toEqual([30, 30]);
+    });
+
+    it('raises no notice when the stored rungs match the local ones', async () => {
+      const { result } = renderHook(() => usePortfolioStore());
+      const pos = makePosition({ recId: 'REC-PATCH-SAME', contract: 'AAA|STOCK', symbol: 'AAA', contracts: 5, targets: [] });
+      act(() => {
+        usePortfolioStore.setState({ positions: [pos], lastSyncError: null });
+      });
+      // Key order differs from what was sent (JSONB): counts still match.
+      (global as unknown as { fetch: jest.Mock }).fetch = jest.fn().mockResolvedValue(jsonResponse({
+        targets: [{ contractsToSell: 2, stockPrice: 55 }],
+      }));
+      act(() => {
+        result.current.updatePosition('AAA|STOCK', { targets: [{ stockPrice: 55, contractsToSell: 2 }] });
+      });
+      await act(async () => { await jest.advanceTimersByTimeAsync(600); });
+      expect(usePortfolioStore.getState().lastSyncError).toBeNull();
     });
 
     it('reverts the optimistic update via a forced resync when the backend rejects the PATCH', async () => {

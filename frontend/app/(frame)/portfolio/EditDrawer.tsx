@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import styles from './page.module.css';
-import { resolvePremiumStopPct, hasOwnPremiumStopPct, premiumStopFiringPrice, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
+import { resolvePremiumStopPct, hasOwnPremiumStopPct, percentStopFiringPrice, premiumStopIsSubCent, isShortStockPosition, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
 import { TIME_STOP_DTE } from '@/lib/alertEngine';
 
 /** `position.contract` for an option position is a backend-generated,
@@ -440,8 +440,16 @@ export function EditDrawer({
         />
         <EditField
           label="Current price"
-          hint="Manual override — will refresh from broker in live mode."
+          // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
+          // quote for carries a 0 currentPrice that is not a price. The field
+          // shows it as unknown -- empty, with a placeholder -- exactly as the
+          // table shows "—", never as 0.
+          hint={position.quoteUnavailable
+            ? 'Quote unavailable'
+            : 'Manual override — will refresh from broker in live mode.'}
           value={position.currentPrice}
+          unknown={position.quoteUnavailable === true}
+          placeholder="— (no quote)"
           // 0 is refused here (decision Q6): it would write `currentPrice: 0`
           // and a -100% P&L onto the row. The way to mark a position worthless
           // is to CLOSE it at $0, which the close path supports end to end.
@@ -457,7 +465,11 @@ export function EditDrawer({
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
-            onChange({ currentPrice: n, pnlDollar, pnlPct });
+            // A typed price IS a mark: the row is no longer "no quote" until the
+            // next sync says otherwise (fromBackend rewrites the flag). Without
+            // this the override would be written while the field, the table and
+            // the totals all kept showing it as unknown.
+            onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
             setPriceEditedSinceEstimate(true);
           }}
         />
@@ -636,6 +648,8 @@ function ExitPlanEditor({
         dte: position.dteRemaining,
         premium: position.currentPrice,
         trend_score: 50,
+        ...(Number.isFinite(position.exitPlan?.targets[0]?.rrRatio) && position.exitPlan!.targets[0].rrRatio > 0 && position.exitPlan!.targets[0].rrRatio <= 10
+          ? { target_r_multiple: position.exitPlan!.targets[0].rrRatio } : {}),
       });
       const plan = { ...res, computedAt: new Date().toISOString() };
       // Feature D: a re-computed plan re-stamps the TP snapshot when one of its
@@ -723,6 +737,7 @@ function ExitPlanEditor({
               {!t.qualityGood && (
                 <Text size={10} tone="caution">
                   {t.qualityReasons.includes('stop_widened') ? 'Stop ATR-widened. ' : ''}
+                  {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}
                   {t.qualityReasons.includes('target_beyond_structural') ? 'Target overshoots structural level.' : ''}
                 </Text>
               )}
@@ -915,6 +930,12 @@ function EditField({
   /** P2-01 -- the message a refused 0 shows when `zeroClears` is off. Current
    *  price uses it to point at the real gesture (close the position at $0). */
   zeroMessage = 'Must be greater than 0 — kept the previous value.',
+  /** NO-LIVE-QUOTE NLQ-1 (round-2 G1) -- `value` is not a real value (Current
+   *  price on a row with no quote). The field then holds an EMPTY draft and
+   *  shows `placeholder`; an empty commit reverts to empty and writes nothing,
+   *  silently, since there is no previous value to "keep". */
+  unknown = false,
+  placeholder,
 }: {
   label: string;
   hint?: string;
@@ -923,6 +944,8 @@ function EditField({
   range?: { min: number; max: number } | null;
   zeroClears?: boolean;
   zeroMessage?: string;
+  unknown?: boolean;
+  placeholder?: string;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -962,7 +985,7 @@ function EditField({
   // and an empty draft REVERTS rather than clearing. Typing an explicit 0 is
   // still the way to clear -- it is what the hints already document, and it is
   // the one gesture that cannot be confused with a half-finished number.
-  const stored = String(value);
+  const stored = unknown ? '' : String(value);
   const [draft, setDraft] = useState(stored);
   const [rejected, setRejected] = useState<string | null>(null);
   // A BLUR IS NOT AN EDIT -- the same lesson as PremiumStopEditor below, which
@@ -1022,9 +1045,11 @@ function EditField({
     const raw = draft.trim();
     if (raw === '') {
       revert(
-        zeroClears
-          ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
-          : 'Empty is not a value — kept the previous one.',
+        unknown
+          ? null
+          : zeroClears
+            ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
+            : 'Empty is not a value — kept the previous one.',
       );
       return;
     }
@@ -1070,6 +1095,7 @@ function EditField({
         inputMode="decimal"
         className={styles.editInput}
         value={draft}
+        placeholder={placeholder}
         onChange={(e) => { dirtyRef.current = true; setRejected(null); setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
@@ -1105,12 +1131,19 @@ function PremiumStopEditor({
   onChange: (patch: Partial<PortfolioPosition>) => void;
 }) {
   const isStock = position.contract.endsWith('|STOCK');
+  // STOP-SEMANTICS-2026-10-02 -- a short stock's stop fires on a RISE, at
+  // entry x (1 + pct). It is never sub-cent, and a global of 100% or more
+  // still fires for it (at 2x entry or above), so neither caution applies.
+  const shortStock = isShortStockPosition(position.contract, position.direction);
   const own = position.premiumStopPct;
   const inherited = !hasOwnPremiumStopPct(own);
   const outsideBand = own != null && (own < PREMIUM_STOP_MIN_PCT || own > PREMIUM_STOP_MAX_PCT);
-  const globalNeverFires = inherited && globalPremiumStopPct >= 1;
-  const subCent = position.entryPrice > 0
-    && premiumStopFiringPrice(position.entryPrice, resolvePremiumStopPct(own, globalPremiumStopPct)) <= 0;
+  const globalNeverFires = inherited && globalPremiumStopPct >= 1 && !shortStock;
+  // The engines' own test at the lowest live quote -- one spelling of the rule
+  // (premiumStopIsSubCent), shared with the commit refusal below and the
+  // backend's save-time refusal.
+  const subCent = premiumStopIsSubCent(
+    position.entryPrice, resolvePremiumStopPct(own, globalPremiumStopPct), shortStock);
   // TWO DECIMALS OF PERCENT, not a whole number. `Math.round(own * 100)` was
   // lossy in both directions and the loss was silent:
   //
@@ -1278,6 +1311,15 @@ function PremiumStopEditor({
       );
       return;
     }
+    // STOP-SEMANTICS (b) -- a stop whose threshold is below $0.01 at THIS
+    // entry can never fire; the backend refuses it (late 422), so refuse it
+    // here first, with the reason, the same way as the band.
+    if (premiumStopIsSubCent(position.entryPrice, next, shortStock)) {
+      revert(
+        `At this entry a ${premiumStopPctLabel(next)} stop fires below $0.01 and could never fire — kept the previous value.`,
+      );
+      return;
+    }
     // COMPARED AT THE EDITOR'S OWN PRECISION, not against the raw stored
     // fraction. `stored` renders `own` at 2dp of a percent, and `next` is
     // re-derived from the typed text at 4dp of a fraction, so for any `own`
@@ -1315,12 +1357,11 @@ function PremiumStopEditor({
   return (
     <label className={styles.editField}>
       <Text size={11} tone="secondary">
-        {/* P2-13 -- a stock position's percent stop is a STOCK price level
-            (entry x (1 - pct)), not a premium. The label names the mechanism
-            alertEngine actually runs, for either direction; the direction-
-            blind comparison on a SHORT stock is an open question (Q-P2-1). */}
+        {/* P2-13 -- a stock position's percent stop is a STOCK price level,
+            not a premium. STOP-SEMANTICS-2026-10-02: a short's fires on a
+            RISE (entry x (1 + pct)), a long's on a fall (entry x (1 - pct)). */}
         {isStock
-          ? `Stock stop — fires ${formatPremiumStopPct(own, globalPremiumStopPct)} below entry`
+          ? `Stock stop — fires ${formatPremiumStopPct(own, globalPremiumStopPct)} ${shortStock ? 'above' : 'below'} entry`
           : `Premium stop — ${formatPremiumStopPct(own, globalPremiumStopPct)}`}
       </Text>
       <input
@@ -1371,10 +1412,14 @@ function PremiumStopEditor({
           The global stop is 100% and can never fire — lower it in Settings.
         </Text>
       ) : subCent && (
-        // R2-3 (decision Q-P2-3: warn only) -- at this entry the threshold is
-        // below one cent.
+        // STOP-SEMANTICS (b) -- new sub-cent stops are refused at save, so this
+        // is only reachable two ways: an INHERITED global that is sub-cent at
+        // this entry (the global has no entry and is not refused, Q1), or an
+        // own value stored before the refusal existed.
         <Text size={10} tone="caution">
-          At this entry the stop threshold is below $0.01, so it can never fire.
+          {inherited
+            ? 'At this entry the global stop fires below $0.01 and can never fire — pin a lower percent.'
+            : 'Stored before sub-cent stops were refused; it can never fire — set a lower percent.'}
         </Text>
       )}
       <span aria-live="polite">
@@ -1670,17 +1715,23 @@ function alertFiresAgainst(
       // ordinary positions, printing a price still ABOVE the threshold. Entry
       // $4.00 at 7% printed "$3.72" where the alert arms at $3.71. The helper
       // steps back a cent when that happens; see its own doc.
+      //
+      // STOP-SEMANTICS-2026-10-02 -- a short stock's stop fires on a RISE; the
+      // helper then names the smallest 2dp price at or above its threshold.
       return position.entryPrice > 0
-        ? `${isStock ? 'stock' : 'premium'} $${premiumStopFiringPrice(
+        ? `${isStock ? 'stock' : 'premium'} $${percentStopFiringPrice(
             position.entryPrice,
             resolvePremiumStopPct(position.premiumStopPct, globalPremiumStopPct),
+            isShortStockPosition(position.contract, position.direction),
           ).toFixed(2)}`
         : null;
     case 'TIME_STOP':
-      // Stock positions carry no expiry and (per alertEngine.ts's isStock
-      // guard) can never fire this type — "not set" rather than a threshold
-      // that looks armed but isn't.
-      return isStock ? null : `${TIME_STOP_DTE} DTE or less`;
+      // Stock positions carry no expiry. STOCKS-HORIZON-T1 H6: one sent with
+      // the scan's hold fires once held that many days (alertEngine.ts's
+      // stock rule); without a hold it never fires — "not set" rather than a
+      // threshold that looks armed but isn't.
+      if (isStock) return position.holdMaxDays != null ? `held ≥ ${position.holdMaxDays} days` : null;
+      return `${TIME_STOP_DTE} DTE or less`;
     case 'EVENT_RISK':
       return 'event within 3 days';
   }
@@ -1690,7 +1741,7 @@ const ALERT_TYPE_LABELS: Record<PositionAlertType, string> = {
   TP_HIT:                   'Target hit',
   STOP_REACHED:             'Stop reached',
   STRUCTURAL_STOP_BREACHED: 'Structural stop',
-  PREMIUM_STOP:             'Premium stop',
+  PREMIUM_STOP:             'Premium / stock stop',
   TIME_STOP:                'Time stop',
   EVENT_RISK:               'Event risk',
 };

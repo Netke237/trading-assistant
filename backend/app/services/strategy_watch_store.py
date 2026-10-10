@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,7 +43,7 @@ def _fresh_state() -> dict:
         "entry_price": None,
         "stop_price": None,
         "target_price": None,
-        "last_event": None,       # entry | exit_target | exit_stop | reversal
+        "last_event": None,       # entry | exit_target | exit_stop | time_stop | reversal
         "last_event_at": None,
     }
 
@@ -94,7 +95,7 @@ def _migrate_interval_spellings(watches: list[dict]) -> list[tuple]:
 class StrategyWatchStore:
     def __init__(self, path: Path | None = _DEFAULT_PATH) -> None:
         self._path = path
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._watches: list[dict] = []
         self._schedule: dict = dict(_DEFAULT_SCHEDULE)
         if self._path and self._path.exists():
@@ -151,13 +152,13 @@ class StrategyWatchStore:
     def save(self) -> None:
         if not self._path:
             return
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(".yaml.tmp")
         with self._lock:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._path.with_suffix(".yaml.tmp")
             data = {"schedule": dict(self._schedule),
                     "watches": [dict(w) for w in self._watches]}
-        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-        os.replace(tmp, self._path)
+            tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+            os.replace(tmp, self._path)
 
     # ── watches ──────────────────────────────────────────────────────────────
     def list_watches(self) -> list[dict]:
@@ -166,10 +167,18 @@ class StrategyWatchStore:
 
     def add_watch(self, symbol: str, strategy_key: str,
                   params_override: dict | None = None,
-                  direction: str = "Bullish") -> dict:
+                  direction: str = "Bullish",
+                  params_horizon: str | None = None) -> dict:
+        """``params_horizon`` (a tuned horizon, STOCKS-HORIZON-T1 H7) picks the
+        parameter profile the watch evaluates with and its hold: the watch
+        stores ``hold_max_days = HOLD_MAX_DAYS[params_horizon]`` (None without
+        a horizon) and time-stops once armed that many days."""
+        from app.services.horizon_profiles import HOLD_MAX_DAYS
         symbol = symbol.strip().upper()
         if strategy_key not in VALID_STRATEGIES:
             raise ValueError(f"unknown strategy: {strategy_key}")
+        if params_horizon is not None and params_horizon not in HOLD_MAX_DAYS:
+            raise ValueError(f"unknown params horizon: {params_horizon}")
         with self._lock:
             for w in self._watches:
                 # Composites carry no strategy_key and can never duplicate a
@@ -186,6 +195,8 @@ class StrategyWatchStore:
                 "strategy_key": strategy_key,
                 "direction": direction,
                 "params_override": dict(params_override or {}),
+                "params_horizon": params_horizon,
+                "hold_max_days": HOLD_MAX_DAYS[params_horizon] if params_horizon is not None else None,
                 "enabled": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_state": _fresh_state(),
@@ -195,11 +206,13 @@ class StrategyWatchStore:
         return dict(entry)
 
     def add_watches_bulk(self, symbols: list[str], strategy_key: str,
-                         direction: str = "Bullish") -> list[dict]:
+                         direction: str = "Bullish",
+                         params_horizon: str | None = None) -> list[dict]:
         added: list[dict] = []
         for sym in symbols:
             try:
-                added.append(self.add_watch(sym, strategy_key, direction=direction))
+                added.append(self.add_watch(sym, strategy_key, direction=direction,
+                                            params_horizon=params_horizon))
             except ValueError:
                 continue  # skip duplicates / blanks
         return added
@@ -251,17 +264,27 @@ class StrategyWatchStore:
             self.save()
         return removed
 
-    def set_enabled(self, watch_id: str, enabled: bool) -> bool:
+    def set_enabled(self, watch_id: str, enabled: bool, *,
+                    on_reenable: Callable[[dict], dict] | None = None) -> bool:
+        """Persist enable and an optional re-enable state transform together.
+
+        The transform must not mutate its input. A failed save restores the
+        watch in memory and propagates the error to the caller.
+        """
         with self._lock:
-            found = False
-            for w in self._watches:
+            for index, w in enumerate(self._watches):
                 if w["id"] == watch_id:
-                    w["enabled"] = bool(enabled)
-                    found = True
-                    break
-        if found:
-            self.save()
-        return found
+                    previous = dict(w)
+                    try:
+                        if enabled and not w.get("enabled", True) and on_reenable is not None:
+                            w["last_state"] = on_reenable(dict(w.get("last_state") or {}))
+                        w["enabled"] = bool(enabled)
+                        self.save()
+                    except Exception:
+                        self._watches[index] = previous
+                        raise
+                    return True
+        return False
 
     def update_state(self, watch_id: str, new_state: dict) -> None:
         with self._lock:

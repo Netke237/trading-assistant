@@ -1,0 +1,32 @@
+[
+  {
+    "command": "npm test -- --runInBand",
+    "result": "199 suites4664 tests passed",
+    "log": "/tmp/integration-resumed-frontend.log",
+    "sha256": "d2d493d0eafb5e5818f0104c3f95d20de8b6a1f6e53853e89e47fe308eb18603"
+  },
+  {
+    "command": "npm run typecheck",
+    "result": "passed",
+    "log": "/tmp/integration-resumed-typecheck.log",
+    "sha256": "257bbdae53ffb556b617d7f8709922683b663071ae7a0efdd5d96ba59785f62c"
+  },
+  {
+    "command": "npm run build",
+    "result": "passed; warmfontcache,30 routes",
+    "log": "/tmp/integration-resumed-build.log",
+    "sha256": "f0deb8997bce96d670470c92f727db9028f82aff828db7cdf446f5299ca73b59"
+  },
+  {
+    "command": "Python3.11.16 pytest named7files",
+    "result": "147 passed",
+    "log": "/tmp/integration-final-backend-parity.log",
+    "sha256": "18feb3020d2872d1ffbd0c200c89ea46058c2506beed22a198f4f64b35d6ad17"
+  },
+  {
+    "command": "Python3.11.16 pytest named3files",
+    "result": "102 passed",
+    "log": "/tmp/integration-final-backend-evidence.log",
+    "sha256": "fcfc81f44ccd67568f66785ba764dec6bef0724fbcdb7f90e75648f0ea6daaec"
+  }
+]

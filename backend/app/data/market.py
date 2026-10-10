@@ -7,6 +7,7 @@ import logging
 import math
 import os
 import time
+import weakref
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,8 @@ from typing import Literal, Optional
 import httpx
 import pandas as pd
 
+from app.data.quote_liveness import classify_quote
+from app.scoring.contract_validator import max_quote_age_seconds
 from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
 from app.services.audit import log_event
 
@@ -81,6 +84,15 @@ _expirations_cache: dict[str, tuple[list[str], str]] = {}
 # yfinance calendar: reset daily (overnight earnings updates).
 _yf_cal_cache: dict[str, tuple[Optional[date], Optional[date]]] = {}
 _yf_cal_cache_date: str = ""
+# Audit round 2, R2-F4: a FAILED yfinance calendar lookup is backed off per
+# symbol for a short TTL -- not cached for the day (round 1, F3: that pinned a
+# stock at CAUTION all day) and not re-asked on every re-scan either (that
+# re-hit a rate-limited feed with no cool-down and could prolong a ban).
+# symbol -> `_yf_fail_clock()` value until which it is not re-asked. Kept apart
+# from `_yf_cal_cache`, which holds REAL answers only (the fire path reads it).
+_YF_CAL_FAIL_TTL_S: float = 10 * 60
+_yf_cal_fail_until: dict[str, float] = {}
+_yf_fail_clock = time.monotonic   # indirection so a test can move time without moving asyncio's
 
 # Yahoo Finance ticker equivalents for index symbols not served by Tradier quotes.
 _YF_SYMBOL_MAP: dict[str, str] = {
@@ -701,13 +713,10 @@ def _nearest_expiration_in_window(
     tolerance margin.
 
     `min_dte_floor` is the contract validator's hard-reject floor
-    (dte_window.widened_min_dte: never below hold_max + 1). Expiries under it
-    are dropped BEFORE the centre-nearest pick. Without this the fetch could
-    choose an expiry the validator is certain to reject as dte_too_short, and
-    because only one expiry is fetched, that rejected the whole symbol even
-    when a valid expiry was listed: a Custom 15-200d hold (window 30-400,
-    centre 215, floor 201) picked a 199d monthly; Intraday (window 1-4, floor 3)
-    picked Friday's weekly from Wednesday on.
+    (dte_window.widened_min_dte: at least hold_max + 21 when a hold is supplied).
+    Drop expiries below it before choosing the nearest window centre, so the
+    one fetched expiry can pass the same validator floor. Custom 15-200d has
+    window 221-400 and floor221; Intraday 0-2d has window23-58 and floor23.
     """
     lo, hi = bounds
     centre = (lo + hi) / 2
@@ -728,12 +737,104 @@ def _nearest_expiration_in_window(
     return min(near, key=lambda d: abs(_dte(d) - centre))
 
 
+# The no-window pick when a caller passes no limits: the first expiry at or
+# above this many days. Pinned to contract_rules.yaml's hard_reject.min_dte by
+# tests/test_option_chain_expiry_selection.py.
+_DEFAULT_MIN_DTE_FLOOR = 21
+
+
+def _pick_expiration_without_window(
+    dates: list[str], today: date, dte_limits: Optional[tuple[int, int, int, int]],
+) -> Optional[str]:
+    """The expiry to fetch when no hold window is set.
+
+    `dte_limits` is (min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    the contract validator applies them (contract_validator.effective_dte_limits).
+    Only expiries inside [min_dte, max_dte] can yield a contract the validator
+    accepts, so nothing outside it is picked (None when nothing is listed
+    there). Among those, the one with the smallest distance to the preferred
+    band [preferred_dte_min, preferred_dte_max] wins, the shorter on a tie --
+    so the shortest expiry inside the band when there is one. This does NOT maximise the DTE sub-score (_score_dte peaks at the
+    band's centre and is 0 at its edges); it only stays out of the hard-reject
+    range and as close to the band as the listing allows.
+
+    With the shipped rules (21, 21-60, 90) that is the old "first expiry of
+    21+ days" whenever that expiry is at most 90 days out; when it is further
+    (only longer expiries listed) the old pick was certain to be rejected as
+    dte_too_long and nothing is fetched instead.
+
+    A fixed 21 used to be the floor whatever the rules said: a min_dte override
+    of 45 fetched the first 21+ day expiry, every contract of which was then
+    rejected as dte_too_short, dropping the symbol from the scan.
+
+    dte_limits=None keeps that old pick (first expiry of 21+ days, now taken in
+    date order rather than listing order) for callers that pass no rules; it
+    stops there, as before. With dte_limits set every listed date is parsed, so
+    one malformed entry fails the whole fetch (the caller's except returns []).
+    """
+    def _dte(d: str) -> int:
+        return (date.fromisoformat(d) - today).days
+
+    ordered = sorted(dates)
+    if dte_limits is None:
+        return next((d for d in ordered if _dte(d) >= _DEFAULT_MIN_DTE_FLOOR), None)
+    # An inverted band (preferred min above max) gives odd distances, but the
+    # validator then scores every DTE 0, so which in-range expiry wins is moot.
+    lo, pref_lo, pref_hi, hi = dte_limits
+
+    def _off_band(d: str) -> int:
+        n = _dte(d)
+        return pref_lo - n if n < pref_lo else max(0, n - pref_hi)
+
+    in_range = [d for d in ordered if lo <= _dte(d) <= hi]
+    return min(in_range, key=_off_band) if in_range else None  # min() keeps the first (shorter) on a tie
+
+
+def _quote_liveness_inputs() -> tuple[float, bool, float, float]:
+    """(now_s, session_open, feed_lag_s, max_age_s) for ONE chain fetch.
+
+    Taken once per fetch, before the row loop, so every row of a chain is
+    classified against the same instant and one fetch cannot straddle 16:00
+    row by row (NO-LIVE-QUOTE, plan 3a). The session test is the scheduler's
+    one, re-exported by market_session; imported HERE, at call time, because
+    importing market_session imports this module (through
+    strategy_watch_scheduler's chain), so a module-level import would be
+    circular.
+    """
+    from app.services.market_session import MARKET_TZ, _market_session_open
+    return (
+        _now(),
+        _market_session_open(datetime.now(MARKET_TZ)),
+        float(intraday_feed_lag_seconds()),
+        max_quote_age_seconds(),
+    )
+
+
+def _quote_keys(c: dict, bid: float, ask: float, q: tuple[float, bool, float, float]) -> dict:
+    """The three liveness keys every chain row carries: quoteState, quoteLive
+    and quoteAgeS (the fresher side's age in seconds, or None). Tradier's
+    `bid_date`/`ask_date` are epoch MILLISECONDS. Deliberately NOT `bid`/`ask`:
+    scan.py's bearish spread builder reads those keys off raw chain rows, and
+    adding them would silently switch that unaudited path on (plan section 2)."""
+    now_s, session_open, feed_lag_s, max_age_s = q
+    state, age_s = classify_quote(
+        bid, ask, c.get("bid_date"), c.get("ask_date"),
+        now_s=now_s, session_open=session_open, feed_lag_s=feed_lag_s, max_age_s=max_age_s,
+    )
+    return {
+        "quoteState": state,
+        "quoteLive": state == "live",
+        "quoteAgeS": round(age_s, 1) if age_s is not None else None,
+    }
+
+
 def fetch_option_chain(
     symbol: str,
     expiry: Optional[str] = None,
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     try:
         exp_resp = httpx.get(
@@ -764,11 +865,10 @@ def fetch_option_chain(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = httpx.get(
@@ -797,6 +897,7 @@ def fetch_option_chain(
         dte = max(0, (exp_date - today).days)
 
         tradier_type = "call" if option_type == "C" else "put"
+        quote_inputs = _quote_liveness_inputs()
         result = []
         for c in contracts:
             if c.get("option_type") != tradier_type:
@@ -804,16 +905,18 @@ def fetch_option_chain(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            last = float(c.get("last") or 0)
-            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
-            if ask > 0:
-                mid = round((bid + ask) / 2, 2)
-                spread = round(ask - bid, 2)
-            elif last > 0:
-                mid = round(last, 2)
-                spread = 0.0
-            else:
+            # No ask (<= 0, or NaN) = no executable price for a buyer (FR-24
+            # "missing ask"): the row is DROPPED (NO-LIVE-QUOTE, Kenneth's Q-C).
+            # This replaced a fallback to the last trade price with a
+            # fabricated zero spread, which graded as a perfect spread. Its
+            # premise -- "outside market hours Tradier returns bid=0, ask=0" --
+            # was never observed: 0 of 4,868 measured rows had ask == 0, in or
+            # out of session (plan section 1). Off-hours rows carry the last
+            # close's real two-sided quotes; quoteState below marks them.
+            if not ask > 0:
                 continue
+            mid = round((bid + ask) / 2, 2)
+            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -854,6 +957,7 @@ def fetch_option_chain(
                 "volume": volume,
                 "open_interest": oi,
                 "score": 0,
+                **_quote_keys(c, bid, ask, quote_inputs),
             })
         # Enrich with IBKR IV Rank/Percentile if available
         _ibkr_iv = None
@@ -1208,8 +1312,26 @@ def _yf_iv_for_chain(symbol: str, expiry: str, is_call: bool) -> dict[float, flo
         return {}
 
 
-def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
-    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips)."""
+class EarningsLookupError(Exception):
+    """An earnings lookup FAILED (audit round 1, F3) -- the request raised, timed
+    out or answered with something unreadable.
+
+    Distinct from a lookup that ANSWERED "no date on file", which returns None.
+    The two used to be one value (`_calendar_dates_yf` swallowed every error into
+    `(None, None)`), so the fire-time refusal could only ever say "none on file"
+    and the scan day-cached a transient failure as if it were an answer.
+
+    WHERE THE SOURCE ALLOWS: yfinance can itself swallow a failed request and
+    hand back an empty calendar, which is then indistinguishable from a genuine
+    "no calendar" and reads as None. What it raises is reported as a failure.
+    """
+
+
+def _calendar_dates_yf_strict(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Earnings + dividend dates in ONE yfinance calendar call, or raise
+    `EarningsLookupError` when the call fails. `(None, None)` means yfinance
+    answered with no calendar. A date already past reads as None (the next one
+    is not known)."""
     try:
         import yfinance as yf
         from datetime import datetime as _dt
@@ -1234,7 +1356,19 @@ def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
             div = d2 if d2 >= today else None
 
         return earn, div
-    except Exception:
+    except Exception as exc:
+        raise EarningsLookupError(f"yfinance calendar for {symbol} failed: {exc}") from exc
+
+
+def _calendar_dates_yf(symbol: str) -> tuple[Optional[date], Optional[date]]:
+    """Fetch earnings + dividend dates in ONE yfinance calendar call (avoids two round-trips).
+
+    Lenient: a failed lookup reads as `(None, None)`, exactly as before audit
+    round 1. Callers that must tell a failure from "no date" use
+    `_calendar_dates_yf_strict`."""
+    try:
+        return _calendar_dates_yf_strict(symbol)
+    except EarningsLookupError:
         return None, None
 
 
@@ -1247,15 +1381,43 @@ def _dividend_date_yf(symbol: str) -> Optional[date]:
     return _calendar_dates_yf(symbol)[1]
 
 
+def _loop_semaphore(
+    registry: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]", limit: int,
+) -> asyncio.Semaphore:
+    """The semaphore for the RUNNING event loop, created on first use.
+
+    On Python 3.11 an `asyncio.Semaphore` binds to the first event loop that
+    has to WAIT on it (`asyncio.mixins._LoopBoundMixin._get_loop`, reached from
+    `acquire()` only when the semaphore is locked). A process-wide singleton
+    therefore raised `RuntimeError: ... is bound to a different event loop` in
+    any later loop that contended on it (pytest-asyncio's loop per test, a
+    script calling `asyncio.run` twice), and the contending symbol was lost.
+    One semaphore per running loop keeps `limit` on every loop and never
+    raises that error. Two loops running at the same time each get their own
+    `limit`.
+
+    The registry is keyed weakly by the loop object, so a new loop that reuses
+    a dead loop's id never inherits its semaphore. A semaphore that has ever
+    been contended holds its loop in `Semaphore._loop`, so that entry stays in
+    the registry after its loop closes — a small, bounded cost in multi-loop
+    processes (tests, scripts). Call only from inside a coroutine.
+    """
+    loop = asyncio.get_running_loop()
+    sem = registry.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(limit)
+        registry[loop] = sem
+    return sem
+
+
 # Limits concurrent Yahoo Finance calendar fetches — prevents rate-limiting during batch scans
-_YF_CALENDAR_SEM: asyncio.Semaphore | None = None
+_YF_CALENDAR_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _get_yf_sem() -> asyncio.Semaphore:
-    global _YF_CALENDAR_SEM
-    if _YF_CALENDAR_SEM is None:
-        _YF_CALENDAR_SEM = asyncio.Semaphore(5)
-    return _YF_CALENDAR_SEM
+    return _loop_semaphore(_YF_CALENDAR_SEMS, 5)
 
 
 async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optional[date]]:
@@ -1269,13 +1431,30 @@ async def fetch_calendar_dates_async(symbol: str) -> tuple[Optional[date], Optio
 
     if symbol in _yf_cal_cache:
         return _yf_cal_cache[symbol]
+    if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+        return None, None   # R2-F4: inside the failure backoff -- not re-asked
 
     async with _get_yf_sem():
         # Double-check after acquiring semaphore — another coroutine may have populated it.
         if symbol in _yf_cal_cache:
             return _yf_cal_cache[symbol]
-        result = await asyncio.to_thread(_calendar_dates_yf, symbol)
+        if _yf_fail_clock() < _yf_cal_fail_until.get(symbol, float("-inf")):
+            return None, None
+        try:
+            result = await asyncio.to_thread(_calendar_dates_yf_strict, symbol)
+        except EarningsLookupError:
+            # Audit round 1, F3: a FAILED lookup is not cached for the day.
+            # Since D4 was amended an unknown date caps a stock card at
+            # CAUTION, so day-caching one transient failure pinned the symbol
+            # at CAUTION for the rest of the day, re-scans included. Round 2,
+            # R2-F4: it is backed off for `_YF_CAL_FAIL_TTL_S` instead, so a
+            # re-scan inside that window does not re-hit a rate-limited feed.
+            # Only real answers are day-cached -- a genuine "no date" among
+            # them (the `(None, None)` return above).
+            _yf_cal_fail_until[symbol] = _yf_fail_clock() + _YF_CAL_FAIL_TTL_S
+            return None, None
 
+    _yf_cal_fail_until.pop(symbol, None)
     _yf_cal_cache[symbol] = result
     return result
 
@@ -1341,14 +1520,13 @@ async def fetch_candles_async(
 
 # Lazy semaphore for candle pre-warm — wider than scan concurrency since candles are the
 # heaviest single call and pre-warming happens before the scan, not during it.
-_PREWARM_SEM: asyncio.Semaphore | None = None
+_PREWARM_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _get_prewarm_sem() -> asyncio.Semaphore:
-    global _PREWARM_SEM
-    if _PREWARM_SEM is None:
-        _PREWARM_SEM = asyncio.Semaphore(15)
-    return _PREWARM_SEM
+    return _loop_semaphore(_PREWARM_SEMS, 15)
 
 
 async def prewarm_candles_async(symbols: list[str]) -> int:
@@ -1411,6 +1589,7 @@ async def fetch_option_chain_async(
     option_type: Literal["C", "P"] = "C",
     dte_bounds: Optional[tuple[int, int]] = None,
     min_dte_floor: Optional[int] = None,
+    dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     """Async variant."""
     try:
@@ -1446,11 +1625,10 @@ async def fetch_option_chain_async(
                           symbol, dte_bounds, min_dte_floor, len(dates))
                 return []
         else:
-            target_exp = next(
-                (d for d in dates if (date.fromisoformat(d) - _today).days >= 21),
-                None,
-            )
+            target_exp = _pick_expiration_without_window(dates, _today, dte_limits)
             if target_exp is None:
+                logger.info("chain %s: no expiry within DTE limits %s (listed: %d)",
+                          symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
         chain_resp = await client.get(
@@ -1478,6 +1656,7 @@ async def fetch_option_chain_async(
         dte = max(0, (exp_date - today).days)
 
         tradier_type = "call" if option_type == "C" else "put"
+        quote_inputs = _quote_liveness_inputs()
         result = []
         for c in contracts:
             if c.get("option_type") != tradier_type:
@@ -1485,16 +1664,18 @@ async def fetch_option_chain_async(
 
             bid = float(c.get("bid") or 0)
             ask = float(c.get("ask") or 0)
-            last = float(c.get("last") or 0)
-            # Outside market hours Tradier returns bid=0, ask=0 — fall back to last price.
-            if ask > 0:
-                mid = round((bid + ask) / 2, 2)
-                spread = round(ask - bid, 2)
-            elif last > 0:
-                mid = round(last, 2)
-                spread = 0.0
-            else:
+            # No ask (<= 0, or NaN) = no executable price for a buyer (FR-24
+            # "missing ask"): the row is DROPPED (NO-LIVE-QUOTE, Kenneth's Q-C).
+            # This replaced a fallback to the last trade price with a
+            # fabricated zero spread, which graded as a perfect spread. Its
+            # premise -- "outside market hours Tradier returns bid=0, ask=0" --
+            # was never observed: 0 of 4,868 measured rows had ask == 0, in or
+            # out of session (plan section 1). Off-hours rows carry the last
+            # close's real two-sided quotes; quoteState below marks them.
+            if not ask > 0:
                 continue
+            mid = round((bid + ask) / 2, 2)
+            spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
             strike = float(c.get("strike") or 0)
@@ -1520,12 +1701,12 @@ async def fetch_option_chain_async(
                 # and tastytrade return a symbol-level RANK, a different
                 # quantity (where today's IV sits in its own 52-week range).
                 # Until 2026-09-06 this value was written into `ivRank`, so a
-                # name at 45% IV scored as though it sat at the 45th percentile
+                # name at 45% IV scored as though it had IV rank 45
                 # of its own range -- failing iv_rank_pass_max: 34 -- and a name
                 # at 75% was HARD-REJECTED at max_iv_rank: 70 even when 75% is
                 # low for it. See PHASE-A-NULL-IVRANK-2026-09-06.
                 "iv": round(iv * 100, 1) if iv > 0 else None,
-                # A TRUE PERCENTILE, or None. None means "no rank source
+                # An IV RANK, or None. None means "no rank source
                 # answered" -- a distinct state from any number, and what tells
                 # the scorer to judge `iv` against the ABSOLUTE thresholds
                 # instead. Only the IBKR and tastytrade branches below fill it.
@@ -1535,6 +1716,7 @@ async def fetch_option_chain_async(
                 "volume": volume,
                 "open_interest": oi,
                 "score": 0,
+                **_quote_keys(c, bid, ask, quote_inputs),
             })
         # Enrich with IBKR IV Rank/Percentile if available (async-safe via to_thread)
         _ibkr_iv = None
@@ -1567,7 +1749,7 @@ async def fetch_option_chain_async(
 
         # Counts contracts with no ABSOLUTE IV, which is what the yfinance
         # backfill below supplies. Reading `ivRank` was only correct while that
-        # field held raw IV; now that it holds a percentile or None, a
+        # field held raw IV; now that it holds a rank or None, a
         # Tradier-only chain would have read 0-of-N and skipped the backfill.
         zero_iv = sum(1 for c in result if not c.get("iv"))
         if zero_iv > len(result) * 0.5 and result:
@@ -1577,7 +1759,7 @@ async def fetch_option_chain_async(
                 if not c.get("iv"):
                     yf_val = yf_iv.get(float(c["strike"]))
                     if yf_val:
-                        # yfinance supplies an ABSOLUTE IV, never a percentile.
+                        # yfinance supplies an ABSOLUTE IV, never a rank.
                         c["iv"] = round(yf_val * 100, 1)
                         c["implied_volatility"] = round(yf_val, 4)
 
@@ -1621,6 +1803,23 @@ async def fetch_contract_quote_async(
     Option format: SYMBOL|STRIKE|EXPIRY|C/P  (e.g. AAPL|185|2025-05-16|C)
     Stock format:  SYMBOL|STOCK               (e.g. BA|STOCK)
     Returns a dict with: price, delta, theta, ivRank — or None on failure.
+
+    How an option row is matched:
+      - EXPIRY exactly. The chain fetch falls back to ANOTHER expiry when the
+        requested one is not listed (an expired or mistyped contract); that
+        row is not this contract's quote, so it is refused here, once, for
+        every caller (it used to be returned, and only get_option_quote
+        checked).
+      - STRIKE after integer truncation on BOTH sides (`int(float(strike))`
+        here, `int(strike)` in the chain rows). A known, pre-existing limit: a
+        fractional strike such as 22.5 gets the 22 row's price. Callers must
+        not use this helper to authorize money on a fractional strike --
+        daily_risk_hooks.opening_price quotes the exact OSI symbol instead for
+        that reason.
+    A contract whose ask is 0 has no row (the chain builder drops it), so it
+    is None too. What None means is up to each caller: most treat it as
+    "quote unavailable", and GET /api/portfolio marks the row
+    `quoteUnavailable` and skips that request's equity snapshot.
     """
     try:
         parts = contract_id.split("|")
@@ -1641,7 +1840,9 @@ async def fetch_contract_quote_async(
         chain = await fetch_option_chain_async(
             client, symbol, expiry=expiry, option_type=right  # type: ignore[arg-type]
         )
-        return next((c for c in chain if c["strike"] == target_strike), None)
+        return next(
+            (c for c in chain if c["strike"] == target_strike and c["expiry"] == expiry), None,
+        )
     except Exception:
         return None
 
@@ -1758,3 +1959,69 @@ def _extract_dividend_date(fund_data: dict | None) -> Optional[date]:
     except ValueError:
         pass
     return None
+
+
+def _first_calendar_result(data) -> dict | None:
+    """The first `results` entry of a Tradier fundamentals/calendars answer."""
+    if data and isinstance(data, list):
+        for entry in data:
+            for r in entry.get("results", []):
+                return r
+    return None
+
+
+# httpx timeouts are PER PHASE (connect, read, write, pool each get their own),
+# not a total, so a bare `timeout=8` let one slow request run 8-16s+ (audit
+# round 2, R2-F3). The hard bound on the fire path is the per-source thread
+# deadline in `auto_trader`; these keep an abandoned thread from lingering far
+# past it. Both sit under `auto_trader._TRADIER_LOOKUP_DEADLINE_S` (5s).
+_TRADIER_CALENDAR_HTTP_TIMEOUT = httpx.Timeout(4.0, connect=2.0)
+
+
+def _fundamentals_calendar_sync(symbol: str) -> dict | None:
+    """Sync twin of `fetch_fundamentals_calendar` for the fire path, which runs
+    on a worker thread. Reuses the scan's same-day answer when there is one
+    (that cache holds only real answers). Raises `EarningsLookupError` on a
+    failed request instead of reading it as "no data"; a real answer is cached
+    the way the async path caches it."""
+    cached = _fundamentals_calendar_cache.get(symbol)
+    if cached is not None and cached[1] == date.today().isoformat():
+        return cached[0]
+    try:
+        resp = httpx.get(
+            f"{_tradier_base()}/beta/markets/fundamentals/calendars",
+            headers=_headers(),
+            params={"symbols": symbol},
+            timeout=_TRADIER_CALENDAR_HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()
+        result = _first_calendar_result(resp.json())
+    except Exception as exc:
+        raise EarningsLookupError(f"fundamentals calendar for {symbol} failed: {exc}") from exc
+    _fundamentals_calendar_cache[symbol] = (result, date.today().isoformat())
+    return result
+
+
+# The fire path's two earnings sources, in the scan's order (`routers/scan.py`,
+# the candidate loop): Tradier fundamentals first, then the yfinance calendar.
+# Each one is called by `auto_trader._lookup_earnings_date` under its OWN
+# deadline (audit round 2, R2-F3); neither is bounded on its own.
+#
+# Each returns the date (today or later) or None when the source ANSWERED with
+# no future date, and raises `EarningsLookupError` when it FAILED. Each reuses
+# the scan's same-day answer when there is one (both caches hold real answers
+# only), which also keeps a fire right after a scan from re-hitting a feed that
+# scan just hammered.
+
+def tradier_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 1: Tradier fundamentals/calendars (`_fundamentals_calendar_sync`)."""
+    return _extract_earnings_date(_fundamentals_calendar_sync(symbol))
+
+
+def yfinance_next_earnings_date(symbol: str) -> Optional[date]:
+    """Source 2: the yfinance calendar, strict (a failure raises)."""
+    if _yf_cal_cache_date == date.today().isoformat():
+        cached = _yf_cal_cache.get(symbol)
+        if cached is not None:
+            return cached[0]
+    return _calendar_dates_yf_strict(symbol)[0]

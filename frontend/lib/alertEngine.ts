@@ -1,5 +1,9 @@
 import type { AlertKind, AlertType, TargetLevel, Direction, AlertOverrides, PositionAlertType, TpMethod } from '@/types/domain';
-import { resolvePremiumStopPct, premiumStopThresholdPrice, PREMIUM_STOP_PCT_FALLBACK, pythonRound4 } from './premiumStop';
+import {
+  resolvePremiumStopPct, percentStopThresholdPrice, isShortStockPosition, premiumStopSide,
+  PREMIUM_STOP_PCT_FALLBACK, pythonRound4,
+} from './premiumStop';
+import type { PremiumStopSide } from './premiumStop';
 
 /** An option position raises TIME_STOP at this many days to expiry or fewer.
  *
@@ -44,6 +48,23 @@ export interface AlertPosition {
   /** Per-position alert-type overrides — absent key inherits the global
    *  `enabledTypes` decision (see `effectiveEnabled`). */
   alertOverrides?: AlertOverrides;
+  /** STOCKS-HORIZON-T1 H6 -- ISO entry date (`YYYY-MM-DD`), read with
+   *  `holdMaxDays` for a stock position's TIME_STOP. */
+  entryDate?: string;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days. Null/absent =
+   *  no hold: a stock position never raises TIME_STOP. */
+  holdMaxDays?: number | null;
+}
+
+/** STOCKS-HORIZON-T1 H6 -- whole calendar days from `entryDate` to today, both
+ *  as LOCAL calendar dates (the backend's `date.today() - entry_date` on the
+ *  server's local date). Null when the entry date does not parse. */
+export function daysHeld(entryDate: string | undefined, now: Date = new Date()): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(entryDate ?? '');
+  if (!m) return null;
+  const entered = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Number.isFinite(entered) ? Math.round((today - entered) / 86_400_000) : null;
 }
 
 export interface AlertReason {
@@ -66,6 +87,9 @@ export interface AlertReason {
    *  the position resolves to when the row is later looked at
    *  (ALERT-THRESHOLD-STAMP-2026-09-05). */
   premiumStopPct?: number;
+  /** PREMIUM_STOP only — the side rule this fire used (STOP-SEMANTICS-2026-10-02):
+   *  'short-stock' fires on a RISE. Absent on every pre-deploy row. */
+  stopSide?: PremiumStopSide;
 }
 
 export interface ScanOptions {
@@ -272,18 +296,28 @@ export function scanPortfolio(
     // with no backend alert behind it — the exact divergence this change was
     // made to close. `> 0` is the frontend spelling of `is not None`: a long
     // option quoted at zero is not a live quote either.
+    //
+    // STOP-SEMANTICS-2026-10-02: a SHORT stock (Bearish `|STOCK`) loses on a
+    // rise, so its stop fires at `price >= entry * (1 + pct)`. Every other
+    // position keeps the fall-side rule. A short's reason is price-only and
+    // identical to the backend's, because `pnlPct` is not direction-aware (a
+    // short that rose 12% reads +12%).
     const resolvedPremiumStopPct = resolvePremiumStopPct(p.premiumStopPct, globalPremiumStopPct);
-    const premiumStopPrice = premiumStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct);
+    const shortStock = isShortStockPosition(p.contract, p.direction);
+    const premiumStopPrice = percentStopThresholdPrice(p.entryPrice, resolvedPremiumStopPct, shortStock);
     if (
       p.entryPrice > 0 && p.currentPrice > 0
-      && p.currentPrice <= premiumStopPrice && enabled('PREMIUM_STOP')
+      && (shortStock ? p.currentPrice >= premiumStopPrice : p.currentPrice <= premiumStopPrice)
+      && enabled('PREMIUM_STOP')
     ) {
       out.push({
         recId: p.recId,
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'PREMIUM_STOP',
-        reason: `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
+        reason: shortStock
+          ? `Stock stop — ${p.symbol} at $${p.currentPrice.toFixed(2)}`
+          : `Premium stop — ${p.symbol} down ${p.pnlPct.toFixed(1)}%`,
         // Both now in scope, and both are what the backend records for the
         // same alert (`alert_generator.py`: `price=opt_price,
         // reference_value=threshold_price`). Leaving them undefined gave
@@ -306,21 +340,40 @@ export function scanPortfolio(
         // server-derived fraction like 0.7554 must not lose precision on the
         // way into storage the way the label's old Math.round did.
         premiumStopPct: resolvedPremiumStopPct,
+        // The side rule it FIRED under; also part of the alert store's dedup
+        // key, so a short's rise-side fire never inherits fall-side state.
+        stopSide: premiumStopSide(p.contract, p.direction),
         direction: p.direction,
         contract: p.contract,
       });
     }
 
-    // TIME_STOP — expiry within 3 days. Stock positions carry no expiry, but
-    // dteRemaining defaults/coerces to 0 for them everywhere upstream
-    // (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's `?? 0`
-    // sync, and the backend schema default — portfolio.py's router only
+    // TIME_STOP — an option within 3 days of expiry. Stock positions carry no
+    // expiry, but dteRemaining defaults/coerces to 0 for them everywhere
+    // upstream (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's
+    // `?? 0` sync, and the backend schema default — portfolio.py's router only
     // overwrites it from a contract's expiry for an options-shaped, 4-part
     // contract string) — so `dteRemaining <= 3` is unconditionally true for
-    // every stock position without this guard. Mirrors the backend's own
-    // alert_generator.py, whose parse_expiry_from_contract already returns
-    // None (never fires) for a `|STOCK` contract.
-    if (!isStock && p.dteRemaining <= TIME_STOP_DTE && enabled('TIME_STOP')) {
+    // every stock position, which is why a stock position takes the hold rule
+    // below instead (STOCKS-HORIZON-T1 H6). Mirrors the backend's own
+    // alert_generator.py: parse_expiry_from_contract returns None for a
+    // `|STOCK` contract, and the hold branch runs instead.
+    if (isStock) {
+      const hold = p.holdMaxDays;
+      const held = hold != null ? daysHeld(p.entryDate) : null;
+      if (hold != null && held != null && held >= hold && enabled('TIME_STOP')) {
+        out.push({
+          recId: p.recId,
+          kind: 'Action',
+          symbol: p.symbol,
+          alertType: 'TIME_STOP',
+          reason: `Time stop — ${p.symbol} held ${held}d (hold ${hold}d)`,
+          referenceValue: held,
+          direction: p.direction,
+          contract: p.contract,
+        });
+      }
+    } else if (p.dteRemaining <= TIME_STOP_DTE && enabled('TIME_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Action',

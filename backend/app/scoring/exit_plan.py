@@ -18,6 +18,8 @@ from typing import Literal, Optional
 
 from app.scoring.structural_stop import StructuralStop, find_structural_stop, find_structural_target
 
+BEARISH_MIN_TARGET_FRACTION = 0.10
+
 StopSource = Literal["structural", "atr_widened"]
 TpSource = Literal["arithmetic", "structural_snap"]
 
@@ -215,17 +217,28 @@ def compute_target_row(
         else entry_price - rr_ratio * final_stop_distance
     )
 
+    target_floor = entry_price * BEARISH_MIN_TARGET_FRACTION
+    target_capped = not is_bullish and arithmetic_price < target_floor
+    if target_capped:
+        arithmetic_price = target_floor
+
     structural_target = find_structural_target(candles, direction, entry_price)
     tolerance_dollar = max(snap_atr_multiplier, 0.0) * max(atr, 0.0)
     distance_dollar = abs(structural_target.price - arithmetic_price) if structural_target is not None else None
 
     tp_source: TpSource = "arithmetic"
     price = arithmetic_price
-    if distance_dollar is not None and distance_dollar <= tolerance_dollar:
+    snap_eligible = distance_dollar is not None and distance_dollar <= tolerance_dollar
+    snap_below_floor = snap_eligible and not is_bullish and structural_target.price < target_floor
+    if snap_below_floor:
+        target_capped = True
+    if snap_eligible and not snap_below_floor:
         tp_source = "structural_snap"
         price = structural_target.price
 
     quality_reasons: list[str] = []
+    if target_capped:
+        quality_reasons.append("target_capped")
     if final_stop.source != "structural":
         quality_reasons.append("stop_widened")
 
@@ -249,3 +262,14 @@ def compute_target_row(
         quality_good=not quality_reasons,
         quality_reasons=quality_reasons,
     )
+
+
+def resolve_t1_target(candles, direction, entry_price, stock_stop, stop_price,
+                      r_multiple, snap_atr_multiplier):
+    """Resolve the first stock target; trade_plan bounds its ladder extension."""
+    if stock_stop is not None and stock_stop.source == "final_stop":
+        row = compute_target_row(candles, direction, entry_price, stock_stop.final_stop,
+                                 stock_stop.atr, r_multiple, snap_atr_multiplier)
+        return row.price, row.tp_source
+    sign = 1 if direction == "Bullish" else -1
+    return entry_price + sign * r_multiple * abs(entry_price - stop_price), "flat_fallback"

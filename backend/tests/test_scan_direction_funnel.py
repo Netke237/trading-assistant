@@ -126,6 +126,7 @@ def _accounted(pipeline: dict) -> int:
         + pipeline["failed_score"]
         + pipeline["failed_contracts"]
         + pipeline["failed_direction"]
+        + pipeline["failed_direction_unmeasured"]
         + pipeline["failed_shortlist"]
         + pipeline["other_rejected"]
     )
@@ -241,7 +242,11 @@ _REAL_REASONS = [
     ("regime data unavailable: no completed 15-min bars for X", "failed_data"),
     ("regime data unavailable: no completed 15-min bars for X (fetch failed: boom)", "failed_data"),
     # P3c item 2: literal lives in stock_scan._direction_conviction_drop.
-    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction"),
+    # Its own bucket (open_questions[53]): removed before the chain fetch.
+    ("direction_conviction_unmeasured: no trend measurement for Bullish Swing", "failed_direction_unmeasured"),
+    # STOCKS-HORIZON-P0A A2: a `scope: scan` symbol from universe_exclusions.yaml,
+    # skipped before any per-symbol work. A data drop.
+    ("Excluded (data): price feed ended 2024-05-03; likely delisted", "failed_data"),
 ]
 
 
@@ -458,3 +463,90 @@ def test_a_malformed_threshold_fails_the_options_scan_before_any_fetching(client
         "the universe quote fetch ran before the config was checked — the "
         "fail-fast moved back below the fan-out"
     )
+
+
+# ── Universe exclusion list (STOCKS-HORIZON-P0A A2) ──────────────────────────
+#
+# A `scope: scan` symbol in config/universe_exclusions.yaml is skipped before
+# any per-symbol work, reported in `rejected` as "Excluded (data): <reason>",
+# counted in `scanned` and in the `failed_data` bucket, so the sum invariant
+# still holds. The shipped file lists CTVA with scope scan (pinned by
+# test_universe_exclusions.py).
+
+_BROKEN_LIST = "universe_exclusions.yaml: 'version' must be 1, got 2"
+
+
+def _ctva_reason() -> str:
+    from app.data.universe_exclusions import load_exclusions
+    return load_exclusions()["CTVA"].reason
+
+
+def _post_options_scan(client, universe, fake_process, *extra_patches):
+    from unittest.mock import MagicMock
+
+    quotes = MagicMock(return_value={})
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.routers.scan._process_symbol", fake_process))
+        stack.enter_context(patch(
+            "app.routers.scan.get_tradier_creds",
+            return_value=("tok", "https://example.invalid"),
+        ))
+        stack.enter_context(patch("app.routers.scan.fetch_quotes", quotes))
+        stack.enter_context(patch(
+            "app.services.historical_store.get_bars", AsyncMock(return_value=[]),
+        ))
+        stack.enter_context(patch(
+            "app.routers.scan.get_fundamentals", AsyncMock(return_value=None),
+        ))
+        for p in extra_patches:
+            stack.enter_context(p)
+        r = client.post("/api/scan", json={
+            "universe": universe, "direction": "Bearish", "horizon": "Position",
+            "overrides": {},
+        })
+    return r, quotes
+
+
+def test_an_excluded_symbol_is_rejected_as_data_and_never_processed(client):
+    """A typed excluded ticker is skipped too: the filter runs on the FINAL list."""
+    processed: list[str] = []
+
+    async def _fake_process(symbol, *_a, **_kw):
+        processed.append(symbol)
+        return _card(symbol, 60)   # clears the Bearish/Position floor
+
+    r, quotes = _post_options_scan(client, ["AAPL", "CTVA"], _fake_process)
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    assert processed == ["AAPL"], "CTVA reached per-symbol work"
+    assert "CTVA" not in quotes.call_args.args[0], "CTVA reached the batch quote fetch"
+    reasons = {x["symbol"]: x["reason"] for x in body["rejected"]}
+    assert reasons["CTVA"] == f"Excluded (data): {_ctva_reason()}"
+    assert [c["symbol"] for c in body["candidates"]] == ["AAPL"]
+
+    pipeline = body["pipeline"]
+    assert pipeline["failed_data"] == 1
+    assert pipeline["other_rejected"] == 0, "the exclusion leaked into the residual"
+    assert pipeline["scanned"] == 2 == _accounted(pipeline)
+
+
+def test_a_broken_exclusion_list_fails_the_options_scan_before_any_symbol_work(client):
+    """A broken list must not silently scan everything: named 500, nothing fetched."""
+    from app.data.universe_exclusions import ExclusionListError
+
+    processed: list[str] = []
+
+    async def _fake_process(symbol, *_a, **_kw):
+        processed.append(symbol)
+        return _card(symbol, 60)
+
+    r, quotes = _post_options_scan(
+        client, ["AAPL"], _fake_process,
+        patch("app.data.universe_exclusions.load_exclusions",
+              side_effect=ExclusionListError(_BROKEN_LIST)),
+    )
+    assert r.status_code == 500, r.text
+    assert r.json()["detail"] == _BROKEN_LIST
+    assert processed == []
+    assert quotes.call_count == 0

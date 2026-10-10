@@ -28,15 +28,15 @@ hard_reject:
   # applies is decided by `iv_basis`, set in app/data/augment.py:
   #   max_iv_abs  judges ABSOLUTE implied volatility 0-100 (Tradier per strike,
   #               the yfinance backfill, or scan.py's Black-Scholes inversion).
-  #   max_iv_rank judges a TRUE PERCENTILE, available only when IBKR or
+  #   max_iv_rank judges an IV RANK, available only when IBKR or
   #               tastytrade answered.
   # 70 is the number this ceiling has ACTUALLY been applying all along, to an
   # absolute level mislabelled as a rank, so it moves to max_iv_abs and
   # behaviour is unchanged for every chain without a rank source.
   max_iv_abs: 70                # long-premium strategy: never buy when absolute IV > 70%
   # UNMEASURED — seeded from the absolute ceiling above. Nobody has checked
-  # whether a percentile deserves the same cut-off; a name at the 75th
-  # percentile of its own range is a genuinely different claim from one at 75%
+  # whether a rank deserves the same cut-off; a name at the 75th
+  # rank of its own range is a genuinely different claim from one at 75%
   # IV. Same standing as the iv_rank_* thresholds in scoring_rules.yaml.
   max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
   max_soft_fail_count: 3        # reject if this many soft rules fail
@@ -75,3 +75,12 @@ weights:
   delta: 0.20        # delta in preferred zone
   dte: 0.15          # DTE in preferred band
   iv_rank: 0.15      # IV rank acceptability
+
+# Quote liveness (NO-LIVE-QUOTE). A chain row's quote counts as live only in the
+# NYSE session AND when its FRESHER side (the newer of bid_date / ask_date) is no
+# older than this. Measured 2026-10-05 in session: the fresher side was never
+# older than 27.3 min (0 of 741 two-sided rows over 30), so the margin is thin.
+# Read by app/data/market.py through contract_validator.max_quote_age_seconds();
+# a missing, non-numeric or <= 0 value runs on 30 and logs a warning.
+quote_liveness:
+  max_age_minutes: 30

@@ -2,17 +2,22 @@
 
 /*
  * Screener Step 7 — Trade Card.
- * Prev/Next cycles ranked candidates, basket pins multiple. Send basket
- * opens a review dialog where any row can be switched from auto-send
- * (sent to broker mock) to manual (added to portfolio tagged MANUAL).
- * Successful submits surface a bottom-right toast with a Portfolio link.
+ * Prev/Next cycles ranked candidates, basket pins multiple. Track basket
+ * opens a review dialog; submitting it saves every row to the Portfolio tagged
+ * MANUAL. It places NO broker order (review #5, D6) -- a card's own send
+ * buttons do that. A tracked row still reserves its contract and symbol (the
+ * caps and the duplicate refusal count it), so tracking blocks a later send of
+ * the same card until the row is closed. Successful submits surface a
+ * bottom-right toast with a Portfolio link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
+import { quoteWarning } from '@/lib/quoteWarning';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -28,7 +33,8 @@ import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
 import { tradeCardSnapshotOf } from '@/lib/tradeCardSnapshot';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
-import { premiumStopDollarToSend } from '@/lib/premiumStop';
+import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 import {
   checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
   checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
@@ -36,7 +42,7 @@ import {
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
-  rrOverridesFrom, withCachedEstimate,
+  rrOverridesForPlan, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
@@ -49,6 +55,12 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { earningsGateFor, scanVetoDays, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+
+// Fix #3 (review) / audit round 1 F4+F8: the veto, its sentence and the
+// unknown-earnings arm refusal live in lib/earningsGate.ts, shared with the
+// @contextRail checklist so the rail and these buttons cannot disagree.
 
 function nowISOLocal(): string {
   const d = new Date();
@@ -174,6 +186,11 @@ function positionFromOrder(
     // Sent as DOLLARS; the backend derives the fraction against the entry
     // price it persists (which may be a live quote, not this `mid`).
     premiumStopDollar,
+    // ...and as the user's own FRACTION of this `mid` (decision PREMIUM-STOP-
+    // FALLBACK-USER-FRACTION-2026-10-03): the writer stores it only when the
+    // dollar is unusable at the persisted entry (a total loss, or sub-cent),
+    // instead of the global. Same divisor as `entryPrice` above.
+    premiumStopPct: premiumStopPctFromDollars(premiumStopDollar, mid) ?? null,
     targets:       c.exit.targets,
     status:        c.finalStatus,
     // Both quantities travel to the position, kept apart
@@ -186,7 +203,8 @@ function positionFromOrder(
     theta:         cd?.theta,
     vega:          0.20,
     contracts:     order.contracts,
-    source:        order.autoSend ? 'broker' : 'manual',
+    // Fix #5: the basket places no broker order (D6); 'broker' made phantom positions count against real caps.
+    source:        'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
     tradeCardSnapshot: tradeCardSnapshotOf(c),
@@ -195,15 +213,17 @@ function positionFromOrder(
 }
 
 interface ToastState {
-  auto:    number;
-  manual:  number;
-  queued:  number;   // subset of auto+manual that is pending a backend retry
+  saved:   number;   // confirmed saved by the backend
+  queued:  number;   // saved locally, pending a backend retry
   // Positions whose requested size was auto-reduced by the backend's risk
   // check to fit exposure limits — "SYMBOL: N contracts" per entry.
   adjusted: string[];
 }
 
 export default function Step7Page() {
+  // The controlled method selector renders inline in TradeCard's Final
+  // Recommendation (no decisionTarget is passed); AutoTradeArm retains its
+  // original page ownership/predicate even while an override plan is pending.
   const [cards, setCards]         = useState<TradeCardData[]>([]);
   const [active, setActive]       = useState<string>('');
   const [basket, setBasket]       = useState<string[]>([]);
@@ -547,8 +567,10 @@ export default function Step7Page() {
   // The one place the card can tell the user their premium stop did not survive
   // the save-time re-anchor. The router logs it server-side and the position
   // quietly inherits the global -- a TIGHTER stop than the one asked for.
-  const droppedStopNote = (requested: number) =>
-    `Premium stop of $${requested.toFixed(2)}/share could not be applied at the filled premium — this position inherits the global stop.`;
+  // STOP-SEMANTICS -- the wording (and the reason it names) is shared with the
+  // Portfolio banner through `premiumStopDropText`.
+  const droppedStopNote = (requested: number | null, reason: PremiumStopDropReason, keptPct?: number) =>
+    premiumStopDropText(requested, reason, keptPct);
   /* ROUND 10 finding 1 — the quote CARRIES THE CONTRACT IT IS FOR.
    *
    * These used to be bare values, cleared at the top of the fetch effect. The
@@ -565,12 +587,19 @@ export default function Step7Page() {
    * every path, including the next early return someone adds: a quote whose
    * key does not match the card on screen is not this card's quote, and
    * `liveQuoteForCard` below is the only thing any consumer may read. */
-  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number } | null>(null);
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null } | null>(null);
+  const [quoteConfirmation, setQuoteConfirmation] = useState<{ contractKey: string } | null>(null);
+  const quoteConfirmationRef = useRef<{ contractKey: string } | null>(null);
+  const quoteRequestGenerationRef = useRef(0);
+  const updateQuoteConfirmation = (confirmation: { contractKey: string } | null) => {
+    quoteConfirmationRef.current = confirmation;
+    setQuoteConfirmation(confirmation);
+  };
   const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
   // the active card AND every overridden basket item share this one cache so a
-  // basket "Send to broker" never falls back to an auto-pick's stale plan just
+  // tracked basket row never falls back to an auto-pick's stale plan just
   // because that symbol isn't the currently-active card. Each entry is tagged
   // with the contract key it was computed for so a plan for contract A is never
   // merged onto contract B while B's recompute is still in flight.
@@ -583,6 +612,10 @@ export default function Step7Page() {
   const requestedPlanKeysRef = useRef<Record<string, string>>({});
 
   const scanResult          = useScanStore((s) => s.scanResult);
+  // STOCKS-HORIZON-P0B B7: the scan's hold, for the veto-window fallback on a
+  // result persisted before `event_window.veto_days` existed.
+  const scanContext         = useScanStore((s) => s.context);
+  const earningsVetoDays    = scanVetoDays(scanResult?.event_window, scanContext);
   const setSelectedSymbol   = useScanStore((s) => s.setSelectedSymbol);
   const pickedContracts     = useScanStore((s) => s.pickedContracts);
   const contractsBySymbol   = useScanStore((s) => s.contractsBySymbol);
@@ -677,6 +710,15 @@ export default function Step7Page() {
 
   const liveQcd = pickedCard?.contractDetails;
   const contractKey = contractKeyFor(pickedCard);
+  const currentContractKeyRef = useRef(contractKey);
+  const selectionEpochRef = useRef(0);
+  if (currentContractKeyRef.current !== contractKey) {
+    selectionEpochRef.current += 1;
+    quoteConfirmationRef.current = null;
+  }
+  currentContractKeyRef.current = contractKey;
+  useEffect(() => () => { currentContractKeyRef.current = null; }, []);
+  useEffect(() => { updateQuoteConfirmation(null); }, [contractKey]);
   // The looser key the three edit caches use — see editKeyFor. Declared from
   // `effectiveCard` (not `pickedCard`) so it matches what the writer reports
   // and what `entryLimitFor`/`premiumStopDollarFor` read on the send paths.
@@ -701,10 +743,16 @@ export default function Step7Page() {
   // auto-pick's (override plan loading or failed). This page does not subscribe
   // to the store, so publishing on every render of an overridden card (whose
   // identity changes each render) re-renders the rail only, never this page.
+  const rrIdentity = effectiveCard ? `${effectiveCard.symbol}|${effectiveCard.contract}` : '';
+  const [rrStaleState, setRrStaleState] = useState<{ key: string; stale: boolean }>({ key: '', stale: false });
+  const onRrStaleChange = useCallback((stale: boolean) => {
+    setRrStaleState((prev) => prev.key === rrIdentity && prev.stale === stale ? prev : { key: rrIdentity, stale });
+  }, [rrIdentity]);
+  const rrStale = rrStaleState.key === rrIdentity && rrStaleState.stale;
   const setRailCard = useTradeCardUiStore((s) => s.setActiveCard);
   useEffect(() => {
-    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady } : null);
-  }, [effectiveCard, planReady, setRailCard]);
+    setRailCard(effectiveCard ? { card: effectiveCard, rrPending: !planReady, rrStale } : null);
+  }, [effectiveCard, planReady, rrStale, setRailCard]);
   // Cleared on unmount, so a later visit never shows the previous visit's
   // contract before its first publish.
   useEffect(() => () => setRailCard(null), [setRailCard]);
@@ -773,10 +821,11 @@ export default function Step7Page() {
   );
 
   // Every basket item, override-resolved and (if overridden) merged with its
-  // recomputed plan. `basketPlansPending` gates the whole "Send to broker" flow
-  // so a basket order can never go out carrying an overridden contract whose
-  // Entry/Exit/RR still describe the auto-pick — the exact bug this recompute
-  // machinery exists to prevent, previously reachable only via Send basket.
+  // recomputed plan. `basketPlansPending` gates the whole "Track basket" flow
+  // so a tracked basket row can never be booked carrying an overridden contract
+  // whose Entry/Exit/RR still describe the auto-pick — the exact bug this
+  // recompute machinery exists to prevent. (Fix #5 / D6: the basket books
+  // Portfolio rows only; it places no broker order.)
   // (resolveBasketCards is the same pure logic exercised directly in
   // lib/__tests__/tradeCardOverride.test.ts.)
   const { cards: basketCards, pending: basketPlansPending } = useMemo(
@@ -846,6 +895,9 @@ export default function Step7Page() {
     // closure, never via React state (whose read timing can't be trusted
     // relative to when cleanup runs for an unrelated reason).
     let settled = false;
+    // Only a run that actually issues a request may supersede a pending
+    // send-time probe -- hence below the claimed-plan early return above.
+    const quoteGeneration = ++quoteRequestGenerationRef.current;
     setLiveQuote(null);
     setLiveStockPrice(null);
     setFetchingQuote(true);
@@ -864,7 +916,10 @@ export default function Step7Page() {
     ])
       .then(([q, sq]) => {
         if (!controller.signal.aborted) {
-          setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          // A send-time probe owns the quote display over an older card-open fetch.
+          if (quoteGeneration === quoteRequestGenerationRef.current) {
+            setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          }
           if (sq) setLiveStockPrice({ symbol, price: sq.price });
         }
         return [q, sq] as const;
@@ -884,12 +939,14 @@ export default function Step7Page() {
           dte:         liveQcd.dte,
           premium:     q?.price ?? liveQcd.mid,
           delta:       liveQcd.delta,
-          spread:      q?.spread ?? 0,
+          spread:      q?.spread ?? liveQcd.spread!,
+          quote_live:  q?.quoteLive ?? !pickedCard.noLiveQuote,
           // PIECE 3 — round-trip the stop this card already resolved. The
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
           final_stop:  pickedCard.exit.finalStop ?? null,
-          ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+          ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
+          ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
           .then((plan) => {
@@ -960,9 +1017,11 @@ export default function Step7Page() {
         dte: cd.dte,
         premium: cd.mid,
         delta: cd.delta,
-        spread: 0,
+        spread: cd.spread!,
+        quote_live: !resolved.noLiveQuote,
         final_stop: resolved.exit.finalStop ?? null,
-        ...rrOverridesFrom(useScanStore.getState().scanOverrides),
+          ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
+        ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
         .then((plan) => {
@@ -1047,6 +1106,8 @@ export default function Step7Page() {
       // Piece 4 — MUST match what positionFromOrder produces for the same card,
       // which is now true by construction: both call premiumStopDollarFor.
       premiumStopDollar: premiumStopDollarFor(card),
+      // The user's own fraction of this `mid` -- see positionFromOrder.
+      premiumStopPct: premiumStopPctFromDollars(premiumStopDollarFor(card), mid) ?? null,
       targets:       card.exit.targets,
       status:        card.finalStatus,
       ivRank:        cd?.ivRank,
@@ -1081,7 +1142,12 @@ export default function Step7Page() {
    * another candidate's screen. */
   async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
-    if (!card || !selectedBroker) return;
+    if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
+    // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
+    // Audit round 1, F4: judged as of TODAY (the scan's distance aged by the
+    // scan's age), the same reading as `earningsVeto` below. P0B B7: against
+    // the scan's veto window, max(reject_days, hold).
+    if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
     // DIRECT-SEND-STOP-GATE-2026-09-09. Belt and braces, and deliberately so:
     // `disabled` protects the button and this protects the ORDER -- anything
     // that reaches this function by another route inherits the refusal.
@@ -1100,6 +1166,26 @@ export default function Step7Page() {
     setPaperOrderId(null);
     let label = card.contract;
     try {
+      const keyAtSend = contractKeyFor(card);
+      const selectionAtSend = selectionEpochRef.current;
+      const cdAtSend = card.contractDetails;
+      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent — contract details unavailable.'); return; }
+      const quoteGeneration = ++quoteRequestGenerationRef.current;
+      const quoteController = new AbortController();
+      const quoteTimeout = setTimeout(() => quoteController.abort(), 8000);
+      let freshQuote: Awaited<ReturnType<typeof api.getContractQuote>> | null;
+      try {
+        freshQuote = await api.getContractQuote(card.symbol, cdAtSend.strike, cdAtSend.expiry, cdAtSend.right, quoteController.signal).catch(() => null);
+      } finally { clearTimeout(quoteTimeout); }
+      // Navigation during the probe cancels this send; neither quote nor tick can cross contracts.
+      if (currentContractKeyRef.current !== keyAtSend || selectionEpochRef.current !== selectionAtSend) return;
+      if (quoteGeneration === quoteRequestGenerationRef.current) {
+        setLiveQuote(freshQuote ? { ...freshQuote, key: keyAtSend } : null);
+      }
+      if (freshQuote?.quoteLive !== true && quoteConfirmationRef.current?.contractKey !== keyAtSend) {
+        setOrderError('No order was sent — confirm the quote warning for this contract and click again.');
+        return;
+      }
       // Captured ONCE; never re-read from `effectiveCard`, which may be another
       // candidate by the time the broker answers.
       label = contractLabelFor(card);
@@ -1111,7 +1197,7 @@ export default function Step7Page() {
       // throw here happens before anything is written.
       const optionSymbol = toOptionSymbol(card);
       const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
-      const pos = buildPaperPosition(card, orderType, broker, 'pending', liveQuoteForCard?.price, contracts);
+      const pos = buildPaperPosition(card, orderType, broker, 'pending', freshQuote?.price, contracts);
       const recId = pos.recId;
 
       // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
@@ -1121,7 +1207,12 @@ export default function Step7Page() {
         return;
       }
 
-      const saved = await persistPosition(pos);
+      // Audit round 1, F1: the save carries the order it precedes, so the
+      // server judges the D5 premium cap at what this order can PAY -- the
+      // edited limit when it is above the mid, the ask for a market order --
+      // and not at `pos.entryPrice`, the mid it stores. `limitPrice` is the
+      // very value the order below posts.
+      const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
       // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
       // may still be running); or a 2xx whose body did not parse (the page
       // cannot know whether the server resized). No order is sent. The create
@@ -1163,7 +1254,7 @@ export default function Step7Page() {
           applyPersistedPosition(
             saved, { ...pos, contracts: orderQty }, addPosition,
             (q) => addSaveNote(`${label}: Portfolio sized it to ${q}; the order was requested for ${q}, status unknown.`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${banner} The local view failed to update: ${String(e)}`);
@@ -1211,7 +1302,7 @@ export default function Step7Page() {
             { ...pos, contracts: orderQty, sourceLabel: `${brokerLabel} — ${orderType === 'LMT' ? 'Limit' : 'Market'} (ID: ${orderId})` },
             addPosition,
             (q) => addSaveNote(`${label}: ${sizeNote(q)}`),
-            (r) => addSaveNote(`${label}: ${droppedStopNote(r)}`),
+            (r, why, kept) => addSaveNote(`${label}: ${droppedStopNote(r, why, kept)}`),
           );
         } catch (e) {
           setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
@@ -1267,13 +1358,35 @@ export default function Step7Page() {
 
   const marketBlocked = directOrderBlock('MKT', selectedBroker);
 
+  // Fix #3 (review, High). The backend sets `earningsVeto` when earnings fall
+  // inside the scan's reject window (and forces finalStatus REJECT).
+  //
+  // Audit round 1, F4 (Kenneth 2026-10-03): that flag is a scan-time snapshot
+  // and the scan result is persisted, so a card reopened days later still
+  // carried the scan day's distance. `earningsGateFor` ages `earningsDays` by
+  // the scan's age in calendar days and re-judges it against the scan's own
+  // window; a distance aged below zero reads as UNKNOWN (D4), not a veto.
+  // F8: `armBlockedReason` also refuses the Arm for a single stock whose date
+  // is unknown -- every fire of it would be refused. The rail reads the same
+  // helper.
+  // STOCKS-HORIZON-P0B B7: the window is the scan's veto window,
+  // `event_window.veto_days ?? max(reject_days, the scan's hold)`.
+  const earningsGate = earningsGateFor(
+    effectiveCard, scanResult?.timestamp, earningsVetoDays,
+  );
+  const earningsVeto = earningsGate.veto;
+  const bearishUnvalidated = isBearishUnvalidated(effectiveCard?.direction);
+
   const idx = symbols.indexOf(active);
 
   const goPrev = () => { if (idx > 0) setActive(symbols[idx - 1]!); };
   const goNext = () => { if (idx >= 0 && idx < symbols.length - 1) setActive(symbols[idx + 1]!); };
 
-  const togglePin = () =>
+  const togglePin = () => {
+    // Fix #3 (review). A vetoed card never enters the basket (un-pinning is fine).
+    if (earningsVeto && !basket.includes(active)) return;
     setBasket((b) => (b.includes(active) ? b.filter((s) => s !== active) : [...b, active]));
+  };
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
   const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
@@ -1294,7 +1407,7 @@ export default function Step7Page() {
     setBasketNotes([]);
     setBasketError(null);
     setOrderError(null);
-    let auto = 0, manual = 0, queued = 0;
+    let saved = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
 
@@ -1337,8 +1450,8 @@ export default function Step7Page() {
       // only two paths that told the user were placeLimitPaper and
       // placeMarketNow. Same fallback, same silence, one of four create paths
       // away. Symbol-qualified because a basket submits several at once.
-      if (res.premiumStopDropped != null) {
-        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped)}`;
+      if (res.premiumStopDropReason != null) {
+        const note = `${o.card.symbol}: ${droppedStopNote(res.premiumStopDropped ?? null, res.premiumStopDropReason, res.premiumStopKeptPct)}`;
         setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
       }
       if (res.status === 'pending') {
@@ -1350,7 +1463,7 @@ export default function Step7Page() {
       }
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
-      if (o.autoSend) auto++; else manual++;
+      saved++;
       if (res.adjustedQty != null) {
         adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
       }
@@ -1367,8 +1480,8 @@ export default function Step7Page() {
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
     // a mixed basket — but a network-only submit shows just the toast (no
     // contradictory red banner) with the queued count reported distinctly.
-    if (auto + manual + queued > 0) {
-      setToast({ auto, manual, queued, adjusted });
+    if (saved + queued > 0) {
+      setToast({ saved, queued, adjusted });
       window.setTimeout(() => setToast(null), 6000);
     }
     if (failures.length) {
@@ -1377,18 +1490,24 @@ export default function Step7Page() {
   };
 
   const basketEmpty = basket.length === 0;
-  const sendLabel = basketEmpty ? 'Send to broker' : `Send basket (${basket.length})`;
+  const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
   return (
-    <div className={styles.main}>
+    <div className={`${styles.main} ${paperStyles.presentationPage}`}>
       <div className={styles.stepHeader}>
         <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
+        <details className={paperStyles.pageExplanation}>
+          <summary>How this page works</summary>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket, then Send to broker — uncheck
-          Auto-send for any contract you&apos;d rather place manually.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
+          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
+          its card instead of tracking it, or close the tracked row first.
         </Text>
+        </details>
       </div>
+
+      {effectiveCard && <MarketSentiment s={effectiveCard.sentiment} compact />}
 
       <CandidateNav
         symbols={symbols}
@@ -1399,12 +1518,16 @@ export default function Step7Page() {
         onSelect={setActive}
         onTogglePin={togglePin}
         onRemovePin={removePin}
+        pinDisabled={earningsVeto}
+        pinDisabledReason={EARNINGS_VETO_MESSAGE}
       />
 
       {cards.length === 0 && (
         <Text size={13} tone="dim">Run a scan to generate trade cards.</Text>
       )}
 
+      <div className={paperStyles.presentationLayout}>
+        <div className={paperStyles.cardColumn}>
       {effectiveCard && (
         <>
           {effectiveCard._userOverride && (
@@ -1432,6 +1555,8 @@ export default function Step7Page() {
             </div>
           ) : (
             <TradeCard
+              showMarketSentiment={false}
+              onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
               onSendToBroker={() => !basketEmpty && !basketPlansPending && setDialogOpen(true)}
@@ -1478,7 +1603,7 @@ export default function Step7Page() {
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
             <Text size={11} tone="caution">
-              Computing the plan for an overridden contract in your basket — Send basket enables once it&apos;s ready.
+              Computing the plan for an overridden contract in your basket — Track basket enables once it&apos;s ready.
             </Text>
           )}
           {basketPlanErrors.map(({ symbol, error }) => (
@@ -1492,7 +1617,13 @@ export default function Step7Page() {
           {fetchingQuote && (
             <Text size={11} tone="dim">Fetching live price…</Text>
           )}
-          {liveQuoteForCard && !fetchingQuote && (
+          {quoteWarning(liveQuoteForCard) && (
+            <div role="status">
+              <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
+              <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
+            </div>
+          )}
+          {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
             <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
           )}
           {liveStockPriceForCard != null && !fetchingQuote && (
@@ -1501,9 +1632,12 @@ export default function Step7Page() {
         </>
       )}
 
+        </div>
+
       {/* Paper broker execution */}
       {effectiveCard && (
         <div className={paperStyles.paperSection}>
+          <Text size={14} weight={600}>Decision and execution</Text>
           <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
           {selectedBroker && (
             <>
@@ -1512,9 +1646,11 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnLimit}
                   onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
                   title={
-                    stopMissing ? MISSING_INVALIDATION_TITLE
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
+                    : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
                   }
@@ -1525,10 +1661,12 @@ export default function Step7Page() {
                   type="button"
                   className={paperStyles.paperBtnMarket}
                   onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || marketBlocked != null}
+                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
                   title={
-                    // The broker refusal wins: filling a field cannot cure it.
-                    marketBlocked != null ? marketBlocked
+                    // Direction and broker refusals cannot be cured by filling a field.
+                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                    : marketBlocked != null ? marketBlocked
+                    : earningsVeto ? EARNINGS_VETO_MESSAGE
                     : stopMissing ? MISSING_INVALIDATION_TITLE
                     : pickMissing ? MISSING_METHOD_PICK_TITLE
                     : undefined
@@ -1537,6 +1675,27 @@ export default function Step7Page() {
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {/* Fix #3 (review). Said, not merely disabled; independent of the
+                * stop / pick refusals below for the same reason they are
+                * independent of each other. */}
+              {bearishUnvalidated && (
+                <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+              )}
+              {earningsVeto && (
+                <Text size={11} tone="reject">
+                  {EARNINGS_VETO_MESSAGE}
+                </Text>
+              )}
+              {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
+                * (title only -- see its armBlockedReason NOTE), so the
+                * unknown-earnings refusal is said here, beside the veto's.
+                * Manual sends stay enabled: D4 caps the card at CAUTION, it
+                * does not veto it. */}
+              {!earningsVeto && earningsGate.armBlockedReason && (
+                <Text size={11} tone="caution">
+                  {earningsGate.armBlockedReason}
+                </Text>
+              )}
               {!planReady && (
                 <Text size={11} tone="caution">
                   Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
@@ -1566,8 +1725,13 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+                * Hiding it also hid Disarm for a strategy already armed; the
+                * veto now refuses Arm / Fire now inside the component, and the
+                * sentence is the one printed above. */}
               {planReady && (
                 <AutoTradeArm
+                  armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
                   // The same live quote TradeCard gets as `liveMid` and the
                   // page prints as "Live mid" -- it was in scope here all
                   // along and simply never handed down, leaving the arm path
@@ -1657,9 +1821,15 @@ export default function Step7Page() {
         </div>
       )}
 
+      </div>
+
       {dialogOpen && (
         <SendToBrokerDialog
           cards={basketCards}
+          quoteWarningsByContract={Object.fromEntries(basketCards.map((c) => {
+            const key = contractKeyFor(c);
+            return [key ?? c.contract, quoteWarning(key === contractKey ? liveQuoteForCard : null)];
+          }))}
           contractsBySymbol={orderContractsBySymbol}
           overridesBySymbol={maxLossOverrideBySymbol}
           invalidationBySymbol={Object.fromEntries(
@@ -1676,13 +1846,9 @@ export default function Step7Page() {
       {toast && (
         <div className={toastStyles.toast} role="status" aria-live="polite">
           <div>
-            <Text size={13} weight={500}>
-              {toast.auto + toast.manual + toast.queued} order{toast.auto + toast.manual + toast.queued === 1 ? '' : 's'} placed
-            </Text>
-            <Text size={11} tone="secondary">
-              {toast.auto} sent to broker · {toast.manual} added manually
-              {toast.queued > 0 ? ` · ${toast.queued} awaiting backend sync` : ''}
-            </Text>
+            <Text size={13} weight={500}>{toast.saved + toast.queued} added to Portfolio</Text>
+            <Text size={11} tone="caution">No broker order was placed. Tracked rows reserve their contract — to trade one, close the row and send from its card.</Text>
+            {toast.queued > 0 && <Text size={11} tone="secondary">{toast.queued} awaiting backend sync</Text>}
             {toast.adjusted.length > 0 && (
               <Text size={11} tone="caution">
                 Size reduced to fit exposure limits — {toast.adjusted.join(', ')}

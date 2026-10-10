@@ -353,18 +353,8 @@ describe('AutoTradeArm — carries the pick onto the arm request (spec test 6, �
   });
 });
 
-describe("the armed payload carries the CARD's direction", () => {
-  /* THE ONE THING THIS WHOLE PIECE EXISTS TO GUARANTEE, and until now nothing
-   * pinned it. The backend sizes off `direction`; if the browser never sends it,
-   * or sends a constant, the fix is inert — and a missing field would be caught
-   * only by `tsc`, and only until someone writes `card.direction ?? 'Bullish'`,
-   * which typechecks and silently restores the exact defect: every bearish trade
-   * sized off the bullish frame.
-   *
-   * Both directions are asserted on purpose. A single Bullish case would pass
-   * against a hardcoded 'Bullish' literal, which is the failure mode worth
-   * catching — the old code hardcoded `action: 'BUY'` and that is what made
-   * `action` useless as a direction signal in the first place. */
+describe("the armed payload carries the Bullish CARD's direction", () => {
+  // Bearish arms are refused by B4; the allowed arm still carries its card's direction.
 
   beforeEach(() => {
     // Same setup the sibling describes use: the Arm button only renders in
@@ -377,7 +367,7 @@ describe("the armed payload carries the CARD's direction", () => {
     (api.armAutoTrade as jest.Mock).mockClear();
   });
 
-  it.each([['Bullish'], ['Bearish']] as const)(
+  it.each([['Bullish']] as const)(
     'sends direction=%s when that is what the card says',
     async (direction) => {
       render(
@@ -901,6 +891,21 @@ describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wo
     expect(screen.queryByText(/at or above today's/)).not.toBeInTheDocument();
   });
 
+  it('STOP-SEMANTICS (F3): a sub-cent stop at today\'s premium is WARNED, and Arm stays enabled', () => {
+    // $0.02 on a $0.03 premium: the threshold is a few ulps under a cent.
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={0.02} liveMid={0.03} methodPick={pick()} />);
+    expect(screen.getByText(
+      "Your $0.02 premium stop leaves a threshold below $0.01 at today's $0.03 premium, so it could never fire. "
+      + 'If it is still below $0.01 at the fill, the booked position inherits the global stop (60%).',
+    )).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Arm —/ })).toBeEnabled();
+  });
+
+  it('STOP-SEMANTICS (F3): no sub-cent warning for an ordinary stop', () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" premiumStopDollar={1.0} liveMid={2.5} methodPick={pick()} />);
+    expect(screen.queryByText(/below \$0\.01/)).not.toBeInTheDocument();
+  });
+
   it('(b) an unbooked fire shows the order id in caution, never "Auto-trade fired"', async () => {
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
@@ -917,4 +922,130 @@ describe('AutoTradeArm — P2-18 premium-stop caution, unbooked fire, booking wo
     expect(screen.getByText(/the invalidation you typed, or the plan's invalidation moved with the stock price at booking/)).toBeInTheDocument();
     expect(screen.queryByText(/with the invalidation, premium stop and exit\s+plan this card had/)).not.toBeInTheDocument();
   });
+});
+
+/* Task 10c (Kenneth, 2026-10-03). An earnings-vetoed card used to HIDE this
+ * whole component, which also hid Disarm for a strategy already armed. Now the
+ * caller always renders it and passes `armBlockedReason`: Arm and Fire now are
+ * refused on it, Disarm never is. */
+describe('AutoTradeArm — armBlockedReason (earnings-vetoed card)', () => {
+  const REASON = 'Earnings inside the reject window — no send';
+
+  beforeEach(() => {
+    act(() => {
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, portfolioValue: 73_000 } }));
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.disarmAutoTrade as jest.Mock).mockClear();
+    (api.fireAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockReset().mockResolvedValue({ armed: false });
+  });
+
+  it('vetoed + unarmed: Arm is disabled, carries the reason, and posts nothing', async () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+    const arm = screen.getByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeDisabled();
+    expect(arm).toHaveAttribute('title', REASON);
+    fireEvent.click(arm);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('vetoed + armed on this card: Disarm stays enabled and works, Fire now is refused', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+
+    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    const fire = screen.getByRole('button', { name: 'Fire now' });
+    await waitFor(() => expect(fire).toBeDisabled());
+    expect(fire).toHaveAttribute('title', REASON);
+    expect(disarm).toBeEnabled();
+
+    fireEvent.click(fire);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.fireAutoTrade).not.toHaveBeenCalled();
+
+    fireEvent.click(disarm);
+    await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
+  });
+
+  it('vetoed card while ANOTHER symbol is armed: Fire now is not blocked by this card\'s veto', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'NVDA', direction: 'Bearish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={REASON} />);
+    await screen.findByText(/Armed NVDA Bearish/);
+    expect(screen.getByRole('button', { name: 'Fire now' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Disarm' })).toBeEnabled();
+  });
+
+  it('un-vetoed + unarmed: Arm is unchanged', () => {
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} armBlockedReason={null} />);
+    const arm = screen.getByRole('button', { name: /^Arm —/ });
+    expect(arm).toBeEnabled();
+    expect(arm).not.toHaveAttribute('title');
+  });
+
+  it('un-vetoed + armed: Disarm and Fire now are unchanged', async () => {
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: true, symbol: 'AAPL', direction: 'Bullish' });
+    act(() => { useAutoTradeStore.setState({ autoMode: 'armed', armed: true, lastOrderId: null }); });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    const fire = await screen.findByRole('button', { name: 'Fire now' });
+    expect(fire).toBeEnabled();
+    expect(fire).not.toHaveAttribute('title');
+    expect(screen.getByRole('button', { name: 'Disarm' })).toBeEnabled();
+    fireEvent.click(fire);
+    await waitFor(() => expect(api.fireAutoTrade).toHaveBeenCalledTimes(1));
+  });
+});
+
+
+describe('AutoTradeArm — P0B B3: the actual scan hold travels on the arm', () => {
+  let previousContext: ReturnType<typeof useScanStore.getState>['context'];
+
+  beforeEach(() => {
+    previousContext = useScanStore.getState().context;
+    act(() => {
+      useAutoTradeStore.setState({ autoMode: 'armed', armed: false, armedSymbol: null, lastOrderId: null });
+      usePortfolioStore.setState({ positions: [] });
+    });
+    (api.armAutoTrade as jest.Mock).mockClear();
+    (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  });
+
+  afterEach(() => { act(() => { useScanStore.setState({ context: previousContext }); }); });
+
+  it.each([
+    ['Position (60–185d)', 'Custom', 60, 185, 185],
+    ['Swing (5–15d)', 'Swing', 5, 15, 15],
+    ['Position (60–185d)', 'Custom', 60.4, 184.6, 185],
+    ['Position (60–185d)', 'Custom', 185, 60, 185],
+  ] as const)('posts the sanitized context hold for %s / %s (%s–%s)', async (horizon, horizonPreset, holdMin, holdMax, expected) => {
+    act(() => {
+      useScanStore.setState({ context: { universe: 'SP500', direction: 'Bullish', horizon,
+        horizonPreset, holdMin, holdMax } });
+    });
+    render(<AutoTradeArm {...BOOKING} card={mockCard} broker="ibkr_paper" methodPick={pick()} />);
+    fireEvent.click(screen.getByText(/^Arm —/));
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledTimes(1));
+    expect((api.armAutoTrade as jest.Mock).mock.calls[0][0].hold_max_days).toBe(expected);
+  });
+});
+
+const BEARISH_REASON = 'Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order.';
+
+it('B4 refuses Bearish arm with its own reason before other arm refusals', async () => {
+  jest.clearAllMocks();
+  (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+  useAutoTradeStore.setState({ autoMode: 'armed', armed: false, lastOrderId: null });
+  render(<AutoTradeArm {...BOOKING} card={{ ...mockCard, direction: 'Bearish' }} broker="ibkr_paper"
+    methodPick={pick()} armBlockedReason="Another gate" />);
+  const button = screen.getByRole('button', { name: /^Arm —/ });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('title', BEARISH_REASON);
+  expect(screen.getByText(BEARISH_REASON)).toBeInTheDocument();
+  fireEvent.click(button);
+  await act(async () => {});
+  expect(api.armAutoTrade).not.toHaveBeenCalled();
 });

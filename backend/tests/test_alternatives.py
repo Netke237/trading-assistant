@@ -200,6 +200,8 @@ async def _run_alt_scan_with_runner_ups(runner_ups: list[dict]):
         # resolves for these inputs. Stated, not defaulted: a TradePlan that
         # cannot say what horizon it priced at is how the ladder and the
         # Monte Carlo card drifted apart in the first place.
+        rr_risk_basis="premium_stop", target_source="arithmetic",
+        stock_stop_loss=None, stock_stop_loss_at=None,
         reprice_years=(45 - 7) / 365.0,
     )
 

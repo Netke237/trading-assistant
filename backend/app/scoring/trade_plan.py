@@ -13,9 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.models.heston import HestonParams
+from app.scoring.exit_plan import BEARISH_MIN_TARGET_FRACTION
 from app.scoring.entry_quality import assess_entry, EntryAssessment
 from app.scoring.reprice_horizon import display_reprice_years
-from app.scoring.reward_risk import estimate_rr, estimate_targets
+from app.scoring.reward_risk import estimate_rr, estimate_targets, captured_stock_risk
 
 
 @dataclass
@@ -38,6 +39,10 @@ class TradePlan:
     # can pin it against the Monte Carlo card's Stage 1 horizon directly, rather
     # than inferring agreement from two option prices that happen to match.
     reprice_years: float
+    rr_risk_basis: str
+    target_source: str
+    stock_stop_loss: float | None
+    stock_stop_loss_at: float | None
 
 
 def build_trade_plan(
@@ -52,11 +57,15 @@ def build_trade_plan(
     entry_mid: float,
     rr_cfg: dict,
     final_stop_price: float,
+    target_price: float,
+    stop_cost_fraction: float | None,
+    target_source: str = "arithmetic",
     heston_params: HestonParams | None = None,
     horizon_preset: str | None = None,
     hold_min: float | None = None,
     hold_max: float | None = None,
     reprice_cfg: dict | None = None,
+    quote_live: bool | None = None,
 ) -> TradePlan:
     """Compute the full trade plan for one contract.
 
@@ -67,8 +76,7 @@ def build_trade_plan(
         dte:         days to expiration.
         premium:     the contract mid used as the risk/target basis (floored by caller).
         entry_bid/entry_ask/entry_mid: feed assess_entry for the Entry Plan.
-        rr_cfg:      the reward_risk config block (bullish_target_pct,
-                     bearish_target_pct, premium_stop_pct). The
+        rr_cfg:      the reward_risk config block (premium_stop_pct). The
                      bullish/bearish_invalidation_pct keys are NOT read here
                      any more -- see final_stop_price.
         final_stop_price: the stock stop this plan is built around, already
@@ -98,15 +106,21 @@ def build_trade_plan(
                      a "Custom" that arrives on one path and not the other is
                      exactly how the two cards diverge.
         reprice_cfg: the reprice_horizon config block; None loads risk_rules.yaml.
+        quote_live:  passed to assess_entry (NO-LIVE-QUOTE plan 3e). False =
+                     the entry bid/ask/mid are not a live quote; None = not
+                     stated (the scan, whose contracts were live when graded).
     """
     is_call = direction == "Bullish"
     premium = max(float(premium), 0.01)
     premium_stop_pct = rr_cfg["premium_stop_pct"]
 
-    target_price = (
-        stock_price * (1 + rr_cfg["bullish_target_pct"]) if is_call
-        else stock_price * (1 - rr_cfg["bearish_target_pct"])
-    )
+    max_move = stock_price * (1 - BEARISH_MIN_TARGET_FRACTION) / 2
+    if not is_call and stock_price - target_price > max_move:
+        target_price = stock_price - max_move
+        target_source = "capped"
+    # A displayed target is also the target round-tripped on contract change.
+    # Price both callers at that same cents level.
+    target_price = round(target_price, 2)
     expiry_years = dte / 365.0
 
     # THE ONE CALLER THIS PLUMBING WAS WAITING FOR. estimate_rr and
@@ -131,11 +145,17 @@ def build_trade_plan(
     # `resolve_stock_stop`'s degenerate-feed fallback.
     #
     # premium_stop_pct remains a separate, independent concept (the dollar
-    # premium_stop field below, and the risk basis inside estimate_rr /
-    # estimate_targets) -- untouched by this.
+    # premium_stop alert level below). R/R risk is the FULL premium
+    # (TRADING-REVIEW-PHASE-C-RR, decision D5): no protective stop order is
+    # placed, so neither the premium stop nor the captured stock-stop fraction
+    # bounds the loss. No `protective_stop_order` is passed, so the default
+    # applies and rr_risk_basis is "full_premium".
     invalidation_price = max(float(final_stop_price), 0.01)
 
-    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
+    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid, quote_live=quote_live)
+    # Captured plans price the cents midpoint that is displayed and replayed.
+    if captured_stock_risk(premium, stop_cost_fraction) is not None:
+        premium = round(premium, 2)
 
     rr = estimate_rr(
         stock_price=stock_price,
@@ -148,6 +168,7 @@ def build_trade_plan(
         heston_params=heston_params,
         premium_stop_pct=premium_stop_pct,
         reprice_years=reprice_years,
+        risk_fraction=stop_cost_fraction,
     )
 
     targets = estimate_targets(
@@ -160,6 +181,7 @@ def build_trade_plan(
         heston_params=heston_params,
         premium_stop_pct=premium_stop_pct,
         reprice_years=reprice_years,
+        risk_fraction=stop_cost_fraction,
     )
 
     return TradePlan(
@@ -174,4 +196,9 @@ def build_trade_plan(
         target_price_raw=target_price,
         invalidation_price_raw=invalidation_price,
         reprice_years=reprice_years,
+        rr_risk_basis=rr.risk_basis,
+        target_source=target_source,
+        stock_stop_loss=captured_stock_risk(premium, stop_cost_fraction),
+        stock_stop_loss_at=(round(invalidation_price, 2)
+                            if captured_stock_risk(premium, stop_cost_fraction) is not None else None),
     )

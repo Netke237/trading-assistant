@@ -7,7 +7,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -43,6 +43,7 @@ class StockScoreCard:
     status: Status                      # derived from score via thresholds
     rules: list[RuleResult] = field(default_factory=list)
     volume_bonus: bool = False          # True if volume confirmation earned
+    explanation: dict | None = None    # additive scan-time evidence, never a scoring input
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,16 @@ def effective_event_window(horizon: Horizon, overrides: dict | None) -> tuple[in
     reject = int(ov["event_reject_days"]) if ov.get("event_reject_days") is not None else int(ec["reject_days"])
     caution = int(ov["event_caution_days"]) if ov.get("event_caution_days") is not None else int(ec["caution_days"])
     return reject, caution
+
+
+# Mirrors the scoring horizons' own hold presets in frontend/lib/horizonPresets.ts.
+DEFAULT_HOLD_MAX: dict[Horizon, int] = {"Intraday": 2, "Swing": 15, "Position": 45}
+
+
+def effective_veto_days(horizon: Horizon, overrides: dict | None, hold_max_days: int | None) -> int:
+    """Earnings gate over the hold; the event rule's grading stays unchanged."""
+    hold = hold_max_days if hold_max_days is not None else DEFAULT_HOLD_MAX[horizon]
+    return max(effective_event_window(horizon, overrides)[0], hold)
 
 
 def _thresholds() -> dict:
@@ -729,6 +740,14 @@ def _detect_candle(bars: list[dict], direction: Direction = "Bullish") -> tuple[
     return False, ""
 
 
+def _event_within(n: int, window: int, event) -> bool:
+    """True if `event(i)` holds for some i in 1..window, where i names the event
+    bar as series[-i] and its prior bar as series[-i - 1]. `n` is the length of the
+    shortest series `event` reads, so the window is bounded by it (series[-n - 1]
+    does not exist). window=1 tests only the last bar."""
+    return any(event(i) for i in range(1, min(window, n - 1) + 1))
+
+
 def _rule_trigger(
     bars: list[dict],
     cfg: dict,
@@ -739,18 +758,32 @@ def _rule_trigger(
     """Returns (RuleResult, volume_bonus)."""
     tc = cfg["trigger"]
     closes = [b["close"] for b in bars]
+    # setup_window_bars (TRADING-REVIEW-PHASE-C T7, review M4): a momentum event
+    # counts if it happened on some bar k within the last W bars AND its state still
+    # holds on the last bar. W=1 is the original last-bar-only behaviour. A value
+    # below 1 would test no bar at all, so it reads as 1; config health warns
+    # about it (Phase C hygiene T4).
+    window = max(1, int(tc.get("setup_window_bars", 1)))
 
     candle_found, candle_name = _detect_candle(bars, direction)
 
     # ── MACD ──────────────────────────────────────────────────────────────────
     hist = _macd_histogram(closes, tc["macd_fast"], tc["macd_slow"], tc["macd_signal"])
+    rising = tc["macd_histogram_rising"]
     if direction == "Bearish":
-        # Histogram crosses DOWN: was positive, now zero/negative
-        macd_pass = (len(hist) >= 2 and hist[-2] > 0 and hist[-1] <= 0 and
-                     (hist[-1] < hist[-2] if tc["macd_histogram_rising"] else True))
+        # Histogram crosses DOWN at bar k (was positive, now zero/negative), with the
+        # rising/falling confirmation applied at k; still <= 0 on the last bar.
+        def _macd_event(i: int) -> bool:
+            return (hist[-i - 1] > 0 and hist[-i] <= 0 and
+                    (hist[-i] < hist[-i - 1] if rising else True))
+        macd_pass = (len(hist) >= 2 and hist[-1] <= 0 and
+                     _event_within(len(hist), window, _macd_event))
     else:
-        macd_pass = (len(hist) >= 2 and hist[-2] < 0 and hist[-1] >= 0 and
-                     (hist[-1] > hist[-2] if tc["macd_histogram_rising"] else True))
+        def _macd_event(i: int) -> bool:
+            return (hist[-i - 1] < 0 and hist[-i] >= 0 and
+                    (hist[-i] > hist[-i - 1] if rising else True))
+        macd_pass = (len(hist) >= 2 and hist[-1] >= 0 and
+                     _event_within(len(hist), window, _macd_event))
 
     # ── RSI ───────────────────────────────────────────────────────────────────
     rsi_vals = _rsi(closes, tc["rsi_period"])
@@ -760,7 +793,9 @@ def _rule_trigger(
     if direction == "Bearish":
         rsi_ceiling = tc.get("rsi_ceiling", 60)
         if len(rsi_vals) >= 2:
-            rsi_pass = rsi_vals[-2] > rsi_ceiling >= rsi_vals[-1]
+            rsi_pass = (rsi_vals[-1] <= rsi_ceiling and _event_within(
+                len(rsi_vals), window,
+                lambda i: rsi_vals[-i - 1] > rsi_ceiling >= rsi_vals[-i]))
             if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
                 # Bearish divergence: price HH while RSI LH
                 price_high_now  = max(closes[-div_win:])
@@ -772,7 +807,9 @@ def _rule_trigger(
     else:
         rsi_floor = tc["rsi_floor"]
         if len(rsi_vals) >= 2:
-            rsi_pass = rsi_vals[-2] < rsi_floor <= rsi_vals[-1]
+            rsi_pass = (rsi_vals[-1] >= rsi_floor and _event_within(
+                len(rsi_vals), window,
+                lambda i: rsi_vals[-i - 1] < rsi_floor <= rsi_vals[-i]))
             if not rsi_pass and len(closes) >= div_win and len(rsi_vals) >= div_win:
                 # Bullish divergence: price LL while RSI HL
                 price_low_now  = min(closes[-div_win:])
@@ -784,17 +821,23 @@ def _rule_trigger(
 
     # ── Stochastic ────────────────────────────────────────────────────────────
     stoch_k, stoch_d = _stoch(bars, tc["stoch_k"], tc["stoch_d"])
+    # K and D are shorter than bars by different amounts but both end on the last
+    # bar, so they are indexed from the end; the window is bounded by the shorter.
+    stoch_n = min(len(stoch_k), len(stoch_d))
     if direction == "Bearish":
-        # K exits overbought from above: was >= overbought, now K < D
+        # K exits overbought from above at bar k: was >= overbought, now K < D;
+        # K still below D on the last bar.
         overbought = tc.get("stoch_overbought", 70) * (1 - tc.get("stoch_tolerance_pct", 5) / 100)
-        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
-                      stoch_k[-2] >= overbought and stoch_k[-1] < stoch_d[-1] and
-                      stoch_k[-2] >= stoch_d[-2])
+        stoch_pass = (stoch_n >= 2 and stoch_k[-1] < stoch_d[-1] and _event_within(
+            stoch_n, window,
+            lambda i: (stoch_k[-i - 1] >= overbought and stoch_k[-i] < stoch_d[-i] and
+                       stoch_k[-i - 1] >= stoch_d[-i - 1])))
     else:
         oversold_threshold = tc["stoch_oversold"] * (1 + tc["stoch_tolerance_pct"] / 100)
-        stoch_pass = (len(stoch_k) >= 2 and len(stoch_d) >= 2 and
-                      stoch_k[-2] <= oversold_threshold and stoch_k[-1] > stoch_d[-1] and
-                      stoch_k[-2] <= stoch_d[-2])
+        stoch_pass = (stoch_n >= 2 and stoch_k[-1] > stoch_d[-1] and _event_within(
+            stoch_n, window,
+            lambda i: (stoch_k[-i - 1] <= oversold_threshold and stoch_k[-i] > stoch_d[-i] and
+                       stoch_k[-i - 1] <= stoch_d[-i - 1])))
 
     momentum_count = sum([macd_pass, rsi_pass, stoch_pass])
     required = tc["momentum_signals_for_pass"]
@@ -810,6 +853,7 @@ def _rule_trigger(
         "stoch_pass": stoch_pass,
         "momentum_count": momentum_count,
         "volume_bonus": vol_bonus,
+        "setup_window_bars": window,
     }
 
     # ── Stock mode: candle = bonus (+15 pts), NOT a gate ─────────────────────
@@ -866,6 +910,19 @@ def _rule_event(
     worst_days: int | None = None
     event_label = "none"
 
+    # Fix #3: the earnings distance is recorded on EVERY detail dict, even when
+    # a nearer dividend names the event, so the options scan can veto on it.
+    earnings_days = (earnings_date - today).days if earnings_date is not None else None
+    if earnings_days is not None and earnings_days < 0:
+        earnings_days = None
+    base_detail: dict = {"earnings_days": earnings_days, "reject_days": int(ec["reject_days"])}
+    if scoring_mode != "stock":
+        # D4 (fix #3, amended 2026-10-03): unknown is surfaced, never SCORED --
+        # ETFs have no earnings. The options scan caps a single stock's card at
+        # CAUTION on it (routers/scan.py::_earnings_unknown_caps). A PAST date
+        # means the next one is unknown, so it is flagged unknown too.
+        base_detail["earnings_unknown"] = earnings_days is None
+
     for label, ev_date in [("earnings", earnings_date), ("dividend", dividend_date)]:
         if ev_date is None:
             continue
@@ -877,7 +934,7 @@ def _rule_event(
             event_label = label
 
     if worst_days is None:
-        detail: dict = {"event": "none"}
+        detail: dict = {"event": "none", **base_detail}
         if scoring_mode == "stock":
             detail["note"] = "Event weight is zero — shown for context only, does not affect stock score."
         return RuleResult("event", "PASS", 90, detail)
@@ -885,6 +942,7 @@ def _rule_event(
     detail = {
         "event": event_label,
         "days_to_event": worst_days,
+        **base_detail,
     }
 
     if scoring_mode == "stock":
@@ -912,7 +970,7 @@ def _rule_vol(
     iv_rank: float | None,
     cfg: dict,
     *,
-    # Which quantity iv_rank holds: "rank" (a true percentile),
+    # Which quantity iv_rank holds: "rank" (an IV rank),
     # "absolute" (IV 0-100), or "none". Defaults to "absolute" because that is
     # what every pre-2026-09-06 caller was in fact passing -- raw IV x 100
     # written into a field named for a percentile.
@@ -938,7 +996,7 @@ def _rule_vol(
     # ── Options mode: volatility ─────────────────────────────────────────────
     # `iv_basis` says WHICH QUANTITY `iv_rank` holds, and therefore which
     # thresholds may judge it (PHASE-A-NULL-IVRANK-2026-09-06):
-    #   "rank"     -- a true percentile from IBKR/tastytrade -> iv_rank_* keys
+    #   "rank"     -- an IV rank from IBKR/tastytrade -> iv_rank_* keys
     #   "absolute" -- absolute IV 0-100 from Tradier or the BS inversion
     #                 -> iv_abs_* keys, which carry the numbers this rule has
     #                    actually been applying all along
@@ -959,7 +1017,7 @@ def _rule_vol(
         # `iv_basis` is carried even here. Not scoring the figure does not stop
         # it being RENDERED: _safe(VolDetail, ...) keeps `iv_rank`, and
         # volDetailText prints it. Omitting the basis let VolDetail's default
-        # answer instead, which reads "absolute" -- so a true percentile from a
+        # answer instead, which reads "absolute" -- so an IV rank from a
         # rank source printed as "IV 45%" rather than "IV Rank 45" whenever the
         # horizon left iv_rank_pass_max unset. Same mislabel as
         # PHASE-A-NULL-IVRANK-2026-09-06, pointing the other way.
@@ -1167,17 +1225,27 @@ def score_stock(
     weighted_score = sum(r.score * name_to_weight[r.name] for r in rules)
     final_score    = round(weighted_score)
     final_status   = _status_from_score(final_score, thresholds)
+    raw_status = final_status
+    caps: list[dict] = []
+
+    def record_cap(name: str, cap: Status, before: Status, detail: dict, config: dict):
+        caps.append({"name": name, "status": cap, "before": before,
+                     "after": final_status, "detail": copy.deepcopy(detail),
+                     "config": copy.deepcopy(config)})
 
     # Pullback timing veto: a REJECT pullback means the setup timing is wrong.
     # Cap at CAUTION so the candidate remains visible but cannot PASS.
     _pb = next((r for r in rules if r.name == "pullback"), None)
     if _pb is not None and _pb.status == "REJECT":
+        before = final_status
         final_status = _worse(final_status, "CAUTION")
+        record_cap("pullback_timing", "CAUTION", before, _pb.detail, {})
 
     # Confidence gate: demote-only. Append a confidence RuleResult and cap status.
     if confidence_gate is not None:
-        from app.scoring.signal_confidence import status_cap, interpret
+        from app.scoring.signal_confidence import status_cap, interpret, load_backtest_cfg
         cap = status_cap(confidence, confidence_gate)
+        before = final_status
         final_status = _worse(final_status, cap)
         rules.append(RuleResult(
             name="confidence",
@@ -1187,14 +1255,17 @@ def score_stock(
                 "confidence": confidence,
                 "sample_size": confidence_sample_size,
                 "interpretation": interpret(
-                    confidence, sample_size=confidence_sample_size, symbol=symbol
+                    confidence, sample_size=confidence_sample_size, symbol=symbol,
+                    min_samples=int(load_backtest_cfg(horizon)["min_samples"]),
                 ),
             },
         ))
+        record_cap("confidence", cap, before, rules[-1].detail, confidence_gate)
 
     # Regime gate: demote-only. Appends a regime RuleResult with score=0 and caps status.
     if regime_signal is not None and regime_gate is not None:
         cap = _regime_cap(regime_signal["conviction_pct"], regime_signal["stability"], regime_gate)
+        before = final_status
         final_status = _worse(final_status, cap)
         rules.append(RuleResult(
             name="regime",
@@ -1202,6 +1273,7 @@ def score_stock(
             score=0,
             detail={**regime_signal},
         ))
+        record_cap("regime", cap, before, rules[-1].detail, regime_gate)
 
     # Fundamentals gate (demote-only, Swing/Position only)
     if fundamentals is not None and fundamentals_gate is not None:
@@ -1210,6 +1282,7 @@ def score_stock(
         is_intraday = str(horizon).lower() == "intraday"
 
         if gate_enabled and not is_intraday:
+            before = final_status
             health_score = fundamentals.score
             caution_below = fundamentals_gate.get("cautionBelow", 45)
             reject_below = fundamentals_gate.get("rejectBelow", 30)
@@ -1248,6 +1321,39 @@ def score_stock(
                 score=health_score,
                 detail=fundamentals.detail,
             ))
+            record_cap("fundamentals", fund_status, before,
+                       {**fundamentals.detail, "score": health_score,
+                        "safety_flags": list(fundamentals.safety_flags)}, fundamentals_gate)
+
+    # Snapshot the resolved objects and RuleResults used above. Keep the
+    # original weighted sum/rounding and all gate decisions authoritative.
+    # Gate RuleResults are not weighted components, even when they have scores.
+    components = {}
+    for r in rules[:5]:
+        rule_config = copy.deepcopy(cfg[r.name])
+        if r.name == "trend":
+            rule_config["crossover"]["ma_type"] = ma_type
+        elif r.name == "vol" and scoring_mode == "stock":
+            rule_config = {"volume_lookback_bars": cfg["trigger"]["volume_lookback_bars"],
+                           "rvol_bands": [2.0, 1.2, 0.8]}
+        components[r.name] = {
+            "name": r.name, "wire_name": "volatility" if r.name == "vol" else r.name,
+            "raw_score": r.score, "status": r.status, "measured": r.measured,
+            "weight": name_to_weight[r.name],
+            "contribution": r.score * name_to_weight[r.name],
+            "detail": copy.deepcopy(r.detail), "config": rule_config,
+        }
+    explanation = {
+        "version": 1, "symbol": symbol, "direction": direction, "horizon": horizon,
+        "scoring_mode": scoring_mode, "iv_basis": iv_basis,
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
+        "score": final_score, "status": final_status, "raw_status": raw_status,
+        "unrounded_score": weighted_score, "rounding": "python_round_ties_to_even",
+        "pass_threshold": thresholds["pass"], "caution_threshold": thresholds["caution"],
+        "weights": dict(name_to_weight), "components": components, "caps": caps,
+        "gate_config": copy.deepcopy({"confidence": confidence_gate, "regime": regime_gate,
+                                      "fundamentals": fundamentals_gate}),
+    }
 
     return StockScoreCard(
         symbol=symbol,
@@ -1257,4 +1363,5 @@ def score_stock(
         status=final_status,
         rules=rules,
         volume_bonus=vol_bonus,
+        explanation=explanation,
     )

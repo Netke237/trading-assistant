@@ -22,6 +22,7 @@ import type { TradeCardData } from '@/types/domain';
 export interface PublishedTradeCard {
   card:      TradeCardData;
   rrPending: boolean;
+  rrStale?: boolean;
 }
 
 interface TradeCardUiState {

@@ -217,6 +217,32 @@ describe('risk helpers', () => {
       expect(result.reasons).toContain('single_trade_exposure_too_high');
     });
 
+    // Review fix #4 (D5): no protective order is placed, so a long option can
+    // lose its whole premium. The per-trade loss limit therefore caps premium
+    // too: the effective option cap is min(single-position cap, loss limit).
+    it('rejects an option premium above maxLossPerTradePct even when under the single-position cap', () => {
+      const limits = { ...DEFAULT_LIMITS, portfolioValue: 100000 };
+      const card = makeCard({ contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 4.5, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 } });
+      const result = checkTradeRisk(card, 10, limits, [], 0, null, undefined, pick()); // $4,500 = 4.5%
+      expect(result.singleExposurePct).toBeCloseTo(0.045, 10);
+      expect(result.reasons).toContain('single_trade_exposure_too_high');
+      expect(result.approved).toBe(false);
+    });
+
+    it('approves an option premium exactly at maxLossPerTradePct', () => {
+      const limits = { ...DEFAULT_LIMITS, portfolioValue: 100000 };
+      const card = makeCard({ contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 3.75, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 } });
+      const result = checkTradeRisk(card, 10, limits, [], 0, null, undefined, pick()); // $3,750 = 3.75%
+      expect(result.reasons).not.toContain('single_trade_exposure_too_high');
+    });
+
+    it('keeps the single-position cap binding when the loss limit is looser', () => {
+      const limits = { ...DEFAULT_LIMITS, portfolioValue: 100000, maxLossPerTradePct: 0.10 };
+      const card = makeCard({ contractDetails: { strike: 260, expiry: '2026-05-16', right: 'C', mid: 5.5, delta: 0.5, theta: -0.1, ivRank: 50, dte: 24 } });
+      const result = checkTradeRisk(card, 10, limits, [], 0, null, undefined, pick()); // 5.5% > 5%
+      expect(result.reasons).toContain('single_trade_exposure_too_high');
+    });
+
     it('rejects when total exposure limit would be reached', () => {
       const positions = [makePosition({ currentPrice: 20, contracts: 50 })]; // 100k notional
       const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, positions, 0);
@@ -325,7 +351,10 @@ describe('risk helpers', () => {
       // dollar override raises the limit above the loss, flipping approval.
       const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
       const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'dollar', value: 2500 }, undefined, pick());
-      expect(result.approved).toBe(true);
+      // The $2,500 premium (5% of 50k) now also trips the premium cap, the
+      // smaller of the 5% single cap and the 3.75% loss limit (review fix #4,
+      // D5), so `approved` is false. The override still flips the STOP check.
+      expect(result.reasons).toEqual(['single_trade_exposure_too_high']);
       expect(result.reasons).not.toContain('max_loss_per_trade_exceeded');
       expect(result.maxLossAtStop).toBe(2000);
       expect(result.maxLossLimitDollar).toBe(2500);
@@ -335,7 +364,8 @@ describe('risk helpers', () => {
       const card = makeCard({ exit: { ...makeCard().exit, exitPlan: makeExitPlan({ contractPrice: 0.5 }) } });
       // 10% of the 50,000 portfolioValue = $5,000 — well above the $2,000 loss.
       const result = checkTradeRisk(card, 10, DEFAULT_LIMITS, [], 0, { mode: 'percent', value: 0.10 }, undefined, pick());
-      expect(result.approved).toBe(true);
+      // Premium cap (D5) also trips on this $2,500 / 5% card; only the stop check is under test.
+      expect(result.reasons).toEqual(['single_trade_exposure_too_high']);
       expect(result.maxLossLimitDollar).toBe(5000);
     });
 
@@ -633,5 +663,44 @@ describe('the printed figures agree with each other and with the verdict', () =>
       }
     }
     expect(checked).toBeGreaterThan(2000);
+  });
+});
+
+// NO-LIVE-QUOTE NLQ-1 (round-1 F2): a position GET /api/portfolio got no quote
+// for carries a 0 currentPrice that is not a price. Exposure values it at its
+// entry (cost basis) through `exposureMark`, never 0, so the pre-trade check
+// cannot approve an order past the total-exposure cap on a $0 mark.
+describe('exposure of a position without a quote', () => {
+  // 6.20 x 100 x 20 = $12,400 at entry; with the card's $250 that is 25.3% of
+  // $50k, past the 25% cap. Valued at $0 it would be 0.5% and approved.
+  const flagged = () => makePosition({ entryPrice: 6.2, currentPrice: 0, contracts: 20,
+                                       pnlDollar: 0, pnlPct: 0, quoteUnavailable: true });
+
+  it('checkTradeRisk blocks when the flagged row at entry pushes total exposure over the cap', () => {
+    const result = checkTradeRisk(makeCard(), 1, DEFAULT_LIMITS, [flagged()], 0, null, undefined, pick());
+    expect(result.totalExposurePct).toBeCloseTo((12400 + 250) / 50000, 10);
+    expect(result.reasons).toContain('total_exposure_limit_reached');
+    expect(result.approved).toBe(false);
+  });
+
+  it('values a flagged row at entry even when it still carries a stale non-zero mark', () => {
+    const row = makePosition({ entryPrice: 6.2, currentPrice: 1, contracts: 20, quoteUnavailable: true });
+    expect(totalNotional([row])).toBeCloseTo(12400, 10);
+  });
+
+  it('values a row whose currentPrice is not a finite number > 0 at entry', () => {
+    for (const bad of [0, -1, NaN, Infinity]) {
+      expect(totalNotional([makePosition({ entryPrice: 6.2, currentPrice: bad, contracts: 20 })])).toBeCloseTo(12400, 10);
+    }
+  });
+
+  it('a quoted row is still valued at its live mark', () => {
+    expect(totalNotional([makePosition({ entryPrice: 6.2, currentPrice: 5, contracts: 20 })])).toBe(10000);
+  });
+
+  it('computePortfolioRiskMetrics counts the flagged row at entry too', () => {
+    const metrics = computePortfolioRiskMetrics([flagged()], DEFAULT_LIMITS, 0);
+    expect(metrics.totalExposurePct).toBeCloseTo(12400 / 50000, 10);
+    expect(metrics.largestConcentrationPct).toBeCloseTo(12400 / 50000, 10);
   });
 });

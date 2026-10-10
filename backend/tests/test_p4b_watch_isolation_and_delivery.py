@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import app.services.strategy_watch_evaluator as ev_mod
+from tests.watch_notify_helpers import configured_channels_no_real_sends, per_channel  # noqa: F401
 from app.services.strategy_watch_evaluator import (
     _Transition, _any_channel_enabled, _commit, evaluate_all, evaluate_and_notify,
 )
@@ -142,7 +143,7 @@ async def test_undelivered_strategy_entry_keeps_state_and_retries():
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     notify = AsyncMock(side_effect=[False, True])
-    with p1, p2, p3, _channels(True), patch(f"{_EV}.notify_enabled_channels", notify):
+    with p1, p2, p3, _channels(True), patch(f"{_EV}.notify_channels", per_channel(notify)):
         first = await evaluate_and_notify()
         assert [e.event_type for e in first] == ["entry"]     # reported as fired
         assert store.committed("a") == {"phase": "idle"}       # not committed
@@ -162,7 +163,7 @@ async def test_undelivered_strategy_exit_stays_armed():
                                     entry_price=100.0, stop_price=101.0, target_price=110.0)])
     p1, p2, p3 = _fire_strategy(store, None)          # close 100 <= stop 101 -> exit_stop
     with p1, p2, p3, _channels(True), \
-            patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=False):
+            patch(f"{_EV}.notify_channels", per_channel(AsyncMock(return_value=False))):
         events = await evaluate_and_notify()
     assert [e.event_type for e in events] == ["exit_stop"]
     assert store.committed("a")["phase"] == "armed"
@@ -174,7 +175,7 @@ async def test_undelivered_composite_entry_stays_unarmed():
     store = _Store([_composite("a")])
     p1, p2, p3, p4 = _fire_composite(store)
     with p1, p2, p3, p4, _channels(True), \
-            patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=False):
+            patch(f"{_EV}.notify_channels", per_channel(AsyncMock(return_value=False))):
         events = await evaluate_and_notify()
     assert [e.watch_id for e in events] == ["a"]
     assert store.committed("a") == {"phase": "idle"}
@@ -186,8 +187,8 @@ async def test_notify_raising_counts_as_undelivered():
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     with p1, p2, p3, _channels(True), \
-            patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock,
-                  side_effect=RuntimeError("smtp down")):
+            patch(f"{_EV}.notify_channels", per_channel(AsyncMock(
+                  side_effect=RuntimeError("smtp down")))):
         events = await evaluate_and_notify()
     assert len(events) == 1
     assert store.committed("a") == {"phase": "idle"}
@@ -202,7 +203,7 @@ async def test_no_channel_enabled_arms_anyway():
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     with p1, p2, p3, \
-            patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=False):
+            patch(f"{_EV}.notify_channels", per_channel(AsyncMock(return_value=False))):
         await evaluate_and_notify()
     assert store.state("a")["phase"] == "armed"
 
@@ -212,7 +213,7 @@ async def test_delivered_arms():
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     with p1, p2, p3, _channels(True), \
-            patch(f"{_EV}.notify_enabled_channels", new_callable=AsyncMock, return_value=True):
+            patch(f"{_EV}.notify_channels", per_channel(AsyncMock(return_value=True))):
         await evaluate_and_notify()
     assert store.state("a")["phase"] == "armed"
 
@@ -222,7 +223,7 @@ async def test_evaluate_all_still_commits_without_notifying():
     store = _Store([_strategy_watch("a")])
     p1, p2, p3 = _fire_strategy(store, _signal())
     notify = AsyncMock()
-    with p1, p2, p3, patch(f"{_EV}.notify_enabled_channels", notify):
+    with p1, p2, p3, patch(f"{_EV}.notify_channels", per_channel(notify)):
         await evaluate_all()
     notify.assert_not_awaited()
     assert store.state("a")["phase"] == "armed"
@@ -275,7 +276,7 @@ async def test_concurrent_runs_send_one_entry():
         return True
 
     p1, p2, p3, p4 = _fire_composite(store)
-    with p1, p2, p3, p4, _channels(True), patch(f"{_EV}.notify_enabled_channels", side_effect=_notify):
+    with p1, p2, p3, p4, _channels(True), patch(f"{_EV}.notify_channels", per_channel(_notify)):
         first, second = await asyncio.gather(evaluate_and_notify(), evaluate_and_notify())
     assert sends == 1
     assert sorted(len(r) for r in (first, second)) == [0, 1]

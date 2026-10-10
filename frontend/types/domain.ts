@@ -480,6 +480,11 @@ export interface PortfolioPosition {
   currentStockPrice?: number;
   pnlDollar:     number;
   pnlPct:        number;
+  /** True when the last GET /api/portfolio had no quote for this position
+   *  (NO-LIVE-QUOTE NLQ-1). `currentPrice`/`pnlDollar`/`pnlPct` then hold 0
+   *  defaults, not a price: the table shows "—" and the totals leave the row
+   *  out. Absent on a row that never synced. */
+  quoteUnavailable?: boolean;
   stop:          number | null;
   /** Structural (order-block/swing) stop level — set only when "Check structure"
    *  was run on the trade card before sending to broker. Optional/opt-in, unlike
@@ -541,13 +546,18 @@ export interface PortfolioPosition {
   /** ISO. The vintage of the numbers the pick was made against — see
    *  `MethodPick.pickedAt`'s own doc. */
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, written by the
+   *  stock sends (`ScanContext.holdMax` through `sanitizeHoldDays`). A stock
+   *  position raises TIME_STOP once held this many days. `null`/absent = no
+   *  hold (options rows, rows opened before H6), never a stock time stop. */
+  holdMaxDays?: number | null;
   /** Per-position alert-type overrides — absent key inherits the global
    *  `AlertConfig.enabledTypes` decision (Feature D). */
   alertOverrides?: AlertOverrides;
   targets:       TargetLevel[];
   status:        Status;
   // Options-specific fields surfaced in the portfolio table.
-  /** A TRUE PERCENTILE (today's IV vs this name's own 52-week range), or
+  /** An IV RANK (today's IV vs this name's own 52-week range), or
    *  absent when no rank source answered — which is the common case. The
    *  absolute level lives in `iv`. Resolve the two via lib/ivBasis.ts;
    *  never print one under the other's label. */
@@ -611,18 +621,24 @@ export interface UpcomingEvent {
 }
 
 export interface TradeCardData {
+  noLiveQuote?: boolean;
   symbol:        string;
   company:       string;
   price:         number;
   direction:     Direction;
   status:        Status;
+  unvalidatedReason?: string | null;
   stockScore:    number;
   stockConfidence: Status;
   stockBreakdown:  ScoreBreakdown;
+  /** Scan-time evidence. Missing/null means not captured; re-run the scan. */
+  stockExplanation?: StockExplanation | null;
   contract:      string;
   contractScore: number;
   contractConfidence: Status;
   contractBreakdown: ContractScoreBreakdown;
+  /** Authoritative evaluation explanation for the picked contract, if available */
+  contractExplanation?: ContractExplanation | null;
   /** Alternative contracts (FR-28) — zero to N alternatives to the best contract. */
   alternatives?: AlternativeContract[];
   alternativesCount?: number;
@@ -631,10 +647,11 @@ export interface TradeCardData {
     strike: number;
     expiry: string;              // YYYY-MM-DD
     right:  'C' | 'P';
+    spread?: number;
     mid:    number;              // premium, $
     delta:  number;
     theta:  number;              // $/day
-    /** TRUE PERCENTILE, or null when no rank source answered. See lib/ivBasis.ts. */
+    /** IV RANK, or null when no rank source answered. See lib/ivBasis.ts. */
     ivRank: number | null;
     /** ABSOLUTE implied volatility 0–100, or null. See lib/ivBasis.ts. */
     iv?:    number | null;
@@ -657,6 +674,10 @@ export interface TradeCardData {
      *  scan refills it. The backend never sends null. */
     invalidation: number | null;
     premiumStop: number; timeStopDays: number; target: number; targets: TargetLevel[];
+    stockStopLoss?: number | null;
+    stockStopLossAt?: number | null;
+    rrRiskBasis?: 'premium_stop' | 'stock_stop' | 'full_premium';
+    targetSource?: 'structural_snap' | 'arithmetic' | 'flat_fallback' | 'capped';
     /** Where `invalidation` came from — rendered by the "Bottom (final stop)"
      *  row before the user has pressed Compute Arithmetic Plan. Sent by the
      *  scan and echoed by /contracts/recompute-plan so a Step 6 contract
@@ -694,6 +715,19 @@ export interface TradeCardData {
   rrRatio:  number;
   rrModel:  'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   finalStatus: Status;
+  /** Fix #3: earnings inside the horizon reject window -> finalStatus REJECT, no send. */
+  earningsVeto?: boolean;
+  /** No known next earnings date (none on file, or only a past one). D4
+   *  amended 2026-10-03: on a single stock the backend caps finalStatus at
+   *  CAUTION; an ETF is unaffected. The cap does not stop an auto-fire by
+   *  itself -- the auto-trader re-looks the date up at fire time and refuses
+   *  on that (audit round 1, F7). Step 7 refuses the Arm for it (F8). */
+  earningsUnknown?: boolean;
+  /** In the backend's curated ETF set (app/data/etfs.py). Absent on pre-deploy
+   *  scans -- read as false, i.e. a single stock (the safe direction). */
+  isEtf?: boolean;
+  /** Days to earnings alone; nextEventDays is the nearer of earnings/dividend. */
+  earningsDays?: number | null;
   /** Signal confidence 0–100 (null when history is too thin to judge). */
   confidence?: number | null;
   confidenceText?: string | null;
@@ -750,11 +784,108 @@ export interface TradeCardData {
   _userOverride?: boolean;
 }
 
+export interface BlockerComparison {
+  code: string;
+  label: string;
+  metric: string;
+  observed: number | string | null;
+  threshold: number | string;
+  operator: string;
+}
+
+export interface ComponentExplanation {
+  name: string;
+  wire_name: string;
+  raw_score: number;
+  weight: number;
+  contribution: number;
+  lost_points: number;
+  observed?: number | null;
+  observed_unit?: string;
+  basis?: 'rank' | 'absolute' | 'none' | null;
+  preferred_min?: number | null;
+  preferred_max?: number | null;
+  flags: string[];
+  volume?: number | null;
+  open_interest?: number | null;
+  preferred_volume_min?: number | null;
+  preferred_oi_min?: number | null;
+}
+
+export interface ContractExplanation {
+  version: number;
+  contract_id: string;
+  evaluated_at: string;
+  outcome: 'blocked' | 'aggregate';
+  score: number;
+  status: Status;
+  unrounded_score: number | null;
+  rounded_score: number | null;
+  pass_threshold: number;
+  caution_threshold: number;
+  weights: Record<string, number>;
+  components: Record<string, ComponentExplanation>;
+  largest_losses: ComponentExplanation[];
+  blockers: BlockerComparison[];
+  reject_reasons: string[];
+  soft_flags: string[];
+  soft_fail_count: number;
+  max_soft_fail_count: number;
+  hard_bounds?: Record<string, number>;
+  raw_inputs?: Record<string, number | null>;
+}
+
+export type ScoreEvidenceValue = string | number | boolean | null | ScoreEvidenceValue[] | { [key: string]: ScoreEvidenceValue };
+
+export interface StockComponentEvidence {
+  name: string;
+  wire_name: string;
+  raw_score: number;
+  status: Status;
+  measured: boolean;
+  weight: number;
+  contribution: number;
+  detail: Record<string, ScoreEvidenceValue>;
+  config: Record<string, ScoreEvidenceValue>;
+}
+
+export interface StockCapEvidence {
+  name: string;
+  status: Status;
+  before: Status;
+  after: Status;
+  detail: Record<string, ScoreEvidenceValue>;
+  config: Record<string, ScoreEvidenceValue>;
+}
+
+export interface StockExplanation {
+  version: 1;
+  symbol: string;
+  direction: Direction;
+  horizon: Horizon;
+  scoring_mode: 'stock' | 'options';
+  iv_basis: string;
+  evaluated_at: string;
+  score: number;
+  status: Status;
+  raw_status: Status;
+  unrounded_score: number;
+  rounding: 'python_round_ties_to_even';
+  pass_threshold: number;
+  caution_threshold: number;
+  weights: Record<string, number>;
+  components: Record<string, StockComponentEvidence>;
+  caps: StockCapEvidence[];
+  gate_config: Record<string, Record<string, ScoreEvidenceValue> | null>;
+}
+
 // --- Option contracts ---
 
 export type OptionRight = 'C' | 'P';
 
 export interface OptionContract {
+  noLiveQuote?: boolean;
+  quoteState?: string | null;
   id:           string;
   symbol:       string;
   strike:       number;
@@ -765,7 +896,7 @@ export interface OptionContract {
   price:        number;
   delta:        number;
   theta:        number;
-  /** TRUE PERCENTILE, or null when no rank source answered — the common case.
+  /** IV RANK, or null when no rank source answered — the common case.
    *  The absolute level is in `iv`. Resolve via lib/ivBasis.ts. */
   ivRank:       number | null;
   /** ABSOLUTE implied volatility, 0–100, for this strike, or null. */
@@ -779,6 +910,22 @@ export interface OptionContract {
    *  (/api/contracts does). Optional because older cached responses and the
    *  scan's own chain rows do not carry it. See applyPickedContract. */
   breakdown?: ContractScoreBreakdown;
+  /** Authoritative evaluation breakdown and blocking causes for THIS contract */
+  explanation?: ContractExplanation;
+}
+
+/** The grading inputs Step 6 sent to `/api/contracts` for a row when it was
+ *  starred, stored with the star so the Watchlist grades it the same way
+ *  (WATCHLIST-SCAN-CONTRACT-RULES). Both rule forms are deltas on the live
+ *  contract_rules.yaml: `{}` = the scan overrode nothing, `null` = the scan's
+ *  rules are unknown (older result / unrecordable). */
+export interface ContractGrading {
+  contract_rules: Record<string, number> | null;
+  /** Both set or both null. */
+  hold_min_days:  number | null;
+  hold_max_days:  number | null;
+  /** 0-100 int; null -> the backend default 70. */
+  stock_score:    number | null;
 }
 
 export function contractId(symbol: string, strike: number, expiry: string, right: OptionRight): string {
@@ -807,12 +954,13 @@ export interface AlternativeContract {
   mid:          number;
   delta:        number;
   theta:        number;
-  /** TRUE PERCENTILE or null; absolute level in `iv`. See lib/ivBasis.ts. */
+  /** IV RANK or null; absolute level in `iv`. See lib/ivBasis.ts. */
   ivRank:       number | null;
   iv?:          number | null;
   score:        number;
   contractConfidence: Status;
   contractBreakdown:  ContractScoreBreakdown;
+  contractExplanation?: ContractExplanation | null;
   rrRatio:      number;
   rrModel:      'Heston repriced' | 'BS repriced (IV-derived)' | 'Delta approximation';
   reason:       string;
@@ -1068,6 +1216,16 @@ export interface ToastItem {
    *  constant). A FRACTION (0.30), not a percentage (30), matching
    *  `resolvePremiumStopPct` and the backend's `thresholdPct`. */
   premiumStopPct?: number;
+  /** PREMIUM_STOP only — the side rule this alert FIRED under
+   *  (STOP-SEMANTICS-2026-10-02): 'short-stock' fires on a RISE above entry,
+   *  'long-stock' and 'option' on a fall. Stamped at fire time, like
+   *  `premiumStopPct`, and part of the alert store's dedup key (`alertKey`), so
+   *  a short's rise-side fire never inherits state written under the old
+   *  fall-side rule. ABSENT on every pre-deploy row, which fired under that
+   *  old rule -- the Alerts page then keeps the legacy label. Needs no store
+   *  migration for the same reason `premiumStopPct` needs none. Mirrors
+   *  `PremiumStopSide` in lib/premiumStop.ts (types/ does not import lib/). */
+  stopSide?: 'short-stock' | 'long-stock' | 'option';
 }
 
 // --- Risk management ---
@@ -1079,8 +1237,12 @@ export interface RiskLimits {
   maxDailyRecommendations: number;    // e.g. 5
   portfolioValue: number;             // user's total portfolio value in $
   /** Max acceptable $ loss at the exit-plan pipeline's final stop, as a
-   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). Warning-only — never
-   *  auto-clamps contract count. See docs/superpowers/plans/
+   *  fraction of portfolioValue (e.g. 0.0375 = 3.75%). The stop-based check
+   *  is warning-only and never auto-clamps. It ALSO caps option premium
+   *  (review fix #4, D5): an option order has no protective order, so the
+   *  effective single-position cap is min(maxSingleTradeExposurePct, this),
+   *  enforced server-side in `check_position_risk` and mirrored in
+   *  `checkTradeRisk`. See docs/superpowers/plans/
    *  2026-08-26-exit-plan-pipeline.md Feature C. */
   maxLossPerTradePct: number;
   /** STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): the STOCK caps, on

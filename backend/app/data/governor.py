@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import threading
 
 
 class TokenBucket:
@@ -19,23 +20,31 @@ class TokenBucket:
         self.capacity = float(capacity) if capacity is not None else float(rate)
         self._tokens = self.capacity
         self._updated = time.monotonic()
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
+
+    def _refill(self) -> None:
+        now = time.monotonic()
+        self._tokens = min(self.capacity, self._tokens + (now - self._updated) * (self.rate / self.per))
+        self._updated = now
+
+    def try_acquire(self, tokens: float = 1.0) -> bool:
+        """Non-blocking admission sharing the async callers' token budget."""
+        with self._lock:
+            self._refill()
+            if self._tokens < tokens:
+                return False
+            self._tokens -= tokens
+            return True
 
     async def acquire(self, tokens: float = 1.0) -> None:
-        async with self._lock:
-            while True:
-                now = time.monotonic()
-                elapsed = now - self._updated
-                self._tokens = min(
-                    self.capacity,
-                    self._tokens + elapsed * (self.rate / self.per),
-                )
-                self._updated = now
+        while True:
+            with self._lock:
+                self._refill()
                 if self._tokens >= tokens:
                     self._tokens -= tokens
                     return
-                deficit = tokens - self._tokens
-                await asyncio.sleep(deficit * (self.per / self.rate))
+                delay = (tokens - self._tokens) * (self.per / self.rate)
+            await asyncio.sleep(delay)
 
 
 class CircuitBreaker:
@@ -48,23 +57,23 @@ class CircuitBreaker:
         self.cooldown = cooldown
         self._failures = 0
         self._opened_at: float | None = None
+        self._lock = threading.RLock()
 
     @property
     def is_open(self) -> bool:
-        if self._opened_at is None:
-            return False
-        if time.monotonic() - self._opened_at >= self.cooldown:
-            return False  # half-open: allow a trial call through
-        return True
+        with self._lock:
+            return self._opened_at is not None and time.monotonic() - self._opened_at < self.cooldown
 
     def record_success(self) -> None:
-        self._failures = 0
-        self._opened_at = None
+        with self._lock:
+            self._failures = 0
+            self._opened_at = None
 
     def record_failure(self) -> None:
-        self._failures += 1
-        if self._failures >= self.fail_threshold:
-            self._opened_at = time.monotonic()
+        with self._lock:
+            self._failures += 1
+            if self._failures >= self.fail_threshold:
+                self._opened_at = time.monotonic()
 
 
 class SymbolBudget:
@@ -131,6 +140,7 @@ class _ProviderState:
     breaker: "CircuitBreaker"
     budget: "SymbolBudget | None" = None
     status: str = "unknown"  # unknown | connected | degraded | down | unconfigured
+    retry_at: float = 0.0
 
 
 class Governor:
@@ -173,12 +183,31 @@ class Governor:
             return True
         return ps.budget.try_consume(symbol)
 
+    def try_acquire(self, provider: str) -> bool:
+        """Refuse immediately on an open circuit or exhausted shared bucket."""
+        ps = self._providers.get(provider)
+        if ps is None:
+            return False
+        with ps.breaker._lock:
+            return not ps.breaker.is_open and ps.bucket.try_acquire()
+
+    def record_success(self, provider: str) -> None:
+        ps = self._providers[provider]
+        ps.breaker.record_success()
+        ps.status = "connected"
+
+    def record_failure(self, provider: str) -> None:
+        ps = self._providers[provider]
+        ps.breaker.record_failure()
+        ps.status = "degraded"
+
     async def call(
         self,
         provider: str,
         coro_factory: Callable[[], Awaitable[T]],
         *,
         retries: int = 3,
+        symbol: str | None = None,
     ) -> T:
         ps = self._providers.get(provider)
         if ps is None:
@@ -190,6 +219,15 @@ class Governor:
         attempt = 0
         while True:
             await ps.bucket.acquire()
+            delay = ps.retry_at - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+                continue
+            if ps.breaker.is_open:
+                raise ProviderUnavailable(f"{provider} circuit open")
+            if symbol is not None and not self.symbol_allowed(provider, symbol):
+                ps.status = "degraded"
+                raise ProviderUnavailable(f"{provider} symbol budget exhausted")
             try:
                 result = await coro_factory()
                 ps.breaker.record_success()
@@ -198,10 +236,11 @@ class Governor:
             except RateLimited as exc:
                 ps.status = "degraded"
                 ps.breaker.record_failure()
+                delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
+                ps.retry_at = max(ps.retry_at, time.monotonic() + delay)
                 if attempt >= retries:
                     logger.warning("%s rate-limited, retries exhausted", provider)
                     raise
-                delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
                 await asyncio.sleep(delay)
                 attempt += 1
             except Exception:

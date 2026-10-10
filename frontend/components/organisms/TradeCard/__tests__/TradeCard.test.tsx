@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import * as React from 'react';
 import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
+import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
@@ -31,9 +32,9 @@ jest.mock('@/components/molecules/SymbolHeader', () => ({
 }))
 
 jest.mock('@/components/molecules/ScoreCardPanel', () => ({
-  ScoreCardPanel: ({ title }: { title: string }) => (
+  ScoreCardPanel: jest.fn(({ title }: { title: string }) => (
     <div data-testid="score-panel">{title}</div>
-  ),
+  )),
 }));
 
 jest.mock('@/components/molecules/LabeledStatusBadge', () => ({
@@ -121,8 +122,10 @@ describe('TradeCard', () => {
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
-    // rr=-1.5/premiumStop(1.5)=-1.0) is a real loss the trader should see,
+    // rr=-1.5/full premium(2.5)=-0.6) is a real loss the trader should see,
     // not silently omitted the way `rr > 0`-gated rendering used to.
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: the risk leg is the full premium
+    // (was -1.5/premiumStop(1.5) = -1.0x).
     const dataWithLosingTarget: TradeCardData = {
       ...mockTradeCard,
       exit: {
@@ -134,7 +137,7 @@ describe('TradeCard', () => {
     };
     render(<TradeCard data={dataWithLosingTarget} />);
     expandLadder();
-    expect(screen.getByText('-1.0x')).toBeInTheDocument();
+    expect(screen.getByText('-0.6x')).toBeInTheDocument();
   });
 
   it('renders symbol and company in header', () => {
@@ -146,6 +149,83 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Stock Scorecard')).toBeInTheDocument();
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
+  });
+
+  it('places the expanded score group directly between identity and Fundamental Health', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const group = toggle.closest('section')!;
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(group.previousElementSibling).toContainElement(screen.getByTestId('symbol-header'));
+    expect(group.nextElementSibling).toHaveTextContent('Fundamental Health');
+    expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
+    expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
+    const panels = within(group).getAllByTestId('score-panel');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(panels[0]).not.toBeVisible();
+    expect(panels[1]).not.toBeVisible();
+    expect(localStorage.getItem('bamendjou:tradecard-scores-collapsed')).toBe('1');
+    fireEvent.click(toggle);
+    expect(within(group).getAllByTestId('score-panel')[0]).toBe(panels[0]);
+  });
+
+  it('keeps real stock and contract evidence independent and mounted across outer toggles', async () => {
+    const panelMock = ScoreCardPanel as jest.Mock;
+    const original = panelMock.getMockImplementation();
+    panelMock.mockImplementation(jest.requireActual('@/components/molecules/ScoreCardPanel').ScoreCardPanel);
+    const captured: TradeCardData = {
+      ...mockTradeCard,
+      stockExplanation: {
+        version: 1, symbol: 'AAPL', direction: 'Bullish', horizon: 'Swing',
+        scoring_mode: 'options', iv_basis: 'rank', evaluated_at: '2026-10-04T00:00:00Z',
+        score: 82, status: 'PASS', raw_status: 'PASS', unrounded_score: 82,
+        rounding: 'python_round_ties_to_even', pass_threshold: 70, caution_threshold: 50,
+        weights: {}, caps: [], gate_config: {}, components: {},
+      },
+    };
+    const before = JSON.stringify(captured);
+    const estimateCalls = (api.getFirstPassageEstimate as jest.Mock).mock.calls.length;
+    const planCalls = (api.getExitPlan as jest.Mock).mock.calls.length;
+    const view = render(<TradeCard data={captured} />);
+    try {
+      await act(async () => { await Promise.resolve(); });
+      const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
+      const group = outer.closest('section')!;
+      const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
+      const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
+      expect(outer).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const evidence = within(group).getByText(/Captured AAPL evidence/);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(stock);
+      expect(evidence).toBeVisible();
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const summary = within(group).getByText('Effective gate configuration and weights');
+      fireEvent.click(summary);
+      const details = summary.closest('details')!;
+      expect(details.open).toBe(true);
+      fireEvent.click(outer);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(outer);
+      expect(within(group).getByText(/Captured AAPL evidence/)).toBe(evidence);
+      expect(stock).toHaveAttribute('aria-expanded', 'true');
+      expect(details.open).toBe(true);
+      fireEvent.click(contract);
+      fireEvent.click(stock);
+      expect(contract).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(localStorage.getItem('bamendjou:tradecard:stock:scoring-evidence:collapsed')).toBe('1');
+      expect(localStorage.getItem('bamendjou:tradecard:contract:scoring-evidence:collapsed')).toBe('0');
+      expect(within(group).getAllByRole('progressbar')).toHaveLength(10);
+      expect(JSON.stringify(captured)).toBe(before);
+      expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(estimateCalls);
+      expect(api.getExitPlan).toHaveBeenCalledTimes(planCalls);
+    } finally {
+      view.unmount();
+      panelMock.mockImplementation(original);
+    }
   });
 
   it('renders contract details when provided', () => {
@@ -160,6 +240,23 @@ describe('TradeCard', () => {
     expect(screen.getByText('24d')).toBeInTheDocument();
     const mids = screen.getAllByText('$2.50');
     expect(mids.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps handling controls and the latest result visible before the method cards', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    const order = screen.getByRole('region', { name: 'Order Entry' });
+    const exit = screen.getByRole('region', { name: 'Exit Plan' });
+    const latest = screen.getByText('Latest calculation');
+    const arithmetic = screen.getByText('Arithmetic Profit Target');
+    expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(latest.compareDocumentPosition(arithmetic) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
+      expect(screen.getAllByLabelText(label)).toHaveLength(1);
+    }
+    expect(screen.getByText(/No method explicitly run/)).toBeVisible();
+    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    expect(within(exit).getByText('Time exit')).toBeVisible();
   });
 
   it('renders the Order Entry strip (Feature 6 — Entry Plan card was folded into this strip)', () => {
@@ -1864,7 +1961,7 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     expect(await screen.findByText(/Risk-derived size: 25 contracts/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     const input = screen.getByLabelText('Max loss override value');
     fireEvent.change(input, { target: { value: '1500' } });
@@ -1890,7 +1987,7 @@ describe('TradeCard', () => {
       <TradeCard data={mockTradeCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     fireEvent.change(screen.getByLabelText('Max loss override value'), { target: { value: '9999' } });
     // Deliberately do NOT click Apply — switch candidates mid-edit instead.
@@ -1899,13 +1996,13 @@ describe('TradeCard', () => {
     rerender(<TradeCard data={nextCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />);
 
     // The editor remounted for the new candidate — back to the closed
-    // "Set override" state, not still showing the $9999 draft mid-edit.
-    expect(screen.getByRole('button', { name: /set override/i })).toBeInTheDocument();
+    // "Set trade loss budget" state, not still showing the $9999 draft mid-edit.
+    expect(screen.getByRole('button', { name: /set trade loss budget/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Max loss override value')).not.toBeInTheDocument();
 
     // Opening and applying fresh on the new candidate must not reuse 9999 —
     // a fresh editor's default draft (0, percent mode) applies instead.
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply max loss override' }));
     expect(onMaxLossOverrideChange).toHaveBeenLastCalledWith({ mode: 'percent', value: 0 });
   });
@@ -2114,11 +2211,13 @@ describe('TradeCard', () => {
     // cancelled and it printed the same ratio on every contract.
     expect(screen.queryByText('Risk / Reward')).not.toBeInTheDocument();
     expect(screen.queryByText('2.5×')).not.toBeInTheDocument();
-    // The FIELD it divided by is untouched — it is a live risk denominator,
-    // not a display. The Sell-to-Close-Plan's own per-target R:R still uses
-    // premiumStop (1.5): reward=5.0-2.5=2.5, rr=2.5/1.5=1.666...→1.7.
+    // The FIELD it divided by is untouched — it is the premium-stop alert
+    // level, not a display. The Sell-to-Close-Plan's own per-target R:R now
+    // risks the full premium (2.5): reward=5.0-2.5=2.5, rr=2.5/2.5=1.0.
+    // Re-pinned by TRADING-REVIEW-PHASE-C-RR: was 2.5/premiumStop(1.5) = 1.7x.
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
-    expect(screen.getByText('1.7x')).toBeInTheDocument();
+    expect(screen.getByText('1.0x')).toBeInTheDocument();
+    expect(screen.queryByText('1.7x')).not.toBeInTheDocument();
   });
 
   it('renders sell-to-close plan with editable target', () => {
@@ -4059,5 +4158,157 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     rerender(<TradeCard data={other} />);
     expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
     expect(staleNotice()).toBeInTheDocument();
+  });
+});
+
+describe('AREA3 captured stock-risk freshness', () => {
+  it('reports moved stop and restoration without automatically repricing', () => {
+    const report = jest.fn();
+    const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64 } };
+    const { rerender } = render(<TradeCard data={card} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+    const moved = { ...card, exit: { ...card.exit, invalidation: 179.65 } };
+    rerender(<TradeCard data={moved} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(true);
+    rerender(<TradeCard data={card} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+  });
+  it('legacy cards without captured loss never claim a stale captured ratio', () => {
+    const report = jest.fn();
+    render(<TradeCard data={mockTradeCard} initialInvalidation={170} onRrStaleChange={report} />);
+    expect(report).toHaveBeenLastCalledWith(false);
+  });
+});
+
+// Re-pinned by TRADING-REVIEW-PHASE-C-RR: the captured stock-stop loss is no
+// longer an R/R risk leg, so a moved stock stop no longer swaps the ladder onto
+// the premium stop (was 5.0x -> 1.7x -> 5.0x). The backend ratio is served
+// only when it was computed on the full-premium basis; a captured ratio on the
+// old basis is recomputed on the full premium: (5.0 - 2.5) / 2.5 = 1.0x.
+it('AREA3 ladder serves the full-premium backend ratio whether or not the stock stop moves', () => {
+  const card = { ...mockTradeCard, exit: { ...mockTradeCard.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64,
+    rrRiskBasis: 'full_premium' as const,
+    targets: [{ ...mockTradeCard.exit.targets[0], rrContribution: 5.0 }] } };
+  const { rerender } = render(<TradeCard data={card} />);
+  expandLadder();
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, exit: { ...card.exit, invalidation: 179.65 } }} />);
+  expect(screen.getByText('5.0x')).toBeInTheDocument();
+  expect(screen.queryByText('1.7x')).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, exit: { ...card.exit, rrRiskBasis: 'stock_stop' } }} />);
+  expect(screen.getByText('1.0x')).toBeInTheDocument();
+  expect(screen.queryByText('5.0x')).not.toBeInTheDocument();
+});
+
+
+it('presentation wires each qualification panel to its unchanged result and bars', () => {
+  (ScoreCardPanel as jest.Mock).mockClear();
+  render(<TradeCard data={mockTradeCard} />);
+  const calls = (ScoreCardPanel as jest.Mock).mock.calls.map(([props]) => props);
+  expect(calls.find((props) => props.title === 'Stock Scorecard')).toMatchObject({
+    qualification: { card: mockTradeCard, kind: 'stock' }, total: mockTradeCard.stockScore,
+    confidence: mockTradeCard.stockConfidence, bars: [{ value: 85 }, { value: 78 }, { value: 72 }, { value: 90 }, { value: 65 }],
+  });
+  expect(calls.find((props) => props.title === `Contract — ${mockTradeCard.contract}`)).toMatchObject({
+    qualification: { card: mockTradeCard, kind: 'contract' }, total: mockTradeCard.contractScore,
+    confidence: mockTradeCard.contractConfidence,
+  });
+  expect(screen.getByText('$190 Call · 2026-05-15')).toBeInTheDocument();
+  expect(screen.getByText(mockTradeCard.contract)).toBeInTheDocument();
+});
+
+it('presentation can hand market context to the page without mounting a second card', () => {
+  const { rerender } = render(<TradeCard data={mockTradeCard} showMarketSentiment={false} />);
+  expect(screen.queryByText(/Market sentiment — insufficient history/)).not.toBeInTheDocument();
+  rerender(<TradeCard data={mockTradeCard} />);
+  expect(screen.getByText(/Market sentiment — insufficient history/)).toBeInTheDocument();
+});
+
+// ── TRADING-REVIEW-PHASE-C-RR (review M7, D5): full-premium R/R ─────────────
+//
+// No protective option order is ever placed, so the whole premium is at risk:
+// every Sell-to-Close row divides by `overlay.entryLimit`, never by the premium
+// stop (an alert level) or the captured stock-stop loss. Premium 2.00, estimate
+// 3.50: 1.50 / 2.00 = 0.75 → 0.8x (on the old 1.20 premium-stop basis: 1.3x).
+describe('Phase C RR: the ladder risks the full premium', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  const RR_CARD: TradeCardData = {
+    ...mockTradeCard,
+    contractDetails: { ...mockTradeCard.contractDetails!, mid: 2.0 },
+    entry: { ...mockTradeCard.entry, limit: 2.0 },
+    exit: {
+      ...mockTradeCard.exit,
+      premiumStop: 1.2,
+      rrRiskBasis: 'full_premium',
+      targets: [
+        { id: 'tp1', stockPrice: 200.02, targetPrice: 200.02, estimatedOptionPrice: 3.5, contractsToSell: 1, status: 'PENDING', rrContribution: 0.75 },
+      ],
+    },
+  };
+  const CAPTION = 'R/R risk: full premium (no protective stop order).';
+
+  it('(i) an un-edited row with no stock-stop loss divides by the full premium', () => {
+    render(<TradeCard data={RR_CARD} />);
+    expandLadder();
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
+  });
+
+  it('serves the backend ratio on an un-edited full-premium row', () => {
+    // 0.74 would be 0.7x; the recomputation would print 0.8x.
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, targets: [{ ...RR_CARD.exit.targets[0], rrContribution: 0.74 }] } };
+    render(<TradeCard data={card} />);
+    expandLadder();
+    expect(screen.getByText('0.7x')).toBeInTheDocument();
+  });
+
+  it('(ii) an edited target row divides by the full premium', async () => {
+    render(<TradeCard data={RR_CARD} />);
+    expandLadder();
+    await act(async () => { fireEvent.click(screen.getByLabelText('Edit target stock price for TP1')); });
+    const input = screen.getByDisplayValue('200.02');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: '200.00' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    // Above the 190 strike: delta 0.5 x (200 - 185.2) = 7.40 over entry.
+    // 7.40 / 2.00 = 3.7x (on the 1.20 premium stop: 6.2x).
+    expect(screen.getByText('3.7x')).toBeInTheDocument();
+    expect(screen.queryByText('6.2x')).not.toBeInTheDocument();
+  });
+
+  it('(iii) a captured stock risk does not set the risk leg once the entry limit is edited', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64 } };
+    render(<TradeCard data={card} initialEntryLimit={2.5} />);
+    expandLadder();
+    // (3.50 - 2.50) / 2.50 = 0.4x (on the 0.50 stock-stop loss: 2.0x).
+    expect(screen.getByText('0.4x')).toBeInTheDocument();
+    expect(screen.queryByText('2.0x')).not.toBeInTheDocument();
+  });
+
+  it('(iv) a moved stock stop (rrStale) changes nothing about the ladder R/R', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, stockStopLoss: 0.5, stockStopLossAt: 179.64, invalidation: 179.65 } };
+    const report = jest.fn();
+    render(<TradeCard data={card} onRrStaleChange={report} />);
+    expandLadder();
+    expect(report).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.queryByText(/R\/R uses the premium stop/)).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
+  });
+
+  it('(v) a saved pre-RR candidate is recomputed on the full premium, never shown at its old ratio', () => {
+    const card = { ...RR_CARD, exit: { ...RR_CARD.exit, rrRiskBasis: 'premium_stop' as const,
+      targets: [{ ...RR_CARD.exit.targets[0], rrContribution: 1.25 }] } };
+    render(<TradeCard data={card} />);
+    expandLadder();
+    // The figure on screen is the full-premium recomputation, so the caption
+    // naming the full premium describes the number it sits above.
+    expect(screen.getByText('0.8x')).toBeInTheDocument();
+    expect(screen.queryByText('1.3x')).not.toBeInTheDocument();
+    expect(screen.getByText(CAPTION)).toBeInTheDocument();
   });
 });

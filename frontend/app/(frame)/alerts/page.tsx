@@ -43,9 +43,11 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   TP_HIT:                 'Target reached',
   STOP_REACHED:           'Stop-loss breach',
   STRUCTURAL_STOP_BREACHED: 'Structural stop breach',
-  PREMIUM_STOP:           'Premium stop',
+  // Names the TYPE, which covers options and both stock sides
+  // (STOP-SEMANTICS-2026-10-02); a fired row is labelled by its stamped side.
+  PREMIUM_STOP:           'Premium / stock stop',
   TIME_STOP_APPROACHING:  'Time stop approaching',
-  TIME_STOP:              'Time stop (≤3 DTE)',
+  TIME_STOP:              'Time stop (≤3 DTE / hold reached)',
   EARNINGS_APPROACHING:   'Earnings within 3 days',
   EVENT_RISK:             'Event risk (≤3 days)',
   EXPIRATION_APPROACHING: 'Expiration within 3 days',
@@ -76,8 +78,26 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
 //
 // Trimmed to two decimals via the shared helper, NOT Math.round -- see
 // premiumStopPctLabel.
-function alertTypeLabel(type: AlertType, premiumStopPct: number): string {
-  if (type === 'PREMIUM_STOP') return `Premium stop (–${premiumStopPctLabel(premiumStopPct)})`;
+//
+// `side` (STOP-SEMANTICS-2026-10-02) is the row's STAMPED `stopSide`: a short
+// stock's stop fires on a RISE, so it reads "+X%". An UNSTAMPED row -- every
+// row from before the stamp, which fired under the old fall-side rule, shorts
+// included -- keeps the legacy "Premium stop (–X%)": that wording is what
+// actually happened. It never falls back to the position's current contract
+// or direction. 'type' is the Alert-types toggle list, which names the type
+// for every side at once.
+function alertTypeLabel(
+  type: AlertType,
+  premiumStopPct: number,
+  side: ToastItem['stopSide'] | 'type',
+): string {
+  if (type === 'PREMIUM_STOP') {
+    const pct = premiumStopPctLabel(premiumStopPct);
+    if (side === 'type') return `Premium / stock stop (±${pct})`;
+    if (side === 'short-stock') return `Stock stop (+${pct})`;
+    if (side === 'long-stock') return `Stock stop (–${pct})`;
+    return `Premium stop (–${pct})`;
+  }
   return ALERT_TYPE_LABELS[type] ?? type;
 }
 
@@ -115,7 +135,7 @@ function AlertRow({ toast }: { toast: ToastItem }) {
       <div className={styles.alertMeta}>
         <Data size={12} weight={500}>{toast.symbol}</Data>
         <span className={styles.alertKind} data-kind={toast.kind}>{toast.kind}</span>
-        <Text size={11} tone="secondary">{alertTypeLabel(toast.alertType, premiumStopPct)}</Text>
+        <Text size={11} tone="secondary">{alertTypeLabel(toast.alertType, premiumStopPct, toast.stopSide)}</Text>
       </div>
       <Text size={12}>{toast.reason}</Text>
       <div className={styles.alertFooter}>
@@ -467,7 +487,7 @@ export default function AlertsPage() {
               {(Object.keys(ALERT_TYPE_LABELS) as AlertType[]).map((type) => (
                 <SettingsRow
                   key={type}
-                  label={alertTypeLabel(type, premiumStopPct)}
+                  label={alertTypeLabel(type, premiumStopPct, 'type')}
                   defaultValue={DEFAULT_CONFIG.enabledTypes.includes(type) ? 'On' : 'Off'}
                 >
                   <Toggle

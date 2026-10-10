@@ -1,0 +1,9 @@
+{
+  "scenario": "spread",
+  "errors": [],
+  "results": [
+    "spread legs retain identity and summary",
+    "alternative metrics/reason reachable",
+    "spread retains original planReady AutoTradeArm rendering predicate"
+  ]
+}

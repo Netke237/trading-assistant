@@ -1,6 +1,9 @@
 """Tests for shortlist cap enforcement in POST /api/scan."""
 
 from contextlib import ExitStack
+
+import pytest
+
 from unittest.mock import patch, AsyncMock
 from app.scoring.stock_scorer import StockScoreCard, RuleResult
 from app.scoring.contract_validator import ContractScoreCard, ContractScoreBreakdown
@@ -26,7 +29,11 @@ _PASS_RULES = [
     RuleResult("trend",    "PASS", 80, {}),
     RuleResult("pullback", "PASS", 75, {}),
     RuleResult("trigger",  "PASS", 70, {}),
-    RuleResult("event",    "PASS", 85, {}),
+    # A KNOWN earnings date well outside the window: since D4 was amended
+    # (2026-10-03) an unknown date caps a single stock at CAUTION, and these
+    # tests are about ranking, not earnings.
+    RuleResult("event",    "PASS", 85, {"earnings_days": 90, "reject_days": 21,
+                                         "earnings_unknown": False}),
     RuleResult("vol",      "PASS", 80, {}),
 ]
 
@@ -71,6 +78,18 @@ def _enter_shortlist_patches(truncate):
     stack.enter_context(patch("app.routers.scan.fetch_option_chain_async",      AsyncMock(return_value=_MOCK_CHAIN)))
     stack.enter_context(patch("app.routers.scan.fetch_company_name_async",      AsyncMock(return_value=None)))
     stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar",   AsyncMock(return_value=None)))
+    # Every other provider the options scan reaches, stubbed so no test here
+    # touches the network and the ranking comes only from the scores each test
+    # sets (#129). Each one used to go live: the Tradier batch quote, the
+    # historical-bars store (Alpaca -> Tiingo -> yfinance on a DB miss), EDGAR
+    # fundamentals, and the yfinance earnings/dividend calendar fallback -- the
+    # last behind a module-level semaphore, so a failing feed could drop
+    # symbols. Each stub returns what a provider with no data for these
+    # made-up symbols returns, so the scan takes the paths patched above.
+    stack.enter_context(patch("app.routers.scan.fetch_quotes",                  return_value={}))
+    stack.enter_context(patch("app.services.historical_store.get_bars",        AsyncMock(return_value=[])))
+    stack.enter_context(patch("app.routers.scan.get_fundamentals",              AsyncMock(return_value=None)))
+    stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async",    AsyncMock(return_value=(None, None))))
     stack.enter_context(patch("app.routers.scan.score_stock",                 side_effect=_pass_card))
     stack.enter_context(patch("app.routers.scan.validate_contract",           side_effect=_pass_contract))
     stack.enter_context(patch("app.routers.scan._settings", {"scan": {"shortlist_max_candidates": truncate}}))
@@ -292,7 +311,7 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
     seen = []
 
     async def _chain(_client, symbol, **kw):
-        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return _MOCK_CHAIN
 
     with _enter_shortlist_patches(10) as stack:
@@ -302,7 +321,33 @@ def test_scan_passes_the_dte_floor_to_the_chain_fetch(client):
             "hold_min_days": 15, "hold_max_days": 200,
         })
     assert r.status_code == 200
-    assert seen and all(s == ((30, 400), 201) for s in seen), seen
+    assert seen and all(s == ((221, 400), 221, None) for s in seen), seen  # hold window: no dte_limits
+
+
+@pytest.mark.parametrize("overrides, limits", [
+    (None, (21, 21, 60, 90)),
+    ({"min_dte": 45}, (45, 21, 60, 90)),
+    ({"min_dte": "45", "max_dte": 60}, (45, 21, 60, 60)),
+])
+def test_scan_without_hold_days_passes_the_validators_dte_limits(client, overrides, limits):
+    """No hold days: the fetch picks within the min_dte/max_dte and nearest
+    the preferred DTE band the validator applies (the overrides, else the
+    YAML). It used a fixed 21, so a min_dte of 45 fetched an expiry whose
+    every contract was dte_too_short and the symbol dropped out of the scan."""
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
+        return _MOCK_CHAIN
+
+    body = {"universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing"}
+    if overrides is not None:
+        body["overrides"] = overrides
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json=body)
+    assert r.status_code == 200
+    assert seen and all(s == (None, None, limits) for s in seen), seen
 
 
 def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
@@ -312,7 +357,7 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
     seen = []
 
     async def _chain(_client, symbol, **kw):
-        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("min_dte_floor")))
+        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
         return [{**_MOCK_CHAIN[0], "right": kw.get("option_type", "C"),
                  "strike": s, "expiry": "2027-06-18"} for s in (180, 185, 190, 195)]
 
@@ -324,10 +369,31 @@ def test_bearish_spread_legs_use_the_main_contracts_expiry(client):
         })
     assert r.status_code == 200
     main, legs = seen[0], seen[1:]
-    assert main == (None, (30, 400), 201)
+    assert main == (None, (221, 400), 221, None)
     assert r.json()["candidates"], r.json()["rejected"]  # else nothing below is exercised
     assert len(legs) == 2, seen
-    assert all(e == "2027-06-18" and b == (30, 400) and f == 201 for e, b, f in legs), seen
+    assert all(e == "2027-06-18" and b == (221, 400) and f == 221 and lim is None for e, b, f, lim in legs), seen
+
+
+def test_bearish_spread_legs_without_hold_days_get_the_same_dte_limits(client):
+    seen = []
+
+    async def _chain(_client, symbol, **kw):
+        seen.append((kw.get("expiry"), kw.get("dte_bounds"), kw.get("dte_limits")))
+        return [{**_MOCK_CHAIN[0], "right": kw.get("option_type", "C"),
+                 "strike": s, "expiry": "2027-06-18"} for s in (180, 185, 190, 195)]
+
+    with _enter_shortlist_patches(10) as stack:
+        stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", side_effect=_chain))
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bearish", "horizon": "Swing",
+            "overrides": {"min_dte": 45},
+        })
+    assert r.status_code == 200
+    main, legs = seen[0], seen[1:]
+    assert main == (None, None, (45, 21, 60, 90))
+    assert r.json()["candidates"], r.json()["rejected"]
+    assert legs == [("2027-06-18", None, (45, 21, 60, 90))] * 2, seen
 
 
 # ── The scan echoes the event window its scorer applied ──────────────────────
@@ -341,7 +407,7 @@ def test_scan_result_carries_the_overridden_event_window(client):
             "overrides": {"event_reject_days": 7, "event_caution_days": 30},
         })
     assert r.status_code == 200
-    assert r.json()["event_window"] == {"reject_days": 7, "caution_days": 30}
+    assert r.json()["event_window"] == {"reject_days": 7, "caution_days": 30, "veto_days": 45}
 
 
 def test_scan_result_carries_the_yaml_event_window_without_overrides(client):
@@ -352,7 +418,7 @@ def test_scan_result_carries_the_yaml_event_window_without_overrides(client):
             "universe": ["AAPL"], "direction": "Bullish", "horizon": "Position",
         })
     assert r.status_code == 200
-    assert r.json()["event_window"] == {"reject_days": ec["reject_days"], "caution_days": ec["caution_days"]}
+    assert r.json()["event_window"] == {"reject_days": ec["reject_days"], "caution_days": ec["caution_days"], "veto_days": 45}
 
 
 def test_a_partial_event_override_falls_back_to_yaml_for_the_other_bound():

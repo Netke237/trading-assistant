@@ -1,8 +1,13 @@
+import { usePortfolioStore } from './portfolioStore';
+import { buildPaperStockPosition } from './paperTrade';
+import type { Direction } from '@/types/domain';
+import { stockExecutionBlock } from './stockExecutionSession';
 import { api, API_BASE_URL } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
-import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
@@ -211,18 +216,10 @@ function clampReason(message: string, max = MAX_REASON_CHARS): string {
     : message;
 }
 
-/** Orders the last-run status refreshes: an earlier run's response landing
- *  after a later run's would pin TopBar/Settings to the older scan — the
- *  staleness the refresh exists to prevent. Module-level because the runs it
- *  orders are separate calls, not state any one of them owns.
- *
- *  Two counters, not one. `metaRefreshSeq` only hands out increasing ids;
- *  `metaAppliedSeq` is the id whose answer is currently on screen, and an
- *  answer applies when it is NEWER than that. Gating on "is this the latest
- *  id issued" instead meant every failed request permanently discarded the
- *  older answers still in flight: with two later requests failing, no amount
- *  of yielding a token back one step let the good answer through, and the
- *  pill stayed at neither run's result. */
+/** Metadata refreshes retain monotonic response ordering AND manual-run
+ * ownership. An older run's refresh cannot caption a newer run, even if the
+ * newer metadata request failed. In that case the prior displayed metadata
+ * stays stale until a current refresh or hydration supplies a new answer. */
 let metaRefreshSeq = 0;
 let metaAppliedSeq = 0;
 
@@ -245,7 +242,7 @@ let metaAppliedSeq = 0;
  * Never throws, and never leaves an unhandled rejection: the scan's own
  * outcome must not depend on this bookkeeping.
  */
-function refreshLastStockScanMeta(): void {
+function refreshLastStockScanMeta(token: number): void {
   try {
     // Inside the try, and only once the call is actually being made: bumping
     // it first meant a `getLastStockScanStatus` that is not callable (a
@@ -258,7 +255,7 @@ function refreshLastStockScanMeta(): void {
         try {
           // A NEWER answer is already on screen, so this older response must
           // not overwrite it. Responses can arrive out of order; ids cannot.
-          if (seq <= metaAppliedSeq) return;
+          if (seq <= metaAppliedSeq || useScanStore.getState().stockManualRunToken !== token) return;
           metaAppliedSeq = seq;
           useScanStore.getState().setLastStockScanMeta(
             s.status, s.updated_at ? toLocalWallClock(s.updated_at) : null, s.strategy ?? null,
@@ -268,42 +265,31 @@ function refreshLastStockScanMeta(): void {
       // Two-argument form on purpose: this swallows a FAILED REQUEST (backend
       // unreachable — leave the meta stale, StoreHydration catches up on the
       // next load) and not a throw from the handler above it, which has its
-      // own guard. A failed request applies nothing and blocks nothing: an
-      // older answer still in flight is still newer than what is on screen.
+      // own guard. A failed request leaves the last displayed metadata; the
+      // current-run metadata is refreshed on the next request/hydration.
       () => {},
     );
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
 
-/** Optional per-run param overrides (the page passes its locally-edited params). */
-export interface StockScanParamOverrides {
-  pullbackTolerancePct?: number;
-  pullbackEmaPeriod?: number;
-  pullbackTrendEma?: number;
-  pullbackMaType?: 'EMA' | 'SMA';
-  maCrossoverFast?: number;
-  maCrossoverSlow?: number;
-  maCrossoverLookback?: number;
-  breakoutVolumeMult?: number;
-  rsiPeriod?: number;
-  rsiOversold?: number;
-  rsiTrendSma?: number;
-  requireChoppyRegime?: boolean;
-  btMinTrades?: number;
-  btMinWinRate?: number;
-  stockShortlistMax?: number;
-}
+/** Optional per-run param overrides (the page passes its locally-edited
+ *  params). A `null` strategy field means "follow the backend profile" and
+ *  wins over a saved override, as the panel shows it (STOCKS-HORIZON-T1 H5). */
+export type StockScanParamOverrides = Partial<ScanParams>;
 
 /**
  * Run a stock scan with `strategy`, reading universe/direction/horizon from
  * scanStore.context and parameters from scanParamsStore (overridable per-run).
  * Writes result + scanState into scanStore. Returns the result or null on error.
  */
-export async function runStockScan(
+export async function runStockScanWithContinuation(
   strategy: string,
   overrides: StockScanParamOverrides = {},
-): Promise<StockScanResult | null> {
+): Promise<StockManualScanOutcome> {
   const store = useScanStore.getState();
+  const token = store.beginStockManualRun();
+  const intent = { ...store.stockAfterScanIntent };
+  const current = () => useScanStore.getState().stockManualRunToken === token;
 
   // Everything else is inside the try, the store writes below included. The
   // store reads and the request-body build used to sit outside it, so a throw
@@ -315,16 +301,27 @@ export async function runStockScan(
   // carry a catch for a rejection that gets past even this (`setScanState`
   // itself throwing), and both reset scanState there.
   let reachedRequest = false;
+  // True only while the request is being BUILT from the saved stores. A throw
+  // in that window (not ScanSizingError, which carries its own message) is a
+  // malformed saved setting -- A5d's STOCK_SCAN_SETTINGS_INVALID, moved here
+  // from Step 5 so Step 4 and the floating Run button say it too. A store
+  // write failing before the build is NOT that, hence a flag of its own.
+  let building = false;
   try {
+    if (!current()) return { kind: 'obsolete', token };
     store.setActiveStrategy(strategy);
+    if (!current()) return { kind: 'obsolete', token };
     store.setStockScanResult(null);
     // Clear the previous run's reason before this one starts — a FAILED pill
     // from an earlier attempt must never caption a scan that is still running,
     // and a run that succeeds must leave nothing behind for a later caller to
     // read as its own failure.
+    if (!current()) return { kind: 'obsolete', token };
     store.setStockScanError(null);
+    if (!current()) return { kind: 'obsolete', token };
     store.setScanState('SCANNING');
 
+    building = true;
     const saved = useScanParamsStore.getState();
     const p = { ...saved, ...overrides };
     const context = store.context;
@@ -342,20 +339,88 @@ export async function runStockScan(
       horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
       strategy,
       params: p,
+      // STOCKS-HORIZON-T1 H5: the backend profile the strategy fields follow.
+      paramsHorizon: context ? tunedParamsHorizon(context.horizonPreset, context.holdMax) : null,
       requireReversal,
       scanOverrides: rawOverrides,
       confidenceGate,
       accountSize: sizing.accountSize,
       riskPct: sizing.riskPct,
+      // The scan context's hold, Custom included (B6): the backend's earnings
+      // veto window is max(reject_days, hold_max_days).
+      holdMinDays: context?.holdMin,
+      holdMaxDays: context?.holdMax,
     });
+    building = false;
 
+    if (!current()) return { kind: 'obsolete', token };
     reachedRequest = true;
     const result = await api.postStockScan(requestBody);
+    if (!current()) return { kind: 'obsolete', token };
     // A5: the request travels with its result, so Analysis replays this run.
     store.setStockScanResult(result, requestBody);
+    if (!current()) return { kind: 'obsolete', token };
     store.setScanState('COMPLETED');
-    return result;
+    const failures: string[] = [];
+    const queued: string[] = [];
+    const adjusted: string[] = [];
+    const skipped: string[] = [];
+    for (const candidate of result.candidates) {
+      if (!current()) return { kind: 'obsolete', token };
+      if (!intent[candidate.symbol]) continue;
+      if (candidate.stock_status !== 'PASS') {
+        skipped.push(`${candidate.symbol}: not PASS (${candidate.stock_status})`);
+        continue;
+      }
+      // These saves are an automatic execution intent, not a human research
+      // save. Guard the actual mutation, preserving pristine scan levels.
+      const blocked = stockExecutionBlock();
+      if (blocked) { skipped.push(`${candidate.symbol}: ${blocked}`); continue; }
+      if (!current()) return { kind: 'obsolete', token };
+      const key = `${token}:${candidate.symbol}`;
+      store.recordStockAfterScanOutcome(key, { token, symbol: candidate.symbol, status: 'saving' });
+      try {
+        if (!current()) {
+          store.recordStockAfterScanOutcome(key, { token, symbol: candidate.symbol, status: 'rejected', detail: 'Superseded before saving' });
+          return { kind: 'obsolete', token };
+        }
+        const boundaryBlock = stockExecutionBlock();
+        if (boundaryBlock) {
+          store.recordStockAfterScanOutcome(key, { token, symbol: candidate.symbol, status: 'rejected', detail: boundaryBlock });
+          skipped.push(`${candidate.symbol}: ${boundaryBlock}`);
+          continue;
+        }
+        const saved = await usePortfolioStore.getState().addPosition(buildPaperStockPosition(
+          candidate.symbol, candidate.strategy.entry_price, candidate.shares, candidate.direction as Direction, undefined,
+          { stop: candidate.strategy.stop_price,
+            targets: (candidate.strategy.targets?.length ? candidate.strategy.targets : [candidate.strategy.target_price]).map(price => ({ price })),
+          },
+        ));
+        // Started saves always finish their own bookkeeping, even after a
+        // newer scan takes ownership. They cannot start another save or route.
+        store.recordStockAfterScanOutcome(key, { token, symbol: candidate.symbol, status: saved.status, detail: saved.detail, adjustedQty: saved.adjustedQty });
+        if (saved.status === 'rejected') failures.push(`${candidate.symbol}: ${saved.detail ?? 'not saved'}`);
+        else if (saved.status === 'pending') queued.push(candidate.symbol);
+        else if (saved.adjustedQty != null) adjusted.push(`${candidate.symbol} (${saved.adjustedQty} sh)`);
+      } catch (error) {
+        const detail = String(error);
+        store.recordStockAfterScanOutcome(key, { token, symbol: candidate.symbol, status: 'rejected', detail });
+        failures.push(`${candidate.symbol}: ${detail}`);
+      }
+    }
+    if (!current()) return { kind: 'obsolete', token };
+    const notices: string[] = [];
+    if (queued.length) notices.push(`Queued — backend unreachable, will sync automatically: ${queued.join(', ')}`);
+    if (adjusted.length) notices.push(`Size reduced to fit exposure limits — ${adjusted.join(', ')}`);
+    if (skipped.length) notices.push(`Not fired — ${skipped.join('; ')}`);
+    store.setStockScanFeedback(token, {
+      error: failures.length ? `Some auto-executed positions were not saved — ${failures.join('; ')}` : null,
+      notice: notices.length ? notices.join(' · ') : null,
+    });
+    if (!current()) return { kind: 'obsolete', token };
+    return { kind: 'success', token, result };
   } catch (err) {
+    if (!current()) return { kind: 'obsolete', token };
     // The reason goes to the store, not to the return value: RunScanButton
     // (step 3) fires this without awaiting a result it can inspect, so a
     // `null` return alone left that path with nothing to show and the
@@ -370,13 +435,19 @@ export async function runStockScan(
     // and then writes storage, so a QuotaExceededError out of the first write
     // would skip the second — and the one that must not be skipped is FAILED,
     // which is what re-enables the Run button.
+    const settingsUnreadable = building && !(err instanceof ScanSizingError);
+    if (settingsUnreadable) console.error('runStockScan: building the stock-scan request failed', err);
     try {
-      store.setStockScanError(stockScanFailureReason(err, reachedRequest));
+      store.setStockScanError(
+        settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
+      );
     } catch { /* see above — the null return is the signal that survives */ }
     try {
-      store.setScanState('FAILED');
+      if (current()) store.setScanState('FAILED');
     } catch { /* ditto */ }
-    return null;
+    const reason = settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest);
+    store.setStockScanFeedback(token, { error: `Scan failed — ${reason}`, notice: null });
+    return { kind: 'failure', token, reason };
   } finally {
     // Refresh last-run status/strategy from the backend so TopBar/Settings
     // reflect this scan immediately (success or failure), not just after the
@@ -384,6 +455,22 @@ export async function runStockScan(
     // actually persisted (e.g. reverted to "idle" on a mid-scan failure).
     // Fire-and-forget: see refreshLastStockScanMeta's header for why awaiting
     // it here used to cost the failure reason outright.
-    refreshLastStockScanMeta();
+    if (current()) refreshLastStockScanMeta(token);
   }
+}
+
+/** UI continuation checks ownership immediately before navigation/toasts.
+ * Obsolete runs must never caption or navigate a newer run. */
+export type StockManualScanOutcome =
+  | { kind: 'success'; token: number; result: StockScanResult }
+  | { kind: 'failure'; token: number; reason: string }
+  | { kind: 'obsolete'; token: number };
+export function isStockManualScanCurrent(outcome: StockManualScanOutcome): boolean {
+  return outcome.kind !== 'obsolete' && useScanStore.getState().stockManualRunToken === outcome.token;
+}
+/** Compatibility for non-workflow callers. Workflow triggers use the explicit
+ * outcome API so null failures cannot be confused with superseded runs. */
+export async function runStockScan(strategy: string, overrides: StockScanParamOverrides = {}): Promise<StockScanResult | null> {
+  const outcome = await runStockScanWithContinuation(strategy, overrides);
+  return outcome.kind === 'success' ? outcome.result : null;
 }

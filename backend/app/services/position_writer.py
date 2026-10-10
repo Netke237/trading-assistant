@@ -78,6 +78,8 @@ with no stop there has no invalidation and no STOP_REACHED alert at all.
 """
 from __future__ import annotations
 
+import math
+
 import asyncio
 import weakref
 from dataclasses import dataclass
@@ -96,9 +98,12 @@ from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.portfolio_performance import _contract_multiplier
+from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.services.portfolio_risk import (
     EXCEEDS_MAX_CONTRACTS,
+    account_value, AccountValueError, RiskCheckResult,
     check_position_risk,
+    premium_cap_basis,
     PortfolioPosition as RiskPosition,
 )
 
@@ -163,11 +168,20 @@ class WriteOutcome:
     the wrong side of the underlying was booked with gates off (None
     otherwise). With gates on that stop raises 422 instead. The caller must
     put it in front of a human; a log line alone hides it.
+
+    `premium_stop_unapplied` (decision PREMIUM-STOP-FALLBACK-USER-FRACTION-
+    2026-10-03) is set when a `premiumStopDollar` was sent and the stored
+    `premium_stop_pct` is NOT its ratio to the persisted entry -- a total loss
+    at that entry, a non-positive entry, or a sub-cent threshold. It names
+    what was stored instead: the client's fraction, or nothing (the global).
+    The auto-trade booking pages it; the card path reads the same fact off the
+    201 itself.
     """
     position:      PortfolioPositionModel
     adjusted_size: Optional[int]
     over_exposure: bool
     wrong_side_stop: Optional[str] = None
+    premium_stop_unapplied: Optional[str] = None
 
 
 def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
@@ -214,8 +228,28 @@ async def create_position(
     exit_plan_cfg_loader: Optional[Callable[[], dict]] = None,
     enforce_pre_trade_gates: bool = True,
     stop_required: bool = False,
+    cap_basis: Optional[float] = None,
+    cap_basis_floor: Optional[float] = None,
 ) -> WriteOutcome:
-    """Persist a position from a create request. See the module docstring."""
+    """Persist a position from a create request. See the module docstring.
+
+    `cap_basis`: the per-contract premium the D5 cap is judged at, when the
+    caller has ALREADY judged the order at one -- the auto-trade booking passes
+    the fire's `auto_trader.armed_cap_basis` for an LMT arm so the two cannot
+    disagree (audit round 2, R2-F6). None (every other caller): derived here
+    from the stored entry, the order fields and the save-time live spread.
+
+    `cap_basis_floor`: judge at max(floor, the basis derived here) instead --
+    the auto-trade booking of a MKT arm (audit round 3, R3-F1). A market order
+    fills at the booking-time price, which can be far above the armed mid the
+    fire judged (the manual fire has no age bound), so the derived basis must
+    still be read; the armed basis is the floor so a quote that fell never
+    judges below what the fire approved. Mutually exclusive with `cap_basis`.
+
+    The STORED entry is unaffected either way.
+    """
+    if cap_basis is not None and cap_basis_floor is not None:
+        raise ValueError("create_position: pass cap_basis OR cap_basis_floor, not both")
     # Call-time defaults (P1a): the module globals, looked up NOW, so a patch
     # on this module's names lands. See the module docstring.
     if quote_fetcher is None:
@@ -440,15 +474,36 @@ async def create_position(
             for p in db_positions
         ]
 
-        risk = check_position_risk(
-            symbol=body.symbol,
-            contract_id=body.contract,
-            proposed_contracts=body.qty,
-            entry_premium=entry_price,
-            current_price=entry_price,
-            portfolio=portfolio,
-            portfolio_value=body.portfolioValue,
+        # Audit round 1, F1: the cap is judged at the price the order this
+        # save precedes can FILL at, not at the mid stored as the entry. The
+        # spread is read only from the live quote that set `entry_price`; with
+        # no live quote a MKT order is judged at the mid (premium_cap_basis
+        # documents that understatement). No order fields -> the mid, as before.
+        live_spread = (
+            live_quote.get("spread")
+            if isinstance(live_quote, dict) and live_entry_rounded and live_entry_rounded > 0
+            else None
         )
+        if cap_basis is None:
+            cap_basis = premium_cap_basis(
+                entry_price, body.orderType, body.orderLimitPrice, spread=live_spread,
+            )
+            if cap_basis_floor is not None:
+                cap_basis = max(float(cap_basis_floor), cap_basis)
+        try:
+            risk = check_position_risk(
+                symbol=body.symbol,
+                contract_id=body.contract,
+                proposed_contracts=body.qty,
+                entry_premium=cap_basis,
+                current_price=cap_basis,
+                portfolio=portfolio,
+                portfolio_value=account_value(),
+            )
+        except AccountValueError as exc:
+            if enforce_pre_trade_gates:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            risk = RiskCheckResult(approved=False, reasons=[str(exc)])
         if not risk.approved and enforce_pre_trade_gates:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -488,7 +543,12 @@ async def create_position(
         # The dollar amount wins when both are sent: it is what the user typed on
         # the card, while a client-sent fraction is at best a stale estimate of it.
         resolved_premium_stop_pct = body.premiumStopPct
+        # Set only where the dollar's own ratio is stored; cleared again by the
+        # sub-cent check below. Read for `WriteOutcome.premium_stop_unapplied`.
+        dollar_applied = False
+        dollar_unapplied_why: Optional[str] = None
         if body.premiumStopDollar is not None and entry_price <= 0:
+            dollar_unapplied_why = "the persisted entry is not positive"
             # DEFENCE IN DEPTH, not a live path. `entryPrice` is gt=0 on the create
             # schema and the live re-anchor above now rounds BEFORE testing, so
             # `entry_price` is positive by here on every route currently known. The
@@ -508,7 +568,9 @@ async def create_position(
             ratio = body.premiumStopDollar / entry_price
             if 0 < ratio < 1:
                 resolved_premium_stop_pct = ratio
+                dollar_applied = True
             else:
+                dollar_unapplied_why = "it is a total loss at that entry"
                 # A stop at or above the whole premium is a total loss, which is
                 # unreachable-by-definition rather than a stop, and there is no
                 # representation for it: the column's contract is (0, 1).
@@ -536,6 +598,43 @@ async def create_position(
                 # saying the same thing, and an unusable dollar is no reason to
                 # discard a fraction that is independently valid.
                 resolved_premium_stop_pct = body.premiumStopPct
+
+        # STOP-SEMANTICS-2026-10-02 (b): a stop below $0.01 at the PERSISTED
+        # entry can never fire. Checked on the FINAL value, so a sub-cent client
+        # fraction arriving as the fallback above is caught too. Never refuse
+        # the create -- on the broker and auto-trade paths the order may already
+        # be at the broker -- so this falls back exactly as the ratio >= 1
+        # branch does: to the client's fraction when that is itself usable,
+        # else None (inherit the global). The client reads the drop off the
+        # response's null `premiumStopPct` and says why.
+        short_stock = is_short_stock_position(body.contract, body.direction)
+        if resolved_premium_stop_pct is not None and premium_stop_is_sub_cent(
+            entry_price, resolved_premium_stop_pct, short_stock,
+        ):
+            _log.warning(
+                "create_position: premium stop %.6f at the persisted entry %.4f for %s fires below $0.01 "
+                "and could never fire -- not stored",
+                resolved_premium_stop_pct, entry_price, body.contract,
+            )
+            if dollar_applied:
+                dollar_applied = False
+                dollar_unapplied_why = "it would fire below $0.01 at that entry"
+            fallback = body.premiumStopPct
+            if fallback is not None and premium_stop_is_sub_cent(entry_price, fallback, short_stock):
+                fallback = None
+            resolved_premium_stop_pct = fallback
+
+        premium_stop_unapplied: Optional[str] = None
+        if body.premiumStopDollar is not None and not dollar_applied:
+            kept = (
+                f"{resolved_premium_stop_pct * 100:.2f}% of the premium (the fraction sent with it) is stored instead"
+                if resolved_premium_stop_pct is not None
+                else "no per-position stop is stored, so it inherits the global premium stop"
+            )
+            premium_stop_unapplied = (
+                f"the ${body.premiumStopDollar:.2f}/share premium stop could not be applied at the "
+                f"booked entry ${entry_price:.2f} ({dollar_unapplied_why or 'reason unavailable'}); {kept}."
+            )
 
         # Phase G (piece 5) — seed the post-trade alert basis from the trader's
         # pre-trade pick, so TP_HIT starts life agreeing with the card the trade was
@@ -569,6 +668,13 @@ async def create_position(
         # ladder, which is where the alert fired before G) and never 500 the create.
         try:
             _rr_ratios = exit_plan_cfg_loader().get("target", {}).get("rr_ratios")
+            _shown = body.exitPlan.get("targets") if isinstance(body.exitPlan, dict) else None
+            if isinstance(_shown, list) and _shown and all(
+                isinstance(row, dict) and isinstance(row.get("rrRatio"), (int, float))
+                and not isinstance(row["rrRatio"], bool) and math.isfinite(row["rrRatio"])
+                for row in _shown
+            ):
+                _rr_ratios = [row["rrRatio"] for row in _shown]
         except Exception:
             _rr_ratios = None
             _log.warning(
@@ -580,9 +686,7 @@ async def create_position(
             body.pickedMethod,
             body.pickedRowStockPrice,
             exit_plan=body.exitPlan,
-            # From config, never a literal. `rr_ratios` is configurable, so a 1.5R
-            # first row must map to `exit_plan_2r` and a 2.0R pick must fall through
-            # when 2.0 is not configured.
+            # Prefer the ratios on the shown rows; config is the legacy fallback.
             rr_ratios=_rr_ratios,
         )
 
@@ -627,6 +731,8 @@ async def create_position(
             picked_row_option_price=body.pickedRowOptionPrice,
             picked_stop_basis=body.pickedStopBasis,
             picked_at=body.pickedAt,
+            # STOCKS-HORIZON-T1 H6 -- the scan's hold; NULL = no time stop.
+            hold_max_days=body.holdMaxDays,
             active_tp_method=active_tp_method,
             resolved_tp_price=resolved_tp_price,
             # Stamped ONLY when a price was actually seeded. The drawer's writer
@@ -677,6 +783,7 @@ async def create_position(
             adjusted_size=risk.adjusted_size,
             over_exposure=over_exposure,
             wrong_side_stop=wrong_side_stop,
+            premium_stop_unapplied=premium_stop_unapplied,
         )
 
 

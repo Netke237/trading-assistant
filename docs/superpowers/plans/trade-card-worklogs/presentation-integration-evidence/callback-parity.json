@@ -1,0 +1,35 @@
+[
+  {
+    "path": "frontend/components/organisms/TradeCard/index.tsx",
+    "baseline": "93983992",
+    "baselineFunctions": 141,
+    "unchangedBaselineFunctions": 141,
+    "missing": [],
+    "added": [
+      {
+        "name": "callback",
+        "hash": "7927a41ff46d2033b92bbd1ba86c3e05ab220c78dffab3d4d3e61020f01c84a1"
+      },
+      {
+        "name": "selectRaceTarget",
+        "hash": "b6465da878a11c51dd22351b0c299a73e3e325e9720f77639a0b58077f4f345a"
+      },
+      {
+        "name": "callback",
+        "hash": "8f5102a6823f27b04c53c2aa6aba47d7b94ab9bc9f9157590cbd788cd9b7b96e"
+      },
+      {
+        "name": "callback",
+        "hash": "b3cb0b93efbe1a7d020cc8aca5ab2ac63fd2b376c740d5d3a7a0d05153ae4a9f"
+      }
+    ]
+  },
+  {
+    "path": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "baseline": "93983992",
+    "baselineFunctions": 129,
+    "unchangedBaselineFunctions": 129,
+    "missing": [],
+    "added": []
+  }
+]

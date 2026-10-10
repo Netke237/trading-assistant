@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import logging
+import math
 import yaml
 from dataclasses import dataclass, field
 from datetime import date
@@ -9,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from app.services.config_health import config_health
+
+logger = logging.getLogger(__name__)
 
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
@@ -40,6 +44,13 @@ class ContractScoreCard:
         default_factory=lambda: ContractScoreBreakdown(0, 0, 0, 0, 0, 0)
     )
     detail: dict = field(default_factory=dict)
+    explanation: dict | None = None
+    # NO-LIVE-QUOTE (plan 3b): set when the graded row's quote was not live
+    # (contract["quoteLive"] is False), with the row's quoteState
+    # ('one_sided' | 'session_closed' | 'stale'). A row with no quoteLive key
+    # (fixtures, hand-built dicts) reads as live and leaves both at default.
+    no_live_quote: bool = False
+    quote_state: str | None = None
 
 
 @lru_cache(maxsize=1)
@@ -67,6 +78,46 @@ def hard_reject_delta_band() -> tuple[float, float]:
     the same values _hard_reject_reasons() uses for real contract selection."""
     hr = _load_config()["hard_reject"]
     return float(hr["min_delta"]), float(hr["max_delta"])
+
+
+def contract_caution_threshold() -> float | int:
+    """contract_score_thresholds.caution from contract_rules.yaml -- the score
+    below which validate_contract() returns REJECT with no reject reason. Not
+    an override key, so the YAML value is the one every scan applied. Returned
+    as written (not int()-truncated): a 45.5 would otherwise print as 45 next
+    to a rejected score of 45."""
+    return _load_config()["contract_score_thresholds"]["caution"]
+
+
+# NO-LIVE-QUOTE: the fallback when quote_liveness.max_age_minutes is missing or
+# unusable. 30 is the shipped value (Kenneth, Q-A); see contract_rules.yaml.
+DEFAULT_QUOTE_MAX_AGE_MINUTES = 30
+_warned_quote_age: set[str] = set()
+
+
+def max_quote_age_seconds() -> float:
+    """quote_liveness.max_age_minutes from contract_rules.yaml, in SECONDS --
+    the oldest the fresher side of a chain row's quote may be and still count
+    as live (app/data/quote_liveness.classify_quote). Read through the same
+    cached loader as every other contract rule.
+
+    A missing block or key, a non-numeric value (a bool, a string, NaN/inf) or a
+    value <= 0 runs on DEFAULT_QUOTE_MAX_AGE_MINUTES and logs ONE warning per
+    distinct bad value (this is read once per chain fetch, so an unthrottled
+    warning would repeat for every name of every scan)."""
+    block = _load_config().get("quote_liveness")
+    val = block.get("max_age_minutes") if isinstance(block, dict) else None
+    if is_finite_rule_value(val) and val > 0:
+        return float(val) * 60.0
+    key = repr(val)
+    if key not in _warned_quote_age:
+        _warned_quote_age.add(key)
+        logger.warning(
+            "contract_rules.yaml quote_liveness.max_age_minutes is %s -- "
+            "using %d minutes", "missing" if val is None else f"unusable ({val!r})",
+            DEFAULT_QUOTE_MAX_AGE_MINUTES,
+        )
+    return float(DEFAULT_QUOTE_MAX_AGE_MINUTES) * 60.0
 
 
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
@@ -106,15 +157,15 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         reasons.append("dte_too_short")
     if dte > hr["max_dte"]:
         reasons.append("dte_too_long")
-    # `iv_rank` holds EITHER a true percentile OR an absolute IV, and
+    # `iv_rank` holds EITHER an IV rank OR an absolute IV, and
     # `iv_basis` (set in app/data/augment.py) says which -- so pick the ceiling
     # that judges the quantity we actually have
     # (PHASE-A-NULL-IVRANK-2026-09-06). Judging a 75% absolute IV against a
-    # percentile ceiling is what used to hard-reject names whose vol was in
+    # rank ceiling is what used to hard-reject names whose vol was in
     # fact low FOR THEM. Basis "none" means no vol figure at all, and
     # `iv_rank is None` already skips the gate.
     _iv_key = "max_iv_rank" if contract.get("iv_basis") == "rank" else "max_iv_abs"
-    # Fall back to the percentile key rather than skipping the gate outright,
+    # Fall back to the rank key rather than skipping the gate outright,
     # so a hand-built cfg carrying only the old key still hard-rejects.
     max_iv = hr.get(_iv_key, hr.get("max_iv_rank"))
     if max_iv is not None and iv_rank is not None and iv_rank > max_iv:
@@ -122,7 +173,7 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
         # the reason was a fixed string, and scan.py aggregates these verbatim
         # into the rejected-candidate list the user reads ("iv_rank_too_high(7)").
         # On the default path that reported "absolute IV above max_iv_abs" under
-        # the percentile's name -- the same mislabel this phase exists to remove,
+        # the rank's name -- the same mislabel this phase exists to remove,
         # in the text explaining why a candidate was thrown away.
         reasons.append(
             "iv_rank_too_high" if contract.get("iv_basis") == "rank" else "iv_too_high"
@@ -269,7 +320,7 @@ def _preferred_iv_max(contract: dict, cfg: dict) -> float:
     """The soft ceiling matching the quantity `iv_rank` actually holds.
 
     `iv_basis` is set by app/data/augment.py and is "rank" only when IBKR or
-    tastytrade supplied a true percentile; every other chain carries an
+    tastytrade supplied an IV rank; every other chain carries an
     absolute IV, which the `preferred_iv_abs_max` numbers have in fact been
     judging all along (PHASE-A-NULL-IVRANK-2026-09-06).
     """
@@ -279,7 +330,7 @@ def _preferred_iv_max(contract: dict, cfg: dict) -> float:
         if contract.get("iv_basis") == "rank"
         else "preferred_iv_abs_max"
     )
-    # Fall back to the percentile key so a caller passing a hand-built cfg
+    # Fall back to the rank key so a caller passing a hand-built cfg
     # (the unit tests do) keeps working without the absolute key present.
     return float(sr[key] if key in sr else sr["preferred_iv_rank_max"])
 
@@ -292,8 +343,8 @@ def _score_iv_rank(contract: dict, cfg: dict) -> tuple[int, list[str]]:
         return 50, ["no_iv_rank_data"]  # neutral
 
     # Same basis split as the hard-reject ceiling above: score the absolute
-    # level against the absolute soft ceiling, a percentile against the
-    # percentile one (PHASE-A-NULL-IVRANK-2026-09-06).
+    # level against the absolute soft ceiling, a rank against the
+    # rank one (PHASE-A-NULL-IVRANK-2026-09-06).
     max_pref = _preferred_iv_max(contract, cfg)
     if iv_rank <= max_pref:
         # Denominator guard: max_pref == 0 divides by zero when iv_rank <= 0
@@ -368,6 +419,23 @@ _CONTRACT_OVERRIDES: dict[str, tuple[str, Callable[[Any], float | int]]] = {
 CONTRACT_OVERRIDE_KEYS: frozenset[str] = frozenset(_CONTRACT_OVERRIDES)
 
 
+def is_finite_rule_value(val: Any) -> bool:
+    """True for a contract-rule value that can be recorded, sent back and
+    applied: a real int/float (not a bool) that is finite as a float.
+
+    The ONE check behind _parse_contract_rules (GET /api/contracts), the
+    watched-contracts grading validator (POST /api/watched-contracts) and the
+    scan's recording of ScanResult.contract_rules. If the three drifted, a
+    scan could record rules that a star's POST then refuses, silently
+    degrading the star to YAML grading."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return False
+    try:
+        return math.isfinite(val)
+    except OverflowError:  # an int too large for a float
+        return False
+
+
 def effective_contract_overrides(overrides: dict | None) -> dict[str, float | int]:
     """The contract-rule overrides validate_contract() applies for `overrides`:
     only the keys it reads, each cast exactly as it casts them. Raises
@@ -383,6 +451,28 @@ def effective_contract_overrides(overrides: dict | None) -> dict[str, float | in
     }
 
 
+def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int, int]:
+    """(min_dte, preferred_dte_min, preferred_dte_max, max_dte) as
+    validate_contract() applies them for `overrides`: each the override when
+    present, else contract_rules.yaml's, cast as validate_contract casts it.
+
+    The chain fetch picks its one expiry from these when no hold window is set
+    (market._pick_expiration_without_window). It used to take the first 21+ day
+    expiry whatever the rules said, so a min_dte override of 45 fetched an
+    expiry every contract of which was rejected as dte_too_short and the symbol
+    dropped out of the scan. With a hold window the scan uses
+    dte_window.widened_min_dte and the window instead, which replace these.
+    """
+    cfg = _load_config()
+    eff = effective_contract_overrides(overrides)
+    return (
+        int(eff.get("min_dte", cfg["hard_reject"]["min_dte"])),
+        int(eff.get("preferred_dte_min", cfg["soft_rank"]["preferred_dte_min"])),
+        int(eff.get("preferred_dte_max", cfg["soft_rank"]["preferred_dte_max"])),
+        int(eff.get("max_dte", cfg["hard_reject"]["max_dte"])),
+    )
+
+
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
     return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
@@ -392,6 +482,8 @@ def validate_contract(
     contract: dict,
     stock_score: int,
     overrides: dict | None = None,
+    *,
+    quote_mode: Literal["reject", "label"] = "reject",
 ) -> ContractScoreCard:
     """
     Validate and score an option contract.
@@ -403,6 +495,18 @@ def validate_contract(
                      (matches the stock `pass` bar in scoring_rules.yaml).
         overrides:   Optional dict of hard-reject and soft-rank overrides; the
                      keys read are _CONTRACT_OVERRIDES' (others are ignored).
+        quote_mode:  What a row whose quote is not live does (NO-LIVE-QUOTE,
+                     plan 3b). The rule fires only when contract["quoteLive"]
+                     is False; a missing key reads as live.
+                     "reject" (the default, so a new caller is safe): the row
+                     is REJECT with reject_reasons exactly ["no_live_quote"];
+                     no other hard rule is evaluated for it. The soft scores
+                     are still computed so the breakdown renders.
+                     "label" (Step 6 / the Watchlist refresh): the row is
+                     graded exactly as a live one, then capped at CAUTION and
+                     flagged ("no_live_quote" soft flag, card.no_live_quote,
+                     card.quote_state). A one_sided row still hard-rejects as
+                     spread_too_wide there, from its own numbers.
 
     Returns:
         ContractScoreCard with score, status, hard-reject reasons, soft flags,
@@ -413,9 +517,21 @@ def validate_contract(
         cfg[_CONTRACT_OVERRIDES[key][0]][key] = val
     contract_id = _contract_id(contract)
 
-    reject_reasons = _hard_reject_reasons(contract, cfg)
-    if stock_score < cfg["hard_reject"]["min_stock_score"]:
-        reject_reasons.append("stock_score_below_threshold")
+    if quote_mode not in ("reject", "label"):
+        raise ValueError(f"quote_mode must be 'reject' or 'label', not {quote_mode!r}")
+    # NO-LIVE-QUOTE: `is False`, not falsiness -- an absent key is live.
+    no_live_quote = contract.get("quoteLive") is False
+    quote_state = contract.get("quoteState") if no_live_quote else None
+    quote_rejected = no_live_quote and quote_mode == "reject"
+
+    if quote_rejected:
+        # Short-circuit: the row's numbers are not a live market, so no other
+        # hard rule is judged on them (and none accumulates beside this one).
+        reject_reasons = ["no_live_quote"]
+    else:
+        reject_reasons = _hard_reject_reasons(contract, cfg)
+        if stock_score < cfg["hard_reject"]["min_stock_score"]:
+            reject_reasons.append("stock_score_below_threshold")
 
     liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
     spread_score, spread_pct, spread_flags = _score_spread(contract, cfg)
@@ -463,8 +579,302 @@ def validate_contract(
     soft_flags = liq_flags + spread_flags + delta_flags + dte_flags + iv_flags
     soft_fail_count = len(soft_flags)
 
-    if soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
+    if not quote_rejected and soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
         reject_reasons.append("too_many_soft_failures")
+
+    if no_live_quote and quote_mode == "label":
+        # Added AFTER soft_fail_count: the label grades the row exactly as a
+        # live one, so it must not count toward too_many_soft_failures.
+        soft_flags = soft_flags + ["no_live_quote"]
+
+    hr = cfg["hard_reject"]
+    volume = contract.get("volume") or 0
+    oi = contract.get("open_interest") or 0
+    delta_val = abs(contract.get("delta") or 0)
+    iv_rank_val = contract.get("iv_rank")
+    iv_basis_val = contract.get(
+        "iv_basis",
+        "none" if iv_rank_val is None else "absolute",
+    )
+    _iv_key = "max_iv_rank" if iv_basis_val == "rank" else "max_iv_abs"
+    max_iv_val = hr.get(_iv_key, hr.get("max_iv_rank"))
+
+    blockers = []
+    for r in reject_reasons:
+        if r == "no_live_quote":
+            blockers.append({
+                "code": "no_live_quote",
+                "label": "No live quote",
+                "metric": "quote_state",
+                "observed": quote_state,
+                "threshold": "live",
+                "operator": "!=",
+            })
+        elif r == "volume_too_low":
+            blockers.append({
+                "code": "volume_too_low",
+                "label": "Volume too low",
+                "metric": "volume",
+                "observed": volume,
+                "threshold": hr["min_volume"],
+                "operator": "<",
+            })
+        elif r == "open_interest_too_low":
+            blockers.append({
+                "code": "open_interest_too_low",
+                "label": "Open interest too low",
+                "metric": "open_interest",
+                "observed": oi,
+                "threshold": hr["min_open_interest"],
+                "operator": "<",
+            })
+        elif r == "spread_too_wide":
+            blockers.append({
+                "code": "spread_too_wide",
+                "label": "Spread too wide",
+                "metric": "spread_pct",
+                "observed": spread_pct,
+                "threshold": hr["max_bid_ask_spread_pct"],
+                "operator": ">",
+            })
+        elif r == "delta_too_low_far_otm":
+            blockers.append({
+                "code": "delta_too_low_far_otm",
+                "label": "Delta too low (far OTM)",
+                "metric": "delta",
+                "observed": delta_val,
+                "threshold": hr["min_delta"],
+                "operator": "<",
+            })
+        elif r == "delta_too_high_deep_itm":
+            blockers.append({
+                "code": "delta_too_high_deep_itm",
+                "label": "Delta too high (deep ITM)",
+                "metric": "delta",
+                "observed": delta_val,
+                "threshold": hr["max_delta"],
+                "operator": ">",
+            })
+        elif r == "dte_too_short":
+            blockers.append({
+                "code": "dte_too_short",
+                "label": "DTE too short",
+                "metric": "dte",
+                "observed": dte,
+                "threshold": hr["min_dte"],
+                "operator": "<",
+            })
+        elif r == "dte_too_long":
+            blockers.append({
+                "code": "dte_too_long",
+                "label": "DTE too long",
+                "metric": "dte",
+                "observed": dte,
+                "threshold": hr["max_dte"],
+                "operator": ">",
+            })
+        elif r == "iv_rank_too_high":
+            blockers.append({
+                "code": "iv_rank_too_high",
+                "label": "IV rank too high",
+                "metric": "iv_rank",
+                "observed": iv_rank_val,
+                "threshold": max_iv_val,
+                "operator": ">",
+            })
+        elif r == "iv_too_high":
+            blockers.append({
+                "code": "iv_too_high",
+                "label": "IV too high",
+                "metric": "iv",
+                "observed": iv_rank_val,
+                "threshold": max_iv_val,
+                "operator": ">",
+            })
+        elif r == "stock_score_below_threshold":
+            blockers.append({
+                "code": "stock_score_below_threshold",
+                "label": "Stock score below threshold",
+                "metric": "stock_score",
+                "observed": stock_score,
+                "threshold": hr["min_stock_score"],
+                "operator": "<",
+            })
+        elif r == "too_many_soft_failures":
+            blockers.append({
+                "code": "too_many_soft_failures",
+                "label": "Too many soft failures",
+                "metric": "soft_fail_count",
+                "observed": soft_fail_count,
+                "threshold": hr["max_soft_fail_count"],
+                "operator": ">=",
+            })
+        else:
+            blockers.append({
+                "code": r,
+                "label": r.replace("_", " ").title(),
+                "metric": r,
+                "observed": None,
+                "threshold": "",
+                "operator": "",
+            })
+
+    weights = cfg["weights"]
+    liq_w = float(weights["liquidity"])
+    spread_w = float(weights["spread"])
+    delta_w = float(weights["delta"])
+    dte_w = float(weights["dte"])
+    iv_w = float(weights["iv_rank"])
+
+    components_dict = {
+        "liquidity": {
+            "name": "liquidity",
+            "wire_name": "liquidity",
+            "raw_score": liq_score,
+            "weight": liq_w,
+            "contribution": liq_score * liq_w,
+            "lost_points": liq_w * 100 - (liq_score * liq_w),
+            "observed": volume,
+            "observed_unit": "contracts",
+            "basis": None,
+            "preferred_min": sr["preferred_volume_min"],
+            "preferred_max": None,
+            "flags": liq_flags,
+            "volume": volume,
+            "open_interest": oi,
+            "preferred_volume_min": sr["preferred_volume_min"],
+            "preferred_oi_min": sr["preferred_oi_min"],
+        },
+        "spread": {
+            "name": "spread",
+            "wire_name": "spread",
+            "raw_score": spread_score,
+            "weight": spread_w,
+            "contribution": spread_score * spread_w,
+            "lost_points": spread_w * 100 - (spread_score * spread_w),
+            "observed": spread_pct,
+            "observed_unit": "%",
+            "basis": None,
+            "preferred_min": None,
+            "preferred_max": sr["preferred_spread_pct_max"],
+            "flags": spread_flags,
+        },
+        "delta": {
+            "name": "delta",
+            "wire_name": "delta",
+            "raw_score": delta_score,
+            "weight": delta_w,
+            "contribution": delta_score * delta_w,
+            "lost_points": delta_w * 100 - (delta_score * delta_w),
+            "observed": delta_val,
+            "observed_unit": "",
+            "basis": None,
+            "preferred_min": sr["preferred_delta_min"],
+            "preferred_max": sr["preferred_delta_max"],
+            "flags": delta_flags,
+        },
+        "dte": {
+            "name": "dte",
+            "wire_name": "dteFit",
+            "raw_score": dte_score,
+            "weight": dte_w,
+            "contribution": dte_score * dte_w,
+            "lost_points": dte_w * 100 - (dte_score * dte_w),
+            "observed": dte,
+            "observed_unit": "days",
+            "basis": None,
+            "preferred_min": sr["preferred_dte_min"],
+            "preferred_max": sr["preferred_dte_max"],
+            "flags": dte_flags,
+        },
+        "iv_rank": {
+            "name": "iv_rank",
+            "wire_name": "ivAttractiveness",
+            "raw_score": iv_score,
+            "weight": iv_w,
+            "contribution": iv_score * iv_w,
+            "lost_points": iv_w * 100 - (iv_score * iv_w),
+            "observed": iv_rank_val,
+            "observed_unit": "%" if iv_basis_val == "absolute" else ("rank" if iv_basis_val == "rank" else ""),
+            "basis": iv_basis_val,
+            "preferred_min": None,
+            "preferred_max": _preferred_iv_max(contract, cfg),
+            "flags": iv_flags,
+        },
+    }
+
+    largest_losses = sorted(
+        list(components_dict.values()),
+        key=lambda c: c["lost_points"],
+        reverse=True,
+    )
+
+    thresholds = cfg["contract_score_thresholds"]
+    pass_thresh = float(thresholds["pass"])
+    caution_thresh = float(thresholds["caution"])
+
+    if reject_reasons:
+        final_score = 0
+        final_status: Status = "REJECT"
+        unrounded_score = None
+        rounded_score = None
+        outcome = "blocked"
+    else:
+        weighted = (
+            liq_score * liq_w
+            + spread_score * spread_w
+            + delta_score * delta_w
+            + dte_score * dte_w
+            + iv_score * iv_w
+        )
+        final_score = round(weighted)
+        unrounded_score = weighted
+        rounded_score = final_score
+        outcome = "aggregate"
+        if final_score >= pass_thresh:
+            final_status = "PASS"
+        elif final_score >= caution_thresh:
+            final_status = "CAUTION"
+        else:
+            final_status = "REJECT"
+        # NO-LIVE-QUOTE label mode: a row priced off a quote that is not live
+        # never reads PASS. The score is left as graded.
+        if no_live_quote and final_status == "PASS":
+            final_status = "CAUTION"
+
+    explanation = {
+        "version": 1,
+        "contract_id": contract.get("id") or contract_id,
+        "evaluated_at": date.today().isoformat(),
+        "outcome": outcome,
+        "score": final_score,
+        "status": final_status,
+        "unrounded_score": unrounded_score,
+        "rounded_score": rounded_score,
+        "pass_threshold": pass_thresh,
+        "caution_threshold": caution_thresh,
+        "weights": {
+            "liquidity": liq_w,
+            "spread": spread_w,
+            "delta": delta_w,
+            "dte": dte_w,
+            "iv_rank": iv_w,
+        },
+        "components": components_dict,
+        "largest_losses": largest_losses,
+        "blockers": blockers,
+        "reject_reasons": list(reject_reasons),
+        "soft_flags": list(soft_flags),
+        "soft_fail_count": soft_fail_count,
+        "max_soft_fail_count": hr["max_soft_fail_count"],
+        "hard_bounds": {
+            key: hr[key] for key in (
+                "min_volume", "min_open_interest", "max_bid_ask_spread_pct",
+                "min_delta", "max_delta", "min_dte", "max_dte", "min_stock_score",
+            )
+        } | {"max_iv": max_iv_val},
+        "raw_inputs": {key: contract.get(key) for key in ("volume", "open_interest", "delta")},
+    }
 
     if reject_reasons:
         return ContractScoreCard(
@@ -486,25 +896,10 @@ def validate_contract(
                 oi_score=oi_score_val,
             ),
             detail=detail,
+            explanation=explanation,
+            no_live_quote=no_live_quote,
+            quote_state=quote_state,
         )
-
-    weights = cfg["weights"]
-    weighted = (
-        liq_score * weights["liquidity"]
-        + spread_score * weights["spread"]
-        + delta_score * weights["delta"]
-        + dte_score * weights["dte"]
-        + iv_score * weights["iv_rank"]
-    )
-    score = round(weighted)
-    thresholds = cfg["contract_score_thresholds"]
-
-    if score >= thresholds["pass"]:
-        status: Status = "PASS"
-    elif score >= thresholds["caution"]:
-        status = "CAUTION"
-    else:
-        status = "REJECT"
 
     return ContractScoreCard(
         contract_id=contract_id,
@@ -512,8 +907,8 @@ def validate_contract(
         strike=float(contract.get("strike", 0)),
         expiry=contract.get("expiry", ""),
         is_call=contract.get("is_call", True),
-        score=score,
-        status=status,
+        score=final_score,
+        status=final_status,
         reject_reasons=[],
         soft_flags=soft_flags,
         breakdown=ContractScoreBreakdown(
@@ -525,4 +920,7 @@ def validate_contract(
             oi_score=oi_score_val,
         ),
         detail=detail,
+        explanation=explanation,
+        no_live_quote=no_live_quote,
+        quote_state=quote_state,
     )

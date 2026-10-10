@@ -4,22 +4,29 @@
  * ContractStar — compact button that toggles an option contract in
  * useWatchedContractsStore and syncs to the backend.
  * Visually identical to WatchStar; different store.
+ *
+ * `grading` (WATCHLIST-SCAN-CONTRACT-RULES): the inputs Step 6 graded this row
+ * with, stored with the star so the Watchlist grades it the same way.
  */
 
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
 import { api } from '@/lib/api';
+import { statusOf } from '@/lib/apiError';
+import type { ContractGrading } from '@/types/domain';
 import styles from '@/components/atoms/WatchStar/WatchStar.module.css';
 
 interface ContractStarProps {
   contractId: string;
+  grading?:   ContractGrading;
   size?:      'sm' | 'md';
   className?: string;
 }
 
-export function ContractStar({ contractId, size = 'md', className }: ContractStarProps) {
-  const isWatched = useWatchedContractsStore((s) => s.isWatched);
-  const add       = useWatchedContractsStore((s) => s.add);
-  const remove    = useWatchedContractsStore((s) => s.remove);
+export function ContractStar({ contractId, grading, size = 'md', className }: ContractStarProps) {
+  const isWatched    = useWatchedContractsStore((s) => s.isWatched);
+  const add          = useWatchedContractsStore((s) => s.add);
+  const remove       = useWatchedContractsStore((s) => s.remove);
+  const clearGrading = useWatchedContractsStore((s) => s.clearGrading);
   // Subscribe so toggles re-render.
   useWatchedContractsStore((s) => s.ids);
 
@@ -38,11 +45,26 @@ export function ContractStar({ contractId, size = 'md', className }: ContractSta
       onClick={(e) => {
         e.stopPropagation();
         if (watched) {
+          // Captured before remove, so a failed DELETE restores the grading too.
+          const prev = useWatchedContractsStore.getState().grading[contractId];
           remove(contractId);
-          api.removeWatchedContract(contractId).catch(() => { add(contractId); });
+          api.removeWatchedContract(contractId).catch(() => { add(contractId, prev); });
         } else {
-          add(contractId);
-          api.addWatchedContract(contractId).catch(() => { remove(contractId); });
+          add(contractId, grading);
+          api.addWatchedContract(contractId, grading).catch((err) => {
+            if (grading !== undefined && statusOf(err) === 422) {
+              // The server refused the grading: keep the star, honestly
+              // YAML-graded. Explicit null also clears any stale server grading.
+              console.warn('ContractStar: grading refused, starring without it', err);
+              // Unstarred while the first POST was in flight: a retry could
+              // land after that DELETE and bring the server row back.
+              if (!useWatchedContractsStore.getState().isWatched(contractId)) return;
+              clearGrading(contractId);
+              api.addWatchedContract(contractId, null).catch(() => { remove(contractId); });
+              return;
+            }
+            remove(contractId);
+          });
         }
       }}
       aria-label={watched ? 'Remove contract from watchlist' : 'Add contract to watchlist'}

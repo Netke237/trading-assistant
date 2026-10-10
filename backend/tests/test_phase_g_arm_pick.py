@@ -59,7 +59,7 @@ def _arm_body(**extra) -> dict:
         # states the direction its option RIGHT implies, which is what stopped
         # them being self-contradictory: `action` is BUY for a long call and a
         # long put alike and never encoded direction.
-        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 1, "order_type": "LMT",
+        "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 1, "order_type": "LMT",
         "limit_price": 2.50, "entry_premium": 2.50,
     }
     base.update(extra)

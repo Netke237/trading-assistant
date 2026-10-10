@@ -1,7 +1,12 @@
-import { runStockScan, stockPositionCardKey, stockScanFailureReason } from '@/lib/stockScan';
+import {
+  runStockScan, stockPositionCardKey, stockScanFailureReason,
+  STOCK_SCAN_SETTINGS_INVALID, SCAN_RISK_ZERO_MESSAGE,
+} from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
+import { useRiskStore } from '@/lib/riskStore';
+import { useScanParamsStore, NO_OVERRIDES } from '@/lib/scanParamsStore';
 import type { PositionCardData } from '@/types/stockDomain';
 
 jest.mock('@/lib/api', () => ({
@@ -92,51 +97,36 @@ describe('runStockScan', () => {
     expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: scorer blew up');
   });
 
-  it("a still-running second scan does not blank the reason of the one that just failed", async () => {
-    // What is actually guaranteed, named honestly: run 2 starts (clearing
-    // stockScanError synchronously) while run 1's request is in flight, and
-    // run 1's reason is still what its own caller reads when it settles.
-    // Distinct rejections on purpose — with the same text on both, this
-    // assertion could not tell whose reason it got.
-    //
-    // NOT guaranteed, and deliberately not claimed: whichever run settles LAST
-    // owns the store (see the case below). Both surfaces disable Run while
-    // scanState is SCANNING, so overlapping runs are not reachable from the
-    // UI; a per-run token would only trade this for a worse failure — the
-    // losing run's caller reading a store its own run was forbidden to write.
-    let rejectFirst: (e: Error) => void = () => {};
+  it('keeps a newer still-running scan untouched by an older failure', async () => {
+    let rejectFirst!: (error: Error) => void;
     (api.postStockScan as jest.Mock)
-      .mockImplementationOnce(() => new Promise((_res, rej) => { rejectFirst = rej; }))
-      .mockImplementationOnce(() => new Promise(() => {}));   // run 2 never settles
-
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockImplementationOnce(() => new Promise(() => {}));
     const first = runStockScan('pullback_ema');
-    const second = runStockScan('pullback_ema');              // the re-click
-    expect(useScanStore.getState().stockScanError).toBeNull();   // run 2 cleared it
-
+    void runStockScan('ma_crossover');
     rejectFirst(new Error('API /api/stock-scan → 422: run one'));
-    await first;
-
-    expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 422: run one');
-    void second;
+    expect(await first).toBeNull();
+    expect(useScanStore.getState().stockScanError).toBeNull();
+    expect(useScanStore.getState().scanState).toBe('SCANNING');
+    expect(useScanStore.getState().activeStrategy).toBe('ma_crossover');
   });
 
-  it('lets the run that settles last own the store, whichever it is', async () => {
-    // Documenting the ordering rather than implying one that does not exist.
-    let rejectFirst: (e: Error) => void = () => {};
+  it('keeps the newest completed result and paired request when an older run fails last', async () => {
+    let rejectFirst!: (error: Error) => void;
     (api.postStockScan as jest.Mock)
-      .mockImplementationOnce(() => new Promise((_res, rej) => { rejectFirst = rej; }))
-      .mockImplementationOnce(async () => ({ scan_id: 'S-2', timestamp: 't', rejected: [], candidates: [] }));
-
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce({ scan_id: 'S-2', timestamp: 't', rejected: [], candidates: [] });
     const first = runStockScan('pullback_ema');
-    await runStockScan('ma_crossover');          // run 2 settles first…
+    await runStockScan('ma_crossover');
     rejectFirst(new Error('API /api/stock-scan → 500: run one'));
-    await first;                                 // …run 1 settles last and wins
-
-    expect(useScanStore.getState().scanState).toBe('FAILED');
-    expect(useScanStore.getState().stockScanError).toBe('API /api/stock-scan → 500: run one');
+    await first;
+    expect(useScanStore.getState().scanState).toBe('COMPLETED');
+    expect(useScanStore.getState().stockScanError).toBeNull();
+    expect(useScanStore.getState().stockScanResult?.scan_id).toBe('S-2');
+    expect(useScanStore.getState().stockScanRequest?.strategy).toBe('ma_crossover');
   });
 
-  it('an earlier status refresh still applies when the later ones failed outright', async () => {
+  it('never applies superseded-run metadata when newer metadata requests failed', async () => {
     // "Latest issued wins" discarded a good response whenever a later request
     // failed, leaving the meta at neither run's answer — the staleness the
     // refresh exists to prevent, on exactly the flaky backends where it
@@ -169,8 +159,8 @@ describe('runStockScan', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(useScanStore.getState().lastStockScanStatus).toBe('completed');
-    expect(useScanStore.getState().lastStockScanStrategy).toBe('pullback_ema');
+    expect(useScanStore.getState().lastStockScanStatus).not.toBe('completed');
+    expect(useScanStore.getState().lastStockScanStrategy).not.toBe('pullback_ema');
   });
 
   it('still reaches FAILED when the reason write is what threw', async () => {
@@ -242,6 +232,12 @@ describe('runStockScan', () => {
   it('forwards mean-reversion-multi params only when that strategy is selected (H4)', async () => {
     const fake = { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] };
     (api.postStockScan as jest.Mock).mockResolvedValue(fake);
+    // STOCKS-HORIZON-T1 H5: the multi fields are overrides (null = follow the
+    // backend profile, not sent); set them so the forwarding is observable.
+    useScanParamsStore.setState({
+      meanReversionVariants: ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
+      meanReversionMinConfirm: 2, vwapLookback: 20, vwapDeviationPct: 0.02,
+    });
 
     await runStockScan('mean_reversion_multi');
     const multiArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
@@ -257,6 +253,56 @@ describe('runStockScan', () => {
     const singleArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
     expect(singleArg.mean_reversion_variants).toBeUndefined();
     expect(singleArg.mean_reversion_min_confirmations).toBeUndefined();
+    useScanParamsStore.setState({ ...NO_OVERRIDES });
+  });
+
+  describe('a throw while building the request (moved from Step 5, A5d)', () => {
+    let consoleError: jest.SpyInstance;
+    beforeEach(() => { consoleError = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+    afterEach(() => consoleError.mockRestore());
+
+    it('confidenceGate: null stores the settings message, posts nothing, logs once', async () => {
+      useSettingsStore.setState({ confidenceGate: null } as never);
+      expect(await runStockScan('breakout_base')).toBeNull();
+      expect(api.postStockScan).not.toHaveBeenCalled();
+      expect(useScanStore.getState().stockScanError).toBe(STOCK_SCAN_SETTINGS_INVALID);
+      expect(useScanStore.getState().scanState).toBe('FAILED');
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError.mock.calls[0][0]).toBe('runStockScan: building the stock-scan request failed');
+      expect(consoleError.mock.calls[0][1]).toBeInstanceOf(TypeError);
+    });
+
+    it('a malformed non-null gate { enabled: true } gets the same message', async () => {
+      useSettingsStore.setState({ confidenceGate: { enabled: true } } as never);
+      await runStockScan('breakout_base');
+      expect(useScanStore.getState().stockScanError).toBe(STOCK_SCAN_SETTINGS_INVALID);
+    });
+
+    it('a 0% max loss keeps its own message and is not logged', async () => {
+      // Restore the store's real value (riskStore's DEFAULT_LIMITS, 0.0375),
+      // read before the change rather than guessed.
+      const priorMaxLoss = useRiskStore.getState().limits.maxLossPerTradePct;
+      useRiskStore.setState((s) => ({ limits: { ...s.limits, maxLossPerTradePct: 0 } }));
+      try {
+        await runStockScan('breakout_base');
+        expect(useScanStore.getState().stockScanError).toBe(SCAN_RISK_ZERO_MESSAGE);
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        useRiskStore.setState((s) => ({ limits: { ...s.limits, maxLossPerTradePct: priorMaxLoss } }));
+      }
+    });
+
+    it('a store write failing BEFORE the build keeps its own text, not the settings message', async () => {
+      const original = useScanStore.getState().setStockScanResult;
+      useScanStore.setState({ setStockScanResult: () => { throw new Error('QuotaExceededError'); } } as never);
+      try {
+        await runStockScan('breakout_base');
+        expect(useScanStore.getState().stockScanError).toBe('QuotaExceededError');
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        useScanStore.setState({ setStockScanResult: original } as never);
+      }
+    });
   });
 });
 

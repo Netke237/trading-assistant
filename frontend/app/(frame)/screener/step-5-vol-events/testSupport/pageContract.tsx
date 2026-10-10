@@ -10,11 +10,12 @@ import { screen } from '@testing-library/react';
 import {
   missingReadingClause, headSentence, causesSentence, ivThresholdSentence,
   eventWindowSentence, thresholdsUnavailableSentence, ivOverrideSentence,
-  MISSING_READING_CLAIM,
+  MISSING_READING_CLAIM, rowDecidingReason, rowCombinationPhrase, formatRulesStripData,
   type MissingReadingClaim, type GateCause, type GateCounts, type IvBand, type ThresholdsAvail,
 } from '../gateSummary';
 import { STATUS_LABEL, type Status } from '@/lib/status';
-import { formatIv, type IvBasis } from '@/lib/ivBasis';
+import { ivBasesOf, type IvBasis } from '@/lib/ivBasis';
+import { formatGateIv } from '../gateSummary';
 import { eventVolGateTooltip, gateDrivers } from '@/lib/statusTooltips';
 import { useIvThresholdsStore, effectiveIvThresholds, ivOverrideFor } from '@/lib/ivThresholdsStore';
 import {
@@ -300,7 +301,7 @@ export const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => vo
     const raw = el.getAttribute('data-iv-value') as string;
     const sym = (el.closest('[data-status]')?.querySelector('[data-cell="symbol"]')
       ?.getAttribute('data-value')) as string;
-    const shown = formatIv({ basis, value: raw === '' ? null : Number(raw) } as never, sym);
+    const shown = formatGateIv({ basis, value: raw === '' ? null : Number(raw) } as never, sym);
     expect(el.textContent).toBe(`${shown.text}${shown.suffix}`);
     expect(el.getAttribute('title')).toBe(shown.title);
   },
@@ -371,6 +372,63 @@ export const CELL_PINS: Record<string, (el: HTMLElement, row: HTMLElement) => vo
       .map((x) => x.textContent).filter((t) => t === STATUS_LABEL[gate]);
     expect(badge.length).toBeGreaterThan(0);
   },
+
+  'iv-status': (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    const st = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-volatility') as Status;
+    if (avail !== 'ready') {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      expect(st).toBe(none);
+      return;
+    }
+    const badge = [...el.querySelectorAll('span')].map((x) => x.textContent).filter((t) => t === STATUS_LABEL[st]);
+    expect(badge.length).toBeGreaterThan(0);
+  },
+
+  'event-status': (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    const st = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-event') as Status;
+    if (avail !== 'ready') {
+      const none: Status = avail === 'failed' ? 'NO_DATA' : 'PENDING';
+      expect(st).toBe(none);
+      return;
+    }
+    const badge = [...el.querySelectorAll('span')].map((x) => x.textContent).filter((t) => t === STATUS_LABEL[st]);
+    expect(badge.length).toBeGreaterThan(0);
+  },
+
+  reason: (el, row) => {
+    const root = page();
+    const avail = root.getAttribute('data-avail') as ThresholdsAvail;
+    if (avail !== 'ready') return;
+    const gate = row.querySelector('[data-cell="gate"]')?.getAttribute('data-gate') as Status;
+    const ivSt = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-volatility') as Status;
+    const evSt = row.querySelector('[data-cell="gate"]')?.getAttribute('data-side-event') as Status;
+    const ivCell = row.querySelector('[data-cell="iv"]') as HTMLElement;
+    const basis = ivCell.getAttribute('data-iv-basis') as IvBasis;
+    const ivGated = root.getAttribute('data-iv-gated') === 'true';
+    const d = gateDrivers({
+      ivStatus: ivSt, proxStatus: evSt, gate,
+      hasIv: basis !== 'none',
+      ivGated,
+    });
+    const expectedReason = rowDecidingReason(gate, d, basis, avail);
+    expect(el.textContent).toBe(`Why this gate: ${expectedReason}`);
+  },
+
+  disclosure: (el, row) => {
+    const sym = row.querySelector('[data-cell="symbol"]')?.getAttribute('data-value');
+    const btn = el.querySelector('button');
+    expect(btn).not.toBeNull();
+    expect(btn?.getAttribute('aria-controls')).toBe(`disclosure-${sym}`);
+    expect(btn?.getAttribute('aria-expanded')).toBeDefined();
+  },
+
+  'pctl-context': (el) => {
+    expect(el.textContent).toBe('IV PCTL (Context only):');
+  },
 };
 
 export const PROSE_ATTRS = ['title', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-hidden'] as const;
@@ -417,6 +475,8 @@ export function nodeId(el: HTMLElement): string {
 export const OWNERS: Array<{ name: string; of: (el: HTMLElement) => HTMLElement | null }> = [
   { name: 'part', of: (el) => el.closest('[data-part]') },
   { name: 'colheaders', of: (el) => el.closest('[data-colheaders]') },
+  { name: 'rules-strip', of: (el) => el.closest('[data-rules-strip]') },
+  { name: 'disclosure-panel', of: (el) => el.closest('[data-disclosure-panel]') },
   { name: 'cell', of: (el) => el.closest('[data-cell]') },
   { name: 'row', of: (el) => (el.hasAttribute('data-status') ? el : null) },
 ];
@@ -460,6 +520,67 @@ export function expectPageCopy() {
     } else if (kind === 'colheaders') {
       expect([...owner.children].map((c) => c.textContent).filter((t) => t !== ''))
         .toEqual(JSON.parse(owner.getAttribute('data-colheaders') as string));
+    } else if (kind === 'rules-strip') {
+      const horizon = root.getAttribute('data-horizon') as ThresholdHorizon;
+      const scanEventWindow = useScanStore.getState().scanResult?.event_window;
+      const hasScan = useScanStore.getState().scanResult !== undefined;
+      const expectedProvenance = scanEventWindow
+        ? 'Recorded scan event window'
+        : hasScan
+          ? 'Legacy scan: current configuration fallback'
+          : 'Current backend configuration';
+      expect(owner.querySelector('[data-provenance]')?.textContent).toBe(expectedProvenance);
+      const rawThresholds = useIvThresholdsStore.getState().thresholds;
+      const ivOverrides = useIvThresholdsStore.getState().overrides;
+      const ivThresholds = effectiveIvThresholds(rawThresholds, ivOverrides);
+      const eventThresholds = useEventThresholdsStore.getState().thresholds;
+      const ivOverride = ivOverrideFor(horizon, rawThresholds, ivOverrides);
+      const baseEventWindow = eventThresholds ? eventThresholds[horizon] : null;
+      const eventWindow = baseEventWindow && scanEventWindow
+        ? { ...baseEventWindow, ...scanEventWindow }
+        : (scanEventWindow ?? baseEventWindow);
+      const candidates = useScanStore.getState().scanResult?.candidates ?? [];
+      const basesPresent = ivBasesOf(candidates.map((x) => x.contractDetails));
+      const expected = formatRulesStripData({
+        horizon,
+        ivThresholds: ivThresholds ? ivThresholds[horizon] : null,
+        eventWindow,
+        scanEventWindow,
+        hasScanResult: hasScan,
+        ivOverride,
+        basesPresent,
+      });
+      expect(owner.textContent).toContain(expected.rankInterval);
+      expect(owner.textContent).toContain(expected.absInterval);
+      expect(owner.textContent).toContain(expected.eventInterval);
+      if (expected.overrideNotice) {
+        expect(owner.textContent).toContain(expected.overrideNotice);
+      }
+    } else if (kind === 'disclosure-panel') {
+      const sym = owner.getAttribute('data-symbol') as string;
+      expect(owner.getAttribute('id')).toBe(`disclosure-${sym}`);
+      expect(owner.getAttribute('role')).toBe('region');
+      const row = owner.closest('[data-status]') as HTMLElement;
+      expect(row).not.toBeNull();
+      const ivSt = sideVerdict(sym, 'volatility');
+      const proxStatus = sideVerdict(sym, 'event');
+      const gate = gateOf(sym);
+      const ivCell = row.querySelector('[data-cell="iv"]');
+      const basis = (ivCell?.getAttribute('data-iv-basis') ?? 'none') as IvBasis;
+      const avail = (root.getAttribute('data-avail') ?? 'ready') as ThresholdsAvail;
+      const d = gateDrivers({
+        ivStatus: ivSt, proxStatus, gate,
+        hasIv: basis !== 'none',
+        ivGated: root.getAttribute('data-iv-gated') === 'true',
+      });
+      const expectedReason = rowDecidingReason(gate, d, basis, avail);
+      const expectedCombination = rowCombinationPhrase(ivSt, proxStatus, gate, d, basis, avail);
+      expect(owner.textContent).toContain('Volatility Check');
+      expect(owner.textContent).toContain('Event Proximity Check');
+      expect(owner.textContent).toContain('Gate Decision & Context');
+      expect(owner.textContent).toContain('Company:');
+      expect(owner.textContent).toContain(expectedReason);
+      expect(owner.textContent).toContain(expectedCombination);
     } else if (kind === 'cell') {
       const name = owner.getAttribute('data-cell') as string;
       const pin = CELL_PINS[name];
@@ -505,4 +626,3 @@ export function gateOf(symbol: string): Status {
   if (v === null) throw new Error(`row ${symbol} publishes no gate verdict`);
   return v as Status;
 }
-

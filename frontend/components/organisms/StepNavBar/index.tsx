@@ -21,10 +21,10 @@ import styles from './StepNavBar.module.css';
 export function StepNavBar() {
   const router   = useRouter();
   const pathname = usePathname();
-  const current  = currentStepFromPath(pathname);
   const regime   = useScanStore((s) => s.combinedRegime);
   const mode     = useScanStore((s) => s.screenerMode);
   const steps    = getSteps(mode);
+  const current  = currentStepFromPath(pathname, steps);
 
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -53,7 +53,9 @@ export function StepNavBar() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && document.querySelector('[role="dialog"][aria-modal="true"]')) return;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (e.key === 'ArrowLeft')  { e.preventDefault(); goPrev(); }
       if (e.key === 'ArrowRight') { e.preventDefault(); handleNext(); }

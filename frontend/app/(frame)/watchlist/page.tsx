@@ -4,13 +4,18 @@
  * Watchlist — Phase 5.
  * Tabs:
  *   - Stocks:    sortable table of ranked candidates + inline chart on select.
- *   - Contracts: every option contract the user has starred on Step 6.
+ *   - Contracts: every option contract the user has starred on Step 6, graded
+ *                with the inputs Step 6 used when it was starred
+ *                (WATCHLIST-SCAN-CONTRACT-RULES). Every star is a row: live, or
+ *                Loading / Expired / Not in the current chain / Could not load
+ *                the chain / Unreadable contract id.
  *   - Composite Alerts: Markov regime alerts created from the Pre-Breakout scanner.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
+import { NoLiveQuoteTag } from '@/components/atoms/NoLiveQuoteTag';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
@@ -24,6 +29,11 @@ import { api, type CompositeWatch } from '@/lib/api';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { contractLabel, type OptionContract } from '@/types/domain';
 import { useWatchedContractsStore } from '@/lib/watchedContractsStore';
+import {
+  planContractGroups, resolveWatchedRows, compareWatchedRows, rowId, localTodayIso,
+  MISSING_NOTE, INVALID_NOTE, YAML_MARKER,
+  type ContractSortKey, type KeptGroupResult, type WatchedContractRow,
+} from '@/lib/contractGrading';
 import type { WatchlistRow } from '@/types/domain';
 import { useChartStore } from '@/lib/chartStore';
 import { useWatchlistUiStore } from '@/lib/watchlistUiStore';
@@ -32,7 +42,9 @@ import styles from './page.module.css';
 type Tab     = 'stocks' | 'contracts' | 'composite';
 type SortKey = 'score' | 'symbol' | 'price' | 'rank' | 'scoreDelta';
 type SortDir = 'asc' | 'desc';
-type ContractSortKey = 'score' | 'dte' | 'price';
+
+// Type only (erased): every runtime helper lives in lib/contractGrading.ts.
+export type { WatchedContractRow };
 
 const COLUMNS          = '32px 28px 72px 1.4fr 90px 80px 80px 90px 80px 60px 90px';
 const CONTRACT_COLUMNS = '28px 72px 1.3fr 120px 80px 72px 80px 80px 100px';
@@ -58,8 +70,15 @@ export default function WatchlistPage() {
   const [contractSortKey, setContractSortKey] = useState<ContractSortKey>('score');
   const [contractSortDir, setContractSortDir] = useState<SortDir>('desc');
   const [watchlist, setWatchlist]             = useState<WatchlistRow[]>([]);
-  const [contracts, setContracts]             = useState<OptionContract[]>([]);
+  // Settled per-group results, replaced atomically when a non-aborted refresh
+  // settles; kept on screen while a refresh is in flight.
+  const [kept, setKept]                       = useState<KeptGroupResult[]>([]);
+  // The local date the rows are classified against (set by each refresh).
+  const [today, setToday]                     = useState<string>(() => localTodayIso());
+  // The Stocks tab's flag. The Contracts tab has its own, so a success on one
+  // tab can no longer hide a failure on the other.
   const [offline, setOffline]                 = useState(false);
+  const [contractsOffline, setContractsOffline] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [refreshingWatchlist, setRefreshingWatchlist] = useState(false);
   const [refreshingContracts, setRefreshingContracts] = useState(false);
@@ -74,6 +93,7 @@ export default function WatchlistPage() {
   const syncFromBackend           = useWatchlistStore((s) => s.syncFromBackend);
   const syncContractsFromBackend  = useWatchedContractsStore((s) => s.syncFromBackend);
   const watchedIds = useWatchedContractsStore((s) => s.ids);
+  const grading    = useWatchedContractsStore((s) => s.grading);
 
   const refreshWatchlist = useCallback(async () => {
     setRefreshingWatchlist(true);
@@ -97,33 +117,41 @@ export default function WatchlistPage() {
   }, []);
 
   const refreshContracts = useCallback(async () => {
-    if (watchedIds.length === 0) { setContracts([]); return; }
-    // Abort any in-flight contracts fetch before starting a new one (CRITICAL-3 fix).
+    // Abort any in-flight contracts fetch before anything else (CRITICAL-3 fix),
+    // including on the early returns: a slow fetch rejecting after the last
+    // unstar is then discarded as aborted and cannot raise the banner.
     contractsAbortRef.current?.abort();
+    const t = localTodayIso();
+    setToday(t);
+    const plan = planContractGroups(watchedIds, grading, t);
+    if (plan.groups.length === 0) {
+      // No stars, or every star expired / unreadable: nothing to fetch.
+      setKept([]);
+      setContractsOffline(false);
+      setRefreshingContracts(false);
+      return;
+    }
     const controller = new AbortController();
     contractsAbortRef.current = controller;
     setRefreshingContracts(true);
-    const pairs = [...new Set(
-      watchedIds.map((id) => {
-        const parts = id.split('|');
-        return `${parts[0]}|${parts[3] ?? 'C'}`;
-      })
-    )].map((key) => {
-      const [sym, right] = key.split('|');
-      return { sym: sym!, right: (right === 'P' ? 'P' : 'C') as 'C' | 'P' };
-    });
     try {
-      const results = await Promise.all(pairs.map(({ sym, right }) => api.getContracts(sym, right, undefined, controller.signal)));
-      if (!controller.signal.aborted) {
-        setContracts(results.flat());
-        setOffline(false);
-      }
-    } catch {
-      if (!controller.signal.aborted) setOffline(true);
+      // One request per (symbol, right, expiry, grading): the star's own expiry
+      // and strikes, graded with the inputs it was starred with. `strikes`
+      // disables `limit` and `max_price` server-side.
+      const settled = await Promise.allSettled(plan.groups.map((g) =>
+        api.getContracts(g.symbol, g.right, { expiry: g.expiry, strikes: g.strikes, ...g.ctx }, controller.signal)));
+      if (controller.signal.aborted) return;
+      setKept(plan.groups.map((g, i): KeptGroupResult => {
+        const r = settled[i]!;
+        return { groupKey: g.key, strikes: new Set(g.strikes), outcome: r.status === 'fulfilled' ? r.value : 'rejected' };
+      }));
+      // Partial failures show per-row "Could not load the chain"; the banner
+      // only when every fetched group failed.
+      setContractsOffline(settled.every((r) => r.status === 'rejected'));
     } finally {
       if (!controller.signal.aborted) setRefreshingContracts(false);
     }
-  }, [watchedIds]);
+  }, [watchedIds, grading]);
 
   useEffect(() => {
     syncFromBackend();
@@ -175,42 +203,21 @@ export default function WatchlistPage() {
     return sorted.length > 0 ? sorted : offlineRows;
   }, [offline, offlineRows, sorted]);
 
-  const watchedContracts = useMemo<OptionContract[]>(() => {
-    const seen = new Set<string>();
-    return watchedIds
-      .map((storedId) => {
-        if (seen.has(storedId)) return null;
-        seen.add(storedId);
-        const [sym, strike, expiry, type] = storedId.split('|');
-        const exact = contracts.find((c) => c.id === storedId);
-        if (exact) return exact;
-        const storedStrike = String(Math.round(parseFloat(strike)));
-        const fallback = contracts.find(
-          (c) =>
-            c.symbol === sym &&
-            String(Math.round(parseFloat(String(c.strike)))) === storedStrike &&
-            c.expiry === expiry &&
-            c.right === ((type ?? 'C') as 'C' | 'P'),
-        );
-        // Normalise the id so ContractStar.isWatched(c.id) returns true
-        return fallback ? { ...fallback, id: storedId } : null;
-      })
-      .filter((c): c is OptionContract => c !== null);
-  }, [contracts, watchedIds]);
+  const contractPlan = useMemo(
+    () => planContractGroups(watchedIds, grading, today),
+    [watchedIds, grading, today],
+  );
 
-  const sortedContracts = useMemo<OptionContract[]>(() => {
-    const list = [...watchedContracts];
-    list.sort((a, b) => {
-      const mul = contractSortDir === 'asc' ? 1 : -1;
-      switch (contractSortKey) {
-        case 'price': return (a.price - b.price) * mul;
-        case 'dte':   return (a.dte - b.dte) * mul;
-        case 'score':
-        default:      return (a.score - b.score) * mul;
-      }
-    });
-    return list;
-  }, [watchedContracts, contractSortKey, contractSortDir]);
+  const watchedContracts = useMemo<WatchedContractRow[]>(
+    () => resolveWatchedRows(contractPlan, kept, grading),
+    [contractPlan, kept, grading],
+  );
+
+  const sortedContracts = useMemo<WatchedContractRow[]>(() => {
+    const order = new Map(contractPlan.ids.map((id, i) => [id, i] as const));
+    return [...watchedContracts].sort((a, b) =>
+      compareWatchedRows(a, b, contractSortKey, contractSortDir, order));
+  }, [watchedContracts, contractPlan, contractSortKey, contractSortDir]);
 
   const toggleContractSort = (k: ContractSortKey) => {
     if (k === contractSortKey) setContractSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -270,9 +277,11 @@ export default function WatchlistPage() {
             ? `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`
             : `${compositeWatches.length} composite alert${compositeWatches.length === 1 ? '' : 's'}`}
         </Text>
-        {offline && (
+        {offline ? (
           <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
-        )}
+        ) : contractsOffline && tab === 'contracts' ? (
+          <Text size={13} tone="dim">Could not load option chains — retry</Text>
+        ) : null}
       </div>
 
       <div className={styles.tabs} role="tablist" aria-label="Watchlist views">
@@ -458,7 +467,7 @@ function ContractsTab({
   sortDir,
   onSort,
 }: {
-  contracts: OptionContract[];
+  contracts: WatchedContractRow[];
   sortKey: ContractSortKey;
   sortDir: SortDir;
   onSort: (k: ContractSortKey) => void;
@@ -474,6 +483,8 @@ function ContractsTab({
     );
   }
 
+  const live = contracts.flatMap((r) => (r.kind === 'live' ? [r.contract] : []));
+
   return (
     <div className={styles.tableWrap}>
       <div className={styles.tableHeader} style={{ gridTemplateColumns: CONTRACT_COLUMNS }}>
@@ -483,33 +494,67 @@ function ContractsTab({
         <SortBtn label="DTE"   active={sortKey === 'dte'}   dir={sortDir} onClick={() => onSort('dte')} />
         <SortBtn label="PRICE" active={sortKey === 'price'} dir={sortDir} onClick={() => onSort('price')} align="right" />
         <Text size={11} tone="dim" className={styles.right}>DELTA</Text>
-        <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(contracts))}</Text>
+        <Text size={11} tone="dim" className={styles.right}>{ivColumnLabel(ivBasesOf(live))}</Text>
         <Text size={11} tone="dim" className={styles.right}>Θ/DAY</Text>
         <SortBtn label="SCORE" active={sortKey === 'score'} dir={sortDir} onClick={() => onSort('score')} align="right" />
       </div>
 
       <div className={styles.tableBody}>
-        {contracts.map((c) => {
-          const status = c.contractConfidence;
-          return (
-            <TableRow key={c.id} status={status} columns={CONTRACT_COLUMNS}>
-              <ContractStar contractId={c.id} size="sm" />
-              <Data size={13} weight={500}>{c.symbol}</Data>
-              <Data size={12}>{contractLabel(c)}</Data>
-              <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
-              <Data size={12} className={styles.right}>${c.price.toFixed(2)}</Data>
-              <Data size={12} className={styles.right}>{c.delta.toFixed(2)}</Data>
-              <IvContractCell contract={c} />
-              <Data size={12} className={styles.right}>{c.theta.toFixed(2)}</Data>
-              <div className={styles.scoreCell}>
-                <Data size={13} weight={500}>{c.score}</Data>
-                <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
-              </div>
-            </TableRow>
-          );
-        })}
+        {contracts.map((row) => (row.kind === 'live'
+          ? <LiveContractRow key={rowId(row)} contract={row.contract} yamlGraded={row.yamlGraded} />
+          : <MissingContractRow key={rowId(row)} row={row} />))}
       </div>
     </div>
+  );
+}
+
+function LiveContractRow({ contract: c, yamlGraded }: { contract: OptionContract; yamlGraded: boolean }) {
+  const status = c.contractConfidence;
+  return (
+    <TableRow status={status} columns={CONTRACT_COLUMNS}>
+      <ContractStar contractId={c.id} size="sm" />
+      <Data size={13} weight={500}>{c.symbol}</Data>
+      <div>
+        <Data size={12}>{contractLabel(c)}</Data>
+        {yamlGraded && <div><Text size={10} tone="caution">{YAML_MARKER}</Text></div>}
+      </div>
+      <DTEProgressBar daysRemaining={c.dte} totalDays={c.dteTotal} />
+      <Data size={12} className={styles.right}>${c.price.toFixed(2)}</Data>
+      <Data size={12} className={styles.right}>{c.delta.toFixed(2)}</Data>
+      <IvContractCell contract={c} />
+      <Data size={12} className={styles.right}>{c.theta.toFixed(2)}</Data>
+      <div className={styles.scoreCell}>
+        <Data size={13} weight={500}>{c.score}</Data>
+        <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
+                    <NoLiveQuoteTag noLiveQuote={c.noLiveQuote} quoteState={c.quoteState} />
+      </div>
+    </TableRow>
+  );
+}
+
+/** A star with no live row: still listed, with why, and a working unstar. */
+function MissingContractRow({ row }: { row: Exclude<WatchedContractRow, { kind: 'live' }> }) {
+  const note   = row.kind === 'invalid' ? INVALID_NOTE : MISSING_NOTE[row.reason];
+  const status = row.kind === 'missing' && row.reason === 'loading' ? 'PENDING' : 'NO_DATA';
+  const label  = row.kind === 'invalid'
+    ? row.id
+    : contractLabel({ symbol: row.symbol, strike: row.strike, right: row.right, expiry: row.expiry });
+  const dash = <Text size={12} tone="dim" className={styles.right}>—</Text>;
+  return (
+    <TableRow status={status} columns={CONTRACT_COLUMNS}>
+      <ContractStar contractId={row.id} size="sm" />
+      {row.kind === 'invalid' ? <Text size={13} tone="dim">—</Text> : <Data size={13} weight={500}>{row.symbol}</Data>}
+      <div title={note}>
+        <Data size={12}>{label}</Data>
+        <div><Text size={10} tone="dim">{note}</Text></div>
+      </div>
+      <Text size={12} tone="dim">—</Text>
+      {dash}
+      {dash}
+      {dash}
+      {dash}
+      {dash}
+    </TableRow>
   );
 }
 

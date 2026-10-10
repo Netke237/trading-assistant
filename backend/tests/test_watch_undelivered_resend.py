@@ -19,6 +19,7 @@ from app.services.strategy_watch_evaluator import (
     WatchEvent, _QUEUE_CAP, _format_event, evaluate_and_notify,
 )
 from app.services.strategy_watch_store import StrategyWatchStore
+from tests.watch_notify_helpers import configured_channels_no_real_sends, per_channel  # noqa: F401
 
 _EV = "app.services.strategy_watch_evaluator"
 
@@ -126,7 +127,7 @@ class _Env:
                       return_value={"structure_matched": [], "structure_total": 0,
                                     "strategy_matched": [], "strategy_total": 0}), \
                 patch(f"{_EV}.read_notification_config", return_value=(cfg, True)), \
-                patch(f"{_EV}.notify_enabled_channels", self.notify):
+                patch(f"{_EV}.notify_channels", per_channel(self.notify)):
             return await evaluate_and_notify(**kw)
 
 

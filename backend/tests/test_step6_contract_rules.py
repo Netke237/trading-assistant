@@ -121,6 +121,19 @@ def test_a_non_finite_rule_is_not_recorded(client):
     assert r.json()["contract_rules"] is None
 
 
+def test_a_huge_int_rule_is_not_recorded(client):
+    """int() keeps 10**400 an int, which overflows float: the shared
+    is_finite_rule_value check refuses it, as /api/contracts and the
+    watched-contracts POST would."""
+    with _scan_patches():
+        r = client.post("/api/scan", json={
+            "universe": ["XOM"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {**_LOOSE, "min_volume": 10 ** 400},
+        })
+    assert r.status_code == 200
+    assert r.json()["contract_rules"] is None
+
+
 def test_scan_without_contract_overrides_records_an_empty_rule_set(client):
     with _scan_patches():
         r = client.post("/api/scan", json={
@@ -138,6 +151,9 @@ def test_step6_grades_the_scans_contract_as_the_trade_card_does(client, monkeypa
     """Same contract, same score and status, on the path Step 6 actually takes:
     the UI always sends hold days, so the DTE widening is applied on top of
     the recorded rules on both sides."""
+    if hold:
+        expiry = (date.today() + timedelta(days=68)).isoformat()
+        contract = {**contract, "expiry": expiry, "dte": 68, "dteTotal": 68}
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [contract])  # restored after the test
     hold_body = {"hold_min_days": hold[0], "hold_max_days": hold[1]} if hold else {}
     with _scan_patches():
@@ -174,8 +190,10 @@ def test_an_empty_rule_set_is_the_yaml(client):
     assert _get_contracts(client, 80, {}).json() == _get_contracts(client, 80).json()
 
 
-def test_recorded_rules_are_widened_for_hold_days_as_the_scan_widens_them(client):
+def test_recorded_rules_are_widened_for_hold_days_as_the_scan_widens_them(client, monkeypatch):
     """A recorded min_dte is replaced by the hold-days window on both sides."""
+    # hold25+buffer21 requires at least46 days; use68 near widened band centre on this hold path.
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_THIN, "expiry": (date.today()+timedelta(days=68)).isoformat(), "dte":68, "dteTotal":68}])
     url = ("/api/contracts?symbol=XOM&right=C&stock_score=80&hold_min_days=20&hold_max_days=25"
            "&contract_rules=" + quote(json.dumps({**_LOOSE, "min_dte": 200})))
     with _contracts_patches():
@@ -202,3 +220,108 @@ def test_unknown_keys_are_ignored_as_the_scan_ignores_them(client):
     r = _get_contracts(client, 80, {**_LOOSE, "event_reject_days": "whatever"})
     assert r.status_code == 200
     assert r.json()[0]["contractConfidence"] != "REJECT"
+
+
+@pytest.mark.parametrize("rules, limits", [(None, (21, 21, 60, 90)), ({"min_dte": 45, "max_dte": 60}, (45, 21, 60, 60))])
+def test_without_hold_days_the_fetch_uses_the_rules_dte_limits(client, rules, limits):
+    """Step 6's fetch, like the scan's, must pick within the min_dte/max_dte
+    (and nearest the preferred DTE band) it then grades with, or every row
+    comes back dte_too_short or dte_too_long."""
+    seen = []
+
+    async def _fetch(*_a, **kw):
+        seen.append((kw.get("dte_bounds"), kw.get("min_dte_floor"), kw.get("dte_limits")))
+        return _chain()
+
+    url = "/api/contracts?symbol=XOM&right=C&stock_score=80&direction=Bullish"
+    if rules is not None:
+        url += "&contract_rules=" + quote(json.dumps(rules))
+    with _contracts_patches() as stack:
+        stack.enter_context(patch("app.routers.contracts.fetch_option_chain_async", side_effect=_fetch))
+        r = client.get(url)
+    assert r.status_code == 200, r.text
+    assert seen == [(None, None, limits)]
+
+
+# ── Open question #8: Step 3's liquidity floors at 0 ──────────────────────────
+# Logged 2026-09-09 as "Min option volume / Min open interest = 0 do not reach
+# validate_contract". On this code they do: the hard reasons go away. The
+# original report's symptom (hard-reason counts unchanged) did not reproduce.
+# Found along the way: on the no-hold-window path this fixture then REJECTs on
+# its composite score (the soft Preferred floors, 200 / 1000, sink its
+# liquidity sub-score) with no reason of its own, which the scan reported as a
+# bare "all contracts rejected". With a hold window the same contract passes.
+
+_DUST = {**_THIN, "volume": 3, "open_interest": 10}
+_ZERO_FLOORS = {"min_volume": 0, "min_open_interest": 0}
+
+
+def _scan(client, overrides, hold=None):
+    hold_body = {"hold_min_days": hold[0], "hold_max_days": hold[1]} if hold else {}
+    with _scan_patches():
+        return client.post("/api/scan", json={
+            "universe": ["XOM"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": overrides, **hold_body,
+        }).json()
+
+
+def test_zero_liquidity_floors_reach_the_validator(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    default = _scan(client, {})
+    assert default["rejected"][0]["reason"] == (
+        "contracts rejected: volume_too_low(1), open_interest_too_low(1)")
+    zeroed = _scan(client, _ZERO_FLOORS)
+    assert zeroed["contract_rules"] == _ZERO_FLOORS
+    reason = zeroed["rejected"][0]["reason"]
+    assert "volume_too_low" not in reason and "open_interest_too_low" not in reason
+
+
+def test_a_score_reject_is_named_not_all_contracts_rejected(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason.startswith("contracts rejected: contract_score_below_caution(1); best contract score ")
+    assert reason.endswith(" < caution 45"), reason
+
+
+def test_zero_floors_plus_zero_preferred_floors_let_the_contract_through(client, monkeypatch):
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    scan = _scan(client, {**_ZERO_FLOORS, "preferred_volume_min": 0, "preferred_oi_min": 0})
+    assert scan["candidates"], scan["rejected"]
+
+
+def test_a_mixed_chain_names_both_the_hard_and_the_score_rejects(client, monkeypatch):
+    """Two contracts: one hard-rejected on spread, one below the caution score."""
+    wide = {**_DUST, "id": f"XOM|195|{_EXPIRY}|C", "strike": 195, "spread": 2.0}
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST, wide])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert "spread_too_wide(1)" in reason and "contract_score_below_caution(1)" in reason, reason
+
+
+def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeypatch):
+    """The UI always sends hold days, so the DTE-widened overrides are the real path."""
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "expiry": (date.today()+timedelta(days=68)).isoformat(), "dte":68, "dteTotal":68}])
+    default = _scan(client, {}, hold=(20, 25))
+    assert "volume_too_low(1)" in default["rejected"][0]["reason"]
+    zeroed = _scan(client, _ZERO_FLOORS, hold=(20, 25))
+    assert zeroed["contract_rules"] == _ZERO_FLOORS
+    assert [c["symbol"] for c in zeroed["candidates"]] == ["XOM"], zeroed["rejected"]
+
+
+def test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures(client, monkeypatch):
+    """The second route the Step-3 hint names: the two Preferred-floor misses
+    plus one more (a wide-ish spread) reach max_soft_fail_count."""
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "spread": 0.30}])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason == "contracts rejected: too_many_soft_failures(1)", reason
+
+
+def test_a_fractional_caution_threshold_prints_as_written(client, monkeypatch):
+    """int() would print '... 45 < caution 45' for a 45.5 threshold."""
+    import copy
+    from app.scoring import contract_validator as cv
+    cfg = copy.deepcopy(cv._load_config())
+    cfg["contract_score_thresholds"]["caution"] = 45.5
+    monkeypatch.setattr(cv, "_load_config", lambda: cfg)
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
+    reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
+    assert reason.endswith(" < caution 45.5"), reason

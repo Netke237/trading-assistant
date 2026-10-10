@@ -1,0 +1,51 @@
+Current takeover outcome and final qualification are in [the reconciliation report](2026-10-03-options-takeover-reconciliation.md). The record below describes the earlier correction checkpoint; its pending-report and release-hold statements are historical.
+
+# Options explanation corrections
+
+Initial correction commit: `283c2cbbb8d6593ff8bacbe7c37b39f49ed24e85`, parent integration commit `66561e26`. Follow-up correction: `b89a1db65f589d215abfb43ce2796840b38b150d`. Existing implementation heads: Step 5 `9b8a2971`, Contracts `ac39b841`; both histories were integrated in the existing checkout on `codex/options-explanation-fixes`. This branch has not been merged into main.
+
+## Corrected behavior
+
+- Step 5 renders the exact IV observation in collapsed rows, native tooltip text and expanded explanations. `34.01%` and rank `34.001` stay distinguishable from the 34 ceiling; classifiers and persisted scan data are unchanged.
+- Header, rules strip and disclosure use the same IV interval formatter. Null caution goes directly from PASS to REJECT. Coincident or above-caution effective pass limits explicitly have no reachable CAUTION interval.
+- All event descriptions retain strict comparisons and explicitly show the empty CAUTION interval when boundaries coincide.
+- Contracts reads backend weight key `iv_rank`, displays 15% with default payloads and preserves fractional weights such as 15.25%.
+- Spread observations/comparisons consistently convert ratios to percentages, including 2 → 200%; the absolute IV formatting path remains distinct.
+- Expanded Contracts component cards preserve the same fractional weight as the banner, including `0.1525` → `15.25%`.
+
+## Verification
+
+New literal regression assertions initially failed against delivered code: 8 failures across 3 targeted suites. The existing null-caution literal pin encoded the defective sentence and was corrected to assert direct REJECT after PASS.
+
+Checks on initial correction commit `283c2cbb`:
+
+- Typecheck: passed.
+- Targeted frontend: 12 suites / 169 tests passed.
+- Full frontend: 188 suites / 4,541 tests passed.
+- Chromium: 23 checks passed, covering new boundary regressions, both pages at 1280/1440/1920, dark/light Step 5 layouts, 20 disclosures, keyboard/network isolation, below-minimum overlay and IV-basis smoke. Original tracked screenshot artifacts were restored byte-for-byte after running existing tests.
+- Python 3.11: 87 tests passed in explanation, validator, scoring and Step 6 rule suites.
+- Production build: passed.
+- State probe: exit 0; unrelated pre-existing STATE-PROBE audit warnings remain.
+
+After the additional component-weight fix in `b89a1db6`, typecheck and 6 related frontend suites / 46 tests passed. The final independent reviewer separately ran 5 component tests successfully. The complete suite, browser suite and production build were not repeated for this final one-expression formatting change.
+
+No gate/scorer, dependency, lockfile or persistence-schema changes were made in the correction commits. Existing React act warnings in inherited suites were not counted as numeric gate findings. The 200-contract performance benchmark was not re-certified for these presentation corrections.
+
+## Independent reviews and cap
+
+Step 5's original code rounds remain recorded as 13, 12, 6, 0 findings. After the explicit extra-round request, the user instructed root to take over and ensure both pages are audited and fixed. Root stated that this authorizes the pending extra Step 5 round. Fresh reviewer `/root/vol_events_corrections_audit` reviewed only `66561e26..283c2cbb` Step 5 corrections and their interactions, returning zero numeric/persistence gate findings after recheck. History now records round 5 with zero findings; no counters were reset. The reviewer traced IV resolution, validated threshold stores, session overrides, backend threshold endpoints, strict event inequalities, partial event overrides and scan echoes, and unchanged Contracts navigation. Independent changed suites passed 2 suites / 37 tests on Node 22. Both source scope and verdict were verified; Step 5 correction audit is clean.
+
+Contracts retains its historical completed round 1 (zero findings). An earlier independent reviewer died on a model usage limit before returning a verdict; that aborted review is not clean and does not increment completed audit rounds.
+
+| Contracts code round | Fresh reviewer | Exact reviewed diff | Gate findings | Result |
+| --- | --- | --- | --- | --- |
+| 2 | `/root/contracts_fix_audit` | `66561e26..283c2cbb`, Contracts corrections and their interactions only | 1 | Fixed in `b89a1db6` |
+| 3 | `/root/contracts_final_audit` | `283c2cbb..b89a1db6`, component-weight fix and its interactions only | 0 | CLEAN |
+
+Round 2 independently reproduced the card displaying `Weight: 15%` while the corrected banner showed `15.25%` for `iv_rank: 0.1525`. The follow-up removes integer rounding from component weights and adds a literal rendered-card regression. Round 3 verified that backend supplies the same effective weight to both paths, and both now display `15.25%`. Both rounds excluded Step 5 entirely. Round 3 was checked against its intended scope and closes the Contracts correction audit at the three-round cap.
+
+Both targets' correction audits are now clean and their code status is `ready_to_merge`. The user relayed the other Contracts session's handoff: its audit is complete, but no code fixes, commits, pushes or merges exist. There is therefore no other implementation to merge. Root took over its task claim as explicitly reassigned by the user. Both original published feature branch heads are ancestors of this branch, and the combined branch is published as `origin/codex/options-explanation-fixes`.
+
+The other session's audit findings were requested for comparison against the six confirmed corrections. Until that evidence arrives, the consolidated release remains on hold; the unknown report is not silently assumed to agree with this review. Nothing is merged into main. Project state is authoritative for current verdicts.
+
+Takeover verification: Step 5 targeted Jest rerun passed 6 suites / 124 tests; typecheck passed. Existing Contracts stress benchmark passed with a 200-contract fixture and 10 concurrently expanded panels in the active group. Measured toggle p95 128 ms, sort p95 66 ms, selection p95 134 ms; no interaction-induced contract requests, no observed main-thread tasks over 100 ms, and no horizontal overflow. This does not claim 200 simultaneously mounted expanded panels.

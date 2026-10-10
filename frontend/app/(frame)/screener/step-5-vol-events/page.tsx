@@ -17,18 +17,17 @@
  * session override), and the header labels an active override.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
-import { EventFlag } from '@/components/atoms/EventFlag';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { useScanStore } from '@/lib/scanStore';
 import {
   useIvThresholdsStore, getIvPassMax, getIvCautionMax, effectiveIvThresholds, ivOverrideFor,
 } from '@/lib/ivThresholdsStore';
-import { resolveIv, formatIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
+import { resolveIv, ivColumnLabel, type IvBasis } from '@/lib/ivBasis';
 import {
   useEventThresholdsStore, getEventWindow, type ThresholdHorizon,
 } from '@/lib/eventThresholdsStore';
@@ -36,32 +35,18 @@ import type { WatchlistRow, TradeCardData } from '@/types/domain';
 import {
   MISSING_READING_CLAIM, ivThresholdSentence, eventWindowSentence,
   headSentence, causesSentence, missingReadingClause,
-  thresholdsUnavailableSentence, ivOverrideSentence, type ThresholdsAvail,
-  type GateCounts, type GateCause, type IvBand, type GateSummary,
+  thresholdsUnavailableSentence, ivOverrideSentence,
+  formatRulesStripData, formatRowExplanation, formatGateIv,
+  type ThresholdsAvail, type GateCounts, type GateCause, type IvBand, type GateSummary,
 } from './gateSummary';
 import { worstStatus, type Status } from '@/lib/status';
 import { eventVolGateTooltip, gateDrivers, type GateDrivers } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
 
-// NAME is `minmax(0, 1fr)`, never a bare `1fr`. Step 4 had this exact defect,
-// and this file was edited by the very commit that fixed it there and left it
-// here. `1fr` is `minmax(auto, 1fr)`: with no free space the track falls back to
-// MIN-CONTENT, and the header's min-content is the word "NAME" while each row's
-// is the longest word of a company name -- and this page's NAME cell had no
-// clipping wrapper at all, so its min-content was LARGER than step 4's ever was.
-// Measured at the app's own MinWidthGate floor, which is 1280px (MIN_WIDTH in
-// components/MinWidthGate/index.tsx -- NOT the 1200 this comment first said, and
-// not the 1200 CLAUDE.md said until it was corrected alongside this): header 94px vs row
-// track 114.8px on "T-Mobile US Telecommunications", putting IV, IV PCTL, NEXT
-// EVENT and GATE 21px off their own data; 173px off on a long single-word name.
-//
-// The NAME track is also CAPPED (240px) rather than taking every spare pixel: a
-// `1fr` NAME stretched the table to the full step width, leaving a wide empty
-// band between a short name and the IV column and pushing GATE to the far right
-// edge. Capped, the columns sit together on the left and the spare width falls
-// after GATE.
-const COLUMNS = '24px 32px 72px minmax(0, 240px) 120px 70px 110px 80px';
+// Responsive two-band layout: fixed columns total 548px + name minmax(0, 180px)
+// fits inside 1280px viewport (centre workspace ~944px) without horizontal overflow.
+const COLUMNS = '24px 32px 72px minmax(0, 180px) 140px 140px 80px 70px';
 
 /** Module-level so the "no scan yet" case is a STABLE reference. `?? []` built a
  *  fresh array every render, so before a scan landed every memo below it
@@ -97,6 +82,7 @@ function cardToRow(c: TradeCardData): WatchlistRow {
 }
 
 export default function Step5Page() {
+  const hasScanResult        = useScanStore((s) => s.scanResult !== undefined);
   const scanResultCandidates = useScanStore((s) => s.scanResult?.candidates);
   const context              = useScanStore((s) => s.context);
   const candidates           = scanResultCandidates ?? NO_CANDIDATES;
@@ -159,7 +145,7 @@ export default function Step5Page() {
   const evCaution = eventWindow?.caution_days ?? null;
   const ivOverride = avail === 'ready' ? ivOverrideFor(horizonKey, ivFetched, ivOverrides) : null;
 
-  // The volatility figure behind each row is EITHER a true percentile
+  // The volatility figure behind each row is EITHER an IV rank
   // (`ivRank`, present only when IBKR or tastytrade answered) OR an absolute
   // implied volatility (`iv`), and each is judged by its own threshold set
   // (PHASE-A-NULL-IVRANK-2026-09-06). Thresholds are therefore resolved
@@ -285,6 +271,29 @@ export default function Step5Page() {
     return [...seen];
   }, [gatedRows]);
 
+  const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
+  const toggleDisclosure = useCallback((sym: string) => {
+    setExpandedSymbols((prev) => {
+      const next = new Set(prev);
+      if (next.has(sym)) next.delete(sym);
+      else next.add(sym);
+      return next;
+    });
+  }, []);
+
+  const rulesModel = useMemo(() => {
+    if (avail !== 'ready') return null;
+    return formatRulesStripData({
+      horizon: horizonKey,
+      ivThresholds: ivThresholds ? ivThresholds[horizonKey] : null,
+      eventWindow,
+      scanEventWindow,
+      hasScanResult,
+      ivOverride,
+      basesPresent,
+    });
+  }, [avail, horizonKey, ivThresholds, eventWindow, scanEventWindow, hasScanResult, ivOverride, basesPresent]);
+
   const ivBands: IvBand[] = avail !== 'ready' || ivThresholds === null ? [] : basesPresent
     .map((b) => {
       const passMax = getIvPassMax(horizonKey, ivThresholds, b);
@@ -362,7 +371,7 @@ export default function Step5Page() {
       // attributions over 21 rows -- while the same 10 overlapping rows with 9
       // unreadable ones printed the cue. The overlap was byte-identical; two
       // unrelated rows removed the warning. On this app that is the COMMON
-      // case, because a true percentile needs IBKR or tastytrade to answer.
+      // case, because an IV rank needs IBKR or tastytrade to answer.
       const driven = count((g) => (g.drivers.iv && !g.drivers.ivMissing) || g.drivers.event);
       causesPart = { list: causes, overlap: sum > driven };
     }
@@ -511,12 +520,41 @@ export default function Step5Page() {
         )}
       </div>
 
+      {rulesModel !== null && (
+        <div className={pageStyles.rulesStrip} data-rules-strip>
+          <div className={pageStyles.rulesStripHeading}>
+            <Text size={12} weight={600} tone="primary">Rules applied</Text>
+            <span className={pageStyles.horizonTag} data-horizon-tag>{`Horizon: ${rulesModel.horizon}`}</span>
+            <span className={pageStyles.provenanceTag} data-provenance>{rulesModel.provenance}</span>
+          </div>
+          <div className={pageStyles.rulesStripBands}>
+            <div className={pageStyles.ruleItem}>
+              <Text size={11} tone="dim">IV RANK RULE</Text>
+              <Text size={12} tone="secondary">{rulesModel.rankInterval}</Text>
+            </div>
+            <div className={pageStyles.ruleItem}>
+              <Text size={11} tone="dim">ABSOLUTE IV RULE</Text>
+              <Text size={12} tone="secondary">{rulesModel.absInterval}</Text>
+            </div>
+            <div className={pageStyles.ruleItem}>
+              <Text size={11} tone="dim">NEXT EVENT RULE</Text>
+              <Text size={12} tone="secondary">{rulesModel.eventInterval}</Text>
+            </div>
+          </div>
+          {rulesModel.overrideNotice && (
+            <div className={pageStyles.overrideText}>
+              {rulesModel.overrideNotice}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={`${styles.stepBody} ${styles.stepBody_noPad} ${pageStyles.tableBody}`}>
         <div
           className={pageStyles.tableHeader}
           style={{ gridTemplateColumns: COLUMNS }}
           data-colheaders={JSON.stringify(
-            ['SYMBOL', 'NAME', ivColumnLabel(basesPresent), 'IV PCTL', 'NEXT EVENT', 'GATE'],
+            ['SYMBOL', 'NAME', ivColumnLabel(basesPresent), 'NEXT EVENT', 'GATE', 'DETAILS'],
           )}
         >
           <span aria-hidden />
@@ -524,23 +562,33 @@ export default function Step5Page() {
           <Text size={11} tone="dim">SYMBOL</Text>
           <Text size={11} tone="dim">NAME</Text>
           <Text size={11} tone="dim">{ivColumnLabel(basesPresent)}</Text>
-          <Text size={11} tone="dim">IV PCTL</Text>
           <Text size={11} tone="dim">NEXT EVENT</Text>
           <Text size={11} tone="dim">GATE</Text>
+          <Text size={11} tone="dim">DETAILS</Text>
         </div>
 
         {gatedRows.map(({ r, c, iv, hasIv, ivSt, proxStatus, gate, drivers }) => {
           const pctl = c?.contractDetails?.ivPercentile;
-          const shownIv = formatIv(iv, r.symbol);
+          const shownIv = formatGateIv(iv, r.symbol);
+          const isExpanded = expandedSymbols.has(r.symbol);
+          const rowExplanation = formatRowExplanation({
+            iv,
+            hasIv,
+            ivSt,
+            proxStatus,
+            gate,
+            drivers,
+            nextEventDays: r.nextEventDays ?? null,
+            nextEventLabel: r.nextEventLabel ?? null,
+            horizonKey,
+            ivThresholds: ivThresholds ? ivThresholds[horizonKey] : null,
+            eventWindow,
+            gateDisabled,
+            pctl,
+            avail,
+          });
+
           return (
-            /* EVERY CELL DECLARES WHAT IT IS AND PUBLISHES WHAT IT RENDERS.
-               Round 2 put a lying `title` on the IV cell and on the event cell,
-               a lying `aria-label` one element above the claim, and a lying
-               tooltip on every row -- all 67/67 green, because the contract
-               looked only at `[data-part]` inside the header. Each cell below
-               is now a declared node whose text and attributes are pinned
-               against its own published data, and anything undeclared under
-               the page root is red. */
             <TableRow key={r.symbol} status={gate} columns={COLUMNS}>
               <span data-cell="chart" data-symbol={r.symbol}>
                 <OpenChartButton symbol={r.symbol} />
@@ -555,79 +603,70 @@ export default function Step5Page() {
                 <Text size={12} tone="secondary">{r.company}</Text>
               </div>
 
-              {/* IV rank + inline mini bar */}
-              <div
-                className={pageStyles.ivRankCell}
-                title={shownIv.title}
-                data-cell="iv"
-                data-iv-basis={iv.basis}
-                data-iv-value={iv.value === null ? '' : String(iv.value)}
-              >
-                <Data size={13} weight={500}>{shownIv.text}</Data>
-                {shownIv.suffix !== '' && (
-                  <Text size={10} tone="dim">{shownIv.suffix}</Text>
-                )}
-                {hasIv && avail === 'ready' && (
-                  <div className={pageStyles.ivTrack}>
-                    <div
-                      className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
-                      style={{ width: `${Math.min(1, (iv.value as number) / 100) * 120}px` }}
-                    />
-                  </div>
-                )}
+              {/* IV rank + inline mini bar + IV status badge */}
+              <div className={pageStyles.ivCellGroup}>
+                <div
+                  className={pageStyles.ivRankCell}
+                  title={shownIv.title}
+                  data-cell="iv"
+                  data-iv-basis={iv.basis}
+                  data-iv-value={iv.value === null ? '' : String(iv.value)}
+                >
+                  <Data size={13} weight={500}>{shownIv.text}</Data>
+                  {shownIv.suffix !== '' && (
+                    <Text size={10} tone="dim">{shownIv.suffix}</Text>
+                  )}
+                  {hasIv && avail === 'ready' && (
+                    <div className={pageStyles.ivTrack}>
+                      <div
+                        className={`${pageStyles.ivFill} ${pageStyles[`ivFill_${ivSt}`]}`}
+                        style={{
+                          width: `${Math.max(
+                            0,
+                            Math.min(
+                              1,
+                              (typeof iv.value === 'number' && Number.isFinite(iv.value) ? iv.value : 0) / 100,
+                            ),
+                          ) * 72}px`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <span data-cell="iv-status">
+                  <StatusBadge status={ivSt} />
+                </span>
               </div>
 
-              {/* `!= null` only. A percentile of 0 is a REAL reading — the bottom of
-                  this name's own 52-week range, i.e. the cheapest premium it gets —
-                  and only an ABSOLUTE IV treats 0 as a missing-data sentinel
-                  (PHASE-A-NULL-IVRANK-2026-09-06; the asymmetry is stated in
-                  lib/ivBasis.ts and pinned in its tests). The old `&& pctl > 0`
-                  guard dated from when a pre-split ivPercentile DEFAULTED to the
-                  literal 0 that meant "no rank source answered"; market.py now
-                  writes null for that, so the guard had nothing left to catch and
-                  only destroyed information. step-6-contracts already gets this
-                  right, so the two pages disagreed about one field. */}
-              <span data-cell="pctl" data-value={pctl != null ? String(pctl) : ''}>
-                <Data size={13} weight={500}>{pctl != null ? pctl : '—'}</Data>
-              </span>
+              {/* Event days/label with proxStatus indicator + Event status badge */}
+              <div className={pageStyles.eventCellGroup}>
+                <span
+                  data-cell="event"
+                  data-days={r.nextEventDays != null ? String(r.nextEventDays) : ''}
+                  data-label={r.nextEventLabel ?? ''}
+                >
+                  {r.nextEventDays != null ? (
+                    <span
+                      className={`${pageStyles.eventIndicator} ${pageStyles[`eventIndicator_${proxStatus}`]}`}
+                      title={r.nextEventLabel ?? undefined}
+                    >
+                      <CalendarIcon className={pageStyles.calendarIcon} />
+                      {r.nextEventDays}d
+                    </span>
+                  ) : (
+                    <Text size={11} tone="dim">—</Text>
+                  )}
+                  {proxStatus === 'REJECT' && r.nextEventLabel === 'Dividend'
+                    && !(c?.earningsDays != null && evReject != null && c.earningsDays < evReject) && (
+                    <Text size={10} tone="dim">Dividend — score penalty, not a send veto</Text>
+                  )}
+                </span>
+                <span data-cell="event-status">
+                  <StatusBadge status={proxStatus} />
+                </span>
+              </div>
 
-              <span
-                data-cell="event"
-                data-days={r.nextEventDays != null ? String(r.nextEventDays) : ''}
-                data-label={r.nextEventLabel ?? ''}
-              >
-                {r.nextEventDays != null
-                  ? <EventFlag days={r.nextEventDays} title={r.nextEventLabel ?? undefined} />
-                  : <Text size={11} tone="dim">—</Text>}
-              </span>
-
-              {/* THESE ARE PRODUCT DATA, NOT TEST HOOKS, and the distinction
-                  matters because the tests treat them as observations of the
-                  page. What they publish is the gate's own reasoning -- the two
-                  sub-verdicts behind the badge -- which the tooltip beside them
-                  already states in prose. `data-gate` and the badge's `status`
-                  read the SAME variable in the same JSX, and both pinning
-                  `data-gate` and pinning the badge go red on mutation, so the
-                  coupling is not merely asserted here.
-
-                  NOT VERIFIED IN JEST: `display: contents`. jest maps
-                  `*.module.css` to an empty object, so `pageStyles.gateCell` is
-                  `undefined` under test and the class never lands. The layout
-                  reasoning was checked by hand against TableRow.module.css
-                  (no `> *` or `:last-child` rules, so promoting the badge back
-                  to grid item is safe), but a dropped or misspelt class name
-                  would not be caught by anything. e2e is where that belongs.
-
-                  THE TWO SIDES OF THE GATE, PUBLISHED SEPARATELY AND KEYED BY
-                  THE CLAIM'S OWN SIDE NAMES. `data-side-${side}` is how a test
-                  turns the claim's `side` field into an observation: exactly
-                  one side may carry the asserted verdict, and it must be the
-                  one the claim names. Before this, `side` and `combination`
-                  were circular -- swapping either in page.tsx AND in the test's
-                  copy of the claim shipped 45/45 green, rendering "graded PASS
-                  on the volatility side alone, never CAUTION there", verbatim
-                  the first entry in this file's own list of past failures.
-                  `display: contents` so the badge stays the grid item. */}
+              {/* Gate badge */}
               <span
                 className={pageStyles.gateCell}
                 data-cell="gate"
@@ -636,34 +675,156 @@ export default function Step5Page() {
                 data-side-event={proxStatus}
                 data-gate={gate}
               >
-              <StatusBadge
-                status={gate}
-                // Right-anchored: the panel opens leftward from the badge. Centred
-                // on it, the panel reached past the table's right edge, where it
-                // was cut off and summoned a horizontal scrollbar.
-                tooltipAlign="right"
-                tooltip={avail !== 'ready' || evReject === null || evCaution === null
-                  ? thresholdsUnavailableSentence(avail === 'ready' ? 'loading' : avail, availError)
-                  : eventVolGateTooltip({
-                  ivRank: iv.value,
-                  ivBasis: iv.basis,
-                  ivStatus: ivSt,
-                  nextEventDays: r.nextEventDays ?? null,
-                  proxStatus,
-                  evReject,
-                  evCaution,
-                  gate,
-                  // The SAME object the banner counted. Passing raw fields and
-                  // letting the tooltip re-derive them is how the two came to
-                  // disagree about one row in the first place.
-                  drivers,
-                })}
-              />
+                <StatusBadge
+                  status={gate}
+                  tooltipAlign="right"
+                  tooltip={avail !== 'ready' || evReject === null || evCaution === null
+                    ? thresholdsUnavailableSentence(avail === 'ready' ? 'loading' : avail, availError)
+                    : eventVolGateTooltip({
+                        ivRank: iv.value,
+                        ivBasis: iv.basis,
+                        ivStatus: ivSt,
+                        nextEventDays: r.nextEventDays ?? null,
+                        proxStatus,
+                        evReject,
+                        evCaution,
+                        gate,
+                        drivers,
+                      })}
+                />
               </span>
+
+              {/* Disclosure button */}
+              <div data-cell="disclosure">
+                <button
+                  type="button"
+                  className={pageStyles.disclosureBtn}
+                  onClick={() => toggleDisclosure(r.symbol)}
+                  aria-expanded={isExpanded}
+                  aria-controls={`disclosure-${r.symbol}`}
+                  aria-label={`${isExpanded ? 'Hide' : 'Explain'} gate details for ${r.symbol}`}
+                >
+                  {isExpanded ? 'Hide' : 'Explain'}
+                </button>
+              </div>
+
+              {/* Row Band 2 — Secondary detail line */}
+              <div role="gridcell" className={pageStyles.rowBand2} style={{ gridColumn: '1 / -1' }}>
+                <div data-cell="reason" className={pageStyles.reasonCell}>
+                  <Text size={11} tone="dim">Why this gate: </Text>
+                  <Text size={11} tone="secondary" weight={500}>
+                    {avail === 'ready' ? rowExplanation.decidingReason : '—'}
+                  </Text>
+                </div>
+                <div className={pageStyles.pctlCell}>
+                  <span data-cell="pctl-context">
+                    <Text size={11} tone="dim">IV PCTL (Context only):</Text>
+                  </span>
+                  <span data-cell="pctl" data-value={pctl != null ? String(pctl) : ''}>
+                    <Data size={11} weight={500}>{pctl != null ? pctl : '—'}</Data>
+                  </span>
+                </div>
+              </div>
+
+              {/* Expanded details disclosure panel */}
+              {isExpanded && (
+                <div role="gridcell" style={{ gridColumn: '1 / -1' }}>
+                  <div
+                    className={pageStyles.disclosurePanel}
+                    data-disclosure-panel
+                    data-symbol={r.symbol}
+                    id={`disclosure-${r.symbol}`}
+                    role="region"
+                    aria-label={`Gate details for ${r.symbol}`}
+                  >
+                    <div className={pageStyles.disclosureGrid}>
+                      {/* Check 1: Volatility */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Volatility Check</Text>
+                          <StatusBadge status={ivSt} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Basis / Unit:</Text>
+                          <Text size={11} tone="primary">{`${rowExplanation.basisLabel} (${rowExplanation.unit})`}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Observed value:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.ivObserved}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Rule applied:</Text>
+                          <Text size={11} tone="secondary">{rowExplanation.ivRuleExplanation}</Text>
+                        </div>
+                      </div>
+
+                      {/* Check 2: Event Proximity */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Event Proximity Check</Text>
+                          <StatusBadge status={proxStatus} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Next event:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.eventObserved}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Rule applied:</Text>
+                          <Text size={11} tone="secondary">{rowExplanation.eventRuleExplanation}</Text>
+                        </div>
+                      </div>
+
+                      {/* Block 3: Decision & Context */}
+                      <div className={pageStyles.disclosureBlock}>
+                        <div className={pageStyles.disclosureBlockHeader}>
+                          <Text size={12} weight={600} tone="primary">Gate Decision & Context</Text>
+                          <StatusBadge status={gate} />
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Company:</Text>
+                          <Text size={11} tone="primary">{r.company}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Combination:</Text>
+                          <Text size={11} tone="primary">{rowExplanation.combination}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">Deciding driver:</Text>
+                          <Text size={11} tone="primary" weight={500}>{rowExplanation.decidingReason}</Text>
+                        </div>
+                        <div className={pageStyles.disclosureRow}>
+                          <Text size={11} tone="dim">IV Percentile (Context only):</Text>
+                          <Text size={11} tone="secondary">
+                            {rowExplanation.pctlFormatted}
+                          </Text>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </TableRow>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
   );
 }

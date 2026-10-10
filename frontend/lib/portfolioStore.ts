@@ -1,8 +1,9 @@
 /*
  * Portfolio store — Zustand with localStorage persistence.
  *
- * Holds open positions. Step 7's "Send to broker" flow calls `addPosition`
- * to push new orders in — tagged as either `broker` or `manual` via `source`.
+ * Holds open positions. Step 7's direct sends (Place Limit / Right Now —
+ * Market) and its tracked-only basket (fix #5 / D6: no broker order) call
+ * `addPosition` — tagged `paper` or `manual` via `source`.
  */
 
 import { create } from 'zustand';
@@ -11,6 +12,8 @@ import type { PortfolioPosition, TargetLevel, Direction, ExitPlan, MaxLossOverri
 import { useRiskStore } from '@/lib/riskStore';
 import { stripLegacyIvFields } from '@/lib/ivBasis';
 import { validationMessages } from '@/lib/pydanticError';
+import { premiumStopDropReason, premiumStopIsSubCent, type PremiumStopDropReason } from '@/lib/premiumStop';
+import { premiumStopPctFromDollars } from '@/lib/barrierRace';
 
 type BackendPosition = {
   id: string;
@@ -40,6 +43,8 @@ type BackendPosition = {
   pickedRowOptionPrice?: number | null;
   pickedStopBasis?: PickedStopBasis | null;
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- null = no hold. */
+  holdMaxDays?: number | null;
   alertOverrides?: AlertOverrides | null;
   targets: TargetLevel[];
   dteTotal: number | null;
@@ -49,6 +54,7 @@ type BackendPosition = {
   currentStockPrice?: number | null;
   pnlDollar?: number;
   pnlPct?: number;
+  quoteUnavailable?: boolean;
   dteRemaining?: number;
   delta?: number | null;
   theta?: number | null;
@@ -90,6 +96,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    holdMaxDays: p.holdMaxDays ?? null,
     alertOverrides: p.alertOverrides ?? {},
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
@@ -100,6 +107,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     currentStockPrice: p.currentStockPrice ?? undefined,
     pnlDollar:    p.pnlDollar ?? 0,
     pnlPct:       p.pnlPct ?? 0,
+    quoteUnavailable: p.quoteUnavailable ?? false,
     delta:        p.delta ?? undefined,
     theta:        p.theta ?? undefined,
     // Two quantities, kept apart (PHASE-A-NULL-IVRANK-2026-09-06):
@@ -113,8 +121,50 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
 }
 
 export type PremiumStopDropNotice = {
-  symbol: string; contract: string; requestedDollar: number; at: number;
+  /** Null when the create sent only a fraction (STOP-SEMANTICS S3). */
+  symbol: string; contract: string; requestedDollar: number | null; at: number;
+  reason: PremiumStopDropReason;
+  /** Set when the dollar could not be applied but the server kept the
+   *  card's own fraction (PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03). */
+  keptPct?: number;
 };
+
+/** STOP-SEMANTICS-2026-10-02 -- did the server drop the per-position stop this
+ *  create asked for, and why? One rule for all three create signals.
+ *
+ *  "Asked for" is what `toBackendBody` actually POSTs: a positive
+ *  `premiumStopDollar`, or a `premiumStopPct` inside (0, 1). A null resolved
+ *  `premiumStopPct` in the 201 then means the server could not store it -- a
+ *  total loss at the persisted entry, or a stop that would fire below $0.01.
+ *  A response carrying the CLIENT fraction (the server's fallback when only
+ *  the dollar was unusable) is not a drop to the global, but the dollar was
+ *  still not applied: that returns a notice with `keptPct` set. */
+export function premiumStopDropOf(
+  p: Pick<PortfolioPosition, 'premiumStopDollar' | 'premiumStopPct'>,
+  savedPremiumStopPct: number | null | undefined,
+  savedEntry: number | null | undefined,
+): { requestedDollar: number | null; reason: PremiumStopDropReason; keptPct?: number } | null {
+  const dollar = (p.premiumStopDollar ?? 0) > 0 ? (p.premiumStopDollar as number) : null;
+  const pct = (p.premiumStopPct ?? 0) > 0 && (p.premiumStopPct as number) < 1 ? p.premiumStopPct : null;
+  if (dollar == null && pct == null) return null;
+  if (savedPremiumStopPct != null) {
+    // PREMIUM-STOP-FALLBACK-USER-FRACTION-2026-10-03 -- the card now sends its
+    // own fraction beside the dollar, so a dollar the server could not apply
+    // no longer leaves a null: it stores that fraction. Same test the writer
+    // makes (total loss or sub-cent at the SAVED entry); the stored fraction is
+    // then not the dollar's, so say which one applies. Card sends are options
+    // only, hence `shortStock = false`, as in premiumStopDropReason.
+    if (dollar == null || savedEntry == null || !Number.isFinite(savedEntry) || savedEntry <= 0) return null;
+    const ratio = premiumStopPctFromDollars(dollar, savedEntry);
+    if (ratio !== undefined && !premiumStopIsSubCent(savedEntry, ratio, false)) return null;
+    return {
+      requestedDollar: dollar,
+      reason: ratio === undefined ? 'total_loss' : 'below_one_cent',
+      keptPct: savedPremiumStopPct,
+    };
+  }
+  return { requestedDollar: dollar, reason: premiumStopDropReason(dollar, savedEntry) };
+}
 
 /** P2-09 (R1-7) -- adopt the server's entry price on a row, and reset the
  *  row's mark to it.
@@ -178,7 +228,7 @@ interface PortfolioStoreState {
    *  instead (a TIGHTER stop than requested). Undefined means nothing was
    *  dropped. Without it the basket path could not report the fallback at all
    *  -- see the note in step-7-trade-card's handleSubmit. */
-  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number }>;
+  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason; premiumStopKeptPct?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
@@ -317,6 +367,8 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    // STOCKS-HORIZON-T1 H6 -- the scan's hold (stock sends only); null = none.
+    holdMaxDays: p.holdMaxDays ?? null,
   };
 }
 
@@ -433,12 +485,22 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
 export async function persistPosition(
   p: PortfolioPosition,
   portfolioValue = accountValue(),
+  /** Audit round 1, F1 — the order this save precedes (Step 7's direct send).
+   *  The server judges the D5 premium cap at the price that order can FILL at
+   *  (`portfolio_risk.premium_cap_basis`: max(mid, limit) for LMT, the ask for
+   *  MKT), not at the stored mid. Create-only transport, never a field of the
+   *  position. Omitted means no order follows (judged at the mid). */
+  order?: { orderType: 'LMT' | 'MKT'; limitPrice: number | null },
 ): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
   try {
+    const payload = {
+      ...toBackendPayload(p, portfolioValue),
+      ...(order ? { orderType: order.orderType, orderLimitPrice: order.limitPrice } : {}),
+    };
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -507,7 +569,7 @@ export function applyPersistedPosition(
    *  The router's own comment says "nothing on screen says why". This is the
    *  hook that lets a call site say it: the response already carries the
    *  resolved `premiumStopPct`, so no extra request is needed. */
-  onPremiumStopDropped?: (requestedDollar: number) => void,
+  onPremiumStopDropped?: (requestedDollar: number | null, reason: PremiumStopDropReason, keptPct?: number) => void,
 ): { rejected: boolean; detail?: string } {
   if (saved.offline) {
     void addPosition(pos);
@@ -517,9 +579,8 @@ export function applyPersistedPosition(
     return { rejected: true, detail: saved.detail };
   }
   if (saved.adjustedQty != null) onAdjusted?.(saved.adjustedQty);
-  if (pos.premiumStopDollar != null && saved.premiumStopPct == null) {
-    onPremiumStopDropped?.(pos.premiumStopDollar);
-  }
+  const dropped = premiumStopDropOf(pos, saved.premiumStopPct, saved.entryPrice);
+  if (dropped) onPremiumStopDropped?.(dropped.requestedDollar, dropped.reason, dropped.keptPct);
   // Piece 4 — carry the server's derived premium-stop fraction onto the row
   // that goes into local state. `skipPost: true` means nothing else will fetch
   // it until the next 30s syncFromBackend, and until then the frontend alert
@@ -593,7 +654,7 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
 async function patchPosition(
   recId: string,
   payload: Record<string, unknown>,
-): Promise<{ ok: boolean; detail?: string; adjustedQty?: number }> {
+): Promise<{ ok: boolean; detail?: string; adjustedQty?: number; targets?: TargetLevel[]; contracts?: number }> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, {
       method: 'PATCH',
@@ -602,8 +663,14 @@ async function patchPosition(
     });
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
-      const adjustedQty = (body as { adjustedQty?: number }).adjustedQty;
-      return typeof adjustedQty === 'number' ? { ok: true, adjustedQty } : { ok: true };
+      // `qty` is the size the server stores (PortfolioPositionSchema.qty).
+      const { adjustedQty, targets, qty } = body as { adjustedQty?: number; targets?: unknown; qty?: unknown };
+      return {
+        ok: true,
+        ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
+        ...(Array.isArray(targets) ? { targets: targets as TargetLevel[] } : {}),
+        ...(typeof qty === 'number' ? { contracts: qty } : {}),
+      };
     }
     const body = await res.json().catch(() => ({}));
     return { ok: false, detail: errorDetail(body, res.status) };
@@ -619,6 +686,8 @@ type PendingPatch = {
   payload: Record<string, unknown>;
   symbol: string;
   contract: string;
+  /** `_rungEditSeq` for this recId when this payload was last merged. */
+  rungSeq: number;
 };
 
 // Debounces `updatePosition` edits per recId so rapid keystrokes in the drawer
@@ -626,6 +695,13 @@ type PendingPatch = {
 // state) — timers are not serializable Zustand state, and this is purely
 // network-scheduling plumbing, not UI state.
 const _pendingPatches = new Map<string, PendingPatch>();
+
+// Counts, per recId, the edits that touch the rungs or the size (`targets` or
+// `qty`). The backend caps stored rungs at the held qty on such a PATCH (open
+// question 54), so its response carries the rungs it stored -- adopted only
+// when no later rung/size edit exists, pending OR in flight; a later one gets
+// its own capped response.
+const _rungEditSeq = new Map<string, number>();
 
 // Tracks the in-flight PATCH request for a recId, from the moment it leaves
 // `_pendingPatches` (debounce fired) until its response settles. Two jobs:
@@ -671,6 +747,11 @@ async function _flushOne(recId: string): Promise<void> {
       void usePortfolioStore.getState().syncFromBackend(true);
       return;
     }
+    // The rungs the backend stored (capped at the held qty, open question 54),
+    // considered only for the latest rung/size edit -- see `_rungEditSeq`.
+    const serverRungs = ('targets' in entry.payload || 'qty' in entry.payload)
+      && (_rungEditSeq.get(recId) ?? 0) === entry.rungSeq
+      ? result.targets : undefined;
     if (result.adjustedQty != null) {
       // The backend's exposure gate approved the qty increase at a SMALLER size
       // than requested (mirrors addPosition's own adjustedQty handling above).
@@ -679,9 +760,14 @@ async function _flushOne(recId: string): Promise<void> {
       // with no explanation — same failure mode Step 4 below prevents for an
       // in-flight edit, but this is a resolved edit the poll would otherwise
       // still be free to overwrite without warning.
+      // The server resized the row, so its rungs (scaled to the booked size,
+      // open question 54) replace the local ones -- the one case where stored
+      // rungs are written back, because the user did not type this size.
       usePortfolioStore.setState((s) => ({
         positions: s.positions.map((p) =>
-          p.recId === recId ? { ...p, contracts: result.adjustedQty } : p
+          p.recId === recId
+            ? { ...p, contracts: result.adjustedQty, ...(serverRungs ? { targets: serverRungs } : {}) }
+            : p
         ),
         lastSyncError: {
           symbol: entry.symbol,
@@ -690,6 +776,27 @@ async function _flushOne(recId: string): Promise<void> {
           at: Date.now(),
         },
       }));
+    } else if (serverRungs && Array.isArray(entry.payload.targets)) {
+      // No resize: the rungs on screen are what the user TYPED, and are never
+      // overwritten with the capped ones -- a rung edit can be over-planned
+      // mid-typing (60/50 of 100 before rung 2 is changed), and writing the
+      // cap back made the next keystroke build on it (open question 54, X1).
+      // Every rung/size edit sends the local rungs, so the next one heals an
+      // intermediate cap. Only SAY what was stored, when it differs from what
+      // was sent, against the size the server holds.
+      const sells = (ts: TargetLevel[]) => JSON.stringify(ts.map((t) => t.contractsToSell ?? null));
+      if (sells(entry.payload.targets as TargetLevel[]) !== sells(serverRungs)) {
+        const held = result.contracts;
+        usePortfolioStore.setState({
+          lastSyncError: {
+            symbol: entry.symbol,
+            contract: entry.contract,
+            detail: `Sell targets plan to sell more than the ${held ?? ''}${held != null ? ' ' : ''}held — `
+              + 'saved scaled down to fit until you change them.',
+            at: Date.now(),
+          },
+        });
+      }
     }
   };
 
@@ -709,8 +816,10 @@ function scheduleRemotePositionPatch(
   const existing = _pendingPatches.get(recId);
   if (existing) clearTimeout(existing.timer);
   const merged = { ...(existing?.payload ?? {}), ...payload };
+  if ('targets' in payload || 'qty' in payload) _rungEditSeq.set(recId, (_rungEditSeq.get(recId) ?? 0) + 1);
+  const rungSeq = _rungEditSeq.get(recId) ?? 0;
   const timer = setTimeout(() => { void _flushOne(recId); }, REMOTE_PATCH_DEBOUNCE_MS);
-  _pendingPatches.set(recId, { timer, payload: merged, symbol, contract });
+  _pendingPatches.set(recId, { timer, payload: merged, symbol, contract, rungSeq });
 }
 
 /** Sends a pending debounced edit immediately instead of waiting out the
@@ -843,6 +952,10 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // ok path) kept `premiumStopDollar` on the row, and a v5 store never ran
       // the old unconditional clean-up again. Idempotent.
       if (version < 6 && ivClean.syncStatus === 'synced') delete ivClean.premiumStopDollar;
+      // v6 -> v7, STOCKS-HORIZON-T1 H6. `holdMaxDays` joins the persisted
+      // shape; a stored row predates the hold, so it has none (null = never a
+      // stock time stop) until the next sync reads the backend's value.
+      if (version < 7 && ivClean.holdMaxDays === undefined) ivClean.holdMaxDays = null;
       return ivClean;
     }),
   };
@@ -1017,13 +1130,19 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           // comment concedes "nothing on screen says why". Reachable through
           // an ordinary fill: a $4.50 stop typed against a $5.20 mid, filled
           // at $4.20.
-          const premiumStopDropped =
-            p.premiumStopDollar != null
-            && outcome.kind === 'ok'
-            && (outcome.premiumStopPct == null)
-              ? p.premiumStopDollar
-              : undefined;
-          return { ok: true, status: 'ok' as const, adjustedQty, premiumStopDropped };
+          // STOP-SEMANTICS -- a fraction-only create counts too, and the
+          // reason travels with it. `premiumStopDropped` stays the dollar
+          // (null for a fraction-only create); a drop is signalled by
+          // `premiumStopDropReason`, which is set exactly when one happened.
+          const drop = outcome.kind === 'ok'
+            ? premiumStopDropOf(p, outcome.premiumStopPct, outcome.entryPrice)
+            : null;
+          return {
+            ok: true, status: 'ok' as const, adjustedQty,
+            premiumStopDropped: drop?.requestedDollar ?? undefined,
+            premiumStopDropReason: drop?.reason,
+            premiumStopKeptPct: drop?.keptPct,
+          };
         }
         if (outcome.kind === 'rejected' || scaleInRefused) {
           const detail = outcome.kind === 'rejected'
@@ -1063,7 +1182,17 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           };
         });
         if (target) {
-          const payload = toUpdatePayload(flooredPatch);
+          // A size edit carries the row's current rungs (open question 54):
+          // the backend caps stored rungs at the stored qty, so an
+          // intermediate size typed on the way to the final one (6 while
+          // typing 60) can cap them -- resending the local rungs with the
+          // next size keystroke restores them. The local rungs are never
+          // overwritten with a cap (see _flushOne).
+          const sendPatch: Partial<PortfolioPosition> =
+            'contracts' in flooredPatch && !('targets' in flooredPatch) && Array.isArray(target.targets)
+              ? { ...flooredPatch, targets: target.targets }
+              : flooredPatch;
+          const payload = toUpdatePayload(sendPatch);
           if (payload) scheduleRemotePositionPatch(target.recId, target.symbol, target.contract, payload);
         }
       },
@@ -1250,11 +1379,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                   // Say so when the server could not apply the stop this row
                   // asked for -- the fourth and last create path to get the
                   // notice the other three now have.
-                  if (
-                    _createOnly != null
-                    && outcome.kind === 'ok'
-                    && outcome.premiumStopPct == null
-                  ) {
+                  const drop = outcome.kind === 'ok'
+                    ? premiumStopDropOf(p, outcome.premiumStopPct, outcome.entryPrice)
+                    : null;
+                  if (drop) {
                     // QUEUED, not first-wins (P2-08). This runs inside a
                     // for-loop over every queued row and on every 30s cycle;
                     // one banner names one position, so each later drop waits
@@ -1263,7 +1391,9 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
                     set((s) => {
                       const queue = [...s.premiumStopDropQueue, {
                         symbol: p.symbol, contract: p.contract,
-                        requestedDollar: _createOnly, at: Date.now(),
+                        requestedDollar: drop.requestedDollar, reason: drop.reason,
+                        keptPct: drop.keptPct,
+                        at: Date.now(),
                       }];
                       return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
                     });
@@ -1351,7 +1481,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 6,
+      version: 7,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),

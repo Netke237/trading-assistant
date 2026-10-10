@@ -13,7 +13,10 @@ function healthTone(score: number): DataTone {
   return toneForScore(score, FUNDAMENTAL_BAND);
 }
 
-export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undefined }) {
+export function FundamentalHealthCard({ f, compact = false }: {
+  f: FundamentalsOut | null | undefined;
+  compact?: boolean;
+}) {
   if (!f) {
     return (
       <div className={styles.empty}>
@@ -22,7 +25,7 @@ export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undef
     );
   }
   return (
-    <div className={styles.card}>
+    <div className={compact ? `${styles.card} ${styles.compact}` : styles.card}>
       <div className={styles.head}>
         <Text size={12} weight={500}>Fundamental Health</Text>
         <Tooltip text={fundamentalScoreTooltip('overall', f.score)}>
@@ -60,6 +63,20 @@ export function FundamentalHealthCard({ f }: { f: FundamentalsOut | null | undef
             </Tooltip>
           ))}
         </div>
+      )}
+      {compact && (
+        <details className={styles.definitions}>
+          <summary>Score definitions & safety flags</summary>
+          <div className={styles.definitionText}>
+            <Text size={11} tone="secondary">{fundamentalScoreTooltip('overall', f.score)}</Text>
+            <Text size={11} tone="secondary">{fundamentalScoreTooltip('growth', f.growth_score)}</Text>
+            <Text size={11} tone="secondary">{fundamentalScoreTooltip('quality', f.quality_score)}</Text>
+            <Text size={11} tone="secondary">{fundamentalScoreTooltip('risk', f.risk_score)}</Text>
+            {(f.safety_flags ?? []).map(flag => (
+              <Text key={flag} size={11} tone="secondary">{safetyFlagTooltip(flag)}</Text>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );

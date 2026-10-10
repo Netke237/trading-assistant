@@ -23,6 +23,30 @@ const migrate = (useScanStore as unknown as {
   } };
 }).persist.getOptions();
 
+// scanStore v18 (TRADING-REVIEW-PHASE-C-RR) discards an options result unless
+// EVERY candidate's R/R was computed on the full-premium basis, and branches
+// accumulate -- so every fixture below, shaped as it was before v18, would come
+// out as `scanResult: null`. Each candidate is marked full_premium on the way
+// in so these tests keep measuring THIS file's branch, not v18's discard
+// (scanStoreRrBasisMigration.test.ts owns that).
+function markFullPremium(state: unknown): unknown {
+  if (state === null || typeof state !== 'object') return state;
+  const s = { ...(state as Record<string, unknown>) };
+  for (const key of ['scanResult', 'previousRun']) {
+    const run = s[key] as { candidates?: unknown } | null | undefined;
+    if (run && typeof run === 'object' && Array.isArray(run.candidates)) {
+      s[key] = {
+        ...run,
+        candidates: run.candidates.map((c) => (c && typeof c === 'object'
+          ? { ...c, exit: { ...((c as { exit?: object }).exit ?? {}), rrRiskBasis: 'full_premium' } }
+          : c)),
+      };
+    }
+  }
+  return s;
+}
+const migrateKept = (state: unknown, version: number) => migrate.migrate(markFullPremium(state), version);
+
 type Migrated = {
   scanResult: { candidates: Array<{ symbol: string; exit: Record<string, unknown> }> };
   previousRun: { candidates: Array<{ symbol: string; exit: Record<string, unknown> }> } | null;
@@ -75,7 +99,7 @@ describe('scanStore migrate(): v15, piece 3\'s stop', () => {
   });
 
   it('strips the flat stop from every candidate in both runs', () => {
-    const out = migrate.migrate(legacyBlob(), 14) as Migrated;
+    const out = migrateKept(legacyBlob(), 14) as Migrated;
     expect(out.scanResult.candidates.map((c) => c.exit.invalidation)).toEqual([null, null]);
     expect(out.previousRun!.candidates.map((c) => c.exit.invalidation)).toEqual([null]);
   });
@@ -84,7 +108,7 @@ describe('scanStore migrate(): v15, piece 3\'s stop', () => {
     // The other exit figures are stale in the ordinary way a restored card is
     // stale — they did not change MEANING, so dropping them would destroy real
     // data for no reason.
-    const c = (migrate.migrate(legacyBlob(), 14) as Migrated).scanResult.candidates[0];
+    const c = (migrateKept(legacyBlob(), 14) as Migrated).scanResult.candidates[0];
     expect(c.exit.premiumStop).toBe(1.5);
     expect(c.exit.timeStopDays).toBe(10);
     expect(c.exit.target).toBe(200.0);
@@ -97,7 +121,7 @@ describe('scanStore migrate(): v15, piece 3\'s stop', () => {
     blob.scanResult.candidates[0].exit = {
       ...blob.scanResult.candidates[0].exit, invalidation: 169.0, finalStop: FINAL_STOP,
     };
-    const out = migrate.migrate(blob, 14) as Migrated;
+    const out = migrateKept(blob, 14) as Migrated;
     expect(out.scanResult.candidates[0].exit.invalidation).toBe(169.0);
     expect(out.scanResult.candidates[0].exit.finalStop).toEqual(FINAL_STOP);
     // ...while its neighbour, which has none, is still stripped.
@@ -109,24 +133,24 @@ describe('scanStore migrate(): v15, piece 3\'s stop', () => {
     // shipped and had to be re-run under a new version. This branch has to
     // survive that: a second pass over an already-migrated blob must not turn
     // a good stop into null.
-    const once = migrate.migrate(legacyBlob(), 14) as Migrated;
-    const twice = migrate.migrate(once, 14) as Migrated;
+    const once = migrateKept(legacyBlob(), 14) as Migrated;
+    const twice = migrateKept(once, 14) as Migrated;
     expect(twice).toEqual(once);
 
-    const kept = migrate.migrate({
+    const kept = migrateKept({
       scanResult: {
         candidates: [{ symbol: 'AAPL', exit: { invalidation: 169.0, finalStop: FINAL_STOP } }],
       },
       previousRun: null,
     }, 14) as Migrated;
-    expect((migrate.migrate(kept, 14) as Migrated).scanResult.candidates[0].exit.invalidation).toBe(169.0);
+    expect((migrateKept(kept, 14) as Migrated).scanResult.candidates[0].exit.invalidation).toBe(169.0);
   });
 
   it('accumulates rather than short-circuiting: a v12 blob gets this branch too', () => {
     // The migrate chain has no early returns by design, so a store at any old
     // version receives every intermediate step in one pass. A v12 blob that
     // skipped v15 would keep its flat stop forever.
-    const out = migrate.migrate(legacyBlob(), 12) as Migrated;
+    const out = migrateKept(legacyBlob(), 12) as Migrated;
     expect(out.scanResult.candidates[0].exit.invalidation).toBeNull();
   });
 
@@ -134,8 +158,8 @@ describe('scanStore migrate(): v15, piece 3\'s stop', () => {
     // zustand swallows a throw from migrate, which leaves the store unhydrated
     // — every deep step URL then bounces to step-1-regime. Same guard, same
     // reason, as the migrations above it.
-    expect(() => migrate.migrate({ scanResult: null, previousRun: undefined }, 14)).not.toThrow();
-    expect(() => migrate.migrate({ scanResult: { candidates: 'nope' } }, 14)).not.toThrow();
-    expect(() => migrate.migrate({ scanResult: { candidates: [null, 7, { symbol: 'X' }] } }, 14)).not.toThrow();
+    expect(() => migrateKept({ scanResult: null, previousRun: undefined }, 14)).not.toThrow();
+    expect(() => migrateKept({ scanResult: { candidates: 'nope' } }, 14)).not.toThrow();
+    expect(() => migrateKept({ scanResult: { candidates: [null, 7, { symbol: 'X' }] } }, 14)).not.toThrow();
   });
 });

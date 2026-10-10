@@ -1,3 +1,4 @@
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import Step4StocksPage from '../page';
@@ -16,6 +17,14 @@ import { runStockScan } from '@/lib/stockScan';
 
 jest.mock('@/lib/stockScan', () => ({
   ...jest.requireActual('@/lib/stockScan'),
+  runStockScanWithContinuation: async (...args: unknown[]) => {
+    const scan = await jest.requireMock('@/lib/stockScan').runStockScan(...args);
+    const store = jest.requireActual('@/lib/scanStore').useScanStore.getState();
+    const reason = store.stockScanError ?? 'unknown error';
+    store.setStockScanFeedback(store.stockManualRunToken, { error: scan ? null : `Scan failed — ${reason}`, notice: null });
+    return scan ? { kind: 'success', token: store.stockManualRunToken, result: scan } : { kind: 'failure', token: store.stockManualRunToken, reason };
+  },
+  isStockManualScanCurrent: (outcome: { kind: string; token: number }) => outcome.kind !== 'obsolete' && outcome.token === jest.requireActual('@/lib/scanStore').useScanStore.getState().stockManualRunToken,
   runStockScan: jest.fn(),
 }));
 jest.mock('@/components/organisms/StockPositionCard', () => ({ StockPositionCard: () => null }));
@@ -23,6 +32,8 @@ jest.mock('@/components/organisms/StockSendDialog', () => ({ StockSendDialog: ()
 jest.mock('@/components/organisms/StrategyParamsPanel', () => ({ StrategyParamsPanel: () => null }));
 jest.mock('@/components/organisms/ScanFunnel', () => ({ ScanFunnel: () => null }));
 jest.mock('@/components/atoms/WatchStar', () => ({ WatchStar: () => null }));
+// This suite does not mock @/lib/api; the row would call the real backend.
+jest.mock('../HistoryPrefetchRow', () => ({ HistoryPrefetchRow: () => null }));
 
 /**
  * Replace a store method with one that throws, and hand back the undo.

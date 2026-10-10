@@ -1,6 +1,6 @@
 import { useUniverseStore } from './universeStore';
 import { useScanStore } from './scanStore';
-import { useScanParamsStore } from './scanParamsStore';
+import { useScanParamsStore, OVERRIDE_FIELDS } from './scanParamsStore';
 import { useSettingsStore } from './settingsStore';
 import { horizonDisplayString, presetByKey, resolveParamsHorizon } from './horizonPresets';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
@@ -37,8 +37,8 @@ export function captureCurrentSnapshot(mode: 'options' | 'stocks'): SearchProfil
     },
   };
   // Only attach strategy/strategyParams when a strategy has actually been
-  // chosen this session (activeStrategy set on Step 5). Saving a stocks
-  // profile straight from Step 3 — before ever visiting Step 5 — must NOT
+  // chosen this session (activeStrategy set on Step 4). Saving a stocks
+  // profile straight from Step 3 — before ever visiting Step 4 — must NOT
   // bake in whatever scanParamsStore happens to hold left over from an
   // unrelated prior session; that would silently masquerade as this
   // profile's intentional strategy tuning.
@@ -48,19 +48,17 @@ export function captureCurrentSnapshot(mode: 'options' | 'stocks'): SearchProfil
   return {
     ...base,
     strategy: s.activeStrategy,
+    // STOCKS-HORIZON-T1 H5: only the overrides the user set; every other
+    // strategy field follows the backend horizon profile when the saved
+    // profile is loaded or scheduled.
     strategyParams: {
-      pullbackTolerancePct: p.pullbackTolerancePct, pullbackEmaPeriod: p.pullbackEmaPeriod,
-      pullbackTrendEma:     p.pullbackTrendEma,     pullbackMaType:    p.pullbackMaType,
-      maCrossoverFast:      p.maCrossoverFast,       maCrossoverSlow:  p.maCrossoverSlow,
-      maCrossoverLookback:  p.maCrossoverLookback,   breakoutVolumeMult: p.breakoutVolumeMult,
-      rsiPeriod:            p.rsiPeriod,             rsiOversold:      p.rsiOversold,
-      rsiTrendSma:          p.rsiTrendSma,            requireChoppyRegime: p.requireChoppyRegime,
-      btMinTrades:          p.btMinTrades,            btMinWinRate:     p.btMinWinRate,
-      eventFilter:          p.eventFilter,            stockShortlistMax: p.stockShortlistMax,
-      meanReversionVariants:   p.meanReversionVariants,
-      meanReversionMinConfirm: p.meanReversionMinConfirm,
-      vwapLookback:            p.vwapLookback,
-      vwapDeviationPct:        p.vwapDeviationPct,
+      btMinTrades:       p.btMinTrades,
+      btMinWinRate:      p.btMinWinRate,
+      eventFilter:       p.eventFilter,
+      stockShortlistMax: p.stockShortlistMax,
+      ...Object.fromEntries(
+        OVERRIDE_FIELDS.filter((f) => p[f] !== null).map((f) => [f, p[f]]),
+      ),
     },
   };
 }
@@ -77,7 +75,7 @@ export function applySearchProfile(profile: SearchProfile): void {
 
   const scoringHz = presetByKey(resolveParamsHorizon(profile.horizonPreset, profile.holdMax)).scoringHorizon;
   useScanStore.getState().setContext({
-    // stockScan.ts and step-5-strategy/page.tsx read context.universe directly
+    // stockScan.ts (runStockScan, which step-4-stocks runs) reads context.universe directly
     // for the actual Stocks scan request (not useUniverseStore) — reusing the
     // OLD context.universe here would silently leave a Stocks scan pointed at
     // whatever universe was previously selected, defeating the whole point of
@@ -92,7 +90,7 @@ export function applySearchProfile(profile: SearchProfile): void {
   useScanStore.getState().setScanOverrides({ ...profile.scanOverrides });
 
   if (profile.mode === 'stocks') {
-    // A strategy-less profile (saved from Step 3 before ever visiting Step 5)
+    // A strategy-less profile (saved from Step 3 before ever visiting Step 4)
     // must explicitly clear activeStrategy — otherwise a strategy left over
     // from an earlier session survives untouched, can silently run via
     // RunScanButton's Stocks path, and can get baked into this profile on a

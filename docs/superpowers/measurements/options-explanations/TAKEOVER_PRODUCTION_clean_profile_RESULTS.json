@@ -1,0 +1,761 @@
+{
+  "browser": "151.0.7922.173",
+  "fixture": "deterministic20symbols10rows",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "variants": [
+    {
+      "label": "clean_profile",
+      "panels": 200,
+      "runs": [
+        {
+          "run": 0,
+          "load": 752,
+          "mounted": 200,
+          "initialChainRequests": [
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM01&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358476
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM02&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358477
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM03&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358478
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM04&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358482
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM05&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358483
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM06&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358483
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM07&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358484
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM08&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358485
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM09&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358492
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM10&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358493
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM11&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358494
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM12&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358496
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM13&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM14&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM15&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358498
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM16&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358501
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM17&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358502
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM18&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358503
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM19&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358504
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM20&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358506
+            }
+          ],
+          "allApiRequests": [
+            {
+              "url": "http://localhost:8000/api/portfolio",
+              "at": 1791060358132
+            },
+            {
+              "url": "http://localhost:8000/api/watchlist",
+              "at": 1791060358136
+            },
+            {
+              "url": "http://localhost:8000/api/config/health",
+              "at": 1791060358137
+            },
+            {
+              "url": "http://localhost:8000/api/stock-scan/last",
+              "at": 1791060358139
+            },
+            {
+              "url": "http://localhost:8000/api/watchlist",
+              "at": 1791060358161
+            },
+            {
+              "url": "http://localhost:8000/api/data-sources",
+              "at": 1791060358164
+            },
+            {
+              "url": "http://localhost:8000/api/data-sources",
+              "at": 1791060358164
+            },
+            {
+              "url": "http://localhost:8000/api/scan/last-run",
+              "at": 1791060358166
+            },
+            {
+              "url": "http://localhost:8000/api/stock-scan/last-run",
+              "at": 1791060358187
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM01&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358476
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM02&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358477
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM03&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358478
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM04&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358482
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM05&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358483
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM06&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358483
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM07&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358484
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM08&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358485
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM09&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358492
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM10&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358493
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM11&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358494
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM12&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358496
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM13&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM14&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358497
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM15&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358498
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM16&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358501
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM17&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358502
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM18&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358503
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM19&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358504
+            },
+            {
+              "url": "http://localhost:8000/api/contracts?symbol=SYM20&right=C&stock_score=82&direction=Bullish&horizon=Swing%20(5-20d)&limit=10&max_price=50&hold_min_days=5&hold_max_days=20&contract_rules=%7B%22min_volume%22%3A20%7D",
+              "at": 1791060358506
+            }
+          ],
+          "chainAfter": 20,
+          "interactionHttp": [],
+          "preparation": {
+            "duration": 14662.900000000373,
+            "tasks": [
+              {
+                "start": 1863.2000000011176,
+                "duration": 50
+              },
+              {
+                "start": 3834.7000000011176,
+                "duration": 59
+              },
+              {
+                "start": 3915.4000000003725,
+                "duration": 57
+              },
+              {
+                "start": 3981.0999999996275,
+                "duration": 57
+              },
+              {
+                "start": 4179.800000000745,
+                "duration": 50
+              },
+              {
+                "start": 4602.5999999996275,
+                "duration": 53
+              },
+              {
+                "start": 4779.700000001118,
+                "duration": 52
+              },
+              {
+                "start": 4913,
+                "duration": 51
+              },
+              {
+                "start": 5037,
+                "duration": 54
+              },
+              {
+                "start": 5100.4000000003725,
+                "duration": 52
+              },
+              {
+                "start": 5163.0999999996275,
+                "duration": 50
+              },
+              {
+                "start": 5413.0999999996275,
+                "duration": 50
+              },
+              {
+                "start": 5479.800000000745,
+                "duration": 51
+              },
+              {
+                "start": 5602.300000000745,
+                "duration": 50
+              },
+              {
+                "start": 5729.700000001118,
+                "duration": 50
+              },
+              {
+                "start": 5796.5,
+                "duration": 50
+              },
+              {
+                "start": 5929.800000000745,
+                "duration": 50
+              },
+              {
+                "start": 5996.4000000003725,
+                "duration": 52
+              },
+              {
+                "start": 6065.5999999996275,
+                "duration": 54
+              },
+              {
+                "start": 6131.5999999996275,
+                "duration": 62
+              },
+              {
+                "start": 6205.200000001118,
+                "duration": 56
+              },
+              {
+                "start": 6280.4000000003725,
+                "duration": 58
+              },
+              {
+                "start": 6351.0999999996275,
+                "duration": 59
+              },
+              {
+                "start": 6422.5,
+                "duration": 59
+              },
+              {
+                "start": 6502.4000000003725,
+                "duration": 61
+              },
+              {
+                "start": 6579.700000001118,
+                "duration": 59
+              },
+              {
+                "start": 6651.700000001118,
+                "duration": 60
+              },
+              {
+                "start": 6732.4000000003725,
+                "duration": 61
+              },
+              {
+                "start": 6807.200000001118,
+                "duration": 60
+              },
+              {
+                "start": 6880.5,
+                "duration": 62
+              },
+              {
+                "start": 6956.4000000003725,
+                "duration": 69
+              },
+              {
+                "start": 7037.300000000745,
+                "duration": 61
+              },
+              {
+                "start": 7116.0999999996275,
+                "duration": 91
+              },
+              {
+                "start": 7219.5999999996275,
+                "duration": 64
+              },
+              {
+                "start": 7299.9000000003725,
+                "duration": 61
+              },
+              {
+                "start": 7372.4000000003725,
+                "duration": 62
+              },
+              {
+                "start": 7449.800000000745,
+                "duration": 72
+              },
+              {
+                "start": 7535.0999999996275,
+                "duration": 61
+              },
+              {
+                "start": 7613,
+                "duration": 58
+              },
+              {
+                "start": 7684.200000001118,
+                "duration": 70
+              },
+              {
+                "start": 7766.9000000003725,
+                "duration": 63
+              },
+              {
+                "start": 7846.300000000745,
+                "duration": 61
+              },
+              {
+                "start": 7921.0999999996275,
+                "duration": 66
+              },
+              {
+                "start": 7999.5,
+                "duration": 60
+              },
+              {
+                "start": 8072.4000000003725,
+                "duration": 62
+              },
+              {
+                "start": 8147.200000001118,
+                "duration": 70
+              },
+              {
+                "start": 8229.700000001118,
+                "duration": 64
+              },
+              {
+                "start": 8307,
+                "duration": 63
+              },
+              {
+                "start": 8383.099999999627,
+                "duration": 74
+              },
+              {
+                "start": 8470.599999999627,
+                "duration": 71
+              },
+              {
+                "start": 8553.599999999627,
+                "duration": 70
+              },
+              {
+                "start": 8636.099999999627,
+                "duration": 68
+              },
+              {
+                "start": 8717.5,
+                "duration": 63
+              },
+              {
+                "start": 8799.700000001118,
+                "duration": 65
+              },
+              {
+                "start": 8879.599999999627,
+                "duration": 68
+              },
+              {
+                "start": 8962.900000000373,
+                "duration": 81
+              },
+              {
+                "start": 9063,
+                "duration": 67
+              },
+              {
+                "start": 9146.200000001118,
+                "duration": 63
+              },
+              {
+                "start": 9223.099999999627,
+                "duration": 71
+              },
+              {
+                "start": 9313,
+                "duration": 66
+              },
+              {
+                "start": 9396.200000001118,
+                "duration": 86
+              },
+              {
+                "start": 9496.200000001118,
+                "duration": 81
+              },
+              {
+                "start": 9590.5,
+                "duration": 66
+              },
+              {
+                "start": 9670.5,
+                "duration": 79
+              },
+              {
+                "start": 9763.5,
+                "duration": 83
+              },
+              {
+                "start": 9863,
+                "duration": 76
+              },
+              {
+                "start": 9953.099999999627,
+                "duration": 74
+              },
+              {
+                "start": 10040.5,
+                "duration": 83
+              },
+              {
+                "start": 10137.400000000373,
+                "duration": 74
+              },
+              {
+                "start": 10229.5,
+                "duration": 75
+              },
+              {
+                "start": 10319.300000000745,
+                "duration": 87
+              },
+              {
+                "start": 10421.200000001118,
+                "duration": 69
+              },
+              {
+                "start": 10503.800000000745,
+                "duration": 67
+              },
+              {
+                "start": 10585.200000001118,
+                "duration": 78
+              },
+              {
+                "start": 10679.5,
+                "duration": 75
+              },
+              {
+                "start": 10770.200000001118,
+                "duration": 76
+              },
+              {
+                "start": 10862.900000000373,
+                "duration": 71
+              },
+              {
+                "start": 10949.400000000373,
+                "duration": 73
+              },
+              {
+                "start": 11036.400000000373,
+                "duration": 77
+              },
+              {
+                "start": 11129.5,
+                "duration": 72
+              },
+              {
+                "start": 11217,
+                "duration": 82
+              },
+              {
+                "start": 11315.099999999627,
+                "duration": 70
+              },
+              {
+                "start": 11400.599999999627,
+                "duration": 83
+              },
+              {
+                "start": 11499.599999999627,
+                "duration": 77
+              },
+              {
+                "start": 11592.300000000745,
+                "duration": 77
+              },
+              {
+                "start": 11684.599999999627,
+                "duration": 74
+              },
+              {
+                "start": 11774.200000001118,
+                "duration": 78
+              },
+              {
+                "start": 11867.700000001118,
+                "duration": 86
+              },
+              {
+                "start": 11970.400000000373,
+                "duration": 79
+              },
+              {
+                "start": 12064.5,
+                "duration": 87
+              },
+              {
+                "start": 12166.099999999627,
+                "duration": 81
+              },
+              {
+                "start": 12263.599999999627,
+                "duration": 106
+              },
+              {
+                "start": 12384.700000001118,
+                "duration": 81
+              },
+              {
+                "start": 12489,
+                "duration": 84
+              },
+              {
+                "start": 12591.599999999627,
+                "duration": 94
+              },
+              {
+                "start": 12701.800000000745,
+                "duration": 87
+              },
+              {
+                "start": 12804.800000000745,
+                "duration": 93
+              },
+              {
+                "start": 12916.700000001118,
+                "duration": 85
+              },
+              {
+                "start": 13017.900000000373,
+                "duration": 85
+              },
+              {
+                "start": 13119.599999999627,
+                "duration": 81
+              },
+              {
+                "start": 13215.5,
+                "duration": 83
+              },
+              {
+                "start": 13313.400000000373,
+                "duration": 76
+              },
+              {
+                "start": 13404.700000001118,
+                "duration": 90
+              },
+              {
+                "start": 13512.700000001118,
+                "duration": 78
+              },
+              {
+                "start": 13605.5,
+                "duration": 83
+              },
+              {
+                "start": 13703.5,
+                "duration": 77
+              },
+              {
+                "start": 13798.5,
+                "duration": 84
+              },
+              {
+                "start": 13897.599999999627,
+                "duration": 78
+              },
+              {
+                "start": 13991.200000001118,
+                "duration": 85
+              },
+              {
+                "start": 14091.5,
+                "duration": 79
+              },
+              {
+                "start": 14187.300000000745,
+                "duration": 85
+              },
+              {
+                "start": 14288.5,
+                "duration": 80
+              },
+              {
+                "start": 14385.800000000745,
+                "duration": 88
+              },
+              {
+                "start": 14491.5,
+                "duration": 80
+              },
+              {
+                "start": 14588.800000000745,
+                "duration": 86
+              },
+              {
+                "start": 14691.200000001118,
+                "duration": 81
+              },
+              {
+                "start": 14790,
+                "duration": 86
+              },
+              {
+                "start": 14895.200000001118,
+                "duration": 84
+              },
+              {
+                "start": 14996.900000000373,
+                "duration": 90
+              },
+              {
+                "start": 15105.800000000745,
+                "duration": 84
+              },
+              {
+                "start": 15209,
+                "duration": 90
+              }
+            ]
+          },
+          "interactions": {
+            "sort": 435.90000000037253,
+            "pick": 71,
+            "toggle": 143.69999999925494
+          },
+          "tasks": [
+            {
+              "start": 15688.800000000745,
+              "duration": 104
+            },
+            {
+              "start": 15792.800000000745,
+              "duration": 327
+            },
+            {
+              "start": 16140.700000001118,
+              "duration": 65
+            },
+            {
+              "start": 16217.099999999627,
+              "duration": 80
+            },
+            {
+              "start": 16297.800000000745,
+              "duration": 53
+            }
+          ]
+        }
+      ],
+      "stats": {
+        "load": {
+          "runs": [
+            752
+          ]
+        },
+        "sort": {
+          "runs": [
+            435.90000000037253
+          ]
+        },
+        "pick": {
+          "runs": [
+            71
+          ]
+        },
+        "toggle": {
+          "runs": [
+            143.69999999925494
+          ]
+        }
+      }
+    }
+  ]
+}

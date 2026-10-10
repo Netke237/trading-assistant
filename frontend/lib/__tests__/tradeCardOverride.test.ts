@@ -1,9 +1,11 @@
 import {
   applyPickedContract, contractKeyFor, mergePlan, resolveBasketCards, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
+  scoreEvidenceFor,
   type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '../tradeCardOverride';
-import type { TradeCardData, OptionContract, ExitPlan } from '@/types/domain';
+import type { TradeCardData, OptionContract, ExitPlan, StockExplanation, ContractExplanation } from '@/types/domain';
+import { useScanStore } from '../scanStore';
 
 function makeCard(overrides: Partial<TradeCardData> = {}): TradeCardData {
   return {
@@ -41,16 +43,113 @@ function makeOption(overrides: Partial<OptionContract> = {}): OptionContract {
   };
 }
 
+function stockEvidence(card: TradeCardData): StockExplanation {
+  return {
+    version: 1, symbol: card.symbol, direction: card.direction, horizon: 'Position',
+    scoring_mode: 'options', iv_basis: 'absolute', evaluated_at: '2026-10-04T00:00:00Z',
+    score: card.stockScore, status: card.stockConfidence, raw_status: card.stockConfidence,
+    unrounded_score: card.stockScore, rounding: 'python_round_ties_to_even',
+    pass_threshold: 55, caution_threshold: 35, weights: {}, components: {}, caps: [], gate_config: {},
+  };
+}
+
+function contractEvidence(id: string, score: number, status: ContractExplanation['status']): ContractExplanation {
+  return {
+    version: 1, contract_id: id, evaluated_at: '2026-10-04T00:00:00Z', outcome: 'aggregate',
+    score, status, unrounded_score: score, rounded_score: score, pass_threshold: 65,
+    caution_threshold: 45, weights: {}, components: {}, largest_losses: [], blockers: [],
+    reject_reasons: [], soft_flags: [], soft_fail_count: 0, max_soft_fail_count: 3,
+  };
+}
+
+describe('score evidence identity and persistence', () => {
+  const absent = { state: 'not_captured', message: 'Not captured — re-run scan' };
+
+  it.each([undefined, null])('marks legacy evidence %s explicitly without changing any numbers', (missing) => {
+    const card = makeCard({ stockExplanation: missing, contractExplanation: missing });
+    const original = JSON.stringify(card);
+    expect(scoreEvidenceFor(card)).toEqual({ stock: absent, contract: absent });
+    expect(JSON.stringify(card)).toBe(original);
+  });
+
+  it('keeps each snapshot paired through override, recompute and basket construction', () => {
+    const card = makeCard();
+    card.stockExplanation = stockEvidence(card);
+    card.contractExplanation = contractEvidence(card.contract, card.contractScore, card.contractConfidence);
+    const picked = makeOption();
+    picked.explanation = contractEvidence(picked.id, picked.score, picked.contractConfidence);
+    const resolved = applyPickedContract(card, picked);
+    const plan = { entry: { ...card.entry, limit: picked.price }, exit: card.exit,
+      rrRatio: 2.1, rrModel: card.rrModel };
+    const merged = mergePlan(resolved, plan);
+    expect(merged.stockExplanation).toBe(card.stockExplanation);
+    expect(merged.contractExplanation).toBe(picked.explanation);
+    expect(scoreEvidenceFor(merged)).toEqual({
+      stock: { state: 'captured', explanation: card.stockExplanation },
+      contract: { state: 'captured', explanation: picked.explanation },
+    });
+    const key = contractKeyFor(resolved)!;
+    const basket = resolveBasketCards([card.symbol], { [card.symbol]: card },
+      { [card.symbol]: picked.id }, { [card.symbol]: [picked] },
+      { [card.symbol]: { key, plan } });
+    expect(basket.pending).toBe(false);
+    expect(basket.cards[0].contractExplanation).toBe(picked.explanation);
+    expect(basket.cards[0].stockExplanation).toBe(card.stockExplanation);
+    const legacyPick = applyPickedContract(card, makeOption());
+    expect(legacyPick.contractExplanation).toBeUndefined();
+    expect(scoreEvidenceFor(mergePlan(legacyPick, plan)).contract).toEqual(absent);
+    expect(scoreEvidenceFor(card).contract.state).toBe('captured'); // switching back restores A's evidence
+  });
+
+  it('refuses evidence for another result or contract without replacing scores', () => {
+    const card = makeCard();
+    card.stockExplanation = { ...stockEvidence(card), score: card.stockScore + 1 };
+    card.contractExplanation = contractEvidence('OTHER|375|2027-01-15|C', card.contractScore, card.contractConfidence);
+    expect(scoreEvidenceFor(card)).toEqual({ stock: absent, contract: absent });
+    expect(card.stockScore).toBe(47);
+    expect(card.contractScore).toBe(84);
+  });
+
+  it.each([true, false])('round-trips captured=%s evidence through actual store storage and hydration', async (captured) => {
+    const previous = useScanStore.getState();
+    const card = makeCard();
+    if (captured) {
+      card.stockExplanation = stockEvidence(card);
+      card.contractExplanation = contractEvidence(card.contract, card.contractScore, card.contractConfidence);
+    }
+    const result = { scan_id: 'evidence-scan', timestamp: '2026-10-04T00:00:00Z', candidates: [card], rejected: [] };
+    try {
+      useScanStore.getState().setScanResult(result);
+      useScanStore.getState().setPickedContract(card.symbol, 'AAPL|375|2027-01-15|C');
+      const saved = localStorage.getItem('bamendjou-scan-store')!;
+      expect(JSON.parse(saved).state.scanResult).toEqual(result);
+      useScanStore.setState({ scanResult: null, pickedContracts: {} });
+      localStorage.setItem('bamendjou-scan-store', saved);
+      await useScanStore.persist.rehydrate();
+      expect(useScanStore.getState().scanResult).toEqual(result);
+      expect(useScanStore.getState().pickedContracts[card.symbol]).toBe('AAPL|375|2027-01-15|C');
+      const restored = useScanStore.getState().scanResult!.candidates[0];
+      expect(scoreEvidenceFor(restored)).toEqual(scoreEvidenceFor(card));
+      const legacyPick = applyPickedContract(restored, makeOption());
+      expect(scoreEvidenceFor(legacyPick).contract).toEqual(absent);
+      if (!captured) expect(restored.stockExplanation).toBeUndefined();
+    } finally {
+      useScanStore.setState(previous, true);
+    }
+  });
+});
+
 describe('applyPickedContract', () => {
   it('returns the card unchanged when nothing is picked', () => {
     const card = makeCard();
     expect(applyPickedContract(card, undefined)).toBe(card);
   });
 
-  it('returns the card unchanged when the pick matches the auto-picked contract', () => {
+  it('preserves the card data and copies liveness when the pick matches the auto-picked contract', () => {
     const card = makeCard();
     const picked = makeOption({ id: card.contract });
-    expect(applyPickedContract(card, picked)).toBe(card);
+    expect(applyPickedContract(card, picked)).toEqual({ ...card, noLiveQuote: false });
+    expect(applyPickedContract(card, { ...picked, noLiveQuote: true })).toEqual({ ...card, noLiveQuote: true });
   });
 
   it('carries the picked contract\'s BREAKDOWN across, not the auto-picked one\'s', () => {

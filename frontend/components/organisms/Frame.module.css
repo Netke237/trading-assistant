@@ -4,6 +4,7 @@
  *
  * Grid:
  *   topbar        topbar       topbar
+ *   banner        banner       banner       (DOCC-5; 0 px when it renders nothing)
  *   navrail       workspace    contextrail
  */
 
@@ -11,8 +12,9 @@
   display: grid;
   grid-template-areas:
     "topbar      topbar        topbar"
+    "banner      banner        banner"
     "navrail     workspace     contextrail";
-  grid-template-rows: var(--frame-topbar-h) 1fr;
+  grid-template-rows: var(--frame-topbar-h) auto 1fr;
   grid-template-columns: auto 1fr auto;
   height: 100vh;
   min-width: 1280px; /* spec: desktop-only ≥1280 */

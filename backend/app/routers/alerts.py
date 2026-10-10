@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.schemas import AlertItem
 from app.services.alert_generator import effective_enabled, generate_alerts
 from app.services.notifications.alert_notifier import notify_alert
 from app.services.position_alert_log import log_position_alert
+from app.services.premium_stop import premium_stop_side
 
 router = APIRouter(prefix='/api', tags=['alerts'])
 
@@ -59,6 +60,9 @@ async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
 
 
 class AlertNotifyRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: a non-finite price/referenceValue is a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     # symbol is accepted but intentionally unused below (post_alert_notify
     # derives it from the DB row instead) — kept on the wire schema since the
     # frontend already sends it and it's harmless input.
@@ -72,6 +76,11 @@ class AlertNotifyRequest(BaseModel):
     direction: str | None = None
     contract: str | None = None
     note: str | None = None
+    # STOP-SEMANTICS-2026-10-02. NOT trusted as a value -- the side is derived
+    # from the DB row below. Its PRESENCE is the signal: a tab still running
+    # the pre-deploy engine sends none, and its PREMIUM_STOP for a short is a
+    # fall-side fire that must keep the legacy key and label.
+    stopSide: str | None = None
 
 
 _REFERENCE_KIND_BY_TYPE = {
@@ -144,8 +153,17 @@ async def post_alert_notify(
     # a muted type before it ever POSTs here, so in practice this carries an
     # explicit True; passing the full three-way result anyway keeps this path
     # correct on its own rather than relying on the caller having filtered.
+    # The side comes from the authoritative row, like symbol/contract/direction
+    # above. A request with no stopSide came from a pre-deploy engine (see
+    # AlertNotifyRequest.stopSide) and keeps the legacy key and label.
+    stop_side = (
+        premium_stop_side(position.contract, position.direction)
+        if req.alertType == 'PREMIUM_STOP' and req.stopSide is not None
+        else None
+    )
     sent = await notify_alert(
         position.symbol, req.alertType, req.reason, req.recId, req.timestamp,
         type_enabled=effective_enabled(position.alert_overrides, req.alertType),
+        stop_side=stop_side,
     )
     return {'sent': sent}

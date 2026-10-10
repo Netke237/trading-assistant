@@ -50,14 +50,18 @@ CHECKED = [
     "scoring_rules.yaml parses", "money blocks: presence, spelling, enabled",
     "regime_sizing values", "regime blocks (intraday, swing, position)",
     "direction_conviction: position and values", "top-level families",
-    "horizons tree: unknown keys", "risk_rules.yaml parses",
-    "contract_rules.yaml parses", "running config vs disk",
+    "horizons tree: unknown keys",
+    "stock_score_thresholds, confidence_backtest, entry_quality: unknown keys",
+    "risk_rules.yaml parses", "risk_rules.yaml: unknown keys",
+    "contract_rules.yaml parses", "contract_rules.yaml: unknown keys", "duplicate keys",
+    "running config vs disk",
 ]
 NOT_CHECKED = [
     "money blocks other than regime_sizing: values",
-    "required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, "
-    "confidence_backtest, risk_rules sections)",
-    "risk_rules.yaml and contract_rules.yaml contents",
+    "missing keys outside the money blocks -- a deleted key runs on the code default "
+    "(horizons.<h>.*, stock_score_thresholds, confidence_backtest, entry_quality, "
+    "risk_rules.yaml, contract_rules.yaml)",
+    "risk_rules.yaml and contract_rules.yaml values",
     "single worker assumed; only WEB_CONCURRENCY is detected",
     "copies the frontend fetched at page load (event and IV thresholds)",
 ]
@@ -193,8 +197,9 @@ def test_t7_unparseable_and_empty(cfg_dir):
     assert "line 2" in rep["errors"][0]["message"]
     assert sorted(stale_names(rep)) == ["config_loader.load_scoring_cfg",
                                         "stock_scorer._load_config"]
-    assert rep["checked"] == ["risk_rules.yaml parses", "contract_rules.yaml parses",
-                              "running config vs disk"]
+    assert rep["checked"] == ["risk_rules.yaml parses", "risk_rules.yaml: unknown keys",
+                              "contract_rules.yaml parses", "contract_rules.yaml: unknown keys",
+                              "duplicate keys", "running config vs disk"]
     (cfg_dir / "scoring_rules.yaml").write_text("")
     rep = config_health.report()
     assert [e["message"] for e in rep["errors"]] == ["must be a mapping, got NoneType"]
@@ -792,9 +797,10 @@ def test_t26_section_removed_after_load(cfg_dir):
 
 
 def test_t28_non_ascii_value_is_clean(cfg_dir):
+    # A known key: an unknown one would (rightly) warn and mask what this pins.
     rewrite(cfg_dir, "risk_rules.yaml",
-            lambda d: d["exit_plan"].__setitem__("note", "prix élevé"))
-    config_loader.load_exit_plan_cfg()
+            lambda d: d["reprice_horizon"]["custom"].__setitem__("rule", "prix élevé"))
+    config_loader.load_reprice_horizon_cfg()
     assert config_health.report()["ok"]
 
 
@@ -832,3 +838,101 @@ def test_t29b_live_values_are_read_before_disk(cfg_dir, monkeypatch):
     config_health._reset_for_tests()
     assert config_health.report()["ok"]       # the next poll: cache and disk agree
 
+
+
+# ── Whole-phase audit (2026-10-01): a misspelled key, and a key written twice ──
+
+def _replace(d: Path, file: str, old: str, new: str) -> None:
+    text = (d / file).read_text()
+    assert text.count(old) == 1, old
+    (d / file).write_text(text.replace(old, new))
+
+
+@pytest.mark.parametrize("file,old,new,path,hint", [
+    ("risk_rules.yaml", "max_daily_loss_pct:", "max_daily_loss_pc:",
+     "auto_trade.max_daily_loss_pc", "max_daily_loss_pct"),
+    ("risk_rules.yaml", "max_single_stock_position_pct:", "max_single_stock_positon_pct:",
+     "portfolio.max_single_stock_positon_pct", "max_single_stock_position_pct"),
+    ("contract_rules.yaml", "dte_holding_multiplier:", "dte_holding_multiplyer:",
+     "dte_holding_multiplyer", "dte_holding_multiplier"),
+    ("scoring_rules.yaml", "max_slippage_pct:", "max_slipage_pct:",
+     "entry_quality.max_slipage_pct", "max_slippage_pct"),
+])
+def test_a1_misspelled_key_outside_the_money_blocks_warns(cfg_dir, file, old, new, path, hint):
+    _replace(cfg_dir, file, old, new)
+    rep = config_health.report()
+    assert rep["ok"] is False
+    assert rep["errors"] == rep["stale"] == []
+    assert rep["warnings"] == [{"file": file, "path": path,
+                                "message": f"unknown key, never read — did you mean {hint!r}?"}]
+
+
+def test_a1b_misspelled_confidence_backtest_key_warns(cfg_dir):
+    rewrite(cfg_dir, "scoring_rules.yaml", lambda doc: doc["confidence_backtest"]["swing"]
+            .__setitem__("history_yeras", doc["confidence_backtest"]["swing"].pop("history_years")))
+    rep = config_health.report()
+    assert [w["path"] for w in rep["warnings"]] == ["confidence_backtest.swing.history_yeras"]
+
+
+def test_a1c_shipped_files_match_their_closed_specs():
+    for file, spec in (("risk_rules.yaml", ch_mod.RISK_KEYS),
+                       ("contract_rules.yaml", ch_mod.CONTRACT_KEYS)):
+        doc = yaml.safe_load((SHIPPED / file).read_text())
+        assert set(doc) == set(spec), file
+    doc = yaml.safe_load((SHIPPED / "scoring_rules.yaml").read_text())
+    for family in ch_mod.SCORING_OTHER_KEYS:
+        assert family in doc
+
+
+def test_a2_duplicate_key_warns_with_both_lines(cfg_dir):
+    _replace(cfg_dir, "scoring_rules.yaml", "regime_sizing:\n  enabled: true\n",
+             "regime_sizing:\n  enabled: true\n  min_mult: 0.15\n")
+    rep = config_health.report()
+    assert rep["ok"] is False
+    assert len(rep["warnings"]) == 1
+    w = rep["warnings"][0]
+    assert (w["file"], w["path"]) == ("scoring_rules.yaml", "regime_sizing.min_mult")
+    assert w["message"].startswith("duplicate key: line ")
+    assert w["message"].endswith(" is used")
+
+
+def test_a2b_duplicate_key_in_risk_rules_warns(cfg_dir):
+    _replace(cfg_dir, "risk_rules.yaml", "  max_daily_loss_pct:",
+             "  max_daily_loss_pct: 0.005\n  max_daily_loss_pct:")
+    rep = config_health.report()
+    assert [(w["file"], w["path"]) for w in rep["warnings"]] == [
+        ("risk_rules.yaml", "auto_trade.max_daily_loss_pct")]
+
+
+def test_a2c_merge_key_override_is_not_a_duplicate():
+    from app.services.config_health import _check_duplicates, _FileResult
+    r = _FileResult()
+    _check_duplicates("contract_rules.yaml",
+                      "a: &b {p: 1, q: 2}\nc:\n  <<: *b\n  p: 3\nd: *b\n", r)
+    assert r.warnings == []
+    r = _FileResult()
+    _check_duplicates("contract_rules.yaml", "a:\n  - {p: 1, p: 2}\n", r)
+    assert [w["path"] for w in r.warnings] == ["a[0].p"]
+
+
+# ── Phase C hygiene T4: setup_window_bars below 1 warns ─────────────────────
+
+SETUP_WINDOW_MSG = "setup_window_bars must be >= 1; read as 1 (last bar only)"
+
+
+@pytest.mark.parametrize("value", [0, -2, 0.5])
+def test_setup_window_below_one_warns_once(cfg_dir, value):
+    rewrite(cfg_dir, "scoring_rules.yaml",
+            lambda doc: doc["horizons"]["swing"]["trigger"].__setitem__("setup_window_bars", value))
+    rep = config_health.report()
+    assert rep["errors"] == []
+    assert rep["warnings"] == [{"file": "scoring_rules.yaml",
+                                "path": "horizons.swing.trigger.setup_window_bars",
+                                "message": SETUP_WINDOW_MSG}]
+    assert rep["checked"] == CHECKED
+
+
+def test_setup_window_shipped_files_do_not_warn():
+    rep = config_health.report()
+    assert not any(w["path"].endswith("setup_window_bars") for w in rep["warnings"])
+    assert rep["warnings"] == []

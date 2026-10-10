@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -349,3 +350,6 @@ describe('StockPositionCard — target-row structure labels', () => {
     )).toBeTruthy();
   });
 });
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));

@@ -1,7 +1,8 @@
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
-              PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+              PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
+              ContractGrading } from '@/types/domain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import { validationMessages } from '@/lib/pydanticError';
@@ -9,7 +10,7 @@ import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import type { ScoringHorizon } from '@/lib/horizonPresets';
+import type { ScoringHorizon, TunedHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -180,7 +181,7 @@ export interface StrategyWatchState {
   entry_price: number | null;
   stop_price: number | null;
   target_price: number | null;
-  last_event: 'entry' | 'exit_stop' | 'exit_target' | 'reversal' | null;
+  last_event: 'entry' | 'time_stop' | 'exit_stop' | 'exit_target' | 'reversal' | null;
   last_event_at: string | null;
 }
 
@@ -190,6 +191,10 @@ export interface StrategyWatch {
   strategy_key: string;
   direction: 'Bullish' | 'Bearish';
   params_override: Record<string, unknown>;
+  /** STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
+   *  whose hold time-stops it. Absent/null on a watch without a horizon. */
+  params_horizon?: TunedHorizon | null;
+  hold_max_days?: number | null;
   enabled: boolean;
   created_at: string;
   last_state: StrategyWatchState;
@@ -251,6 +256,8 @@ export interface AnalysisBacktest {
   confidence: number | null;
   passes_gate: boolean;
   summary_text: string;
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
 
 export interface AnalysisSentiment {
@@ -352,6 +359,10 @@ export interface StockAnalysis {
   fundamentals: AnalysisFundamentals | null;
   next_event_days: number | null;
   next_event_label: string | null;
+  /** STOCKS-HORIZON-P0B B6: as on PositionCardData. Optional for a backend
+   *  from before B6. */
+  earnings_days?: number | null;
+  earnings_veto?: boolean;
   rules: RuleContribution[];
   gate_flags: GateFlag[];
   ema_trend: EmaTrend | null;
@@ -406,7 +417,11 @@ export const api = {
     ctx?: { stock_score?: number; direction?: string; horizon?: string; limit?: number; max_price?: number;
             hold_min_days?: number; hold_max_days?: number;
             /** The scan's ScanResult.contract_rules. Absent = contract_rules.yaml. */
-            contract_rules?: Record<string, number> },
+            contract_rules?: Record<string, number>;
+            /** One expiry's chain, filtered to it (the Watchlist's starred expiry). */
+            expiry?: string;
+            /** Only these strikes; the backend then applies neither `limit` nor `max_price`. */
+            strikes?: number[] },
     signal?: AbortSignal,
   ) => get<OptionContract[]>(
     `/api/contracts?symbol=${encodeURIComponent(symbol)}&right=${right}` +
@@ -418,14 +433,16 @@ export const api = {
     (ctx?.hold_min_days != null ? `&hold_min_days=${ctx.hold_min_days}` : '') +
     (ctx?.hold_max_days != null ? `&hold_max_days=${ctx.hold_max_days}` : '') +
     (ctx?.contract_rules && Object.keys(ctx.contract_rules).length > 0
-      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : ''),
+      ? `&contract_rules=${encodeURIComponent(JSON.stringify(ctx.contract_rules))}` : '') +
+    (ctx?.expiry ? `&expiry=${encodeURIComponent(ctx.expiry)}` : '') +
+    (ctx?.strikes && ctx.strikes.length > 0 ? `&strikes=${encodeURIComponent(ctx.strikes.join(','))}` : ''),
     signal,
   ),
   getTradecards: () => get<TradeCardData[]>('/api/tradecards'),
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -441,8 +458,10 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
-    rr_bullish_target_pct?: number;
-    rr_bearish_target_pct?: number;
+    quote_live?: boolean | null;
+    rr_target_r_multiple?: number;
+    target_stock_price?: number;
+    target_source?: TradeCardData['exit']['targetSource'];
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
     /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
@@ -535,6 +554,7 @@ export const api = {
     dte: number;
     premium: number;
     trend_score: number;
+    target_r_multiple?: number;
     /** Same meaning as on `getStructuralStop` — the stop-vs-premium gate is
      *  per-horizon and this is where the line comes from. */
     horizon_preset?: string;
@@ -587,7 +607,13 @@ export const api = {
   addWatchlist:    (symbol: string) => post<{ symbol: string }>('/api/watchlist', { symbol }),
   removeWatchlist: (symbol: string) => del(`/api/watchlist/${encodeURIComponent(symbol)}`),
   getWatchedContracts:    () => get<string[]>('/api/watched-contracts'),
-  addWatchedContract:     (contractId: string) => post<{ contract_id: string }>('/api/watched-contracts', { contract_id: contractId }),
+  getWatchedContractsDetail: () =>
+    get<{ contract_id: string; grading: ContractGrading | null }[]>('/api/watched-contracts/detail'),
+  /** `grading` undefined = no key (the server keeps an existing row's grading);
+   *  `null` = sent as `"grading": null` (clears it); an object stores/overwrites. */
+  addWatchedContract:     (contractId: string, grading?: ContractGrading | null) =>
+    post<{ contract_id: string }>('/api/watched-contracts',
+      grading !== undefined ? { contract_id: contractId, grading } : { contract_id: contractId }),
   removeWatchedContract:  (contractId: string) => del(`/api/watched-contracts/${encodeURIComponent(contractId)}`),
   postScan: (
     universe: string[],
@@ -679,6 +705,8 @@ export const api = {
      *  the scan context rather than hand-writing a literal; never default it
      *  here, which would typecheck while measuring the wrong window. */
     horizon: ScoringHorizon;
+    /** Actual sanitized scan hold, including Custom ranges. Required at arm. */
+    hold_max_days: number;
     /** The Regime Gate thresholds this card's scan RESOLVED, read off the
      *  card's own `regimeGate` snapshot so neither a Step-3 edit, a reset nor
      *  a reload can change the rule the trade is judged by — the same freeze
@@ -690,7 +718,9 @@ export const api = {
     regime_headwind_caution_pct?: number;
     regime_headwind_reject_pct?: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null; conid?: number;
-    entry_premium?: number;
+    /** REQUIRED and > 0 on the backend (audit round 2, R2-F2): it is what the
+     *  D5 cap is judged from at fire, and an arm without it is a 422. */
+    entry_premium: number;
     portfolio_value?: number;
     /** Piece 4 — the per-trade premium stop as a FRACTION of `entry_premium`.
      *  Omitted inherits `auto_trade.premium_stop_pct`. Declared here because
@@ -805,10 +835,12 @@ export const api = {
 
   getStrategyWatches: () =>
     get<StrategyWatch[]>('/api/strategy-watch/'),
-  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction }),
-  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction }),
+  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                     params_horizon: TunedHorizon | null = null) =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction, params_horizon }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                           params_horizon: TunedHorizon | null = null) =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction, params_horizon }),
   removeStrategyWatch: (id: string) =>
     del(`/api/strategy-watch/${id}`),
   setStrategyWatchEnabled: (id: string, enabled: boolean) =>
@@ -860,7 +892,7 @@ export const api = {
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
   ) =>
-    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+    post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -872,14 +904,7 @@ export const api = {
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
   ) =>
-    post<Array<{
-      symbol: string;
-      direction: string;
-      fib_level_hit: string;
-      fib_dist_pct: number | null;
-      at_level: boolean;
-      confidence: number;
-    }>>(
+    post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -908,6 +933,13 @@ export const api = {
     get<Record<string, { reject_days: number; caution_days: number }>>(
       '/api/config/event-thresholds'
     ),
+
+  // STOCKS-HORIZON-T1 H4/H5: per-horizon strategy parameter profiles.
+  // Untyped on purpose: lib/strategyProfilesStore.ts parseStrategyProfiles validates it.
+  getStrategyProfiles: () => get<unknown>('/api/config/strategy-profiles'),
+
+  // DOCC-5: GET /api/config/health (DOCC-4). Always 200; parsed by lib/configHealth.ts.
+  getConfigHealth: (signal?: AbortSignal) => get<unknown>('/api/config/health', signal),
 
   // ── Part 1: operator timezone ────────────────────────────────────────────
   getSchedulingTimezone: () => get<{ timezone: string }>('/settings/scheduling'),
@@ -1096,11 +1128,17 @@ export interface WfoOosMetrics {
   win_rate: number;
   total_return: number;
   max_drawdown: number;
+  /** Pooled OOS trade count across the basket — the figure `min_trades` gates. */
   n_trades: number;
+  /** Phase C T5: pooled trades / contributing symbols. Absent on proposals persisted before Phase C T5. */
+  n_trades_per_symbol?: number;
+  /** Phase C T5: symbols that contributed OOS trades — the figure `min_symbols` gates. Absent on older proposals. */
+  n_symbols?: number;
 }
 
 export interface WfoProposal {
   strategy: string;
+  direction: 'Bullish' | 'Bearish';
   proposed: Record<string, number | string>;
   consistency: number;
   eligible: boolean;
@@ -1138,6 +1176,6 @@ export async function clearTuningJobs(): Promise<{ cleared: number }> {
   return res.json() as Promise<{ cleared: number }>;
 }
 
-export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>): Promise<{ ok: boolean; active: Record<string, number | string> }> {
-  return post('/api/strategy-tuning/adopt', { strategy, params });
+export async function adoptStrategyParams(strategy: string, params: Record<string, number | string>, direction: 'Bullish' | 'Bearish'): Promise<{ ok: boolean; active: Record<string, number | string> }> {
+  return post('/api/strategy-tuning/adopt', { strategy, params, direction });
 }

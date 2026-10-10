@@ -8,6 +8,8 @@ import { ScoreBar } from '@/components/atoms/ScoreBar';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import type { Status } from '@/lib/status';
+import { TradeCardQualification, type QualificationPresentation } from '@/components/molecules/TradeCardQualification';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
 import styles from './ScoreCardPanel.module.css';
 
 export interface ScoreBarData {
@@ -31,6 +33,8 @@ interface ScoreCardPanelProps {
   statusTooltip?: string;
   /** Right-align the status tooltip panel (use when the panel sits near the right edge). */
   statusTooltipAlignRight?: boolean;
+  /** Opt-in captured evidence presentation; supply the same result as the bars/total. */
+  qualification?: QualificationPresentation;
   className?: string;
 }
 
@@ -45,6 +49,7 @@ export function ScoreCardPanel({
   statusTooltip,
   statusTooltipAlignRight,
   className,
+  qualification,
 }: ScoreCardPanelProps) {
   return (
     <div className={[styles.panel, className].filter(Boolean).join(' ')}>
@@ -68,6 +73,12 @@ export function ScoreCardPanel({
           </div>
         ))}
       </div>
+      {qualification?.kind === 'stock' && <div className={styles.backtest}>
+        <Text size={12} weight={500}>Backtested setup confidence</Text>
+        <Text size={11} tone="secondary">Based on historical entry signals, adjusted for favourable versus adverse move size. This is a confidence score, not this contract’s predicted chance of profit.</Text>
+        {confidenceText && <Text size={11} tone="secondary">{confidenceText}</Text>}
+        {confidenceScore === undefined && <Text size={11} tone="dim">Backtest confidence not supplied</Text>}
+      </div>}
       <div className={styles.footer}>
         <div className={styles.totalGroup}>
           <Text size={12} tone="secondary">
@@ -88,6 +99,20 @@ export function ScoreCardPanel({
           />
         </div>
       </div>
+      {qualification && (
+        total === (qualification.kind === 'stock' ? qualification.card.stockScore : qualification.card.contractScore)
+        && confidence === (qualification.kind === 'stock' ? qualification.card.stockConfidence : qualification.card.contractConfidence)
+          ? <CollapsibleSection
+              key={qualification.kind}
+              title={`Captured ${qualification.kind} scoring evidence`}
+              storageKey={`bamendjou:tradecard:${qualification.kind}:scoring-evidence:collapsed`}
+              defaultCollapsed
+              keepMounted
+            >
+              <TradeCardQualification {...qualification} />
+            </CollapsibleSection>
+          : <Text size={12} tone="dim">Evidence does not match displayed score</Text>
+      )}
     </div>
   );
 }

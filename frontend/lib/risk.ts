@@ -15,6 +15,7 @@ import type {
 } from '@/types/domain';
 import type { Status } from '@/lib/status';
 import { worstStatus, STATUS_LABEL } from '@/lib/status';
+import { exposureMark } from '@/lib/portfolioTotals';
 
 export function capitalAtRisk(mid: number, contracts: number): number {
   return mid * contracts * 100;
@@ -353,12 +354,13 @@ export function positionMultiplier(p: PortfolioPosition): number {
 
 /** Sum of notional. `kind` (STOCK-SENDS) limits it to option or stock rows:
  *  each kind's total counts only its own rows (decision
- *  STOCK-SENDS-STOCK-CAPS-2026-09-27). */
+ *  STOCK-SENDS-STOCK-CAPS-2026-09-27). A row without a live quote is valued at
+ *  its entry price, never 0 (`exposureMark`, NO-LIVE-QUOTE NLQ-1). */
 export function totalNotional(positions: PortfolioPosition[], kind?: 'option' | 'stock'): number {
   return positions.reduce(
     (sum, p) => {
       if (kind && p.contract.endsWith('|STOCK') !== (kind === 'stock')) return sum;
-      return sum + p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1);
+      return sum + exposureMark(p) * positionMultiplier(p) * (p.contracts ?? 1);
     },
     0,
   );
@@ -381,7 +383,7 @@ export function computePortfolioRiskMetrics(
   let largestConcentrationPct = 0;
   let largestConcentrationSymbol = '—';
   for (const p of positions) {
-    const posNotional = p.currentPrice * positionMultiplier(p) * (p.contracts ?? 1);
+    const posNotional = exposureMark(p) * positionMultiplier(p) * (p.contracts ?? 1);
     const posPct = posNotional / portfolioValue;
     if (posPct > largestConcentrationPct) {
       largestConcentrationPct = posPct;
@@ -560,7 +562,14 @@ export function checkTradeRisk(
     approved = false;
   }
 
-  if (singleExposure > limits.maxSingleTradeExposurePct) {
+  // Review fix #4 (decision D5): this check runs on the options basket only,
+  // and an option order carries no protective order, so its worst-case loss is
+  // the whole premium. `maxLossPerTradePct` therefore caps premium as well, and
+  // the effective cap is the smaller of the two. Both limits and
+  // `singleExposure` are fractions of portfolio value (0.05 = 5%). Mirrors
+  // backend `portfolio_risk.check_position_risk`; stocks never reach here.
+  const maxSingleOption = Math.min(limits.maxSingleTradeExposurePct, limits.maxLossPerTradePct);
+  if (singleExposure > maxSingleOption) {
     reasons.push('single_trade_exposure_too_high');
     approved = false;
   }

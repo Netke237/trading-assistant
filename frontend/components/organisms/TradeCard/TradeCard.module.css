@@ -238,6 +238,8 @@
 
 .scoreCardHeader {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   justify-content: space-between;
   align-items: center;
 }
@@ -470,3 +472,169 @@
   padding-top: var(--space-2);
   margin-top: var(--space-2);
 }
+
+/* Handling remains one controlled instance per candidate. */
+.handling {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.handlingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-4);
+}
+
+.handlingGrid .orderStrip,
+.handlingGrid .planCard {
+  grid-column: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+
+.handlingGrid .orderStrip {
+  gap: var(--space-2);
+}
+
+.handlingGrid .orderStrip > :first-child {
+  margin-bottom: var(--space-1);
+}
+
+.handlingGrid .orderStripItem {
+  display: block;
+  min-width: 0;
+}
+
+/* Shared columns for Order Entry (including Order type's KV) and Exit Plan.
+   Keep generic KV rows elsewhere on the card in their existing flex layout. */
+.handlingGrid .kvRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  column-gap: var(--space-3);
+  align-items: baseline;
+  align-content: center;
+  min-height: 28px;
+}
+
+.handlingGrid .kvRow > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.handlingGrid .kvRow > :nth-child(2) {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.handlingGrid .editInput {
+  box-sizing: border-box;
+}
+
+.handlingGrid .editRejected {
+  grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Remove the empty live region from grid sizing without hiding it from AT. */
+.handlingGrid .editRejectedEmpty {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* Stack methods according to the card's usable width, including the frame rail. */
+.methodGrid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.grid > *,
+.methodGrid > *,
+.targetMain {
+  min-width: 0;
+}
+
+.resultColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(145px, 0.7fr);
+  gap: var(--space-4);
+}
+
+.probabilityColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.resultColumns .kvRow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.targetPctRow {
+  flex-wrap: wrap;
+}
+
+.targetPctInput {
+  flex: 1 1 100px;
+  min-width: 0;
+}
+
+.targetPctInput .editInput {
+  min-width: 0;
+}
+
+.methodDetails > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.methodDetails[open] > summary {
+  margin-bottom: var(--space-2);
+}
+
+.identityFacts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+.identityFacts > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contractIdentity {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-4);
+}
+@media (max-width: 1366px) {
+  .identityFacts { grid-template-columns: minmax(0, 1fr); }
+  .contractIdentity { border-left: 0; padding-left: 0; }
+}
+
+.scorePanelsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-4);
+}
+
+.scorePanelsGrid > * { min-width: 0; }

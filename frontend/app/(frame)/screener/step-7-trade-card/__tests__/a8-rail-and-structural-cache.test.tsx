@@ -27,12 +27,13 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
     getContractQuote: jest.fn().mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
     recomputePlan: jest.fn(),
     getStructuralStop: jest.fn(),
+    getExitPlan: jest.fn(),
     getAutoTradeStatus: jest.fn().mockResolvedValue({ armed: false }),
     armAutoTrade: jest.fn().mockResolvedValue({ armed: true }),
     disarmAutoTrade: jest.fn().mockResolvedValue({ armed: false }),
@@ -117,7 +118,7 @@ describe('step-7-trade-card -- publishes the shown card for the context rail (A8
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
+      quoteLive: true, price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
     });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     global.fetch = echoFetch();
@@ -188,7 +189,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     (api.getStructuralStop as jest.Mock).mockResolvedValue({
@@ -238,5 +239,43 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
     fireEvent.click(limitBtn);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].structuralStop).toBe(143.25);
+  });
+
+  it('arms with the checked level and the computed plan, the two fields a fired trade books', async () => {
+    // POSITION-WRITER-O4-CLEANUP (O4 step 6 round 2, item 6): the page passes
+    // `structuralStop` and `exitPlan` to AutoTradeArm, and no test read them
+    // back, so `structuralStop={null}` / `exitPlan={null}` at the call site
+    // survived. The fired trade books both through `book_fired_order`.
+    (api.getExitPlan as jest.Mock).mockResolvedValue({
+      stop: {
+        price: 141.0, source: 'atr_floor', contractPrice: 1.2,
+        rrModel: 'Heston repriced', structuralSource: 'order_block', structuralConfidence: 75,
+        structuralPrice: 143.25, atrFloorPrice: 141.0, distanceDollar: 9.0,
+      },
+      targets: [],
+      atr: 3.5,
+    });
+    act(() => {
+      useSettingsStore.setState((st) => ({
+        ibkrPaper: { ...st.ibkrPaper, accountId: 'ACC', baseUrl: 'https://localhost:7499/v1/api' },
+      }) as any);
+    });
+    render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
+    expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
+    await waitFor(() => expect(api.getExitPlan).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
+    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+
+    await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
+    const body = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
+    expect(body.structural_stop).toBe(143.25);
+    expect(body.exit_plan).toEqual(expect.objectContaining({
+      stop: expect.objectContaining({ price: 141.0, atrFloorPrice: 141.0 }),
+      atr: 3.5,
+    }));
   });
 });

@@ -44,7 +44,7 @@ describe('formatIv', () => {
     const f = formatIv(resolveIv({ ivRank: null, iv: 45 }), 'AAPL');
     expect(f.text).toBe('45.0%');
     expect(f.suffix).toBe('');
-    expect(f.title).toContain('absolute level, not a percentile');
+    expect(f.title).toContain('absolute level, not a rank');
   });
 
   it('shows an em dash and no misleading number when there is no data', () => {

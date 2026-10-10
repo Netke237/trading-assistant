@@ -33,10 +33,9 @@ export const SCREENER_STEPS_STOCKS: ScreenerStep[] = [
   { index: 1, slug: 'step-1-regime',        label: 'Market Regime' },
   { index: 2, slug: 'step-2-universe',      label: 'Universe'      },
   { index: 3, slug: 'step-3-direction',     label: 'Direction'     },
-  { index: 4, slug: 'step-4-stocks',        label: 'Stocks'        },
-  { index: 5, slug: 'step-5-strategy',      label: 'Strategy'      },
-  { index: 6, slug: 'step-6-backtest',      label: 'Backtest'      },
-  { index: 7, slug: 'step-7-position-card', label: 'Position'      },
+  { index: 4, slug: 'step-4-stocks',        label: 'Strategy'      },
+  { index: 5, slug: 'step-6-backtest',      label: 'Backtest'      },
+  { index: 6, slug: 'step-7-position-card', label: 'Position'      },
 ];
 
 export const SCREENER_STEPS_PREBREAKOUT: ScreenerStep[] = [
@@ -55,18 +54,27 @@ export function getSteps(mode: 'options' | 'stocks' | 'prebreakout'): ScreenerSt
   return SCREENER_STEPS_OPTIONS;
 }
 
-export function currentStepFromPath(pathname: string | null): number {
+/** The current step's 1-based INDEX in `steps`, resolved by slug in the active
+ *  mode's list: the slug digit and the index differ in Stocks mode since Step 5
+ *  was merged into Step 4 (STOCKS-STEP-MERGE-S1). Falls back to the slug digit
+ *  only for a slug not in the list (e.g. a cross-mode path before
+ *  ScreenerStepGate bounces it), which is what every caller got before. */
+export function currentStepFromPath(pathname: string | null, steps?: ScreenerStep[]): number {
   if (!pathname) return 1;
-  const m = pathname.match(/\/screener\/step-(\d)/);
-  return m ? parseInt(m[1]!, 10) : 1;
+  const m = pathname.match(/\/screener\/(step-[^/?#]+)/);
+  if (!m) return 1;
+  const hit = steps?.find((s) => s.slug === m[1]);
+  if (hit) return hit.index;
+  const d = m[1]!.match(/^step-(\d)/);
+  return d ? parseInt(d[1]!, 10) : 1;
 }
 
 export function Stepper() {
   const pathname = usePathname();
   const router   = useRouter();
-  const current  = currentStepFromPath(pathname);
   const mode     = useScanStore((s) => s.screenerMode);
   const steps    = getSteps(mode);
+  const current  = currentStepFromPath(pathname, steps);
 
   return (
     <div className={styles.wrap}>

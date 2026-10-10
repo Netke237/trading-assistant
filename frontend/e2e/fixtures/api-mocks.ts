@@ -56,6 +56,36 @@ export const MOCK_OPTION_CHAIN = [
     volume: 1250,
     score: 78,
     contractConfidence: 'PASS',
+    explanation: {
+      contract_id: 'AAPL|185|2025-05-16|C',
+      version: 1,
+      evaluated_at: '2026-10-03T12:00:00Z',
+      outcome: 'aggregate',
+      score: 78,
+      status: 'PASS',
+      weights: { liquidity: 0.25, spread: 0.25, delta: 0.2, dte: 0.15, iv_rank: 0.15 },
+      pass_threshold: 65,
+      caution_threshold: 45,
+      unrounded_score: 78.2,
+      rounded_score: 78,
+      components: {
+        liquidity: { name: 'liquidity', wire_name: 'liquidity', raw_score: 85, weight: 0.25, contribution: 21.25, lost_points: 3.75, flags: [] },
+        spread: { name: 'spread', wire_name: 'spread', raw_score: 90, weight: 0.25, contribution: 22.5, lost_points: 2.5, flags: [] },
+        delta: { name: 'delta', wire_name: 'delta', raw_score: 75, weight: 0.2, contribution: 15, lost_points: 5, flags: [] },
+        dte: { name: 'dte', wire_name: 'dte', raw_score: 70, weight: 0.15, contribution: 10.5, lost_points: 4.5, flags: [] },
+        iv_rank: { name: 'iv_rank', wire_name: 'iv', raw_score: 60, weight: 0.15, contribution: 9, lost_points: 6, flags: [] },
+      },
+      largest_losses: [
+        { name: 'iv_rank', wire_name: 'iv', raw_score: 60, weight: 0.15, contribution: 9, lost_points: 6, flags: [] },
+        { name: 'delta', wire_name: 'delta', raw_score: 75, weight: 0.2, contribution: 15, lost_points: 5, flags: [] },
+      ],
+      blockers: [],
+      reject_reasons: [],
+      reasons: [],
+      soft_flags: [],
+      soft_fail_count: 0,
+      max_soft_fail_count: 3,
+    },
   },
   {
     id: 'AAPL|190|2025-05-16|C',
@@ -148,6 +178,9 @@ export const MOCK_SCAN_CANDIDATE = {
   exit: {
     invalidation: 180,
     premiumStop: 1.0,
+    // TRADING-REVIEW-PHASE-C-RR: the backend's current R/R basis. scanStore v18
+    // discards a seeded options result whose candidates are on any other basis.
+    rrRiskBasis: 'full_premium',
     timeStopDays: 30,
     targets: [
       { id: 'tp1', stockPrice: 194.25, estimatedOptionPrice: 3.5, pricingMethod: 'BS repriced (IV-derived)', contractsToSell: 1, status: 'PENDING' },
@@ -157,6 +190,29 @@ export const MOCK_SCAN_CANDIDATE = {
   rrRatio: 2.5,
   rrModel: 'BS repriced (IV-derived)',
   finalStatus: 'PASS',
+};
+
+/** A clean DOCC-4 health report (exported for docc5-config-health.spec.ts). */
+export const CONFIG_HEALTH_CLEAN = {
+  ok: true,
+  checked: [
+    'scoring_rules.yaml parses', 'money blocks: presence, spelling, enabled', 'regime_sizing values',
+    'regime blocks (intraday, swing, position)', 'direction_conviction: position and values',
+    'top-level families', 'horizons tree: unknown keys', 'risk_rules.yaml parses',
+    'contract_rules.yaml parses', 'running config vs disk',
+  ],
+  not_checked: [
+    'money blocks other than regime_sizing: values',
+    'required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, '
+      + 'confidence_backtest, risk_rules sections)',
+    'risk_rules.yaml and contract_rules.yaml contents',
+    'single worker assumed; only WEB_CONCURRENCY is detected',
+    'copies the frontend fetched at page load (event and IV thresholds)',
+  ],
+  pid: 4242,
+  errors: [] as unknown[],
+  warnings: [] as unknown[],
+  stale: [] as unknown[],
 };
 
 export async function setupApiMocks(page: Page): Promise<void> {
@@ -374,6 +430,17 @@ export async function setupApiMocks(page: Page): Promise<void> {
         Swing:    { reject_days: 21, caution_days: 45 },
         Position: { reject_days: 30, caution_days: 60 },
       }),
+    });
+  });
+
+  // DOCC-5 config health (DOCC-4's GET /api/config/health): a clean report,
+  // so the TopBar chip reads "Config OK" and no banner takes a grid row.
+  // Mirrors backend/app/services/config_health.py CHECK_ORDER / NOT_CHECKED.
+  await page.route('**/api/config/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(CONFIG_HEALTH_CLEAN),
     });
   });
 

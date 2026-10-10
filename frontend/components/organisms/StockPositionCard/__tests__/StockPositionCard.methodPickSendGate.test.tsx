@@ -1,3 +1,4 @@
+import { useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
@@ -112,7 +113,7 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
   });
 
-  it('unblocks both S1 and S2 once the trader picks a method', async () => {
+  it('allows a picked research save while the new validation boundary blocks broker sending', async () => {
     (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-1' });
     global.fetch = echoFetch();
 
@@ -132,6 +133,10 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
     expect(limitBtn).toBeEnabled();
     fireEvent.click(limitBtn);
 
+    await waitFor(() => expect(api.postStockOrder).not.toHaveBeenCalled());
+    expect(usePortfolioStore.getState().positions).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /^recommendation$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add to portfolio/i }));
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     // Confirmed gap as of build step 4 (S1): the gate above blocked an
     // UNPICKED send, but nothing carried a MADE pick's values into the
@@ -166,3 +171,9 @@ describe('StockPositionCard — the method-pick send gate (S1, S2)', () => {
     expect(created.pickedAt).toBe('2026-09-14T10:00:00.000Z');
   });
 });
+
+// New ephemeral execution records must not leak between independent test scans.
+beforeEach(() => useScanStore.setState({ stockExecution: {}, stockExecutionGeneration: 0 }));
+
+// Mutation ownership is session-wide; each test begins a fresh session.
+beforeEach(() => useStockOrderOwnershipStore.setState({ bySymbol: {} }));
