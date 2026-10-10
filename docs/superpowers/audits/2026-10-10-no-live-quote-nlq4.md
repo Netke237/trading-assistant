@@ -22,3 +22,22 @@ Fresh independent reviewer (cloud board-worker session, general-purpose subagent
 Not findings, checked: the confirmation ref never grants consent the visible state lacks; Prev/Next or A→B→A during a pending probe cancels the send; Place Limit and Place Market share one path and the basket sends nothing; StrictMode only over-refuses (fails safe); the `applyPickedContract` liveness-copy change does not alter any identity-dependent effect.
 
 Round 3 (NLQ-4's last under the scoped cap) must review only the NLQ4-R2-1 fix, its regression test and their interactions.
+
+## Between rounds 2 and 3 — fixes
+
+- `252ec0c4` — NLQ4-R2-1: the card-open effect increments the quote generation only when it actually issues a request (below the claimed-plan early return). A regression case was added; it was red before the fix.
+- `fa91d789` — the first full Jest run on the branch (never run by the building session) found three tests that pass on main and at `e92e8a30` but fail from `25c2570e` on:
+  - (a) Step 6 Recommended: the all-non-live fallback `?? byScore[0]` could recommend a rescued card contract. This was a code regression, now fixed to `?? byScore.find(c => !rescuedIds.includes(c.id))`.
+  - (b) `edited-fields-sync` quote mock: given `quoteLive: true`, as plan §3e requires.
+  - (c) `direct-send-save-first` #11: now ticks the contract-keyed confirmation, as plan §3e requires.
+  - (d) Raw cp1252 0x97 bytes in user-facing strings (`step-7-trade-card/page.tsx`, `lib/quoteWarning.ts`) restored to UTF-8 em dashes.
+  - Result: full Jest 212 suites / 4804 tests, 0 failures; typecheck clean.
+
+## Code round 3 — CLEAN (NLQ-4's last round under the scoped cap)
+
+Fresh independent reviewer (cloud board-worker session, general-purpose subagent applying bmad-review-adversarial-general), 2026-10-10. Scope: `git diff 25c2570e fa91d789 -- frontend` (both fix commits) and their interactions. Checked:
+- the generation counter on every quote path (claimed-plan early return, StrictMode re-run, the top early return, Prev/Next incl. A→B→A, basket Retry/recomputeTick; the send decision reads the fresh probe result, never React state);
+- the Recommended pick vs the chain list, the auto-pick and the Step 7 hand-off (it equals main's rule plus the plan's live-first preference);
+- that the two test edits add exactly the plan's preconditions and keep their invariants (no cross-contract quote; entry limit stored with a 0 scan mid);
+- that no code matches on the restored strings.
+6 suites / 122 focused tests pass. **0 gate findings. NLQ-4 closed clean at code round 3.**
