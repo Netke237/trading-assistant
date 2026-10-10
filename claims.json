@@ -18,14 +18,6 @@
     },
     {
       "agent": "codex",
-      "branch": "board/stock-pres-p1-backend-evidence-merge-e405d5ba",
-      "claimed_at": "2026-10-10T20:57:17Z",
-      "expires_at": "2026-10-11T00:29:12Z",
-      "note": "User-approved merge of board #146, PR #192; integration pending",
-      "task": "STOCK-PRES-P1-BACKEND-EVIDENCE"
-    },
-    {
-      "agent": "codex",
       "branch": "board/autotrade-fire-hygiene-merge-822b11ca",
       "claimed_at": "2026-10-10T20:57:28Z",
       "expires_at": "2026-10-10T23:57:30Z",
