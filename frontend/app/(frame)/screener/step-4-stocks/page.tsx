@@ -14,6 +14,7 @@ import { runStockScanWithContinuation, isStockManualScanCurrent, stockScanFailur
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { regimeFitTooltip } from '@/lib/statusTooltips';
 import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
+import { stockExecutionBlock } from '@/lib/stockExecutionSession';
 import { HistoryPrefetchRow } from './HistoryPrefetchRow';
 import styles from './page.module.css';
 
@@ -38,24 +39,26 @@ function _labelWithDate(iso: string): string {
 // written as marketing. Exit rung 1 is `signal.targets[0]` (== target_price, the
 // only rung the backtest and TP_HIT observe); the rest are the ladder's
 // extensions. See docs/superpowers/plans/2026-08-22-stock-exit-targets-plan.md.
+// `looksFor:` is the owner-approved plain-language summary shown on each card
+// (STOCK-PRES-P4-STRATEGY M3); it is display text only and feeds no logic.
 const STRATEGIES_BULLISH = [
-  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below the pullback MA by 1.5 ATR', exit: 'Prior swing high, then 2R / 3R extensions' },
-  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Just under the breakout level (base high)', exit: 'Measured move — base height projected off the breakout' },
-  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
-  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
-  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Mid-band, then upper band' },
-  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: 'VWAP, then 0.5 ATR past it' },
-  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction oversold entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets" },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady uptrends',        entry: 'Dip to 20-EMA + reversal candle in uptrend',              stop: 'Below the pullback MA by 1.5 ATR', exit: 'Prior swing high, then 2R / 3R extensions', looksFor: 'an uptrend that dips to its moving average' },
+  { key: 'breakout_base',         label: 'Breakout from tight base',  when: 'Momentum stocks',        entry: 'Break above N-day high after narrow range + volume spike', stop: 'Just under the breakout level (base high)', exit: 'Measured move — base height projected off the breakout', looksFor: 'a quiet range that breaks out on volume' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses above 50-SMA',                             stop: 'Below 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)', looksFor: 'a fast average crossing a slow one' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Oversold in uptrend',    entry: 'RSI < 30 while above 200-SMA',                            stop: 'Below recent swing low', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR', looksFor: 'an oversold dip inside a longer uptrend' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches lower Bollinger Band + reversal signal',     stop: 'Below lower band',       exit: 'Mid-band, then upper band', looksFor: 'a lower-band touch that turns back up' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% below VWAP + reversal bar',           stop: '0.5 ATR below entry',    exit: 'VWAP, then 0.5 ATR past it', looksFor: 'an intraday stretch below VWAP' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction oversold entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets", looksFor: 'several oversold signals agreeing' },
 ];
 
 const STRATEGIES_BEARISH = [
-  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above the pullback MA by 1.5 ATR', exit: 'Prior swing low, then 2R / 3R extensions' },
-  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Just above the breakdown level (base low)', exit: 'Measured move — base height projected off the breakdown' },
-  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)' },
-  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR' },
-  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Mid-band, then lower band' },
-  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: 'VWAP, then 0.5 ATR past it' },
-  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction overbought entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets" },
+  { key: 'pullback_ema',          label: 'Pullback to 20-EMA',        when: 'Steady downtrends',      entry: 'Bounce to 20-EMA + reversal candle in downtrend',          stop: 'Above the pullback MA by 1.5 ATR', exit: 'Prior swing low, then 2R / 3R extensions', looksFor: 'a downtrend that bounces to its moving average' },
+  { key: 'breakout_base',         label: 'Breakdown from tight base', when: 'Momentum shorts',        entry: 'Break below N-day low after narrow range + volume spike',  stop: 'Just above the breakdown level (base low)', exit: 'Measured move — base height projected off the breakdown', looksFor: 'a quiet range that breaks down on volume' },
+  { key: 'ma_crossover',          label: 'MA Crossover 20/50',        when: 'Simple trend entry',     entry: '20-SMA crosses below 50-SMA',                             stop: 'Above 50-SMA',           exit: '3 / 4.5 / 6 ATR ladder (cross-back level shown)', looksFor: 'a fast average crossing a slow one' },
+  { key: 'mean_reversion_rsi',    label: 'Mean Reversion RSI',        when: 'Overbought in downtrend', entry: 'RSI > 70 while below 200-SMA',                           stop: 'Above recent swing high', exit: 'Return to the 20-SMA, then 2.5 / 3.75 ATR', looksFor: 'an overbought pop inside a longer downtrend' },
+  { key: 'mean_reversion_bb',     label: 'Mean Reversion BB',         when: 'Choppy / range-bound',   entry: 'Price touches upper Bollinger Band + reversal signal',     stop: 'Above upper band',       exit: 'Mid-band, then lower band', looksFor: 'an upper-band touch that turns back down' },
+  { key: 'mean_reversion_vwap',   label: 'Mean Reversion VWAP',       when: 'Intraday · 15m session', entry: 'Price deviates >1.5% above VWAP + reversal bar',           stop: '0.5 ATR above entry',    exit: 'VWAP, then 0.5 ATR past it', looksFor: 'an intraday stretch above VWAP' },
+  { key: 'mean_reversion_multi',  label: 'Mean Reversion Multi-Signal', when: 'High-conviction overbought entries', entry: 'RSI + BB + VWAP daily all confirm simultaneously', stop: "Widest of the fired variants' stops", exit: "Tightest of the fired variants' targets", looksFor: 'several overbought signals agreeing' },
 ];
 
 type RegimeFit = 'PASS' | 'CAUTION' | 'REJECT';
@@ -131,6 +134,9 @@ export default function Step4StocksPage() {
   const pv = profile?.values;
 
   const stockScanAt  = useScanStore((s) => s.stockScanAt);
+  // STOCK-PRES-P4-STRATEGY M11: how many symbols carry an after-scan intent
+  // (set on the position card). A number selector, so no new object per render.
+  const armedCount = useScanStore((s) => Object.values(s.stockAfterScanIntent).filter(Boolean).length);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -225,6 +231,11 @@ export default function Step4StocksPage() {
   }
 
 
+  // STOCK-PRES-P4-STRATEGY M11: the block is read at render, never cached, so
+  // the card states it for exactly as long as stockExecutionBlock() applies.
+  const afterScanBlock = armedCount > 0 ? stockExecutionBlock() : null;
+  const armedNoun = armedCount === 1 ? 'symbol' : 'symbols';
+
   return (
     <div className={styles.main}>
       <div className={styles.header}>
@@ -238,116 +249,152 @@ export default function Step4StocksPage() {
         </Text>
       </div>
 
-      <div className={styles.grid}>
-        {STRATEGIES.map((s) => {
-          const fit = REGIME_FIT[s.key]?.[combinedRegime];
-          const badge = fit ? REGIME_BADGE[fit] : null;
-          return (
-            <button
-              key={s.key}
-              type="button"
-              className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
-              onClick={() => setActiveStrategy(s.key)}
-            >
-              <div className={styles.cardHeader}>
-                <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
-                <Text size={11} tone="secondary">{s.when}</Text>
-                {badge && fit && (
-                  <Tooltip text={regimeFitTooltip(strategyLabel[s.key] ?? s.label, fit, combinedRegime)}>
-                    <span className={`${styles.regimeBadge} ${BADGE_CLASS[fit]}`}>{badge.label}</span>
-                  </Tooltip>
-                )}
-              </div>
-              <div className={styles.cardBody}>
-                <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
-                <Text size={11} tone="dim">Stop: {s.stop}</Text>
-                <Text size={11} tone="dim">Exit: {s.exit}</Text>
-              </div>
-            </button>
-          );
-        })}
+      <details className={styles.pageExplanation}>
+        <summary>How this page works</summary>
+        <Text size={12} tone="secondary">
+          Click a card to select a strategy (saved at once; the floating Run button on Steps 1–3 uses it). Adjust parameters, then Run Stock Scan. A successful scan opens Backtest; a failed scan stays here with its reason.
+        </Text>
+      </details>
+
+      <div className={styles.layout}>
+        <div className={styles.stack}>
+          <section className={styles.panel}>
+            <h2 className={styles.cardTitle}><Text size={14} weight={500}>Choose a strategy</Text></h2>
+            <div className={styles.grid}>
+              {STRATEGIES.map((s) => {
+                const fit = REGIME_FIT[s.key]?.[combinedRegime];
+                const badge = fit ? REGIME_BADGE[fit] : null;
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={`${styles.card} ${activeStrategy === s.key ? styles.cardActive : ''}`}
+                    onClick={() => setActiveStrategy(s.key)}
+                  >
+                    <div className={styles.cardHeader}>
+                      <Text size={14} weight={500}>{strategyLabel[s.key] ?? s.label}</Text>
+                      <Text size={11} tone="secondary">{s.when}</Text>
+                      {badge && fit && (
+                        <Tooltip text={regimeFitTooltip(strategyLabel[s.key] ?? s.label, fit, combinedRegime)}>
+                          <span className={`${styles.regimeBadge} ${BADGE_CLASS[fit]}`}>{badge.label}</span>
+                        </Tooltip>
+                      )}
+                    </div>
+                    <div className={styles.cardBody}>
+                      <Text size={11} tone="secondary">Looks for: {s.looksFor}</Text>
+                      <Text size={11} tone="dim">Entry: {entryLabel[s.key] ?? s.entry}</Text>
+                      <Text size={11} tone="dim">Stop: {s.stop}</Text>
+                      <Text size={11} tone="dim">Exit: {s.exit}</Text>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={styles.panel}>
+            <h2 className={styles.cardTitle}><Text size={14} weight={500}>Parameters</Text></h2>
+            <StrategyParamsPanel
+              params={params}
+              setParams={setParams}
+              onReset={() => setParams(panelParamsOf(useScanParamsStore.getState()))}
+              profile={profile}
+              profileUnavailable={profilesFailed}
+              customHorizon={context?.horizonPreset === 'Custom' ? paramsHorizon : null}
+            />
+
+            {activeStrategy === 'mean_reversion_multi' && (
+              multiVariants !== null && multiMinConfirm !== null && multiVwapLookback !== null && multiVwapDeviationPct !== null ? (
+                <MeanReversionConfirmPanel
+                  variants={multiVariants}
+                  minConfirmations={multiMinConfirm}
+                  vwapLookback={multiVwapLookback}
+                  vwapDeviationPct={multiVwapDeviationPct}
+                  onChange={(update) => {
+                    if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
+                    if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
+                    if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
+                    if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
+                  }}
+                />
+              ) : (
+                <Text size={11} tone="caution">
+                  {'Signal confirmation: profile unavailable — the scan uses the backend\'s values'}
+                </Text>
+              )
+            )}
+            {activeStrategy === 'mean_reversion_multi' && multiOverridden && (
+              <button
+                type="button"
+                className={styles.resetProfileBtn}
+                onClick={() => {
+                  setMeanReversionVariants(null);
+                  setMeanReversionMinConfirm(null);
+                  setVwapLookback(null);
+                  setVwapDeviationPct(null);
+                }}
+              >
+                Reset signal confirmation to profile
+              </button>
+            )}
+          </section>
+        </div>
+
+        <aside className={styles.side} aria-label="Scan actions">
+          <section className={styles.panel}>
+            <h2 className={styles.cardTitle}><Text size={14} weight={500}>Run scan</Text></h2>
+            <div className={styles.runRow}>
+              <button
+                type="button"
+                className={styles.runBtn}
+                onClick={onRun}
+                disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0)}
+                title={
+                  !activeStrategy
+                    ? 'Select a strategy first'
+                    : activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0
+                    ? 'Select at least one confirmation signal'
+                    : undefined
+                }
+              >
+                {scanning ? 'Running backtest scan…' : 'Run Stock Scan'}
+              </button>
+              {stockScanAt && mounted && (
+                <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>
+              )}
+
+            </div>
+            {error && <Text size={12} tone="reject">{error}</Text>}
+            {notice && <Text size={12} tone="caution">{notice}</Text>}
+            {result && (
+              <button type="button" className={styles.sendBtn} onClick={() => router.push('/screener/step-6-backtest')}>
+                View Backtest results
+              </button>
+            )}
+          </section>
+
+          <section className={styles.panel}>
+            <h2 className={styles.cardTitle}><Text size={14} weight={500}>Pre-warm history</Text></h2>
+            <HistoryPrefetchRow />
+          </section>
+
+          {armedCount > 0 && (
+            <section className={styles.panel}>
+              <h2 className={styles.cardTitle}><Text size={14} weight={500}>After-scan</Text></h2>
+              <Text size={12} tone="secondary">
+                {afterScanBlock !== null
+                  ? `${armedCount} ${armedNoun} armed. ${afterScanBlock} Arming itself stays on the position card.`
+                  : `${armedCount} ${armedNoun} armed — booked to the paper portfolio only if they PASS on the next scan. Arming itself stays on the position card.`}
+              </Text>
+            </section>
+          )}
+
+          {/* STOCK-SENDS (§A3): notes left by a stock send (StockPositionCard or
+            * StockSendDialog) whose row may have no order, or whose order's status
+            * is unknown. */}
+          <DirectSendNotesPanel />
+        </aside>
       </div>
-
-      <StrategyParamsPanel
-        params={params}
-        setParams={setParams}
-        onReset={() => setParams(panelParamsOf(useScanParamsStore.getState()))}
-        profile={profile}
-        profileUnavailable={profilesFailed}
-        customHorizon={context?.horizonPreset === 'Custom' ? paramsHorizon : null}
-      />
-
-      {activeStrategy === 'mean_reversion_multi' && (
-        multiVariants !== null && multiMinConfirm !== null && multiVwapLookback !== null && multiVwapDeviationPct !== null ? (
-          <MeanReversionConfirmPanel
-            variants={multiVariants}
-            minConfirmations={multiMinConfirm}
-            vwapLookback={multiVwapLookback}
-            vwapDeviationPct={multiVwapDeviationPct}
-            onChange={(update) => {
-              if (update.variants !== undefined)         setMeanReversionVariants(update.variants);
-              if (update.minConfirmations !== undefined) setMeanReversionMinConfirm(update.minConfirmations);
-              if (update.vwapLookback !== undefined)     setVwapLookback(update.vwapLookback);
-              if (update.vwapDeviationPct !== undefined) setVwapDeviationPct(update.vwapDeviationPct);
-            }}
-          />
-        ) : (
-          <Text size={11} tone="caution">
-            {'Signal confirmation: profile unavailable — the scan uses the backend\'s values'}
-          </Text>
-        )
-      )}
-      {activeStrategy === 'mean_reversion_multi' && multiOverridden && (
-        <button
-          type="button"
-          className={styles.resetProfileBtn}
-          onClick={() => {
-            setMeanReversionVariants(null);
-            setMeanReversionMinConfirm(null);
-            setVwapLookback(null);
-            setVwapDeviationPct(null);
-          }}
-        >
-          Reset signal confirmation to profile
-        </button>
-      )}
-
-      <div className={styles.runRow}>
-        <button
-          type="button"
-          className={styles.runBtn}
-          onClick={onRun}
-          disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0)}
-          title={
-            !activeStrategy
-              ? 'Select a strategy first'
-              : activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0
-              ? 'Select at least one confirmation signal'
-              : undefined
-          }
-        >
-          {scanning ? 'Running backtest scan…' : 'Run Stock Scan'}
-        </button>
-        {stockScanAt && mounted && (
-          <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>
-        )}
-
-      </div>
-
-      <HistoryPrefetchRow />
-
-      {error && <Text size={12} tone="reject">{error}</Text>}
-      {notice && <Text size={12} tone="caution">{notice}</Text>}
-      {/* STOCK-SENDS (§A3): notes left by a stock send (StockPositionCard or
-        * StockSendDialog) whose row may have no order, or whose order's status
-        * is unknown. */}
-      <DirectSendNotesPanel />
-
-      {result && (
-        <button type="button" className={styles.sendBtn} onClick={() => router.push('/screener/step-6-backtest')}>
-          View Backtest results
-        </button>
-      )}
     </div>
   );
 }
