@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "claude/ci-docs-paths-ignore",
-      "claimed_at": "2026-10-10T08:10:45Z",
-      "expires_at": "2026-10-10T11:10:45Z",
-      "note": "Skip CI + Playwright on docs-only pushes/PRs to save Actions minutes",
-      "task": "CI-DOCS-PATHS-IGNORE"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/board-worker",
       "claimed_at": "2026-10-10T08:56:24Z",
       "expires_at": "2026-10-10T11:56:24Z",
