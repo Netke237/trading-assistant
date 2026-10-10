@@ -2217,7 +2217,7 @@
       "id": "YF-CALENDAR-SEMAPHORE",
       "name": "yfinance limiters bound to the first event loop: one semaphore per running loop so no scan symbol is lost to 'bound to a different event loop'",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2232,7 +2232,11 @@
         "pattern": "def _loop_semaphore",
         "note": "Task 1 adds the per-loop semaphore helper. PRESENCE ONLY; behaviour is pinned by tests/test_yf_semaphore_loops.py."
       },
-      "note": "2026-10-10 taken from the Board (#142). Reproduced on Python 3.11.17: two consecutive asyncio.run bursts of 10 symbols through fetch_calendar_dates_async -> loop 2: 5 ok, 5 RuntimeError (semaphore bound to a different event loop). Same pattern in _PREWARM_SEM. Plan: per-loop semaphores (WeakKeyDictionary keyed by the running loop). Plan round 1 next."
+      "note": "2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan at 8ba56fbb against main 13c8b52c and CPython 3.11.17 asyncio.locks/mixins; runtime experiment: before - loops 2 and 3 lose 5/10 calendar lookups, prewarm 15/20; after - 10/10 and 20/20, peaks 5 and 15. Only uvicorn's loop reaches the limiters in production; existing patched test stays valid. 0 GATE FINDINGS. Plan stage closed; code stage starts at round 1 of 3. Non-gate wording fixed in the plan: a contended semaphore keeps its loop alive (not collected); prewarm getter at L1466. || 2026-10-10 taken from the Board (#142). Reproduced on Python 3.11.17: two consecutive asyncio.run bursts of 10 symbols through fetch_calendar_dates_async -> loop 2: 5 ok, 5 RuntimeError (semaphore bound to a different event loop). Same pattern in _PREWARM_SEM. Plan: per-loop semaphores (WeakKeyDictionary keyed by the running loop). Plan round 1 next.",
+      "plan_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      }
     }
   ],
   "already_shipped": [

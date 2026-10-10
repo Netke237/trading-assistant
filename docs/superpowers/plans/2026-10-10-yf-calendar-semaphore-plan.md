@@ -39,8 +39,10 @@ lost (it decides the event gate and the stock card's status cap), is a wrong res
 ## Decision (technical, coordinator): per-loop semaphores
 
 The issue offered "per-loop semaphore or a threading limiter". **Per-loop**: one `asyncio.Semaphore`
-per running event loop, held in a `weakref.WeakKeyDictionary` keyed by the loop, so a closed loop's
-semaphore is collected with it.
+per running event loop, held in a `weakref.WeakKeyDictionary` keyed by the loop (a weak key never matches a
+new loop that reuses a dead loop's id). Note: a semaphore that has ever been contended holds its loop in
+`Semaphore._loop`, so such an entry is not collected when its loop closes — a small, bounded memory cost in
+multi-loop processes (tests, scripts); do not claim otherwise in the code comment.
 - Same behaviour as today on the single uvicorn loop (limit 5 / 15, same `async with` call sites).
 - No thread blocked while waiting (a `threading.BoundedSemaphore` acquired inside the event loop would
   block the loop; acquiring it in a worker thread would change every call site).
@@ -83,7 +85,7 @@ affected), every other module.
    `_get_yf_sem()` with `return _loop_semaphore(_YF_CALENDAR_SEMS, 5)`; same for `_PREWARM_SEM` →
    `_PREWARM_SEMS`, `_get_prewarm_sem()` → `_loop_semaphore(_PREWARM_SEMS, 15)`. Keep the existing
    comments that explain each limit. Both getters are only ever called inside a coroutine (verify:
-   L1364, L1464, L1680), so `get_running_loop()` cannot raise on a real path.
+   L1364, L1466, L1680), so `get_running_loop()` cannot raise on a real path.
 
 **Tests first** (new `backend/tests/test_yf_semaphore_loops.py`; sync test functions that call
 `asyncio.run` themselves, so pytest-asyncio's own loop is not involved; reset `_yf_cal_cache`,
