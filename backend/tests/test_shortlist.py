@@ -78,6 +78,18 @@ def _enter_shortlist_patches(truncate):
     stack.enter_context(patch("app.routers.scan.fetch_option_chain_async",      AsyncMock(return_value=_MOCK_CHAIN)))
     stack.enter_context(patch("app.routers.scan.fetch_company_name_async",      AsyncMock(return_value=None)))
     stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar",   AsyncMock(return_value=None)))
+    # Every other provider the options scan reaches, stubbed so no test here
+    # touches the network and the ranking comes only from the scores each test
+    # sets (#129). Each one used to go live: the Tradier batch quote, the
+    # historical-bars store (Alpaca -> Tiingo -> yfinance on a DB miss), EDGAR
+    # fundamentals, and the yfinance earnings/dividend calendar fallback -- the
+    # last behind a module-level semaphore, so a failing feed could drop
+    # symbols. Each stub returns what a provider with no data for these
+    # made-up symbols returns, so the scan takes the paths patched above.
+    stack.enter_context(patch("app.routers.scan.fetch_quotes",                  return_value={}))
+    stack.enter_context(patch("app.services.historical_store.get_bars",        AsyncMock(return_value=[])))
+    stack.enter_context(patch("app.routers.scan.get_fundamentals",              AsyncMock(return_value=None)))
+    stack.enter_context(patch("app.routers.scan.fetch_calendar_dates_async",    AsyncMock(return_value=(None, None))))
     stack.enter_context(patch("app.routers.scan.score_stock",                 side_effect=_pass_card))
     stack.enter_context(patch("app.routers.scan.validate_contract",           side_effect=_pass_contract))
     stack.enter_context(patch("app.routers.scan._settings", {"scan": {"shortlist_max_candidates": truncate}}))
