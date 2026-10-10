@@ -1,9 +1,10 @@
 """Request-boundary guards (NUMERIC-API-INPUTS T1, board #164).
 
 `NonFiniteJsonGuard` refuses a JSON request body that carries a non-finite
-number -- the literals NaN / Infinity / -Infinity, or a number that overflows
-to +-inf such as 1e999 -- with FastAPI's standard 422 shape, before any
-endpoint runs. FastAPI parses bodies with `json.loads`, which accepts all of
+number -- the literals NaN / Infinity / -Infinity, or a number literal that
+overflows a double to +-inf, whether written as a float (1e999) or as an
+integer of 309+ digits (the browser's JSON.parse reads both as Infinity) --
+with FastAPI's standard 422 shape, before any endpoint runs. FastAPI parses bodies with `json.loads`, which accepts all of
 these; inside an untyped `dict` field nothing validates them afterwards, so
 without this guard they reach calculations and storage.
 
@@ -50,6 +51,24 @@ def _finite_float(literal: str) -> float:
     if not math.isfinite(value):   # e.g. 1e999 -> inf
         raise _NonFinite(literal)
     return value
+
+
+def _finite_int(literal: str) -> int:
+    # json.loads routes an integer literal (no fraction, no exponent) here, not
+    # to parse_float. float() of a huge digit string returns +-inf rather than
+    # raising, and has no digit limit, so the finiteness check comes FIRST:
+    # int() of a literal beyond sys.get_int_max_str_digits() (4300) raises
+    # ValueError, which would otherwise read as invalid JSON.
+    if not math.isfinite(float(literal)):   # e.g. 10**400 written out
+        raise _NonFinite(literal)
+    return int(literal)
+
+
+def _syntax_only(_literal: str) -> int:
+    # The re-parse below only asks "is this valid JSON?": numbers are not
+    # converted, so an integer beyond the int-string digit limit is not
+    # mistaken for a syntax error.
+    return 0
 
 
 def _is_json_content_type(scope: Scope) -> bool:
@@ -100,14 +119,19 @@ class NonFiniteJsonGuard:
 
         if not pending and body:
             try:
-                json.loads(body, parse_constant=_reject_constant, parse_float=_finite_float)
+                json.loads(body, parse_constant=_reject_constant,
+                           parse_float=_finite_float, parse_int=_finite_int)
             except _NonFinite as exc:
                 refuse = True
                 try:
                     # The hook fires as soon as the scanner meets the number,
                     # possibly before a later syntax error. Refuse only a body
-                    # FastAPI would itself parse; otherwise keep its error.
-                    json.loads(body)
+                    # that is syntactically valid JSON; otherwise keep
+                    # FastAPI's error. Number conversion is skipped so a
+                    # 4300+ digit integer (plain json.loads raises ValueError
+                    # on it) is still refused as non-finite.
+                    json.loads(body, parse_int=_syntax_only,
+                               parse_float=_syntax_only, parse_constant=_syntax_only)
                 except Exception:
                     refuse = False
                 if refuse:

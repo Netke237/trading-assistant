@@ -12,10 +12,14 @@ parameter -- including those of nested `Dependant.dependencies` -- has its
 pydantic-core schema walked:
 
   * each `float` leaf is compiled ON ITS OWN into a `SchemaValidator`, with its
-    own constraints and the effective `allow_inf_nan` (the field's own value,
-    else the nearest enclosing model/dataclass/typed-dict `config`, else
-    pydantic's default True), and probed with nan, inf, -inf, the string "NaN"
-    and the string "1e999". Not one leaf may accept any of them.
+    own constraints and the effective `allow_inf_nan`: the field's own value,
+    else the `config` of the innermost model/dataclass/typed-dict that holds
+    it, else pydantic's default True. A parent's value is NOT carried into a
+    nested model or dataclass -- pydantic validates each under its own config
+    (a typed-dict's schema config already includes the inherited value) -- so
+    a nested model without `allow_inf_nan=False` shows up here. The leaf is
+    probed with nan, inf, -inf, the string "NaN" and the string "1e999". Not
+    one leaf may accept any of them. Two self-tests pin this walker rule.
   * untyped leaves (`Any`, or a `dict` whose values are `Any`) cannot be
     validated by the schema at all; only T1's JSON guard reaches them. Their
     set is pinned to the section 1 inventory (34), so a new one fails here and
@@ -38,8 +42,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 import pytest
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict
+from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic_core import SchemaValidator
 
 import app.routers.stock_scan as stock_scan_mod
@@ -189,7 +196,10 @@ def _walk(node, path, allow, defs, out, seen, ctx) -> None:
     if "ref" in node and t != "float":
         defs.setdefault(node["ref"], node)
     if t in ("model", "dataclass", "typed-dict") and isinstance(node.get("config"), dict):
-        allow = node["config"].get("allow_inf_nan", allow)
+        # A nested model/dataclass validates under its OWN config, not its
+        # parent's: reset to pydantic's default rather than inheriting. (A
+        # typed-dict's schema config already carries the enclosing value.)
+        allow = node["config"].get("allow_inf_nan", True)
         cls = node.get("cls")
         if cls is not None:
             path = path + [f"<{cls.__name__}>"]
@@ -221,9 +231,8 @@ def _walk(node, path, allow, defs, out, seen, ctx) -> None:
         _walk(v, path, allow, defs, out, seen, ctx)
 
 
-@pytest.fixture(scope="module")
-def inventory() -> tuple[list[APIRoute], list[Leaf], list[str]]:
-    routes = list(_iter_api_routes(create_app().routes))
+def _collect(app) -> tuple[list[APIRoute], list[Leaf], list[str]]:
+    routes = list(_iter_api_routes(app.routes))
     leaves: list[Leaf] = []
     no_schema: list[str] = []
     for r in routes:
@@ -239,6 +248,77 @@ def inventory() -> tuple[list[APIRoute], list[Leaf], list[str]]:
                       label)
                 leaves.extend(Leaf(label, kind, lk, path, acc) for lk, path, acc in out)
     return routes, leaves, no_schema
+
+
+@pytest.fixture(scope="module")
+def inventory() -> tuple[list[APIRoute], list[Leaf], list[str]]:
+    return _collect(create_app())
+
+
+# ── the walker itself ─────────────────────────────────────────────────────────
+# pydantic does NOT carry a parent model's allow_inf_nan into a nested model or
+# dataclass: each validates its own fields under its own config (default True).
+# The walker must model that, or a nested float model without the config would
+# pass the ratchet while accepting nan over HTTP.
+
+class _WalkInnerDefault(BaseModel):
+    x: float
+
+
+class _WalkInnerGuarded(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    x: float
+
+
+@pydantic_dataclass
+class _WalkInnerDataclass:
+    y: float
+
+
+class _WalkOuterDefaultInner(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    inner: _WalkInnerDefault
+    dc: _WalkInnerDataclass
+    z: float
+
+
+class _WalkOuterGuardedInner(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    inner: _WalkInnerGuarded
+    z: float
+
+
+def _walk_selftest_floats(body_model) -> dict[str, tuple[str, ...]]:
+    def _w(body):
+        return None
+
+    # Set the annotation as an object: under `from __future__ import
+    # annotations` a local `body: body_model` would be an unresolvable string.
+    _w.__annotations__ = {"body": body_model}
+    app = FastAPI()
+    app.add_api_route("/w", _w, methods=["POST"])
+    routes, leaves, no_schema = _collect(app)
+    assert [r.path for r in routes] == ["/w"] and no_schema == []
+    return {leaf.path: leaf.accepts for leaf in leaves if leaf.leaf_kind == "float"}
+
+
+def test_walker_does_not_inherit_allow_inf_nan_into_a_nested_model():
+    floats = _walk_selftest_floats(_WalkOuterDefaultInner)
+    # Ground truth from pydantic itself: the nested model and dataclass accept nan.
+    probe = _WalkOuterDefaultInner.model_validate(
+        {"inner": {"x": float("nan")}, "dc": {"y": float("nan")}, "z": 1.0})
+    assert math.isnan(probe.inner.x) and math.isnan(probe.dc.y)
+    assert "nan" in floats["body.<_WalkOuterDefaultInner>.inner.<_WalkInnerDefault>.x"], floats
+    assert "nan" in floats["body.<_WalkOuterDefaultInner>.dc.<_WalkInnerDataclass>.y"], floats
+    assert floats["body.<_WalkOuterDefaultInner>.z"] == (), floats
+
+
+def test_walker_reports_nothing_when_the_nested_model_is_guarded():
+    floats = _walk_selftest_floats(_WalkOuterGuardedInner)
+    assert floats == {
+        "body.<_WalkOuterGuardedInner>.inner.<_WalkInnerGuarded>.x": (),
+        "body.<_WalkOuterGuardedInner>.z": (),
+    }, floats
 
 
 # ── the ratchet ───────────────────────────────────────────────────────────────

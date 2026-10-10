@@ -16,6 +16,8 @@ body passes through byte-identical.
   4. The STRING "NaN" in an untyped dict passes the guard (residual, plan section 5).
   5. A finite body reaches the endpoint byte-identical; chunked bodies are reassembled.
   6. The 422 carries CORS headers for an allowed origin (CORS wraps the guard).
+  7. An integer literal that overflows a double (309+ digits, incl. one beyond
+     Python's 4300-digit int-string limit) -> 422; a large finite one passes.
 
 TestClient is used WITHOUT a `with` block, so the app lifespan (schedulers,
 monitors) never starts; every request is either refused before the endpoint
@@ -267,3 +269,44 @@ def test_refusal_carries_cors_headers_for_allowed_origin(client, calls):
     _assert_finite_422(resp, "Infinity")
     assert resp.headers.get("access-control-allow-origin") == _ALLOWED_ORIGIN
     assert calls == []
+
+
+# 7 ---------------------------------------------------------------------------
+# Python's json routes an integer literal (no fraction, no exponent) to
+# parse_int, not parse_float, and keeps it an exact int -- so a 309+ digit
+# integer was never seen by the float hook. It overflows to inf in the
+# browser's JSON.parse exactly like 1e999 does, so it is refused the same way.
+_INT_400 = "1" + "0" * 400
+_INT_5000 = "1" + "0" * 4999   # beyond sys.get_int_max_str_digits() (4300)
+
+
+@pytest.mark.parametrize("literal", [_INT_400, "-" + _INT_400], ids=["int400", "neg-int400"])
+def test_overflowing_integer_literal_in_untyped_dict_is_refused(client, calls, literal):
+    resp = client.post(
+        "/api/portfolio",
+        content=_portfolio_body('{"t1": [{"price": ' + literal + ', "pct": 50}]}'),
+        headers={"content-type": "application/json"},
+    )
+    _assert_finite_422(resp, literal)
+    assert calls == []
+
+
+def test_integer_literal_beyond_int_str_digit_limit_is_refused_as_non_finite(client, calls):
+    """A 5000-digit integer exceeds Python's int-string conversion limit, so a
+    plain json.loads raises ValueError on it. It must still be the guard's
+    finite_number 422 -- not FastAPI's json_invalid, not a 500."""
+    resp = client.post(
+        "/api/portfolio",
+        content=_portfolio_body('{"t1": ' + _INT_5000 + "}"),
+        headers={"content-type": "application/json"},
+    )
+    _assert_finite_422(resp, _INT_5000)
+    assert calls == []
+
+
+@pytest.mark.parametrize("literal", ["1" + "0" * 300, "-" + "1" + "0" * 300, "12345", "0", "-7"])
+def test_large_but_finite_integer_passes_byte_identical(client, literal):
+    body = ('{"a": ' + literal + ', "b": [' + literal + "]}").encode()
+    resp = client.post("/__t1_echo", content=body, headers={"content-type": "application/json"})
+    assert resp.status_code == 200, resp.text
+    assert resp.content == body
