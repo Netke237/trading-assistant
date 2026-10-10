@@ -2492,8 +2492,8 @@
       "id": "APPROVED-BOARD-MERGE-2026-10-10",
       "name": "User-approved integration of seven audited waiting-merge board items",
       "status": "built",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "depends_on": [],
       "branch": "board/approved-board-merge-2026-10-10-4d19dd6e",
       "covers": [
@@ -2511,7 +2511,7 @@
         "pattern": "params=replace\\(result.params\\)",
         "note": "Presence only for one included target; graph ancestry and integration evidence verify all seven sources."
       },
-      "note": "All seven frozen source PR heads merged locally. Conflicts only PROJECT_STATE.json; semantic three-way merge retains both phase entries, removals from backlog, source audit counters and decision additions. Both P4 notes retained. Production overlapping edits auto-merged. Original phases remain built until actual main merge. Integration audit is a separate merge target; original closed caps unchanged."
+      "note": "All seven frozen source PR heads merged locally. Conflicts only PROJECT_STATE.json; semantic three-way merge retains both phase entries, removals from backlog, source audit counters and decision additions. Both P4 notes retained. Production overlapping edits auto-merged. Original phases remain built until actual main merge. Integration audit is a separate merge target; original closed caps unchanged. Independent code round 1: /root/approved_merge_audit reviewed 13c8b52ccfa782f995bb11e02b2378bf293dd812..3db23735b2b7d90c32704bb91795c32bf5403d2c, all seven ancestry/merge interactions and state reconciliation, zero gate findings. Combined validation found two incompatible scheduler test stubs; fixture-only fix and scoped independent follow-up pending. No original source audit counters reopened. Independent code round 2: fresh /root/merge_fixture_audit reviewed only the fixture compatibility diff from 3db23735 (SHA256 8bf237cc2b39f40f17326ff37aa5ca15c69feb4f99c09a6f89e80fc21c7f713c) and scheduler interactions, zero gate findings, no fixes/outstanding findings; scope verified. Cancellation module 25 passed; typecheck passed. Final combined CI pending before merge."
     }
   ],
   "already_shipped": [

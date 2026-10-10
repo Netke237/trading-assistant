@@ -90,7 +90,8 @@ def _scan_fire_worker_idle_after_each_test():
 def scan_env(monkeypatch):
     """A PASS scan result, no persistence, a counted booking mock."""
     result = SimpleNamespace(scan_id="REC-H1",
-                             candidates=[SimpleNamespace(finalStatus="PASS")])
+                             candidates=[SimpleNamespace(finalStatus="PASS")],
+                             rejected=[], noLiveQuoteNames=0)
     monkeypatch.setattr(scan_module, "_execute_scan_core",
                         AsyncMock(return_value=result))
     upsert = AsyncMock()
@@ -791,7 +792,8 @@ async def test_a_manual_scan_overlapping_a_scheduled_one_dispatches_once(
     from app.schemas import ScanRequest
     manual_result = scan_env.result
     sched_result = SimpleNamespace(scan_id="REC-SCHED", model_dump_json=lambda: "{}",
-                                   candidates=[SimpleNamespace(finalStatus="PASS")])
+                                   candidates=[SimpleNamespace(finalStatus="PASS")],
+                                   rejected=[], noLiveQuoteNames=0)
     sched_in_core, sched_gate = asyncio.Event(), asyncio.Event()
 
     async def _core(req, db, previous_result=None):

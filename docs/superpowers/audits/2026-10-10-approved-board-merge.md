@@ -22,4 +22,13 @@ NO-LIVE-QUOTE raw Tradier sample files remain exactly as approved in source PR #
 
 ## Validation and audit
 
-Full backend Python 3.11, frontend typecheck/Jest and combined Options e2e pending. Fresh independent integration audit pending; cap three rounds for this merge target. Numeric/persistence gate applies; only findings introduced by integration or its interactions can block this stage.
+Independent code round 1: fresh reviewer `/root/approved_merge_audit` applied bmad adversarial review to `13c8b52ccfa782f995bb11e02b2378bf293dd812..3db23735b2b7d90c32704bb91795c32bf5403d2c`. It checked all seven frozen heads/merge parents, production overlaps, scheduler/auto-trade interactions, stock evidence/Heston cache boundaries, source phase fields, decisions/backlog, raw sample identity and state probes. Zero gate findings; no audit fixes or outstanding gate findings. Scope verified against the frozen sources. Original source audit histories/caps unchanged.
+
+Validation on `3db23735`: frontend typecheck passed; hosted frontend CI (full Jest and production build) and Playwright passed; local Options e2e passed 2/2 at 1200/1920 widths. Local Jest passed 4932/4934 tests in 228/230 suites; two tests exceeded their default five-second timeout under concurrent full-suite load, then their unchanged suites passed 45/45 with the standard timeout. No timeout or production change.
+
+Local full backend Python 3.11.16: 7018 passed, 9 skipped, two failures (855.05s). Hosted Python 3.11.17 backend CI: same two failures, 7018 passed, 9 skipped (519.83s). Both scheduler cancellation tests use SimpleNamespace results lacking `rejected` / `noLiveQuoteNames` now consumed by the NO-LIVE-QUOTE scheduler diagnostics. Minimal fixture compatibility update pending; semantic assertions and production code unchanged. Follow-up independent scope is that fixture fix and its scheduler interaction only. Merge held until combined validation passes.
+
+
+Independent code round 2: fresh `/root/merge_fixture_audit` reviewed only the fixture diff from `3db23735` (SHA256 `8bf237cc2b39f40f17326ff37aa5ca15c69feb4f99c09a6f89e80fc21c7f713c`) and scheduler/schema interactions. Zero gate findings. The empty rejection list and zero missing-quote count match a PASS result; all cancellation/dispatch/booking/arm assertions remain. No production or persistence writer changed, no audit fixes or outstanding findings. Scope verified. Integration code stage clean in two rounds; original source counters untouched.
+
+Fixture validation: full cancellation module 25 passed on Python 3.11.16; frontend typecheck and diff whitespace check passed. Final combined CI on the fixture-adjusted commit must pass before merging.
