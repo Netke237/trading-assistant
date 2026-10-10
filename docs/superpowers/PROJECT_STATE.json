@@ -2217,7 +2217,7 @@
       "id": "NUMERIC-API-INPUTS",
       "name": "Reject NaN/Infinity at the API boundary: JSON guard for untyped payloads, allow_inf_nan=False on the request models, route-wide ratchet test",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2232,10 +2232,27 @@
         "pattern": "class NonFiniteJsonGuard",
         "note": "PRESENCE ONLY: the T1 JSON boundary guard exists. Behaviour is pinned by the T1-T3 tests."
       },
-      "note": "2026-10-10 board #164: inventory done (143 routes; 123 body float leaves accept non-finite across 17 request models; 34 untyped leaves; query floats already bounded). Plan written; plan audit round 1 pending.",
-      "audit_history": [],
+      "note": "2026-10-10 board #164: inventory done (143 routes; 123 body float leaves accept non-finite across 17 request models; 34 untyped leaves; query floats already bounded). PLAN ROUND 1 CLEAN (0 gate findings). Tickets T1-T3 next.",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "docs/superpowers/plans/2026-10-10-numeric-api-inputs-plan.md at 60987f9, checked against the named code and with read-only experiments in a Python 3.11 venv (fastapi 0.141.1, pydantic 2.13.4, starlette 1.7.0); inventory counts re-derived by the reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_notes": [
+            "Plan section 5 'Those seen already check finiteness' is inaccurate for stock_scorer.py:1131-1181 float(val) and the contract-rule override casts; reviewer judged the string-in-untyped-dict residual below the gate (non-finite thresholds raise or act as extreme finite values, which the plan accepts). Logged against main, not fixed in-branch.",
+            "T3 'no allowlist' vs rr_ratios allowlist entry: moot once StockExitPlanRequest carries allow_inf_nan=False; the implementer adds the entry only if the leaf still shows."
+          ],
+          "clean": true
+        }
+      ],
       "plan_stage": {
-        "rounds": 0
+        "rounds": 1,
+        "closed_by": "clean"
       }
     }
   ],
