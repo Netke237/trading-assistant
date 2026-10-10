@@ -867,7 +867,6 @@ export default function Step7Page() {
       return;
     }
     const keyAtRequest = contractKey;
-    const quoteGeneration = ++quoteRequestGenerationRef.current;
     const symbol = pickedCard.symbol;
     const isOverrideAtRequest = isOverride;
 
@@ -896,6 +895,9 @@ export default function Step7Page() {
     // closure, never via React state (whose read timing can't be trusted
     // relative to when cleanup runs for an unrelated reason).
     let settled = false;
+    // Only a run that actually issues a request may supersede a pending
+    // send-time probe -- hence below the claimed-plan early return above.
+    const quoteGeneration = ++quoteRequestGenerationRef.current;
     setLiveQuote(null);
     setLiveStockPrice(null);
     setFetchingQuote(true);

@@ -278,3 +278,38 @@ it('audit: revoking the tick during the send probe refuses the order', async () 
  await settle();
  expect(api.postOptionOrder).not.toHaveBeenCalled();
 });
+it('audit: an unrelated basket Retry during the send probe must not suppress the fresh refused quote', async () => {
+ const row = (sym: 'AAA' | 'BBB') => {
+  const strike = sym === 'BBB' ? 155 : 150;
+  return { id: `${sym}|${strike}|2026-05-15|C`, symbol: sym, strike, expiry: '2026-05-15', right: 'C', price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, dte: 24, score: 75, contractConfidence: 'PASS', spread: 0.1 };
+ };
+ resetStores([makeCard('BBB'), makeCard('AAA')]);
+ act(() => useScanStore.setState({
+  pickedContracts: { AAA: row('AAA').id, BBB: row('BBB').id },
+  contractsBySymbol: { AAA: [row('AAA')], BBB: [row('BBB')] },
+ } as any));
+ (api.getContractQuote as jest.Mock).mockResolvedValue({quoteLive:true,price:1,spread:0.1});
+ (api.recomputePlan as jest.Mock).mockImplementation(async (req: { symbol: string }) => {
+  if (req.symbol === 'BBB') throw new Error('plan failed');
+  const c = makeCard('AAA');
+  return { entry: c.entry, exit: c.exit, rrRatio: 2, rrModel: 'Heston repriced' };
+ });
+ render(<Step7TradeCardPage />);
+ await screen.findByText(/Could not compute the plan for the selected contract/);
+ fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+ fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+ await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
+ await screen.findByText('Live mid: $1.00');
+ const retryBbb = await screen.findByRole('button', { name: 'Retry BBB' });
+ const probe = deferred<any>();
+ (api.getContractQuote as jest.Mock).mockReturnValueOnce(probe.promise);
+ await send();
+ fireEvent.click(retryBbb);
+ await act(async () => probe.resolve({quoteLive:false,quoteState:'session_closed',price:9,spread:0.1}));
+ await settle();
+ expect(persistBodies()).toHaveLength(0);
+ expect(api.postOptionOrder).not.toHaveBeenCalled();
+ expect(screen.getByText(/No live quote \(market closed\)/)).toBeInTheDocument();
+ expect(screen.getByLabelText('Confirm sending without a live quote')).toBeInTheDocument();
+ expect(screen.queryByText('Live mid: $1.00')).not.toBeInTheDocument();
+});
