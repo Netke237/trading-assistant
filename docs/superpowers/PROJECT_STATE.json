@@ -2517,7 +2517,7 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2533,11 +2533,28 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: inventory done (17 market.py sites + sectors, daily-risk quote, stream session, two probes, paper orders; only the fire gate used the governor; no 429 handling anywhere). Plan written; plan audit round 1 pending. MERGE NEEDS KENNETH'S OK ON THE PROJECTED SCAN SLOWDOWN (TG-1).",
-      "audit_history": [],
+      "note": "2026-10-10 board #169: inventory done (17 market.py sites + sectors, daily-risk quote, stream session, two probes, paper orders; only the fire gate used the governor; no 429 handling anywhere). Plan written; plan round 1: 2 gate findings fixed in the plan; plan round 2 pending. MERGE NEEDS KENNETH'S OK ON THE PROJECTED SCAN SLOWDOWN (TG-1).",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewed": "docs/superpowers/plans/2026-10-10-tradier-governor-plan.md at 41cde651",
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-auditor brief",
+          "gate_findings": 2,
+          "findings": [
+            "G1: sync admission time is added inside deadline-bounded callers (A11 earnings calendar under the 5 s Tradier lookup deadline; fire-path regime fetch_candles under 25 s), so under bulk load Tradier loses to the yfinance fallback -> earnings flag missing / different veto date / different regime bars; and a literal D3 passed A11's httpx.Timeout as the float admission budget (TypeError)",
+            "G2: _tradier_get_async(timeout=None) forwarded to client.get removes every B/C/D timeout (httpx None = no timeout), so a stalled chain call during book_fired_order never returns and a live order has no persisted Portfolio row"
+          ],
+          "fixes": "plan revised: float admit_timeout separate from the HTTP timeout, per-site budgets, TokenBucket reserve=3 with priority admission (A11 always priority; fire-path regime fetch via market.tradier_priority() ContextVar), async helper timeout default httpx.USE_CLIENT_DEFAULT; new T1/T2/T3 tests",
+          "outstanding": "none at the gate; round 2 reviews only these fixes"
+        }
+      ],
       "plan_stage": {
-        "rounds": 0
-      }
+        "rounds": 1
+      },
+      "decisions": [
+        "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI."
+      ]
     }
   ],
   "already_shipped": [
