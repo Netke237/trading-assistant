@@ -20,7 +20,7 @@
       "agent": "codex",
       "branch": "board/trade-card-ui-followup-options-merge-065b8d86",
       "claimed_at": "2026-10-10T20:57:06Z",
-      "expires_at": "2026-10-10T23:57:09Z",
+      "expires_at": "2026-10-11T00:29:04Z",
       "note": "User-approved merge of board #158, PR #195; integration pending",
       "task": "TRADE-CARD-UI-FOLLOWUP-OPTIONS"
     },
