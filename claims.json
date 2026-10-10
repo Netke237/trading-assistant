@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/yf-calendar-semaphore-47d6c524",
       "claimed_at": "2026-10-10T18:52:23Z",
-      "expires_at": "2026-10-10T22:18:11Z",
+      "expires_at": "2026-10-10T22:18:26Z",
       "note": "Board #142: yfinance calendar semaphore bound to first event loop",
       "task": "YF-CALENDAR-SEMAPHORE"
     }
