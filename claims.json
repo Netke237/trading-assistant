@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/screen-labels-19-20-dba12b5f",
       "claimed_at": "2026-10-10T20:16:42Z",
-      "expires_at": "2026-10-10T23:16:42Z",
+      "expires_at": "2026-10-10T23:16:57Z",
       "note": "Board #163: implement chat-approved duration units and driver wording",
       "task": "SCREEN-LABELS-19-20"
     }
