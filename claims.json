@@ -15,6 +15,14 @@
       "expires_at": "2026-10-10T22:24:32Z",
       "note": "Board #158: verify, merge origin/main, code audit, PR",
       "task": "TRADE-CARD-UI-FOLLOWUP-OPTIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/heston-cache-isolation-d8e79288",
+      "claimed_at": "2026-10-10T19:25:34Z",
+      "expires_at": "2026-10-10T22:25:34Z",
+      "note": "Board #166: isolate cached Heston results across requests",
+      "task": "HESTON-CACHE-ISOLATION"
     }
   ]
 }
