@@ -2585,7 +2585,7 @@
     {
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
-      "status": "blocked",
+      "status": "in_progress",
       "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [],
@@ -2595,14 +2595,14 @@
         "reconciliation ticket 13"
       ],
       "plan": "docs/superpowers/plans/2026-10-10-tradier-governor-plan.md",
-      "branch": "board/tradier-governor-889de9f2",
+      "branch": "board/tradier-governor-2b6fd1f9",
       "verify": {
         "kind": "present",
         "path": "backend/app/data/governor.py",
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: inventory done (17 market.py sites + sectors, daily-risk quote, stream session, two probes, paper orders; only the fire gate used the governor; no 429 handling anywhere). Plan written; plan rounds 1-3 ran (2, 1, 1 gate findings); PLAN STAGE AT CAP, NOT CLEAN; R3-G1 unresolved; needs-kenneth on #169 (new plan stage for a revised design?). No code written. MERGE NEEDS KENNETH'S OK ON THE PROJECTED SCAN SLOWDOWN (TG-1).",
+      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation, recorded here). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
       "audit_history": [
         {
           "round": 1,
@@ -2644,7 +2644,7 @@
       ],
       "plan_stage": {
         "rounds": 3,
-        "closed_by": "cap reached without a clean round -- stopped, Kenneth to decide"
+        "closed_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10"
       },
       "decisions": [
         "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI.",
@@ -4390,6 +4390,12 @@
       "id": "TICKET-38-OPTIONS-ONLY-2026-10-09",
       "q": "Backlog ticket 30 found the audit-clean trade-card UI follow-up (codex/trade-card-ui-followup, 55e08e55) unmerged and conflicting with current main on the Stocks Step 7 surfaces, which the active STOCK-DESIGN-GRILLING claim is redesigning. Integrate how?",
       "a": "Kenneth, 2026-10-09 (in chat): option A. Integrate the Options half now (TC-UI-01..05, TC-UI-06 Options half) on a fresh branch from current main with a fresh code audit; leave TC-UI-07 and the Stocks half of TC-UI-06 to the Stocks design owner. Recorded as phase TRADE-CARD-UI-FOLLOWUP-OPTIONS."
+    },
+    {
+      "id": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10",
+      "q": "TRADIER-GOVERNOR's plan stage hit its 3-round cap without a clean round (R3-G1: a deadline-bound fire-path regime fetch can miss its rate-limit slot during a stock scan, fall back to yfinance and size the order differently). Q1 open a new plan stage for the overdraft redesign? Q2 if not, shrink to bulk traffic only? Q3 accept a short burst above the limit while the overdraft is used (at most 15 extra requests, then repaid)?",
+      "a": "Kenneth, 2026-10-10 (chat): 'i agree' to the coordinator's recommendation -- Q1 YES: open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall) for the overdraft redesign: deadline-bound auto-trade fire-path Tradier calls (regime fetch incl. intraday, earnings veto, market-open price check) never wait and never fail on the limiter -- they take a slot if free, otherwise go anyway and book an overdraft (bucket negative, floored at -capacity 15); bulk traffic (scans, prewarm, monitors, probes) waits until it is repaid, so the average stays 120/min; the stock scan's earnings lookup waits for its slot BEFORE its 5 s deadline starts. Q3 YES: a burst of at most 15 extra requests is accepted. Q2 not needed. No counter reset: plan rounds 1-3 stay recorded; the scan-slowdown merge question stays pre-accepted ('ok Go ahead', 2026-10-10). Not a merge approval.",
+      "by": "Kenneth 2026-10-10 (chat)"
     }
   ],
   "pending_kenneth": [
