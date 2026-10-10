@@ -60,7 +60,7 @@
       "agent": "codex",
       "branch": "board/heston-cache-isolation-merge-a61ef422",
       "claimed_at": "2026-10-10T20:57:39Z",
-      "expires_at": "2026-10-10T23:57:39Z",
+      "expires_at": "2026-10-10T23:57:41Z",
       "note": "User-approved merge of board #166, PR #200; integration pending",
       "task": "HESTON-CACHE-ISOLATION"
     }
