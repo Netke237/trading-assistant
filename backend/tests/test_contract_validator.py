@@ -265,3 +265,138 @@ def test_score_card_detail_present_even_on_hard_reject():
 def test_hard_reject_delta_band_reads_from_config():
     from app.scoring.contract_validator import hard_reject_delta_band
     assert hard_reject_delta_band() == (0.20, 0.85)
+
+
+# ── NO-LIVE-QUOTE (plan 3b, test T6): quote_mode ─────────────────────────────
+#
+# A chain row whose quote is not live (quoteLive False: market closed, stale,
+# one-sided) is hard-rejected by default -- the scan's mode -- and only
+# labelled, capped at CAUTION, in Step 6 / the Watchlist ("label").
+
+def _live_pass_contract(**overrides):
+    """A contract that grades PASS when its quote is live (score 69)."""
+    return _contract_with_expiry(35, bid=2.40, ask=2.50, iv_rank=30, **overrides)
+
+
+def _not_live(contract, state="session_closed"):
+    return {**contract, "quoteLive": False, "quoteState": state}
+
+
+def test_quote_mode_defaults_to_reject():
+    """Relies on the DEFAULT (r0 finding 18): no quote_mode is passed, so a new
+    caller that forgets it gets the safe behaviour, a hard reject."""
+    card = validate_contract(_not_live(_live_pass_contract()), stock_score=70)
+    assert card.status == "REJECT"
+    assert card.score == 0
+    assert card.reject_reasons == ["no_live_quote"]
+
+
+def test_quote_mode_default_in_the_signature_is_reject():
+    import inspect
+    assert inspect.signature(validate_contract).parameters["quote_mode"].default == "reject"
+
+
+def test_reject_mode_short_circuits_to_exactly_no_live_quote():
+    """Every other hard rule this row breaks (volume, DTE, delta, stock score,
+    too many soft failures) is NOT evaluated: the reasons are exactly
+    ["no_live_quote"], with one blocker entry for it."""
+    bad = _not_live(
+        _contract_with_expiry(1, bid=2.40, ask=2.50, volume=1, open_interest=1,
+                              delta=0.05, iv_rank=95),
+        state="stale",
+    )
+    card = validate_contract(bad, stock_score=10, quote_mode="reject")
+    assert card.status == "REJECT"
+    assert card.reject_reasons == ["no_live_quote"]
+    blockers = card.explanation["blockers"]
+    assert blockers == [{
+        "code": "no_live_quote",
+        "label": "No live quote",
+        "metric": "quote_state",
+        "observed": "stale",
+        "threshold": "live",
+        "operator": "!=",
+    }]
+    assert card.explanation["reject_reasons"] == ["no_live_quote"]
+    assert card.explanation["outcome"] == "blocked"
+    # The soft scores are still computed so the breakdown renders.
+    assert set(card.detail) == {"dte", "delta", "iv_rank", "liquidity", "spread"}
+    assert card.breakdown.spread_score > 0
+    assert card.breakdown.dte_score == 0
+    assert "no_live_quote" not in card.soft_flags
+    # The explanation builds on the wire model.
+    from app.schemas import ContractExplanation
+    ContractExplanation.model_validate(card.explanation)
+
+
+def test_label_mode_caps_pass_at_caution_and_flags_the_card():
+    live = validate_contract(_live_pass_contract(), stock_score=70, quote_mode="label")
+    assert live.status == "PASS"
+    assert live.no_live_quote is False and live.quote_state is None
+
+    card = validate_contract(_not_live(_live_pass_contract()), stock_score=70, quote_mode="label")
+    assert card.status == "CAUTION"
+    assert card.score == live.score          # graded exactly as the live row
+    assert card.reject_reasons == []
+    assert "no_live_quote" in card.soft_flags
+    assert card.no_live_quote is True
+    assert card.quote_state == "session_closed"
+    assert card.explanation["status"] == "CAUTION"
+    assert card.explanation["soft_fail_count"] == live.explanation["soft_fail_count"]
+
+
+def test_label_mode_flag_does_not_count_as_a_soft_failure():
+    """Two real soft flags plus the label must not reach max_soft_fail_count
+    (3) and turn into too_many_soft_failures: the label changes no grade."""
+    thin = _live_pass_contract(volume=100, open_interest=500)
+    live = validate_contract(thin, stock_score=70, quote_mode="label")
+    assert live.status == "CAUTION" and len(live.soft_flags) == 2
+    card = validate_contract(_not_live(thin), stock_score=70, quote_mode="label")
+    assert card.status == "CAUTION"
+    assert card.reject_reasons == []
+    assert card.score == live.score
+
+
+def test_label_mode_still_applies_every_other_hard_rule():
+    card = validate_contract(
+        _not_live(_live_pass_contract(volume=1)), stock_score=70, quote_mode="label",
+    )
+    assert card.status == "REJECT"
+    assert "volume_too_low" in card.reject_reasons
+    assert "no_live_quote" not in card.reject_reasons
+    assert card.no_live_quote is True
+
+
+def test_label_mode_one_sided_row_still_rejects_as_spread_too_wide():
+    """A no-bid row as the chain builder emits it (price = ask/2, spread = ask)
+    through _augment, as Step 6 grades it: rejected on its own spread, as
+    before NO-LIVE-QUOTE."""
+    from app.data.augment import _augment
+    row = {
+        "symbol": "AAPL", "strike": 200, "right": "C", "dte": 35,
+        "expiry": (date.today() + timedelta(days=35)).isoformat(),
+        "price": 0.2, "spread": 0.41, "delta": 0.45, "volume": 500,
+        "open_interest": 2000, "iv": 30.0,
+        "quoteState": "one_sided", "quoteLive": False, "quoteAgeS": 4.0,
+    }
+    card = validate_contract(_augment(row, stock_price=190.0), stock_score=70, quote_mode="label")
+    assert card.status == "REJECT"
+    assert "spread_too_wide" in card.reject_reasons
+    assert "no_live_quote" not in card.reject_reasons
+    assert card.quote_state == "one_sided"
+
+
+@pytest.mark.parametrize("mode", ["reject", "label"])
+def test_missing_or_true_quote_live_reads_as_live(mode):
+    for c in (_live_pass_contract(),
+              {**_live_pass_contract(), "quoteLive": True, "quoteState": "live"},
+              {**_live_pass_contract(), "quoteLive": None}):
+        card = validate_contract(c, stock_score=70, quote_mode=mode)
+        assert card.status == "PASS", c
+        assert card.no_live_quote is False and card.quote_state is None
+        assert "no_live_quote" not in card.soft_flags
+
+
+def test_unknown_quote_mode_is_refused():
+    with pytest.raises(ValueError):
+        validate_contract(_live_pass_contract(), stock_score=70, quote_mode="ignore")

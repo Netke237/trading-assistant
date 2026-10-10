@@ -217,20 +217,26 @@ def test_effective_dte_limits_are_the_overrides_else_the_yaml():
 class _FakeTradier:
     """Answers the expirations and chains calls; records the chain expiry asked for."""
 
-    def __init__(self, dates):
+    def __init__(self, dates, quote_stamp_ms=None):
         self.dates = dates
         self.chain_expiries = []
+        # NO-LIVE-QUOTE: bid_date/ask_date for the row, so a test that grades
+        # it can make the quote live (no stamps reads `stale`).
+        self.quote_stamp_ms = quote_stamp_ms
 
     def get(self, url, headers=None, params=None, **_):
         if url.endswith("/expirations"):
             body = {"expirations": {"date": self.dates}}
         else:
             self.chain_expiries.append(params["expiration"])
-            body = {"options": {"option": [{
+            row = {
                 "symbol": "XOM", "option_type": "call", "strike": 110.0,
                 "bid": 2.0, "ask": 2.2, "last": 2.1, "volume": 500, "open_interest": 900,
                 "greeks": {"delta": 0.45, "theta": -0.04, "mid_iv": 0.3},
-            }]}}
+            }
+            if self.quote_stamp_ms is not None:
+                row["bid_date"] = row["ask_date"] = self.quote_stamp_ms
+            body = {"options": {"option": [row]}}
 
         class _R:
             def raise_for_status(self):
@@ -252,11 +258,20 @@ def _patch_tradier(monkeypatch):
 
 
 def test_async_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accepts(monkeypatch):
+    import app.services.market_session as _session
+
     today = date.today()
     dates = _dates(today, 24, 52, 80)
     _patch_tradier(monkeypatch)
     monkeypatch.setitem(market._expirations_cache, "XOM", (dates, today.isoformat()))
-    fake = _AsyncFakeTradier(dates)
+    # NO-LIVE-QUOTE NLQ-2: the validator now rejects a row whose quote is not
+    # live WITHOUT judging its DTE, which would make the DTE assertion below
+    # pass vacuously. So the row is made live (in session, a 5-second-old
+    # two-sided quote) and the test asserts it is.
+    _now_s = 1_791_216_001.0
+    monkeypatch.setattr(_session, "_market_session_open", lambda *a, **k: True)
+    monkeypatch.setattr(market, "_now", lambda: _now_s)
+    fake = _AsyncFakeTradier(dates, quote_stamp_ms=int((_now_s - 5) * 1000))
 
     rules = {"min_dte": 45}
     chain = asyncio.run(fetch_option_chain_async(
@@ -264,7 +279,9 @@ def test_async_fetch_with_a_45_day_min_dte_returns_contracts_the_validator_accep
 
     assert fake.chain_expiries == [_dates(today, 52)[0]]
     assert chain, "the fetch returned no contracts"
+    assert chain[0]["quoteLive"] is True, chain[0]
     card = validate_contract({**chain[0], "symbol": "XOM"}, 80, overrides=rules)
+    assert "no_live_quote" not in card.reject_reasons
     assert not {"dte_too_short", "dte_too_long"} & set(card.reject_reasons), card.reject_reasons
 
 
@@ -285,3 +302,175 @@ def test_sync_fetch_uses_the_same_no_window_pick(monkeypatch):
     monkeypatch.setattr(market.httpx, "get", fake.get)
     assert fetch_option_chain("XOM", dte_limits=(45, 21, 60, 90))
     assert fake.chain_expiries == [_dates(today, 52)[0]]
+
+
+# ── NO-LIVE-QUOTE NLQ-1 (plan 3a, test T3): every row's quote liveness ──────
+#
+# Both builders, run through the same fake Tradier: every emitted row carries
+# quoteState / quoteLive / quoteAgeS and never bid / ask (scan.py's bearish
+# spread builder reads those off raw chain rows -- adding them would switch an
+# unaudited path on); a row with no ask is dropped (it used to be kept at the
+# last price with a fabricated 0.0 spread); price and spread are unchanged for
+# every kept row; the session flag and `now` are read once per fetch; the
+# sandbox feed lag is applied.
+
+import app.services.market_session as market_session  # noqa: E402
+
+_Q_NOW = 1_791_216_001.0   # 2026-10-05 12:00:01 ET (the in-session Step 0 capture)
+
+
+def _stamp(age_s):
+    return int((_Q_NOW - age_s) * 1000)
+
+
+def _opt(strike, bid, ask, *, last=None, bd=None, ad=None, right="call"):
+    o = {"symbol": f"XOM-{strike}", "option_type": right, "strike": float(strike),
+         "bid": bid, "ask": ask, "last": last, "volume": 500, "open_interest": 900,
+         "implied_volatility": 0.3, "greeks": {"delta": 0.45, "theta": -0.04}}
+    if bd is not None:
+        o["bid_date"] = bd
+    if ad is not None:
+        o["ask_date"] = ad
+    return o
+
+
+_Q_CHAIN = [
+    _opt(100, 2.0, 2.2, last=2.1, bd=_stamp(4), ad=_stamp(9)),          # two-sided, seconds old
+    _opt(105, 0.0, 0.41, last=0.3, bd=_stamp(4), ad=_stamp(9)),         # no bid
+    _opt(110, 0.0, 0.0, last=1.5, bd=_stamp(4), ad=_stamp(9)),          # no ask, a last price: dropped
+    _opt(115, 0.5, 0.0, last=0.0),                                      # no ask, no last: dropped
+    _opt(120, 1.0, 1.3, bd=_stamp(7200), ad=_stamp(5400)),              # two-sided, 90 min old
+    _opt(125, 1.0, 1.3),                                                # two-sided, no stamps
+    _opt(130, 0.7, 0.9, bd=_stamp(2400), ad=_stamp(3600)),              # fresher side 40 min old
+    _opt(100, 3.0, 3.2, bd=_stamp(4), ad=_stamp(4), right="put"),       # other right: not emitted
+]
+
+
+class _QuoteFake:
+    def __init__(self, dates, options):
+        self.dates, self.options = dates, options
+
+    def get(self, url, headers=None, params=None, **_):
+        body = ({"expirations": {"date": self.dates}} if url.endswith("/expirations")
+                else {"options": {"option": [dict(o) for o in self.options]}})
+
+        class _R:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return body
+        return _R()
+
+
+class _AsyncQuoteFake(_QuoteFake):
+    async def get(self, url, headers=None, params=None, **_):
+        return _QuoteFake.get(self, url, headers=headers, params=params)
+
+
+class _Counted:
+    def __init__(self, *values):
+        self.values, self.calls = list(values), 0
+
+    def __call__(self, *a, **k):
+        self.calls += 1
+        return self.values[min(self.calls, len(self.values)) - 1]
+
+
+def _run_builder(which, monkeypatch, *, base="https://api.tradier.com", session=(True,), now=(_Q_NOW,),
+                 options=_Q_CHAIN):
+    """Run one builder offline; returns (rows, session_counter, clock_counter)."""
+    today = date.today()
+    dates = _dates(today, 45)
+    monkeypatch.setattr(market, "_tradier_base", lambda: base)
+    monkeypatch.setattr(market, "_headers", lambda *a, **k: {})
+    monkeypatch.setattr("app.data.ibkr.fetch_iv_metrics_ibkr", lambda *a, **k: None)
+    monkeypatch.setattr("app.data.tastytrade_iv.fetch_iv_metrics_tastytrade", lambda *a, **k: None)
+    monkeypatch.setattr(market, "_yf_iv_for_chain", lambda *a, **k: {})
+    session_fn, clock = _Counted(*session), _Counted(*now)
+    monkeypatch.setattr(market_session, "_market_session_open", session_fn)
+    monkeypatch.setattr(market, "_now", clock)
+    if which == "sync":
+        monkeypatch.setattr(market.httpx, "get", _QuoteFake(dates, options).get)
+        rows = fetch_option_chain("XOM", option_type="C", dte_limits=(21, 21, 60, 90))
+    else:
+        rows = asyncio.run(fetch_option_chain_async(
+            _AsyncQuoteFake(dates, options), "XOM", option_type="C", dte_limits=(21, 21, 60, 90)))
+    return rows, session_fn, clock
+
+
+_BUILDERS = pytest.mark.parametrize("which", ["sync", "async"])
+
+
+@_BUILDERS
+def test_every_row_carries_the_quote_keys_and_never_bid_or_ask(which, monkeypatch):
+    rows, _, _ = _run_builder(which, monkeypatch)
+    assert rows
+    for r in rows:
+        assert {"quoteState", "quoteLive", "quoteAgeS"} <= set(r), r
+        assert r["quoteLive"] is (r["quoteState"] == "live")
+        assert "bid" not in r and "ask" not in r, r
+
+
+@_BUILDERS
+def test_rows_with_no_ask_are_dropped(which, monkeypatch):
+    rows, _, _ = _run_builder(which, monkeypatch)
+    assert sorted(r["strike"] for r in rows) == [100, 105, 120, 125, 130]
+    assert all(r["spread"] > 0 for r in rows), "no row may carry a fabricated 0.0 spread"
+
+
+@_BUILDERS
+def test_price_and_spread_are_unchanged_for_kept_rows(which, monkeypatch):
+    rows, _, _ = _run_builder(which, monkeypatch)
+    got = {r["strike"]: (r["price"], r["spread"]) for r in rows}
+    assert got == {
+        100: (2.1, 0.2),
+        105: (0.2, 0.41),     # bid 0: price = ask/2 (round(0.205, 2) == 0.2), spread = ask
+        120: (1.15, 0.3),
+        125: (1.15, 0.3),
+        130: (0.8, 0.2),
+    }
+
+
+@_BUILDERS
+def test_quote_states_in_session(which, monkeypatch):
+    rows, _, _ = _run_builder(which, monkeypatch)
+    got = {r["strike"]: (r["quoteState"], r["quoteAgeS"]) for r in rows}
+    assert got == {
+        100: ("live", 4.0),
+        105: ("one_sided", 4.0),
+        120: ("stale", 5400.0),
+        125: ("stale", None),
+        130: ("stale", 2400.0),
+    }
+
+
+@_BUILDERS
+def test_quote_states_outside_the_session(which, monkeypatch):
+    rows, _, _ = _run_builder(which, monkeypatch, session=(False,))
+    got = {r["strike"]: r["quoteState"] for r in rows}
+    assert got == {100: "session_closed", 105: "one_sided", 120: "session_closed",
+                   125: "session_closed", 130: "session_closed"}
+    assert not any(r["quoteLive"] for r in rows)
+
+
+@_BUILDERS
+def test_session_flag_and_now_are_read_once_per_fetch(which, monkeypatch):
+    # A second read would see the session closed and the clock an hour on.
+    rows, session_fn, clock = _run_builder(which, monkeypatch, session=(True, False),
+                                           now=(_Q_NOW, _Q_NOW + 3600))
+    assert session_fn.calls == 1
+    assert clock.calls == 1
+    states = {r["strike"]: r["quoteState"] for r in rows}
+    assert states[100] == "live"
+    assert all(r["quoteAgeS"] in (4.0, 5400.0, 2400.0, None) for r in rows)
+
+
+@_BUILDERS
+def test_the_sandbox_feed_lag_is_applied(which, monkeypatch):
+    # 15-minute-delayed quotes: 40 minutes on the wall clock is 25 in the feed's.
+    rows, _, _ = _run_builder(which, monkeypatch, base="https://sandbox.tradier.com")
+    got = {r["strike"]: (r["quoteState"], r["quoteAgeS"]) for r in rows}
+    assert got[130] == ("live", 1500.0)
+    assert got[100] == ("live", -896.0)
+    assert got[120] == ("stale", 4500.0)

@@ -354,6 +354,12 @@ class OptionContract(BaseModel):
     score: int
     contractConfidence: Status
     explanation: Optional[ContractExplanation] = None
+    # NO-LIVE-QUOTE (plan 3c): /api/contracts grades in label mode, so a row
+    # whose quote is not live comes back capped at CAUTION with these set from
+    # the score card. quoteState: 'one_sided' | 'session_closed' | 'stale';
+    # None on a live row.
+    noLiveQuote: bool = False
+    quoteState: Optional[str] = None
 
 
 # ── Candles ──────────────────────────────────────────────────────────────────
@@ -755,6 +761,11 @@ class TradeCardData(BaseModel):
     isEtf: bool = False
     # Days to EARNINGS alone (nextEventDays is the nearer of earnings/dividend).
     earningsDays: Optional[int] = None
+    # NO-LIVE-QUOTE (plan 3c): carries a Step 6 pick's flag onto the card. A
+    # scan card is built only from contracts that were live WHEN THE SCAN RAN
+    # (reject mode), so the scan always leaves this False -- which is never
+    # proof that the quote is live now (the result is persisted).
+    noLiveQuote: bool = False
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None
@@ -1095,6 +1106,11 @@ class ScanResult(BaseModel):
     # back to Bullish / Swing (STEP3-PARAM-REACH). None = a result from before
     # 2026-10-02.
     request_context: Optional[ScanRequestContext] = None
+    # NO-LIVE-QUOTE (plan 3f): how many rejected names were rejected only
+    # because none of their contracts had a live quote (reason exactly
+    # "contracts rejected: no_live_quote(N)"). The scheduled-scan notice reads
+    # this rather than parsing reasons. 0 on results persisted before it.
+    noLiveQuoteNames: int = 0
 
 
 class ScanSessionStatus(BaseModel):
@@ -1366,6 +1382,10 @@ class PortfolioPositionSchema(BaseModel):
     currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
+    # True when GET /portfolio got no quote for this position (NO-LIVE-QUOTE
+    # NLQ-1 round-1 F2). currentPrice / pnlDollar / pnlPct then hold their 0.0
+    # defaults, which are NOT a price: the table renders "—" instead.
+    quoteUnavailable: bool = False
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None

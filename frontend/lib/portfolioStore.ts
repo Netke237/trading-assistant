@@ -54,6 +54,7 @@ type BackendPosition = {
   currentStockPrice?: number | null;
   pnlDollar?: number;
   pnlPct?: number;
+  quoteUnavailable?: boolean;
   dteRemaining?: number;
   delta?: number | null;
   theta?: number | null;
@@ -106,6 +107,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     currentStockPrice: p.currentStockPrice ?? undefined,
     pnlDollar:    p.pnlDollar ?? 0,
     pnlPct:       p.pnlPct ?? 0,
+    quoteUnavailable: p.quoteUnavailable ?? false,
     delta:        p.delta ?? undefined,
     theta:        p.theta ?? undefined,
     // Two quantities, kept apart (PHASE-A-NULL-IVRANK-2026-09-06):

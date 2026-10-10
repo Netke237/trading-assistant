@@ -4,7 +4,7 @@
 
 **Blocked by:** Reproduce current duration calculation/display.
 
-**Status:** draft — awaiting breakdown approval and applicable plan/design gates
+**Status:** approved for agent work by Kenneth 2026-10-09; not started. Applicable plan/design gates still apply.
 
 **Owner category:** agent plan.
 

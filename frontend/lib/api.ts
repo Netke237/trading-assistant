@@ -2,7 +2,7 @@ import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCa
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
               ContractGrading } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import { validationMessages } from '@/lib/pydanticError';
@@ -442,7 +442,7 @@ export const api = {
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -458,6 +458,7 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
+    quote_live?: boolean | null;
     rr_target_r_multiple?: number;
     target_stock_price?: number;
     target_source?: TradeCardData['exit']['targetSource'];
@@ -891,7 +892,7 @@ export const api = {
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
   ) =>
-    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+    post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -903,14 +904,7 @@ export const api = {
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
   ) =>
-    post<Array<{
-      symbol: string;
-      direction: string;
-      fib_level_hit: string;
-      fib_dist_pct: number | null;
-      at_level: boolean;
-      confidence: number;
-    }>>(
+    post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),

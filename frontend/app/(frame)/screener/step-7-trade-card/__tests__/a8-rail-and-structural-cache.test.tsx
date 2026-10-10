@@ -27,7 +27,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
     getContractQuote: jest.fn().mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
@@ -118,7 +118,7 @@ describe('step-7-trade-card -- publishes the shown card for the context rail (A8
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
+      quoteLive: true, price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
     });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     global.fetch = echoFetch();
@@ -189,7 +189,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
     (api.getStructuralStop as jest.Mock).mockResolvedValue({

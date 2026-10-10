@@ -1,0 +1,208 @@
+FAIL app/(frame)/screener/step-7-trade-card/__tests__/no-live-quote.test.tsx (24.423 s)
+  ● T11 no live quote direct send › failed quote recomputes from the picked spread, never a fabricated zero
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: ObjectContaining {"quote_live": false, "spread": 0.37}, Anything
+    Received: {"delta": 0.4, "direction": "Bullish", "dte": 24, "final_stop": null, "premium": 3, "quote_live": false, "spread": 0, "stock_price": 150, "strike": 160, "symbol": "AAA"}, {}
+
+    Number of calls: 1
+
+    Ignored nodes: comments, script, style
+    [36m<html>[39m
+      [36m<head />[39m
+      [36m<body>[39m
+        [36m<div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"undefined undefined"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m""[39m
+              [36m>[39m
+                [0mSTEP 7 OF 7[0m
+              [36m</span>[39m
+              [36m<h1[39m
+                [33mclass[39m=[32m""[39m
+              [36m>[39m
+                [0mTrade Card[0m
+              [36m</h1>[39m
+              [36m<details>[39m
+                [36m<summary>[39m
+                  [0mHow this page works[0m
+                [36m</summary>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m""[39m
+                [36m>[39m
+                  [0mCycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from its card instead of tracking it, or close the tracked row first.[0m
+                [36m</span>[39m
+              [36m</details>[39m
+            [36m</div>[39m
+            [36m<div>[39m
+              [36m<span[39m
+                [33mclass[39m=[32m""[39m
+              [36m>[39m
+                [0mMarket sentiment — insufficient history[0m
+              [36m</span>[39m
+            [36m</div>[39m
+            [36m<div>[39m
+              [36m<div>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Previous candidate"[39m
+                  [33mdisabled[39m=[32m""[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0m← Prev[0m
+                [36m</button>[39m
+                [36m<div>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m""[39m
+                  [36m>[39m
+                    [0mAAA[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m""[39m
+                  [36m>[39m
+                    [0m1 / 2[0m
+                  [36m</span>[39m
+                [36m</div>[39m
+                [36m<button[39m
+                  [33maria-label[39m=[32m"Next candidate"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0mNext →[0m
+                [36m</button>[39m
+                [36m<button[39m
+                  [33maria-pressed[39m=[32m"false"[39m
+                  [33mclass[39m=[32m"undefined "[39m
+                  [33mtitle[39m=[32m"Pin to basket"[39m
+                  [33mtype[39m=[32m"button"[39m
+                [36m>[39m
+                  [0m☆ Pin to basket[0m
+                [36m</button>[39m
+              [36m</div>[39m
+              [36m<div[39m
+                [33maria-label[39m=[32m"Basket"[39m
+              [36m>[39m
+                [36m<span[39m
+                  [33mclass[39m=[32m""[39m
+                [36m>[39m
+                  [0mBASKET [0m
+                  [0m— empty[0m
+                [36m</span>[39m
+                [36m<div />[39m
+              [36m</div>[39m
+            [36m</div>[39m
+            [36m<div>[39m
+              [36m<div>[39m
+                [36m<span[39m
+                  [33mdata-align[39m=[32m"center"[39m
+                  [33mdata-position[39m=[32m"top"[39m
+                [36m>[39m
+                  [36m<span[39m
+                    [33mclass[39m=[32m""[39m
+                  [36m>[39m
+                    [0mUser-selected[0m
+                  [36m</span>[39m
+                  [36m<span[39m
+                    [33mrole[39m=[32m"tooltip"[39m
+                  [36m>[39m
+                    [0mManually pinned as the active trade card — not a scoring verdict.[0m
+                  [36m</span>[39m
+                [36m</span>[39m
+                [36m<div>[39m
+                  [36m<div>[39m
+                    [36m<div>[39m
+                      [36m<div[39m
+                        [33mclass[39m=[32m""[39m
+                      [36m>[39m
+                        [36m<div>[39m
+                          [36m<button[39m
+                            [33mclass[39m=[32m""[39m
+                            [33mtitle[39m=[32m"Open in Chart"[39m
+                            [33mtype[39m=[32m"button"[39m
+                          [36m>[39m
+                            [0m📈[0m
+                          [36m</button>[39m
+                          [36m<span[39m
+                            [33mclass[39m=[32m""[39m
+                          [36m>[39m
+                            [0mAAA[0m
+                          [36m</span>[39m
+                          [36m<span[39m
+                            [33mclass[39m=[32m""[39m
+                          [36m>[39m
+                            [0mAAA Inc.[0m
+                          [36m</span>[39m
+                          [36m<span[39m
+                            [33mclass[39m=[32m""[39m
+                          [36m>[39m
+                            [0m$[0m
+                            [0m150.00[0m
+                          [36m</span>[39m
+                        [36m</div>[39m
+                        [36m<span[39m
+                          [33mdata-align[39m=[32m"center"[39m
+                          [33mdata-position[39m=[32m"bottom"[39m
+                        [36m>[39m
+                          [36m<span[39m
+                            [33mclass[39m=[32m""[39m
+                          [36m>[39m
+                            [0mPASS[0m
+                          [36m</span>[39m
+                          [36m<span[39m
+                            [33mrole[39m=[32m"tooltip"[39m
+                          [36m>[39m
+                            [0mStrong signal — all key scoring components cleared the threshold. Good base to proceed at normal size.[0m
+                          [36m</span>[39m
+                        [36m</span>[39m
+                        [36m<span[39m
+                          [33mdata-align[39m=[32m"center"[39m
+                          [33mdata-position[39m=[32m"bottom"[39m
+                        [36m>[39m
+                          [36m<span[39m
+                            [33mclass[39m=[32m" "[39m
+                          [36m>[39m
+                            [0mBullish[0m
+                          [36m</span>[39m
+                          [36m<span[39m
+                            [33mrole[39m=[32m"tooltip"[39m
+                          [36m>[39m
+                            [0mScan direction: Bullish. You are looking for upward moves — call options profit when the stock rises above the strike before expiry.[0m
+                          [36m</span>[39m
+                        [36m</span>[39m
+                      [36m</div>[39m
+                    [36m</div>[39m
+                    [36m<div>[39m
+                      [36m<div>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m""[39m
+                        [36m>[39m
+                          [0mStock score [0m
+                          [0m80[0m
+                          [0m/100 · [0m
+                          [0mPASS[0m
+                        [36m</span>[39m
+                        [36m<span[39m
+                          [33mclass[39m=[32m""[39m
+                        [36m>[39m
+                          [0mBacktested confidence: [...
+
+      252 |     (api.recomputePlan as jest.Mock).mockResolvedValue({ entry: makeCard('AAA').entry, exit: makeCard('AAA').exit, rrRatio: 2, rrModel: 'Heston repriced' });
+      253 |     await renderPage();
+    > 254 |     await waitFor(() => expect(api.recomputePlan).toHaveBeenCalledWith(expect.objectContaining({ spread: 0.37, quote_live: false }), expect.anything()));
+          |                                                   ^
+      255 |   });
+      256 | });
+      257 |
+
+      at C:\GitHub\trading-assistant\.claude\worktrees\priceless-jennings-995ab7\frontend\app\(frame)../../../../../../screener/step-7-trade-card/__tests__/no-live-quote.test.tsx:254:51
+      at runWithExpensiveErrorDiagnosticsDisabled (../../../../frontend/node_modules/@testing-library/dom/dist/config.js:47:12)
+      at checkCallback (../../../../frontend/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+      at checkRealTimersCallback (../../../../frontend/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+      at Timeout.task [as _onTimeout] (../../../../frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 5 passed, 6 total
+Snapshots:   0 total
+Time:        25.968 s

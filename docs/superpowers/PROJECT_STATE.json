@@ -1,7 +1,7 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
   "updated": "2026-10-10",
-  "updated_by": "main: STATE-PER-STAGE-CAP merged (eca429ec).",
+  "updated_by": "STATE-LEDGER-RECON-2026-10-10 (board #159)",
   "main": "STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": "main",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
@@ -1571,17 +1571,101 @@
     {
       "id": "NO-LIVE-QUOTE",
       "name": "Option chain rows with no live two-sided quote are never graded or traded as a 0% spread (PRD FR-24): hard reject in the scan and at auto-trade fire time, label only in Step 6 / Watchlist",
-      "status": "not_started",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "status": "built",
+      "audit_rounds": 12,
+      "audit_clean": true,
       "depends_on": [],
       "verify": {
-        "kind": "defect_marker",
-        "path": "backend/app/data/market.py",
-        "pattern": "spread = 0\\.0",
-        "note": "DEFECT MARKER: the chain builders fabricate a 0.0 spread when Tradier's ask is 0 (off-hours), and augment.py turns it into bid = ask = last. Gone = the no-live-quote treatment built."
+        "kind": "present",
+        "path": "frontend/components/organisms/ScanLog/index.tsx",
+        "pattern": "no_live_quote:\\s*'DATA'",
+        "note": "PRESENCE ONLY of the LAST ticket's marker (NLQ-4, ScanLog REASON_CATEGORY) so the phase reads BUILT only when the whole build is in; state.py's probe is binary. The old defect marker (`spread = 0.0` in market.py) is gone since 959f0221. Behaviour is pinned by tests/test_quote_liveness.py (five-sample replay) and the T3-T11 files named in the plan."
       },
-      "note": "RESCUED TO MAIN 2026-10-02 (LEDGER-RESCUE-CONTRACT-LIQUIDITY-DTE): this record existed only on claude/contract-liquidity-dte (tip bed0ab4f); its claim was erased by the claims.json\\r bug that CLAIMS-WINDOWS-CRLF fixes. Ledger + plan document only -- no code moved; the build stays on that branch under decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30. Nobody holds a claim on it now. || PARKED 2026-09-30, split out of CONTRACT-LIQUIDITY-DTE (was its fix 3) by Kenneth (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30). Draft + 19 open round-2 findings: docs/superpowers/plans/2026-09-30-no-live-quote-plan.md. STEP 0 before any design: observe raw Tradier chain rows (bid/ask/last/bid_date/ask_date) pre-market, in session, after close, weekend, on the production base -- the design rests on an unobserved code comment."
+      "note": "2026-10-10 NLQ-5 INTEGRATION AUDIT ROUND 1 (overall round 12; fresh independent reviewer at 86b3c929: main merge incl. 7 both-sides files, cross-part chain, evidence collector): CLEAN, 0 gate findings. EVERY PART CLOSED CLEAN (NLQ-1 code 3, NLQ-2 code 1, NLQ-3 code 1, NLQ-4 code 3, NLQ-5 1) -> audit_clean true. Merged tree: backend 6949 passed / 9 skipped / 0 failed (Python 3.11), Jest 227/4899, typecheck clean; spread = 0.0 marker gone. Built, NOT merged; PR next. Live check after the build needs Kenneth's machine (listed under Needs Kenneth). || 2026-10-10 origin/main merged (NLQ-5 step 1): textual conflicts only .gitignore (both blocks kept) and PROJECT_STATE.json (main's file + this phase entry + the four NO-LIVE-QUOTE decisions + active_phase re-applied; main had not touched them since the merge base b7c5b38c). Branch-only backend failures before the merge (test_shortlist x2 live-yfinance, test_stock_scan_backtest_commission #129) reproduce identically at the merge base b7c5b38c, i.e. old-main failures, not NLQ. || 2026-10-10 NLQ-4 CODE ROUND 3 (overall round 11; fresh independent reviewer; scope git diff 25c2570e fa91d789 -- frontend: the NLQ4-R2-1 fix 252ec0c4 and fa91d789's repairs of three regressions the first full Jest run exposed + em-dash bytes): CLEAN, 0 gate findings. NLQ-4 CLOSED CLEAN at code round 3 (the scoped cap). Full Jest 212/4804, typecheck clean. NEXT: NLQ-5 (#194) - merge main, full suites, integration audit, PR. || 2026-10-10 NLQ-4 CODE ROUND 2 (overall round 10; fresh independent reviewer, cloud board-worker session; scope 845a8fea..25c2570e on page.tsx + tradeCardOverride.test.ts + the race regression cases + interactions): NOT CLEAN, 1 GATE FINDING NLQ4-R2-1 (generation counter bumped before the claimed-plan early return hides a fresh non-live send-time quote behind a stale 'Live mid'). Both round-1 races confirmed fixed and pinned (16/16). Fix next via a fresh implementer; NLQ-4 code round 3 (its last) reviews only that fix. Resumed from claude/priceless-jennings-995ab7 on board/no-live-quote-99ba51f7 (Board #119, Kenneth's go in chat). || 2026-10-10: NLQ-3 code round 1 clean, zero gate findings, 268 independent tests; M7/M8 behavioral mutations killed and bytes restored. NLQ-4 independent review in progress; overall audit_clean remains false. AUTHORIZED CONTINUATION 2026-10-09: scoped per-part cap approved in NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09. NLQ-1 closure preserved; NLQ-2 first completed independent code round clean, exact record/scope in audit_scopes. Phase audit_rounds 7 counts plan3 + NLQ1 code3 + NLQ2 code1; overall audit_clean false until NLQ3/4/5 complete. state.py still interprets this as one code stage and flags the recorded cap: known tooling limitation under the explicit scoped exception, not permission for a fourth round on any part. || CONTINUATION 2026-10-09: fresh independent NLQ-2 scope review b6f2259e..215aeafe by /root/nlq2_review returned zero gate findings; 91 independent and 153 coordinator focused tests passed on Python 3.11.9. NOT phase clearance or another qualifying phase round: recovered per-ticket cap conflicts with docs/agents/ticket-orchestration.md phase-only ownership, and state.py reports exhausted phase code cap. Implementers stopped before edits; await explicit scope decision. audit_rounds 6/audit_clean false retained. Exact record docs/superpowers/audits/2026-10-09-no-live-quote-nlq2-continuation.md. || 2026-10-09 NLQ-1 CODE ROUND 3 (round 6 overall; fresh independent gate-briefed reviewer; scope git diff 2cb80ff6..0f14b77a, the round-2 fix only) CLEAN -- ZERO GATE-LEVEL FINDINGS. NLQ-1 TICKET CLEAN (3 code rounds: 2, 1, 0 gate findings). Phase audit_clean stays false until NLQ-2..NLQ-4 are clean. Below-gate logged in the ticket. NEXT: NLQ-2. || 2026-10-09 NLQ-1 CODE ROUND 2 (round 5 overall; fresh independent gate-briefed reviewer; scope git diff 5b14896e..0c605733, round-1 fixes only) NOT CLEAN -- 1 GATE FINDING, fixed in 0f14b77a: G1 (gate 1) the portfolio EditDrawer's 'Current price' field still showed 0 for a quoteUnavailable row; now empty with '— (no quote)' + 'Quote unavailable'; a typed manual mark clears the flag locally (same as any manual override; flag is never sent, next sync rewrites it). Verified sound in round 2: F1 docstring accurate; snapshot skip before the upsert; display totals exclude flagged rows on all five surfaces; exposureMark at entry in totalNotional/checkTradeRisk/computeMetrics/computePortfolioRiskMetrics; backend exposure sums use stored entry_price. Below-gate logged: one never-quotable open position stalls the equity curve (nothing wrong persisted); entry-price exposure can under-count a position that has risen. NEXT: NLQ-1 code round 3 (the ticket's LAST) on 2cb80ff6..0f14b77a only. || 2026-10-09 NLQ-1 CODE ROUND 1 (round 4 overall; fresh independent gate-briefed reviewer, bmad-review-adversarial-general; scope git diff 55232a50..959f0221, the whole NLQ-1 ticket) NOT CLEAN -- 2 GATE FINDINGS, both fixed. F1 (gate 4): fetch_contract_quote_async docstring claimed exact-strike matching; matching truncates strikes to int (pre-existing; 22.5 gets the 22 row) -- docstring corrected, matching unchanged, pre-existing bug flagged as a separate task. F2 (gate 1/2): GET /api/portfolio turned a None quote (NLQ-1 widened: ask==0 rows, unlisted expiry) into currentPrice 0.0 / P&L 0 and PERSISTED it via _upsert_equity_snapshot -- fixed: quoteUnavailable flag, snapshot skipped when any position lacks a quote, '—' display, display totals exclude flagged rows with a note (portfolio footer, QuickLook, both context rails, dashboard), and every exposure/limit sum (checkTradeRisk via totalNotional, riskStore.computeMetrics, computePortfolioRiskMetrics) values a flagged row at its entry price, never 0 (exposureMark). Backend exposure sums already use stored entry_price. Fix commits c84556aa, 67a99f44, 0c605733. Verified: T2 replay 741 live/231 one_sided in session, 0 live off-hours; mutations M1/M2/M3/M10/M11 + snapshot-skip + exclusion + exposure-at-0 all fail tests. Below-gate notes logged in .scratch/no-live-quote/issues/01-data.md. NEXT: NLQ-1 code round 2 on 5b14896e..0c605733 only. || 2026-10-09 BUILD STARTED on claude/priceless-jennings-995ab7 (main merged at 2051fa39). Kenneth answered Q-A..Q-D (decision NO-LIVE-QUOTE-QA-QD-ANSWERS-2026-10-09, all recommendations). Tickets: .scratch/no-live-quote/map.md (k-ticket-coordinator). Code stage: each ticket is audited by a fresh gate-briefed reviewer, cap 3 rounds per ticket; commit subjects say 'NLQ-<n> code round K'. Codex's codex/no-live-quote-evidence-prep is a superseded duplicate of Step 0 (decision NO-LIVE-QUOTE-STEP0-DUPLICATE-2026-10-09). || PLAN STAGE CLEAN 2026-10-05: plan round 3 (fresh gate-auditor, diff b7ce86ec..6d6c1bf1) returned 0 gate findings, verifying the send-time refetch sits before any save in placeDirectOrder, postOptionOrder (page.tsx:1215) is the only option-order call, the basket places no order, and contractKey is unique per contract. Tally: 3 plan rounds, 4 gate findings, 4 fixed, 0 deferred. audit_clean stays false (it is the code gate; nothing built). NEXT: Kenneth answers plan s5 Q-A (30-min threshold), Q-B (Step 7 tick), Q-C (drop no-ask rows), Q-D (CONTRACT-LIQUIDITY-DTE merge hold); then the build (k-ticket-coordinator) and code audit rounds. || PLAN ROUND 2 (2026-10-05, fresh gate-auditor, diff 6787651b..b7ce86ec only): 2 gate findings, both FIXED in plan r3 -- G1: the Step 7 tick was page-level, so a tick for candidate A covered B after Next; now keyed to contractKey and cleared on change. G2: 'confirmed live' never expired (quote fetched once per contractKey, no refetch), so a 15:50 live quote covered a 17:30 send; now placeDirectOrder fetches a fresh quote at send time and gates on it. Also corrected: the basket dialog places no order (addPosition only), so no tick there. || PLAN ROUND 1 (2026-10-05, fresh gate-auditor): 2 gate findings, both FIXED in plan r2 -- F1 high: the confirm tick sat only in SendToBrokerDialog, but Step 7's primary send path is the Place Limit / Market buttons -> placeDirectOrder (page.tsx:1113,1599,1615); tick now gates both buttons + placeDirectOrder + the basket dialog. F2 medium: a failed live quote fell back to the scan card's noLiveQuote=false (persisted card, non-active basket items) -> fail open; r2 counts a contract live only when this Step 7 visit's live quote proved it. Below gate noted: assess_entry CAUTION not surfaced; M3 needed a T1 16:05 case (added). || PLAN r1 WRITTEN 2026-10-05 (claude/priceless-jennings-995ab7): docs/superpowers/plans/2026-09-30-no-live-quote-plan.md rewritten against the five samples -- quote state per chain row (one_sided / session_closed / stale / live) from a wall-clock NYSE session test + fresher-side quote age (max_age_minutes 30, sandbox feed lag subtracted); rows with no ask dropped (defect marker removed); scan hard-rejects no_live_quote (short-circuit), Step 6/Watchlist label (CAUTION cap); auto-trade pre-disarm quote gate via one raw Tradier chain GET; Step 7 warning from the live quote + confirm tick (Q-B). All 19 r0 findings disposed (plan s4). Replay of the committed samples through the rule: 0 live off-hours, 741 live / 231 one_sided in session. Open for Kenneth: Q-A threshold, Q-B Step 7 send, Q-C drop no-ask rows, Q-D merge hold. Plan audit rounds: starting (cap 3). || STEP 0 MEASUREMENT COMPLETE 2026-10-05. SAMPLE 5/5 AFTER-CLOSE 16:45 ET (clock 'postmarket', folder 20261005T204500Z_after-close): 972 rows, ask == 0 on ZERO rows, 737 two-sided; quotes frozen at the 16:00:06 ET close (two-sided bid/ask age median 45.0 min, min 44.9 min) with NON-ZERO sizes on all 737 and volume kept (395 rows > 0). VERDICT ACROSS ALL FIVE (weekend, overnight, pre-market, in-session, after-close; 7 names; 4,868 rows): (1) the code comment's off-hours shape (bid = ask = 0) and the defect path (ask == 0 -> spread = 0.0) were NEVER observed; (2) bid == 0 & ask > 0 is ~23-25% of rows in EVERY sample incl. in session (far OTM), so it is not an off-hours marker; (3) the plan's 3g PASS CONDITION FAILED -- off-hours rows carry stale non-zero closing quotes, so the fallback applies, AND the fallback as drafted (max(bid_date, ask_date) > 15 min) is itself wrong: it false-rejects 24/741 live in-session rows, misses 08:00-08:15 ET (dates re-stamped at the 08:00 roll) and misses 16:00-16:15 ET (closing quotes, sizes non-zero). No single row field separates live from stale; Tradier /markets/clock state does in all five samples. The real off-hours risk is a STALE BUT PLAUSIBLE closing spread graded as live, not a fabricated 0% spread -- which bears on decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30 (Kenneth to revisit). NEXT: plan rewrite of 3a-3g + the 19 findings, awaiting Kenneth's go. || SAMPLE 4/5 IN-SESSION 2026-10-05 12:00 ET (clock 'open', folder 20261005T160001Z_in-session): 972 rows, ask == 0 on ZERO rows (again), 741 two-sided, 231 bid 0 & ask > 0. 737 of 741 two-sided rows have prices different from pre-market (live). ANSWER TO THE KEY QUESTION: ages are short -- two-sided bid_date median 4s (p75 20s), ask_date median 4s (p75 14s) -- BUT a max(bid_date, ask_date) > 15 min rule would wrongly mark 24 of 741 LIVE two-sided rows stale (quiet far-OTM strikes whose one side has not moved for 22-110 min; sizes > 0, other side seconds old). The freshest side, min(bid_date, ask_date), is > 15 min on only 2 of 741 (max 27.3 min). SIZES: all 741 two-sided rows have bidsize > 0 AND asksize > 0 in session; pre-market all 972 had both sizes 0; weekend/overnight carried Friday's non-zero sizes. So no single field separates live from stale: weekend/overnight is caught by age (>= 24h), 08:00-09:30 ET by zero sizes, and the in-session false-stale risk sits in max-age, not min-age. Local clock ~5s behind Tradier (ages down to -5.3s): any age rule needs skew tolerance. After-close sample still to come. || SAMPLES 2+3/5 TAKEN 2026-10-05 via one-time Windows tasks Kenneth created (token in user env var TRADIER_SAMPLE_TOKEN, never read by an agent): OVERNIGHT-CHECK 02:02 ET (clock 'closed', folder 20261005T060215Z_overnight-check) and PRE-MARKET 08:30 ET (clock 'premarket', folder 20261005T123001Z_pre-market). Both: 972 rows, ask == 0 on ZERO rows, 748 two-sided, 224 bid 0 & ask > 0. Overnight still carries Friday's closing quotes (bid/ask age 2.4-2.7d). PRE-MARKET FINDING THAT CHANGES THE 3g FALLBACK: at 08:00 ET Tradier rolls the day -- bid_date/ask_date of EVERY row re-stamped to 12:00:00-12:00:03 UTC, volume -> 0, close -> null, bidsize = asksize = 0 on all 972 rows -- while bid/ask/last PRICES are byte-identical to the overnight sample (0 of 972 changed), i.e. still Friday's close. So a pre-market Friday quote reads 30 min old: a quote-age rule alone would call it live between 08:00 and 08:15 ET, and bid > 0 and ask > 0 calls it live all morning. Candidate signals for the rewrite: zero bid/ask SIZE (pre-market), quote age (weekend/overnight), Tradier /markets/clock state. In-session sample (decides whether live rows have size > 0 and second-scale ages) and after-close still to come. || SAMPLE 1/4 TAKEN 2026-10-03 (WEEKEND, Sat 17:01 ET, production base, Tradier clock 'closed'): backend/scripts/out/tradier_chain_raw/20261003T210145Z_weekend/ (force-added). 980 rows, 7 names, 1-2 expiries. ask == 0 on ZERO rows; both-zero ZERO; ask 0 & last > 0 ZERO -- the code comment's off-hours shape and the defect path (spread = 0.0) were NOT observed on a weekend. Instead 731 rows (75%) are two-sided with Friday's CLOSING quotes: bid_date/ask_date ages 25.0h-31.5h (median 25.0h = Fri ~16:00 ET); volume is Friday's too (436 rows > 0); greeks updated_at Fri 15:59:55 ET. 249 rows have bid 0 & ask > 0 (far OTM, |delta| <= 0.008 at p90). CONSEQUENCE FOR THE PLAN: `bid > 0 and ask > 0` cannot tell stale from live off-hours, so the plan's own 3g fallback applies (quote age from bid_date/ask_date), and 3a changes. Still needed: pre-market, in-session, after-close samples -- in-session decides whether quote age separates live from stale. || STEP 0 SCRIPT SHIPPED 2026-10-03 (claude/priceless-jennings-995ab7), AWAITING KENNETH'S FOUR RUNS: backend/scripts/tradier_chain_raw_sample.py calls Tradier /v1/markets/options/chains?greeks=true DIRECTLY (not /api/contracts) and writes EVERY row incl. both-zero ones -- raw bid/ask/last/close/volume/open_interest/bid_date/ask_date/trade_date + capture UTC/ET + base URL + Tradier clock state -- to gitignored backend/scripts/out/tradier_chain_raw/, with a summary (bid 0, ask 0, both 0, ask 0 & last > 0, two-sided, quote-age distributions). Production base only; sandbox refused without --allow-sandbox. Tests: backend/tests/test_tradier_chain_raw_sample.py (respx-mocked, 20 pass). Run instructions: backend/scripts/README_tradier_chain_raw_sample.md (weekend, pre-market, in-session, after-close). NOT measured yet -- no cloud/agent session has Tradier credentials; nobody may assume the results. NEXT: once the four samples are committed or pasted, rewrite plan sections 3a-3g against them, answer/close the 19 open round-2 findings, then plan audit rounds (cap 3). No production code changed; audit_rounds stays 0. || RESCUED TO MAIN 2026-10-02 (LEDGER-RESCUE-CONTRACT-LIQUIDITY-DTE): this record existed only on claude/contract-liquidity-dte (tip bed0ab4f); its claim was erased by the claims.json\\r bug that CLAIMS-WINDOWS-CRLF fixes. Ledger + plan document only -- no code moved; the build stays on that branch under decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30. Nobody holds a claim on it now. || PARKED 2026-09-30, split out of CONTRACT-LIQUIDITY-DTE (was its fix 3) by Kenneth (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30). Draft + 19 open round-2 findings: docs/superpowers/plans/2026-09-30-no-live-quote-plan.md. STEP 0 before any design: observe raw Tradier chain rows (bid/ask/last/bid_date/ask_date) pre-market, in session, after close, weekend, on the production base -- the design rests on an unobserved code comment.",
+      "plan": "docs/superpowers/plans/2026-09-30-no-live-quote-plan.md",
+      "plan_stage": {
+        "rounds": 3,
+        "closed_by": "NO-LIVE-QUOTE-PLAN-STAGE-CLOSED-2026-10-05"
+      },
+      "audit_scopes": {
+        "decision": "NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09",
+        "plan": {
+          "rounds": 3,
+          "clean": true
+        },
+        "NLQ-1": {
+          "code_rounds": 3,
+          "clean": true,
+          "closure": "b6f2259e",
+          "scope": "2cb80ff6..0f14b77a"
+        },
+        "NLQ-2": {
+          "code_rounds": 1,
+          "clean": true,
+          "reviewer": "/root/nlq2_review",
+          "scope": "b6f2259e..215aeafe",
+          "record": "docs/superpowers/audits/2026-10-09-no-live-quote-nlq2-continuation.md",
+          "findings": 0,
+          "fixes": [],
+          "outstanding": [],
+          "previous_attempt": "interrupted without verdict"
+        },
+        "NLQ-3": {
+          "code_rounds": 1,
+          "clean": true,
+          "reviewer": "/root/nlq3_audit1",
+          "scope": "e92e8a30 + uncommitted five NLQ-3 paths; SHA manifest .scratch/no-live-quote/nlq3-reviewed-files.json",
+          "record": "docs/superpowers/audits/2026-10-10-no-live-quote-nlq3.md",
+          "findings": 0,
+          "fixes": [],
+          "outstanding": [],
+          "previous_attempt": "interrupted without verdict"
+        },
+        "NLQ-4": {
+          "code_rounds": 3,
+          "clean": true,
+          "record": "docs/superpowers/audits/2026-10-10-no-live-quote-nlq4.md",
+          "round_1": {
+            "reviewer": "/root/nlq4_audit1",
+            "scope": "e92e8a30 + all uncommitted frontend files; exact diff and file manifest .scratch/no-live-quote/nlq4-reviewed*",
+            "findings": 2,
+            "fixes": [
+              "25c2570e quote request generation counter",
+              "25c2570e current confirmation ref read after await"
+            ],
+            "outstanding": []
+          },
+          "round_2": {
+            "reviewer": "fresh general-purpose subagent (cloud board-worker session), bmad-review-adversarial-general",
+            "scope": "845a8fea..25c2570e on step-7-trade-card/page.tsx + lib/__tests__/tradeCardOverride.test.ts (845a8fea = e92e8a30 + .scratch/no-live-quote/nlq4-reviewed.diff), the race regression cases in step-7-trade-card/__tests__/no-live-quote.test.tsx, interactions",
+            "findings": 1,
+            "outstanding": [],
+            "fixes": [
+              "252ec0c4 NLQ4-R2-1 generation counter only on runs that issue a request"
+            ]
+          },
+          "between_2_and_3": "fa91d789: three regressions from 25c2570e found by the first full Jest run (Step 6 Recommended could pick a rescued row -> code fix; two tests given the plan-required quoteLive/tick preconditions) + cp1252 0x97 bytes restored to em dashes",
+          "round_3": {
+            "reviewer": "fresh general-purpose subagent (cloud board-worker session), bmad-review-adversarial-general",
+            "scope": "git diff 25c2570e fa91d789 -- frontend + interactions",
+            "findings": 0,
+            "fixes": [],
+            "outstanding": []
+          },
+          "closure": "fa91d789"
+        },
+        "NLQ-5": {
+          "integration_verified": true,
+          "code_rounds": 1,
+          "clean": true,
+          "reviewer": "fresh general-purpose subagent (cloud board-worker session), bmad-review-adversarial-general",
+          "scope": "86b3c929: merge of origin/main 13c8b52c (7 both-sides files + main-side option paths), cross-part chain NLQ-1..4, backend/scripts/no_live_quote_evidence.py",
+          "record": "docs/superpowers/audits/2026-10-10-no-live-quote-nlq5.md",
+          "findings": 0,
+          "fixes": [],
+          "outstanding": []
+        }
+      }
     },
     {
       "id": "WATCH-RESEND-HEAD-OF-LINE",
@@ -2056,7 +2140,7 @@
     {
       "id": "STATE-BUILT-UNMERGED",
       "name": "State checker: built code recorded separately from merged work",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 1,
       "audit_clean": true,
       "depends_on": [],
@@ -2067,7 +2151,7 @@
         "pattern": "BUILT_STATUSES",
         "note": "PRESENCE ONLY: built status exists; lifecycle behavior checked by test_state_built_status.py."
       },
-      "note": "ROUND 1 (CODE ROUND 1, 2026-10-06) CLEAN -- ZERO GATE FINDINGS. Fresh independent reviewer /root/built_status_audit applying bmad-review-adversarial-general and numeric/persistence gate. Reviewed only scripts/state.py, docs/agents/ticket-orchestration.md, backend/tests/test_state_built_status.py; patch dbf50918..dce08aa7 identical to reviewed working-tree snapshot from 7f377ab5 (file SHA256 hashes independently pinned and coordinator rechecked). Scope includes built/missing/not-started/defect-marker probes, legacy statuses, strict audit_clean is True, rendering, quiet-mode unaudited warnings and bookkeeping interactions. Auditor: 14 pytest cases and 324 synthetic combinations passed, Python 3.11.9. Implementer: test-first 8 red, then 117 new/existing state tests passed; frontend typecheck clean. No findings, no fixes, no outstanding gate findings. Built and UNMERGED; part of P0A PR closeout prerequisite #78; P0A counters unchanged."
+      "note": "2026-10-10 SHIPPED: merged to main in 58be67d8 (PR #88); recorded by STATE-LEDGER-RECON-2026-10-10 (#159). || ROUND 1 (CODE ROUND 1, 2026-10-06) CLEAN -- ZERO GATE FINDINGS. Fresh independent reviewer /root/built_status_audit applying bmad-review-adversarial-general and numeric/persistence gate. Reviewed only scripts/state.py, docs/agents/ticket-orchestration.md, backend/tests/test_state_built_status.py; patch dbf50918..dce08aa7 identical to reviewed working-tree snapshot from 7f377ab5 (file SHA256 hashes independently pinned and coordinator rechecked). Scope includes built/missing/not-started/defect-marker probes, legacy statuses, strict audit_clean is True, rendering, quiet-mode unaudited warnings and bookkeeping interactions. Auditor: 14 pytest cases and 324 synthetic combinations passed, Python 3.11.9. Implementer: test-first 8 red, then 117 new/existing state tests passed; frontend typecheck clean. No findings, no fixes, no outstanding gate findings. Built and UNMERGED; part of P0A PR closeout prerequisite #78; P0A counters unchanged."
     },
     {
       "id": "STATE-AUDIT-MULTI-PHASE",
@@ -2154,7 +2238,7 @@
     {
       "id": "TIINGO-GOVERNOR",
       "name": "Tiingo history pacing, symbol budget and shared rate-limit cooldown",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 1,
       "audit_clean": true,
       "depends_on": [],
@@ -2164,32 +2248,33 @@
         "pattern": "get_governor\\(\\)\\.call\\(\"tiingo\", request, symbol=symbol\\)",
         "note": "Presence only; offline adapter/governor/fallback tests verify admission behavior."
       },
-      "note": "Follow-up from D3 #114. Independent code R1 clean: /root/tiingo_governor_audit_r1 reviewed b7c5b38c..c4addf9b, diff SHA256 dfc165d17d4b0628235b3691d47e974fa56bae3e570f3906103e7e4c0d3f6ffb; zero gate findings and verified whole-target scope. Independent offline tests 123 passed; author focused suite 169 passed / 6 PostgreSQL skips; frontend typecheck passed. Audit record docs/superpowers/audits/2026-10-09-tiingo-governor-code.md. PR132 pending merge; no deployment/live calls. Merged HISTORY audit record remains unchanged."
+      "note": "2026-10-10 SHIPPED: merged to main in 37551d71 (PR #132); recorded by STATE-LEDGER-RECON-2026-10-10 (#159). || Follow-up from D3 #114. Independent code R1 clean: /root/tiingo_governor_audit_r1 reviewed b7c5b38c..c4addf9b, diff SHA256 dfc165d17d4b0628235b3691d47e974fa56bae3e570f3906103e7e4c0d3f6ffb; zero gate findings and verified whole-target scope. Independent offline tests 123 passed; author focused suite 169 passed / 6 PostgreSQL skips; frontend typecheck passed. Audit record docs/superpowers/audits/2026-10-09-tiingo-governor-code.md. PR132 pending merge; no deployment/live calls. Merged HISTORY audit record remains unchanged."
     },
     {
       "id": "AUTOTRADE-FIRE-HYGIENE",
       "name": "Scan-trigger cancellation outcome ownership and accurate execution-context documentation",
-      "status": "not_started",
-      "audit_rounds": 1,
+      "status": "built",
+      "audit_rounds": 3,
       "audit_clean": true,
       "plan_stage": {
         "rounds": 1,
-        "closed_by": "clean"
+        "closed_by": "clean",
+        "record": "2026-10-10 canonical subject restates original clean plan audit in8a6ac80f and docs/superpowers/audits/2026-10-09-fire-horizon-ticketing-plan.md; no new plan round or counter reset."
       },
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-09-autotrade-fire-hygiene-plan.md",
-      "note": "2026-10-09 PLAN ROUND 1 CLEAN: fresh /root/fire_ticket_plan_audit reviewed exact file hashes in docs/superpowers/audits/2026-10-09-fire-horizon-ticketing-plan.md against a8fce005; zero numeric/persistence findings after recheck. Code not started; no code audit. Publication-ready H1-H3/coordinator bodies in .scratch/autotrade-fire-hygiene; GitHub issue API Forbidden, publication and assignment preflight pending. T1 existing #92/#93-103/#104 preserved; T2-T4 breakdowns are draft research/design work packages only.",
+      "note": "2026-10-10 COORDINATOR VERIFICATION: Python3.11.16 backend6846 passed/9 skipped (full suite); Node22 frontend223 suites/4873 tests passed; typecheck clean. Integrated main13c8b52c; plan1/code2 clean. Built and ready for PR, NOT MERGED. || 2026-10-10 ROUND3 (CODE ROUND2) CLEAN: fresh /root/fire_integration_audit reviewed integration13ca16d8..c4576c4d and interactions with prior target; verified integrated PR diff13c8b52c..c4576c4d. Zero gate findings. Cancellation, manual fire, booking, daily-risk and scheduling paths byte-unchanged; incoming stock metadata/presentation changes do not alter shared scan dispatch. No fixes. Coordinator bookkeeping excluded. Full backend/frontend verification pending. || 2026-10-10 RESUME #133: current origin/main 13c8b52c merged without conflicts; original plan1/code1 clean counters retained. Integrated-head verification and independent code round2 (main integration interactions) pending. No product edits during resume. || 2026-10-09 ROUND 2 (CODE ROUND 1) CLEAN -- ZERO GATE FINDINGS; code stage closed (1 of 3 code rounds). Reviewer: fresh independent general-purpose subagent applying .claude/skills/bmad-review-adversarial-general/SKILL.md, briefed with the numeric/persistence gate; scope git diff a2b6935..670df0d (whole target: routers/scan.py, auto_trader.py docstrings, test_autotrade_scan_fire_cancellation.py, bookkeeping) against the whole plan and fire_now/_log_unbooked. Checked: every CancelledError delivery point in run_scan (wrap_future while queued/running/done-before-resume; booking_not_started is synchronous, no delivery; book_fired_order lets CancelledError through with no shield/booked=False path; nothing awaits after booking returns, so the booked/NOT booked line precedes _upsert_session); handler cannot raise before the callback is installed; normal path unchanged (one submit, same args, one booking on the loop with the request session, non-Cancelled exceptions propagate as before); separate executors and expect= guard kept; maybe_fire_on_scan has no caller besides run_scan; every edited docstring matches call sites; 35 tests re-run. Fixes: none. Outstanding gate findings: none. Below gate (not reported as findings, recorded for main): on a forced shutdown the dedicated executor is not joined by shutdown_default_executor, so DailyRiskHooks.resolve can hit a closed loop and keep the reservation (overstates the day budget, errs toward blocking; same accepted shape as /fire since P3c), and a narrow shutdown race can hang the worker in a hook (missing log line, hung exit). NOT MERGED -- merge waits on Kenneth. || 2026-10-09 BUILT, NOT AUDITED, NOT MERGED: H1 #134 970410a (_SCAN_FIRE_EXECUTOR + thread-side _log_scan_fire_outcome), H2 #135 078a3c7 (booking phase; cancel while booking -> booking confirmation unavailable, never NOT BOOKED, no second booking), H3 #136 cbee98e (auto_trader.py execution-context docstrings; the defect-marker probe phrase is gone). origin/main a2b6935 (STOCKS-HORIZON-T1 #138) merged in at 66e7e4d, only this file overlapped. Coordinator verification on Python 3.11: full backend 6569 passed / 3 failed / 8 skipped at H2 (failures = #129 commission fixture + two network-dependent test_shortlist tests, both reproduced on main 8a6ac80); H3 docstring-only, 262 focused pass. audit_clean set FALSE: it described the clean PLAN round; the CODE stage (#137, round 2 overall = code round 1 of 3) has not run. || 2026-10-09 TICKETS PUBLISHED (claim claude/hopeful-rubin-64bowt): tracking issue #133; children #134 H1, #135 H2 (blocked by #134), #136 H3 (blocked by #135), #137 coordinator verify/code audit/PR (blocked by all). Duplicate search found none; native blocked-by edges not set, the Blocked by lines in each body are the record. Build starts at H1. || 2026-10-09 PLAN ROUND 1 CLEAN: fresh /root/fire_ticket_plan_audit reviewed exact file hashes in docs/superpowers/audits/2026-10-09-fire-horizon-ticketing-plan.md against a8fce005; zero numeric/persistence findings after recheck. Code not started; no code audit. Publication-ready H1-H3/coordinator bodies in .scratch/autotrade-fire-hygiene; GitHub issue API Forbidden, publication and assignment preflight pending. T1 existing #92/#93-103/#104 preserved; T2-T4 breakdowns are draft research/design work packages only.",
       "verify": {
-        "kind": "present",
-        "path": "backend/app/routers/scan.py",
-        "pattern": "^_SCAN_FIRE_EXECUTOR\\s*=",
-        "note": "Presence only: proposed H1 scan-trigger executor, not implemented. Implementation must preserve this marker or update the probe to the actual owned helper; it does not verify behaviour."
+        "kind": "defect_marker",
+        "path": "backend/app/services/auto_trader.py",
+        "pattern": "endpoint, where asyncio\\.run raises\\.",
+        "note": "DEFECT MARKER from the LAST ticket (H3, #136): the stale docstring saying fire() is reached on the event-loop thread via /fire. RE-POINTED 2026-10-09 at H1's build: the first probe (present: ^_SCAN_FIRE_EXECUTOR\\s*= in routers/scan.py) was H1's own marker and would have read the three-ticket phase as built after H1. Gone = H3 landed, i.e. every ticket is built. PRESENCE ONLY. Behavioural pins: backend/tests/test_autotrade_scan_fire_cancellation.py (H1, extended by H2)."
       }
     },
     {
       "id": "STOCK-PRES-P4-STRATEGY",
       "name": "Stocks Strategy page (Step 4 of 6) in the Options layout: how-to, Market Sentiment strip, Looks-for lines, after-scan count; everything existing kept",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "depends_on": [],
@@ -2207,11 +2292,226 @@
         "pattern": "Market sentiment loads on Step 1",
         "note": "T3 adds the strip's no-reading note (Kenneth's wording on #149). PRESENCE ONLY; behaviour is pinned by the plan's tests."
       },
-      "note": "2026-10-10 ROUND 4 (code round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 2e79c22d..9f2fcf8f -- frontend (the P4-C1 fix) and its interactions: module-level request counter, only the latest request writes regimeSentiment (late older success and late older failure both blocked; latest success always writes); Step 1's own display, verdict, retry and offline state unchanged; strip unchanged; not persisted; comments accurate. 0 GATE FINDINGS. Coordinator full suites at 9f2fcf8f: typecheck clean, Jest 223/223 suites, 4873/4873 tests. Built, audit-clean, NOT merged - PR next. Below the gate, not counted: in dev StrictMode two identical requests can leave Step 1's own panel on the first response while the store holds the second (setRegimeData deliberately unguarded). || 2026-10-10 ROUND 3 (code round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 6ebb14bd..adbc90c3 -- frontend (whole target) against the plan + preview.html. 1 GATE FINDING. P4-C1: overlapping Step 1 mounts - an older, slower regime response answering after a newer one overwrites scanStore.regimeSentiment, so the Strategy strip shows numbers Step 1 no longer shows; the fetchRegime comment misstates it. Fix (plan section 'Code round 1 fix'): module-level request counter, only the latest request writes regimeSentiment; test for late success and late failure. Checked clean: Step 1 behaviour unchanged, not persisted, no other writer, every Strategy item kept, after-scan count/sentence true, How-to claims hold, T5 amendment hides no regression. || 2026-10-10 bookkeeping: plan round 2's clean close (recorded at a5d09aef, whose subject put a comma between the round number and 'clean', which state.py's canonical-shape check does not accept) is restated in the canonical subject shape. No audit content changed. || 2026-10-10 BUILT (not merged, code audit pending): tickets #182 T1 c593757c, #183 T2 e55baa1a (after plan amendment d4a5d38c: readableScanError T5's page-wide no-failure-text assertion scoped to the Scan actions aside, test-only), #184 T3 d49cbbcd - all closed. Coordinator re-runs: typecheck clean; Jest 223/223 suites, 4871/4871 tests (baseline 218/4849). Mapping M1-M13 all present. origin/main merged (already up to date at 6ebb14bd). Visual check vs preview.html not run (no browser in this container) - listed under Needs Kenneth on #149. || 2026-10-10 ROUND 2 (plan round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 4ff09712..fba31507 of the plan (the P4-A1/P4-A2 fixes) and their interactions, checked against main 6ebb14bd: block wording true in both states, count true, store written in fetchRegime then/catch survives unmount, Step 1's own MarketSentiment unchanged, field not persisted, tests buildable. 0 GATE FINDINGS. Plan stage closed; code stage starts at round 1 of 3. Not counted (inherited, logged against main): fetchRegime has no overlap guard, so on a hard load two /api/regime requests (default vs user Markov settings) can race; the strip always equals Step 1's own display. || 2026-10-10 ROUND 1 (plan round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at 4ff09712 checked against main 6ebb14bd. 2 GATE FINDINGS. P4-A1: the plan's after-scan card wording (preview: 'booked to the paper portfolio only if they PASS on the next scan') is false today - stockExecutionBlock() (lib/stockExecutionSession.ts L109-111) always returns STOCK_VALIDATION_UNAVAILABLE, so armed PASS candidates are skipped and nothing is booked; plan mechanism line corrected; the wording itself goes to Kenneth (approved preview text). P4-A2: writing regimeSentiment from a Step 1 effect on local state would miss a response that lands after the user left Step 1 (setRegime/setCombinedRegime still update), leaving the strip on an older reading than the verdict; fixed in the plan - one pure sentimentFromRegime builder, store cleared at fetch start and written in fetchRegime's then/catch, unmount-before-response test. || 2026-10-10 taken from the Board (#149). Kenneth answered 2 questions on #149 (chat answer recorded on the issue): option (a) - non-persisted scanStore.regimeSentiment written by Step 1 (may touch lib/scanStore.ts and step-1-regime/page.tsx), hide the strip with 'Market sentiment loads on Step 1' when absent; Bearish 'Looks for' wording approved. Plan written; plan round 1 next.",
+      "note": "2026-10-10 SHIPPED via PR #186, merged at 13c8b52c on Kenneth's instruction in the working session's chat; merged at the audited head 88a9eae5, CI green (frontend, test, backend). || 2026-10-10 ROUND 4 (code round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 2e79c22d..9f2fcf8f -- frontend (the P4-C1 fix) and its interactions: module-level request counter, only the latest request writes regimeSentiment (late older success and late older failure both blocked; latest success always writes); Step 1's own display, verdict, retry and offline state unchanged; strip unchanged; not persisted; comments accurate. 0 GATE FINDINGS. Coordinator full suites at 9f2fcf8f: typecheck clean, Jest 223/223 suites, 4873/4873 tests. Built, audit-clean, NOT merged - PR next. Below the gate, not counted: in dev StrictMode two identical requests can leave Step 1's own panel on the first response while the store holds the second (setRegimeData deliberately unguarded). || 2026-10-10 ROUND 3 (code round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 6ebb14bd..adbc90c3 -- frontend (whole target) against the plan + preview.html. 1 GATE FINDING. P4-C1: overlapping Step 1 mounts - an older, slower regime response answering after a newer one overwrites scanStore.regimeSentiment, so the Strategy strip shows numbers Step 1 no longer shows; the fetchRegime comment misstates it. Fix (plan section 'Code round 1 fix'): module-level request counter, only the latest request writes regimeSentiment; test for late success and late failure. Checked clean: Step 1 behaviour unchanged, not persisted, no other writer, every Strategy item kept, after-scan count/sentence true, How-to claims hold, T5 amendment hides no regression. || 2026-10-10 bookkeeping: plan round 2's clean close (recorded at a5d09aef, whose subject put a comma between the round number and 'clean', which state.py's canonical-shape check does not accept) is restated in the canonical subject shape. No audit content changed. || 2026-10-10 BUILT (not merged, code audit pending): tickets #182 T1 c593757c, #183 T2 e55baa1a (after plan amendment d4a5d38c: readableScanError T5's page-wide no-failure-text assertion scoped to the Scan actions aside, test-only), #184 T3 d49cbbcd - all closed. Coordinator re-runs: typecheck clean; Jest 223/223 suites, 4871/4871 tests (baseline 218/4849). Mapping M1-M13 all present. origin/main merged (already up to date at 6ebb14bd). Visual check vs preview.html not run (no browser in this container) - listed under Needs Kenneth on #149. || 2026-10-10 ROUND 2 (plan round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 4ff09712..fba31507 of the plan (the P4-A1/P4-A2 fixes) and their interactions, checked against main 6ebb14bd: block wording true in both states, count true, store written in fetchRegime then/catch survives unmount, Step 1's own MarketSentiment unchanged, field not persisted, tests buildable. 0 GATE FINDINGS. Plan stage closed; code stage starts at round 1 of 3. Not counted (inherited, logged against main): fetchRegime has no overlap guard, so on a hard load two /api/regime requests (default vs user Markov settings) can race; the strip always equals Step 1's own display. || 2026-10-10 ROUND 1 (plan round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at 4ff09712 checked against main 6ebb14bd. 2 GATE FINDINGS. P4-A1: the plan's after-scan card wording (preview: 'booked to the paper portfolio only if they PASS on the next scan') is false today - stockExecutionBlock() (lib/stockExecutionSession.ts L109-111) always returns STOCK_VALIDATION_UNAVAILABLE, so armed PASS candidates are skipped and nothing is booked; plan mechanism line corrected; the wording itself goes to Kenneth (approved preview text). P4-A2: writing regimeSentiment from a Step 1 effect on local state would miss a response that lands after the user left Step 1 (setRegime/setCombinedRegime still update), leaving the strip on an older reading than the verdict; fixed in the plan - one pure sentimentFromRegime builder, store cleared at fetch start and written in fetchRegime's then/catch, unmount-before-response test. || 2026-10-10 taken from the Board (#149). Kenneth answered 2 questions on #149 (chat answer recorded on the issue): option (a) - non-persisted scanStore.regimeSentiment written by Step 1 (may touch lib/scanStore.ts and step-1-regime/page.tsx), hide the strip with 'Market sentiment loads on Step 1' when absent; Bearish 'Looks for' wording approved. Plan written; plan round 1 next. || INCOMING MERGE RECORD: 2026-10-10 SHIPPED: merged to main in 13c8b52c (PR #186); recorded by STATE-LEDGER-RECON-2026-10-10 (#159). || 2026-10-10 ROUND 4 (code round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 2e79c22d..9f2fcf8f -- frontend (the P4-C1 fix) and its interactions: module-level request counter, only the latest request writes regimeSentiment (late older success and late older failure both blocked; latest success always writes); Step 1's own display, verdict, retry and offline state unchanged; strip unchanged; not persisted; comments accurate. 0 GATE FINDINGS. Coordinator full suites at 9f2fcf8f: typecheck clean, Jest 223/223 suites, 4873/4873 tests. Built, audit-clean, NOT merged - PR next. Below the gate, not counted: in dev StrictMode two identical requests can leave Step 1's own panel on the first response while the store holds the second (setRegimeData deliberately unguarded). || 2026-10-10 ROUND 3 (code round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 6ebb14bd..adbc90c3 -- frontend (whole target) against the plan + preview.html. 1 GATE FINDING. P4-C1: overlapping Step 1 mounts - an older, slower regime response answering after a newer one overwrites scanStore.regimeSentiment, so the Strategy strip shows numbers Step 1 no longer shows; the fetchRegime comment misstates it. Fix (plan section 'Code round 1 fix'): module-level request counter, only the latest request writes regimeSentiment; test for late success and late failure. Checked clean: Step 1 behaviour unchanged, not persisted, no other writer, every Strategy item kept, after-scan count/sentence true, How-to claims hold, T5 amendment hides no regression. || 2026-10-10 bookkeeping: plan round 2's clean close (recorded at a5d09aef, whose subject put a comma between the round number and 'clean', which state.py's canonical-shape check does not accept) is restated in the canonical subject shape. No audit content changed. || 2026-10-10 BUILT (not merged, code audit pending): tickets #182 T1 c593757c, #183 T2 e55baa1a (after plan amendment d4a5d38c: readableScanError T5's page-wide no-failure-text assertion scoped to the Scan actions aside, test-only), #184 T3 d49cbbcd - all closed. Coordinator re-runs: typecheck clean; Jest 223/223 suites, 4871/4871 tests (baseline 218/4849). Mapping M1-M13 all present. origin/main merged (already up to date at 6ebb14bd). Visual check vs preview.html not run (no browser in this container) - listed under Needs Kenneth on #149. || 2026-10-10 ROUND 2 (plan round 2 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 4ff09712..fba31507 of the plan (the P4-A1/P4-A2 fixes) and their interactions, checked against main 6ebb14bd: block wording true in both states, count true, store written in fetchRegime then/catch survives unmount, Step 1's own MarketSentiment unchanged, field not persisted, tests buildable. 0 GATE FINDINGS. Plan stage closed; code stage starts at round 1 of 3. Not counted (inherited, logged against main): fetchRegime has no overlap guard, so on a hard load two /api/regime requests (default vs user Markov settings) can race; the strip always equals Step 1's own display. || 2026-10-10 ROUND 1 (plan round 1 of 3): fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at 4ff09712 checked against main 6ebb14bd. 2 GATE FINDINGS. P4-A1: the plan's after-scan card wording (preview: 'booked to the paper portfolio only if they PASS on the next scan') is false today - stockExecutionBlock() (lib/stockExecutionSession.ts L109-111) always returns STOCK_VALIDATION_UNAVAILABLE, so armed PASS candidates are skipped and nothing is booked; plan mechanism line corrected; the wording itself goes to Kenneth (approved preview text). P4-A2: writing regimeSentiment from a Step 1 effect on local state would miss a response that lands after the user left Step 1 (setRegime/setCombinedRegime still update), leaving the strip on an older reading than the verdict; fixed in the plan - one pure sentimentFromRegime builder, store cleared at fetch start and written in fetchRegime's then/catch, unmount-before-response test. || 2026-10-10 taken from the Board (#149). Kenneth answered 2 questions on #149 (chat answer recorded on the issue): option (a) - non-persisted scanStore.regimeSentiment written by Step 1 (may touch lib/scanStore.ts and step-1-regime/page.tsx), hide the strip with 'Market sentiment loads on Step 1' when absent; Bearish 'Looks for' wording approved. Plan written; plan round 1 next.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
       }
+    },
+    {
+      "id": "YF-CALENDAR-SEMAPHORE",
+      "name": "yfinance limiters bound to the first event loop: one semaphore per running loop so no scan symbol is lost to 'bound to a different event loop'",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item / tracking issue #142",
+        "found in STOCKS-T1-FOLLOWUPS (#139, #129)"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-10-yf-calendar-semaphore-plan.md",
+      "branch": "board/yf-calendar-semaphore-47d6c524",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/data/market.py",
+        "pattern": "def _loop_semaphore",
+        "note": "Task 1 adds the per-loop semaphore helper. PRESENCE ONLY; behaviour is pinned by tests/test_yf_semaphore_loops.py."
+      },
+      "note": "2026-10-10 ROUND 2 (code round 1 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 13c8b52c..295184d0 -- backend (whole target) against the plan: only the helper, registries and getters changed; every getter call is inside a coroutine; limit exactly 5/15 per loop, no creation race, no deadlock; uvloop loops hashable + weakrefable (three uvloop runs, 0 errors, peak 5); other app loops never reach the limiters; new tests fail on 13c8b52c and pass on HEAD (43 with test_market_data_fixes). 0 GATE FINDINGS. Built, audit-clean, NOT merged - PR next. || 2026-10-10 BUILT (not merged, code audit pending): #190 T1 5746e333 closed. Red on 3.11.17: calendar across loops 5 RuntimeErrors, prewarm 15/20, same object across loops. Green: new 4 passed, test_market_data_fixes 39 passed unedited, full backend 6825 passed / 0 failed / 9 skipped on Python 3.11 (base 13c8b52c: 6821 / 0 / 9). Reproduction re-run: loop 2 10 ok / 0 errors. origin/main merged (already up to date). || 2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate-auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan at 8ba56fbb against main 13c8b52c and CPython 3.11.17 asyncio.locks/mixins; runtime experiment: before - loops 2 and 3 lose 5/10 calendar lookups, prewarm 15/20; after - 10/10 and 20/20, peaks 5 and 15. Only uvicorn's loop reaches the limiters in production; existing patched test stays valid. 0 GATE FINDINGS. Plan stage closed; code stage starts at round 1 of 3. Non-gate wording fixed in the plan: a contended semaphore keeps its loop alive (not collected); prewarm getter at L1466. || 2026-10-10 taken from the Board (#142). Reproduced on Python 3.11.17: two consecutive asyncio.run bursts of 10 symbols through fetch_calendar_dates_async -> loop 2: 5 ok, 5 RuntimeError (semaphore bound to a different event loop). Same pattern in _PREWARM_SEM. Plan: per-loop semaphores (WeakKeyDictionary keyed by the running loop). Plan round 1 next.",
+      "plan_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      }
+    },
+    {
+      "id": "TRADE-CARD-UI-FOLLOWUP-OPTIONS",
+      "name": "Trade card UI follow-up, Options half: aligned order/exit values, selected-method recommendation, loss-budget label, alternative spacing, collapsed scoring evidence, score cards moved up (Options)",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [],
+      "plan": "docs/superpowers/plans/2026-10-09-trade-card-ui-followup-options-integration.md",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/components/molecules/CollapsibleSection/index.tsx",
+        "pattern": "keepMounted\\?: boolean",
+        "note": "PRESENCE ONLY: the follow-up's keepMounted CollapsibleSection prop exists. Behaviour is covered by keepMounted.test.tsx, collapsedEvidence.test.tsx, TradeCard tests and the Options e2e spec."
+      },
+      "note": "2026-10-10 BOARD #158 (board-worker): taken on board/trade-card-ui-followup-options-4866cbfb, cut from claude/relaxed-fermat-sm9xru (f501ad40); git merge origin/main (13c8b52c, 35 commits) -- only conflict PROJECT_STATE.json (both sides added a phase entry; both kept). Main touched none of the 12 audited frontend files. CLAUDE.md: the branch's 'Working the Markdown backlog in parallel' section dropped in the merge (the Board #151 supersedes that backlog). Ticket-26 evidence doc (f501ad40) and .scratch status lines kept. CODE ROUND 3 (stage round 3 of 3) on the merge: CLEAN, zero gate findings. Coordinator checks on f76eb77: typecheck clean; full Jest 225 suites/4902 tests pass; Options e2e trade-card-ui-followup.spec.ts 2/2 (1200/1920) with the container's Chromium 1194 via launchOptions.executablePath (repo Playwright pins a build this container lacks). Backend: no diff vs main. Built, audit clean, PR open, NOT MERGED. || PREVIOUS: 2026-10-09 BUILT on claude/relaxed-fermat-sm9xru at d43931e2, NOT MERGED, CODE AUDIT CLEAN at code round 2 of 3 (R1: 1 display finding F1, fixed a8c3b4a4; R2: zero gate findings). Awaiting Kenneth's merge decision. Backlog TICKET-38, decision TICKET-38-OPTIONS-ONLY-2026-10-09. Narrowing of the TRADE-CARD-UI-FOLLOWUP plan (independent plan round 1 clean on that phase); no new behaviour, so no separate plan round. The original code round (4b06656a..bdf3bed2) does not carry over: base moved 141 commits. Path-limited git apply -3 of 4b06656a..origin/codex/trade-card-ui-followup, no merge/cherry-pick, so the Stocks commits stay unmerged for the later Stocks integration. 11 of 12 files byte-identical to the reviewed branch; step-7-trade-card/page.tsx removes only the decisionTarget portal plus one comment correction, P0A/P0B gates unchanged. Implementer: fresh subagent. Coordinator verification: typecheck clean; targeted Jest 13 suites/372 tests pass. Implementer: full Jest 219 suites/4873 tests pass; Options e2e 2/2 at 1200/1920 with mocked fonts (DejaVu metrics; production font metrics unverified). Excluded: TC-UI-07 and the Stocks half of TC-UI-06 (STOCK-DESIGN-GRILLING owner).",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-09",
+          "scope": "git diff 0b019988..d43931e2 (12 frontend files, +638/-133); range verified by reviewer",
+          "findings": [
+            "F1 (gate, display): TradeCard/index.tsx:2533 Barrier Race pick line prints round(pTargetFirst*100)% target first, contradicting the backend-allocated weightTargetFirst that the same row's edge uses and that BarrierRaceCard prints (types/domain.ts contract). Reviewer brute force: ~8% of k/2000 share rows differ. Display only; pick records targetOptionPrice correctly."
+          ],
+          "fixes": [
+            "F1 fixed in a8c3b4a4 by a fresh implementer: label uses weightPercents(o)[0]; regression test fails before, passes after"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-09",
+          "scope": "git diff f73952da..a8c3b4a4 (F1 fix only: TradeCard/index.tsx, TradeCard.methodPick.test.tsx, +19/-2) and interactions; range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 3,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "merge f76eb77 (parents f501ad40 + origin/main 13c8b52c, base a2b6935c): git diff 13c8b52c..f76eb77 (conflict resolution; 19 of 20 files match the branch's own diff, only PROJECT_STATE.json differs; CLAUDE.md equals main) and git diff f501ad40..f76eb77 for interactions with the audited Options trade-card files (scanStore persist version 18 unchanged, regimeSentiment not persisted; api.ts/stockDomain.ts gain optional Stocks-only fields; audited files byte-identical to a8c3b4a4); range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        }
+      ],
+      "branch": "board/trade-card-ui-followup-options-4866cbfb",
+      "covers": [
+        "board item / tracking issue #158",
+        "backlog TICKET-38 (folds reconciliation ticket 30)"
+      ]
+    },
+    {
+      "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
+      "name": "Send the already-computed stock score evidence, Pre-Breakout confidence sub-scores and Fib swing low/high (no calculation change)",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [],
+      "plan": "docs/superpowers/plans/2026-10-10-stock-pres-p1-backend-evidence-plan.md",
+      "tracking_issue": 146,
+      "branch": "board/stock-pres-p1-backend-evidence-f4e4b87f",
+      "covers": [
+        "decision STOCK-PRESENTATION-2026-10-10",
+        "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+        "board item #146",
+        "programme #144"
+      ],
+      "verify": {
+        "kind": "absent",
+        "path": "frontend/types/stockDomain.ts",
+        "pattern": "PreBreakoutResultRow",
+        "note": "The LAST build ticket (T3) adds PreBreakoutResultRow; T1's stock_explanation alone must not read as the whole target built. PRESENCE ONLY; behaviour is pinned by the plan's tests."
+      },
+      "note": "2026-10-10 ROUND 3 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 13c8b52c..fd8cdb0b -- backend frontend (the whole integrated phase, main merged) vs the plan incl. the Task 2 amendment: differential run of strategy_engine.py at 13c8b52c vs HEAD over 20,000 random bar series (1,449 signals) - identical Fib tuple, confidence, metrics and None-cases; breakdown sums to unrounded exactly; stock_score/status/gates/sizing untouched; ValidationError never drops a candidate; old scan_sessions / scheduled_scan_runs rows load, new rows round-trip; SIGNAL_CACHE_VERSION only orphans signal-cache files; scanStore version/migrate/merge/partialize unchanged and the merge resolution kept main's regimeSentiment. 0 GATE FINDINGS. Below-gate: ~4.8 KB more per persisted stock candidate in localStorage (quota-safe adapter keeps the previous save). Built, NOT merged; PR next. || 2026-10-10 BUILT, all build tickets closed: #154 T1 dcc015a5, #155 T2 3cb1c5b5, #156 T3 e2b3ada4. Coordinator re-runs on Python 3.11: backend 6857 passed / 9 skipped / 0 failed (at 3cb1c5b5); frontend typecheck clean, Jest 219 suites / 4855 tests (at e2b3ada4). Acceptance checklist checked (no UI file, store version/migrate/partialize untouched, only the planned SIGNAL_CACHE_VERSION bump). origin/main (13c8b52c, incl. STOCK-PRES-P4-STRATEGY) merged before code round 1: conflicts only in PROJECT_STATE.json (re-applied this entry onto main's file) and frontend/lib/scanStore.ts (main's regimeSentiment kept beside P1's row types). Code audit not started; NOT clean. || 2026-10-10 ROUND 2 (plan round 2 of 3): CLEAN. Plan defect reported by the T2 retry implementer: test_horizon_tuning_core pins strategy_engine.py's sha256 per SIGNAL_CACHE_VERSION, so the engine edit needs a version bump. Plan amended at a27bf075 (Task 2 bumps SIGNAL_CACHE_VERSION 1->2 and pins the new hash). Fresh independent gate auditor, scope = git diff 18b3fbb0..a27bf075 on the plan + interactions: version only in signal_key and tune_horizons run_key; gate keys unaffected; no tuned signal function reaches the Fib helper or breakout_setup_signal; no remote branch carries version 2. 0 GATE FINDINGS. Below-gate: tune_horizons --resume recomputes finished cells once (time only). Plan stage closed at round 2. Build: #154 T1 done (dcc015a5); #155 T2 in progress. || 2026-10-10 session hit its usage limit ~12:30 UTC; T2 implementer interrupted; claim re-taken 17:26 UTC on the same branch. || 2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at c9335d89 checked against main 8d1e32e: pinned Pre-Breakout/Fib numbers re-run on Python 3.11; unrounded->int refactor bit-identical; later scan caps replace status only so stock_explanation is the scorer's dict; real score_stock explanations (AAPL/MSFT/NVDA x 2 directions x 3 horizons) validate and round-trip; old rows load (Optional=None); frontend merge passes optional keys. 0 GATE FINDINGS. Below-gate notes applied as plan clarifications (no behaviour change): preBreakoutResults/fibPullbackResults are not persisted (session-only); test_fib_pullback_endpoint.py L96/L177 patches must be repointed at fibonacci_pullback_detail in T2. Plan stage closed; code stage starts at round 1 of 3. || 2026-10-10 taken from the Board (#146) by a board-worker session on board/stock-pres-p1-backend-evidence-f4e4b87f, cut from main 8d1e32e; moved here from task_backlog. Plan written; plan round 1 next (fresh independent gate auditor).",
+      "plan_stage": {
+        "rounds": 2,
+        "closed_by": "clean"
+      }
+    },
+    {
+      "id": "HESTON-CACHE-ISOLATION",
+      "name": "Public Heston calibration results own their nested parameters",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item #166; reconciliation ticket 22"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-10-heston-cache-isolation-plan.md",
+      "branch": "board/heston-cache-isolation-d8e79288",
+      "note": "2026-10-10 ROUND 2 (code round 1/3): CLEAN, zero gate findings. Fresh independent heston_code_audit reviewed exact integrated diff 13c8b52c..e3748e3d against plan and actual scan -> trade-plan -> reward/risk users; independently reran all 57 Heston tests and mixed-wrapper mixed-put/call mutation/reassignment probe. Reviewed both public boundaries, private direct read-only callers, cached/fresh fallback, values and cache behaviour. Plan round 1/3 clean. Full validation: Python 3.11.16 backend 6827 passed/9 skipped, typecheck passed, Jest 223 suites/4873 passed. Built audit-clean, PR next, never merged. No unrelated pricing math, cache keys or mutable API changes.",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/models/heston_cache.py",
+        "pattern": "params=replace\\(result.params\\)",
+        "note": "Presence only; detached result and nested params behaviour tested separately."
+      },
+      "plan_audit_clean": true,
+      "audit_records": [
+        {
+          "stage": "plan",
+          "round": 1,
+          "reviewer": "fresh independent subagent heston_plan_audit",
+          "scope": "entire docs/superpowers/plans/2026-10-10-heston-cache-isolation-plan.md against source at 13c8b52c",
+          "findings": [],
+          "fixes": [],
+          "outstanding": []
+        },
+        {
+          "stage": "code",
+          "round": 1,
+          "overall_round": 2,
+          "reviewer": "fresh independent subagent heston_code_audit",
+          "scope": "13c8b52ccfa782f995bb11e02b2378bf293dd812..e3748e3d3ea825126256f3cbf09354d3cf7afa25; all four changed files plus consumers",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "evidence": "57 Heston tests passed; mixed-wrapper mixed-call/put probe verified private cache preservation, params reassignment independence, misses/hits and unchanged 210C price 6.512151104274864."
+        }
+      ],
+      "implementation_commit": "7b313090a702b5f4c843844c9e9e9865366b9564",
+      "tickets": [
+        196
+      ],
+      "validation": {
+        "python": "3.11.16",
+        "red": "4 mutation cases failed; 2 thin fallback passed on original code",
+        "heston_tests": "57 passed",
+        "frontend_typecheck": "passed",
+        "jest": "223 suites / 4873 tests passed",
+        "backend": "6827 passed, 9 skipped; no failures"
+      },
+      "code_audit_clean": true
+    },
+    {
+      "id": "STATE-LEDGER-RECON-2026-10-10",
+      "name": "Ledger reconciliation: record TIINGO-GOVERNOR, STATE-BUILT-UNMERGED and STOCK-PRES-P4-STRATEGY as shipped (docs only)",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "closed_by": "clean"
+      },
+      "depends_on": [],
+      "tracking_issue": 159,
+      "plan": "docs/superpowers/plans/2026-10-10-state-ledger-recon-plan.md",
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/PROJECT_STATE.json",
+        "pattern": "(?s)\\A(?=.*[S]HIPPED: merged to main in 37551d71)(?=.*[S]HIPPED: merged to main in 58be67d8)(?=.*[S]HIPPED: merged to main in 13c8b52c)",
+        "note": "PRESENCE ONLY, self-proof ([S] cannot match its own JSON text): passes only when all three SHIPPED note lines are in the file."
+      },
+      "note": "2026-10-10 ROUND 3 (code round 1 of 3): CLEAN. Fresh independent gate auditor, scope git diff 13c8b52c 1b8bd6ca -- PROJECT_STATE.json vs the plan: key-by-key compare of every entry (only the three status flips + note prefixes, this entry, active_phase/_note/updated_by changed); merge facts re-verified via git + REST (#132 37551d71, #88 58be67d8, #186 13c8b52c); shipped rule met (merged + audit_clean); self-proof probe checked; state.py exit 0; 254 state tests. 0 GATE FINDINGS. Built, not merged; PR next. || 2026-10-10 BUILT (board item #159, branch board/state-ledger-recon-2026-10-10-362eaf48 from main 13c8b52c). Plan round 1: 1 gate finding (F1, self-matching probe) fixed in b6a42699; plan round 2 (fix only): CLEAN, 0 gate findings; plan stage closed. Ledger edit: three phases built -> shipped with merge evidence (37551d71 #132, 58be67d8 #88, 13c8b52c #186). NOT done: decision BOARD-SINGLE-SOURCE-2026-10-10 (requested only by an agent-written comment; asked Kenneth). Code audit (the diff) next."
+    },
+    {
+      "id": "APPROVED-BOARD-MERGE-2026-10-10",
+      "name": "User-approved integration of seven audited waiting-merge board items",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [],
+      "branch": "board/approved-board-merge-2026-10-10-4d19dd6e",
+      "covers": [
+        "Board #142, source PR #193, frozen head af092437234e60a16411d12afa90faead62b96c7",
+        "Board #119, source PR #202, frozen head 599ad0ffdf21bb82f7b5cf22f7722e18da030d0c",
+        "Board #158, source PR #195, frozen head 1aaca3af0a0697be0f402cd58bbea1aaa2b0f920",
+        "Board #146, source PR #192, frozen head 60041f00b05e6cf6e67b10d88568f9f44391fa23",
+        "Board #133, source PR #201, frozen head 2647d51a8ddc8ab63d85c7eb3b05cb06acfe6224",
+        "Board #166, source PR #200, frozen head d02494e2db4db5857e550edb1d0e430923b6944d",
+        "Board #159, source PR #203, frozen head f328445eacd9ef9c427d9d49b1100019a0ce3636"
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/models/heston_cache.py",
+        "pattern": "params=replace\\(result.params\\)",
+        "note": "Presence only for one included target; graph ancestry and integration evidence verify all seven sources."
+      },
+      "note": "All seven frozen source PR heads merged locally. Conflicts only PROJECT_STATE.json; semantic three-way merge retains both phase entries, removals from backlog, source audit counters and decision additions. Both P4 notes retained. Production overlapping edits auto-merged. Original phases remain built until actual main merge. Integration audit is a separate merge target; original closed caps unchanged. Independent code round 1: /root/approved_merge_audit reviewed 13c8b52ccfa782f995bb11e02b2378bf293dd812..3db23735b2b7d90c32704bb91795c32bf5403d2c, all seven ancestry/merge interactions and state reconciliation, zero gate findings. Combined validation found two incompatible scheduler test stubs; fixture-only fix and scoped independent follow-up pending. No original source audit counters reopened. Independent code round 2: fresh /root/merge_fixture_audit reviewed only the fixture compatibility diff from 3db23735 (SHA256 8bf237cc2b39f40f17326ff37aa5ca15c69feb4f99c09a6f89e80fc21c7f713c) and scheduler interactions, zero gate findings, no fixes/outstanding findings; scope verified. Cancellation module 25 passed; typecheck passed. Final combined CI pending before merge."
     }
   ],
   "already_shipped": [
@@ -3923,6 +4223,35 @@
       "id": "T1-H0A-SOURCES-2026-10-09",
       "q": "T1 H0a plan defect (implementer, ticket #93): pandas.read_html needs lxml/html5lib, absent from backend/requirements.txt; the Wikipedia Nasdaq-100 page has no GICS constituents table; the sector heatmap and SECTOR: presets read sp500.csv directly so H0a would not change them. How should H0a work?",
       "a": "Kenneth, 2026-10-09 (in chat), recommended option. (1) Parse the Wikipedia 'List of S&P 500 companies' table with BeautifulSoup + html.parser (already installed), no new dependency. (2) NDX-only names take their sector from yfinance .info (the source update_sp500_liquidity.py already uses); failures listed as unmatched. (3) 'NDX 100' = the app's universe_presets.NDX100. (4) The plan no longer claims the heatmap / SECTOR: presets change; only sector_for_symbol's callers (stock_scan._sector_context, the tuner strata) see the filled sectors. Routing the heatmap and presets through sector_for_symbol is LOGGED against main, not scheduled. Plan stage is closed (T1-CAP-SPLIT-H0B-2026-10-09), so this correction is by decision, unaudited at plan stage; the code audit covers it."
+    },
+    {
+      "id": "NO-LIVE-QUOTE-QA-QD-ANSWERS-2026-10-09",
+      "q": "NO-LIVE-QUOTE plan r3 section 5: Q-A in-session max quote age; Q-B Step 7 direct send when not live; Q-C rows with no ask; Q-D keep CONTRACT-LIQUIDITY-DTE merge hold?",
+      "a": "Kenneth, 2026-10-09 (in chat), all four recommendations: Q-A max_age_minutes 30. Q-B (a) warning + confirm tick keyed to contractKey, decided on a fresh send-time quote in placeDirectOrder. Q-C drop rows with ask <= 0 in both chain builders. Q-D KEEP the hold: NO-LIVE-QUOTE merges first, then CONTRACT-LIQUIDITY-DTE. Also recorded: the 3b label-mode deviation from FR-24 (display only) stands as Kenneth's Q3 decision of 2026-09-30.",
+      "by": "Kenneth 2026-10-09"
+    },
+    {
+      "id": "NO-LIVE-QUOTE-STEP0-DUPLICATE-2026-10-09",
+      "q": "codex/no-live-quote-evidence-prep (2026-10-06) built a second raw Tradier collector for Step 0. Is it needed?",
+      "a": "No. Step 0 was already complete on claude/priceless-jennings-995ab7 (five production samples 2026-10-03..05, committed under backend/scripts/out/tradier_chain_raw/), invisible from main because that branch was unmerged. The Codex branch collected no samples; it is superseded and not merged. Kenneth's rule from this episode: data-collection jobs are scheduled to run automatically, and unmerged branches are checked for earlier runs before collecting.",
+      "by": "Claude (Lane NLQ session), found 2026-10-09; rule stated by Kenneth 2026-10-09"
+    },
+    {
+      "id": "NO-LIVE-QUOTE-PLAN-STAGE-CLOSED-2026-10-05",
+      "q": "Is the NO-LIVE-QUOTE plan stage closed?",
+      "a": "Yes. NO-LIVE-QUOTE plan round 3 (fresh gate-auditor, diff b7ce86ec..6d6c1bf1) returned 0 gate findings on 2026-10-05 (commit 6ca99b40); plan stage closed at 3 rounds, code stage starts at code round 1. Recorded as a decision on 2026-10-09 only because state.py's closed_by 'clean' check reads the 'NO' in the target name as a negation word (logged against main); the fact is the 2026-10-05 round.",
+      "by": "audit record 2026-10-05; entered 2026-10-09"
+    },
+    {
+      "id": "NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09",
+      "q": "How does the review cap apply to the existing NLQ split?",
+      "a": "User explicitly authorized reviewing each remaining part separately with up to three code rounds per part, preserving NLQ-1 code-round-3 closure, followed by integration verification in NLQ-5. Scoped exception for NO-LIVE-QUOTE only to the phase-only orchestration rule. No reset of historical rounds, no reopening NLQ-1, no implicit merge approval. NLQ-2 continuation review b6f2259e..215aeafe qualifies as its first completed code round; the original interrupted attempt has no verdict.",
+      "by": "user approval 2026-10-09"
+    },
+    {
+      "id": "TICKET-38-OPTIONS-ONLY-2026-10-09",
+      "q": "Backlog ticket 30 found the audit-clean trade-card UI follow-up (codex/trade-card-ui-followup, 55e08e55) unmerged and conflicting with current main on the Stocks Step 7 surfaces, which the active STOCK-DESIGN-GRILLING claim is redesigning. Integrate how?",
+      "a": "Kenneth, 2026-10-09 (in chat): option A. Integrate the Options half now (TC-UI-01..05, TC-UI-06 Options half) on a fresh branch from current main with a fresh code audit; leave TC-UI-07 and the Stocks half of TC-UI-06 to the Stocks design owner. Recorded as phase TRADE-CARD-UI-FOLLOWUP-OPTIONS."
     }
   ],
   "pending_kenneth": [
@@ -4145,8 +4474,8 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "STOCK-PRES-P4-STRATEGY",
-  "active_phase_note": "D1 HISTORY plan audit; D2 begins only after independent plan clean. || STOCKS-HORIZON-T1 (lane B, #92): built on claude/stocks-horizon-t1, code audit clean at code round 2 of 3, PR pending (not merged).",
+  "active_phase": "APPROVED-BOARD-MERGE-2026-10-10",
+  "active_phase_note": "User-approved integration of seven already-audited waiting-merge items; independent interaction audit pending.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
@@ -5424,18 +5753,6 @@
           "docs/adr/0001-stocks-parameters-per-horizon.md"
         ],
         "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery."
-      },
-      {
-        "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
-        "owner": "agent",
-        "status": "not_started",
-        "depends_on": [],
-        "covers": [
-          "decision STOCK-PRESENTATION-2026-10-10",
-          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
-          "tracking issue #144"
-        ],
-        "summary": "Additive backend fields only, no calculation change: stock score factors on /api stock scan candidates (StockScoreCard.explanation, already computed on main), Pre-Breakout confidence sub-scores, Fib swing low/high; frontend types."
       },
       {
         "id": "STOCK-PRES-P2-POSITION",
