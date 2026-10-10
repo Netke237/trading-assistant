@@ -7,14 +7,6 @@
       "expires_at": "2026-10-10T23:18:23Z",
       "note": "Board #163: implement chat-approved duration units and driver wording",
       "task": "SCREEN-LABELS-19-20"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/contract-liquidity-dte-b714cd2a",
-      "claimed_at": "2026-10-10T22:50:00Z",
-      "expires_at": "2026-10-11T01:50:27Z",
-      "note": "Board #161: verify state, questions for Kenneth",
-      "task": "CONTRACT-LIQUIDITY-DTE"
     }
   ]
 }
