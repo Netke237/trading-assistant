@@ -56,10 +56,12 @@ Monte Carlo already exists for stocks: the Estimate button (`/api/stocks/first-p
 |---|---|
 | D9 | Proposal 02 approved as is (incl. "Looks for"); real pages follow the app theme tokens |
 | D10 | Five phases, in order: P1 backend fields → P2 Position → P3 Backtest → P4 Strategy → P5 Pre-Breakout |
-| D11 | P1 reuses the audited `stock_scorer` evidence commit `08ce063c` (branch `codex/trade-card-qualification-presentation`) — one source of score factors |
+| D11 | ~~P1 reuses commit `08ce063c`~~ **Corrected 2026-10-10:** that evidence (`StockScoreCard.explanation`: weights, factor components, caps) is already on main via the trade-card integration. P1 only sends it on stock-scan candidates — one source of score factors, nothing imported |
 | D12 | Planning documents live on `main`; code on one feature branch per phase; merge only on Kenneth's go. Work continues from a cloud container |
+| D13 | Tracking stays on **GitHub issues** (umbrella #144): issue updates cost no Actions minutes, while Markdown status commits to `main` each triggered CI (~20 min). CI now skips docs-only changes (PR #145, pending Kenneth's merge). Every agent-written issue/comment/PR starts with `[claude]` or `[codex]` |
+| D14 | **P3** must also keep the Backtest time-exit display added by `STOCKS-T1-FOLLOWUPS` (merged `ea9c67ce`, after the 66-row mapping was drawn): its plan adds that item to the mapping slice. **P5** is presentation only and must not pre-empt reconciliation ticket 10 “Pre-Breakout exit semantics” (`.scratch/project-ticket-reconciliation-20261009/issues/10-t4-exits.md`) |
 
-Recorded as decision `STOCK-PRESENTATION-2026-10-10` and backlog items `STOCK-PRES-P1…P5` in `PROJECT_STATE.json`. Umbrella tracking issue: **#144**.
+Recorded (with the D11/D13/D14 corrections) as decision `STOCK-PRESENTATION-2026-10-10` and backlog items `STOCK-PRES-P1…P5` in `PROJECT_STATE.json`. Umbrella tracking issue: **#144**.
 
 ## The path (per phase)
 
