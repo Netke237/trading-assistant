@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/tradier-governor-889de9f2",
       "claimed_at": "2026-10-10T22:51:08Z",
-      "expires_at": "2026-10-11T01:54:43Z",
+      "expires_at": "2026-10-11T02:05:53Z",
       "note": "Board #169: route every Tradier call through the governor rate limiter (TG-1)",
       "task": "TRADIER-GOVERNOR"
     },
