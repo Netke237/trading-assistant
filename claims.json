@@ -18,14 +18,6 @@
     },
     {
       "agent": "codex",
-      "branch": "board/state-ledger-recon-2026-10-10-merge-e3ab4f37",
-      "claimed_at": "2026-10-10T20:57:52Z",
-      "expires_at": "2026-10-11T00:29:36Z",
-      "note": "User-approved merge of board #159, PR #203; integration pending",
-      "task": "STATE-LEDGER-RECON-2026-10-10"
-    },
-    {
-      "agent": "codex",
       "branch": "board/approved-board-merge-2026-10-10-4d19dd6e",
       "claimed_at": "2026-10-10T20:58:03Z",
       "expires_at": "2026-10-11T00:28:42Z",
