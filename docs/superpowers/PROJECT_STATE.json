@@ -2491,7 +2491,7 @@
     {
       "id": "STOCK-PRESENTATION-2026-10-10",
       "q": "Stocks screener and Pre-Breakout do not look like the approved Options design (Kenneth 2026-10-10: \"that was not what I expected\"). STOCKS-STEP-MERGE-S2 excluded visual redesign; STOCK-DESIGN-GRILLING (claimed 2026-10-04) had produced nothing. What do we build, and how?",
-      "a": "Kenneth 2026-10-10, three grilling rounds + approval: build design proposal 02 (docs/superpowers/specs/2026-10-10-stock-presentation/preview.html, README.md D1-D11). All four pages (Strategy, Backtest, Position, Pre-Breakout) in the Options layout and parts; Pre-Breakout stays in place (no Position handoff until STOCKS-HORIZON-T4); no new calculations (Monte Carlo = existing /api/stocks/first-passage and /api/stocks/exit-plan, race included). NOTHING REMOVED: every item of the 66-row mapping stays on screen; Backtest Expand keeps the full card. NEW only as approved: Position scorecard factor rows, pre-trade checklist from existing gates only, Latest calculation strip, Sharpe; Backtest quick summary, Score/Confidence sort, summary strip; Strategy Market Sentiment strip, Looks-for line, after-scan count; Pre-Breakout confidence breakdown, why-it-is-a-setup inline, mini chart, Fib swing low/high; How-this-page-works + section links. Three additive backend fields (already computed, only sent). SPLIT into 5 phases per audit_rule batch size: P1 STOCK-PRES-P1-BACKEND-EVIDENCE (reuse audited stock_scorer evidence commit 08ce063c from codex/trade-card-qualification-presentation), P2 POSITION, P3 BACKTEST, P4 STRATEGY, P5 PREBREAKOUT; each: plan -> plan audit (cap 3) -> tickets under its own tracking issue -> build -> code audit (cap 3) -> PR, merge only on Kenneth go. Planning docs go to main; code on feature branches. Work continues from a cloud container. Umbrella tracking issue #144."
+      "a": "Kenneth 2026-10-10, three grilling rounds + approval: build design proposal 02 (docs/superpowers/specs/2026-10-10-stock-presentation/preview.html, README.md D1-D11). All four pages (Strategy, Backtest, Position, Pre-Breakout) in the Options layout and parts; Pre-Breakout stays in place (no Position handoff until STOCKS-HORIZON-T4); no new calculations (Monte Carlo = existing /api/stocks/first-passage and /api/stocks/exit-plan, race included). NOTHING REMOVED: every item of the 66-row mapping stays on screen; Backtest Expand keeps the full card. NEW only as approved: Position scorecard factor rows, pre-trade checklist from existing gates only, Latest calculation strip, Sharpe; Backtest quick summary, Score/Confidence sort, summary strip; Strategy Market Sentiment strip, Looks-for line, after-scan count; Pre-Breakout confidence breakdown, why-it-is-a-setup inline, mini chart, Fib swing low/high; How-this-page-works + section links. Three additive backend fields (already computed, only sent). SPLIT into 5 phases per audit_rule batch size: P1 STOCK-PRES-P1-BACKEND-EVIDENCE (CORRECTED same day: StockScoreCard.explanation is already on main via the trade-card integration; P1 only sends it on stock-scan candidates, no import of 08ce063c), P2 POSITION, P3 BACKTEST, P4 STRATEGY, P5 PREBREAKOUT; each: plan -> plan audit (cap 3) -> tickets under its own tracking issue -> build -> code audit (cap 3) -> PR, merge only on Kenneth go. Planning docs go to main; code on feature branches. Work continues from a cloud container. Umbrella tracking issue #144. || ADDENDUM 2026-10-10: tracking stays on GitHub issues (#144; issue updates cost no Actions minutes, Markdown status commits to main triggered ~20 min CI each); CI docs-only skip proposed in PR #145; source tags [claude]/[codex]. P3 must keep the Backtest time-exit display from STOCKS-T1-FOLLOWUPS (ea9c67ce). P5 must not pre-empt reconciliation ticket 10 (Pre-Breakout exit semantics)."
     },
     {
       "id": "DOCC-2-DUPLICATE-PORT-RELATIONS-2026-09-29",
@@ -5403,7 +5403,7 @@
           "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
           "tracking issue #144"
         ],
-        "summary": "Additive backend fields only, no calculation change: stock score factors on /api stock scan candidates (reuse audited stock_scorer evidence commit 08ce063c), Pre-Breakout confidence sub-scores, Fib swing low/high; frontend types."
+        "summary": "Additive backend fields only, no calculation change: stock score factors on /api stock scan candidates (StockScoreCard.explanation, already computed on main), Pre-Breakout confidence sub-scores, Fib swing low/high; frontend types."
       },
       {
         "id": "STOCK-PRES-P2-POSITION",
@@ -5432,7 +5432,7 @@
           "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
           "tracking issue #144"
         ],
-        "summary": "Backtest page: summary strip, Score/Confidence sort, quick summary above the kept full-card Expand; all 17 columns kept."
+        "summary": "Backtest page: summary strip, Score/Confidence sort, quick summary above the kept full-card Expand; all 17 columns kept. Keep the time-exit display added by STOCKS-T1-FOLLOWUPS (ea9c67ce)."
       },
       {
         "id": "STOCK-PRES-P4-STRATEGY",
@@ -5458,7 +5458,7 @@
           "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
           "tracking issue #144"
         ],
-        "summary": "Pre-Breakout page layout; row details (why it is a setup, confidence breakdown, mini chart, fib swing); three tables and all controls kept."
+        "summary": "Pre-Breakout page layout; row details (why it is a setup, confidence breakdown, mini chart, fib swing); three tables and all controls kept. Must not pre-empt reconciliation ticket 10 (Pre-Breakout exit semantics, STOCKS-HORIZON-T4)."
       }
     ]
   },
