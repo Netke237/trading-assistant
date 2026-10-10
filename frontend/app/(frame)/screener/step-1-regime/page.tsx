@@ -15,7 +15,7 @@
  *   7. Market news
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { toneForStatus } from '@/lib/status';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
@@ -26,7 +26,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { NewsCard } from '@/components/molecules/NewsCard';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { api } from '@/lib/api';
-import type { MarketRegime, SectorTile, NewsItem } from '@/types/domain';
+import type { MarketRegime, SectorTile, NewsItem, SentimentData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
 import { regimeStatusTooltip, regimeMetricTooltip, regimeNoDataTooltip } from '@/lib/statusTooltips';
@@ -62,10 +62,38 @@ function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
 
+/** The Market Sentiment reading built from a regime response — `null` when it
+ *  carries no `omm`. Used for Step 1's own MarketSentiment and for
+ *  `scanStore.regimeSentiment` (the Stocks Strategy page's strip). */
+function sentimentFromRegime(r: MarketRegime, horizon: string): SentimentData | null {
+  if (!r.omm) return null;
+  return {
+    horizon,
+    timeframe: 'daily',
+    state: r.omm.state,
+    p_stay: r.omm.p_stay,
+    stability: r.omm.stability,
+    regime_age_days: r.omm.regime_age_days,
+    avg_regime_duration: r.omm.avg_regime_duration,
+    conviction_pct: r.conviction_pct ?? 0,
+    conviction_label: r.conviction_label ?? 'Neutral',
+    interpretation: `Market conviction: ${r.conviction_label ?? 'Neutral'}`,
+    hmm_state: r.hmm_state ?? null,
+    alignment: (r.alignment ?? 'Unavailable') as 'Aligned' | 'Diverging' | 'Unavailable',
+    insufficient_data: false,
+  };
+}
+
+/** Bumped by every `fetchRegime` call. Module-level, not a ref: it must
+ *  outlive the component, because an earlier mount's request can still answer
+ *  after a later mount's request has started (or answered). */
+let regimeSentimentRequestSeq = 0;
+
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
   const setRegimeDirection = useScanStore((s) => s.setRegimeDirection);
+  const setRegimeSentiment = useScanStore((s) => s.setRegimeSentiment);
   const context = useScanStore((s) => s.context);
   const markov = useSettingsStore((s) => s.markov);
 
@@ -86,11 +114,20 @@ export default function Step1RegimePage() {
 
   const fetchRegime = useCallback(() => {
     setRegimeFetchFailed(false);
+    // Written here, not by an effect: these callbacks still run after the
+    // user leaves Step 1 (as setRegime does). Only the latest request writes
+    // the shared reading: an older request answering or failing after a newer
+    // one started leaves it alone, so the latest request wins.
+    const seq = ++regimeSentimentRequestSeq;
+    setRegimeSentiment(null);
     // Always fetch with 'intraday' so the HMM is always computed —
     // the regime step is visited before horizon selection (step 3).
     api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
+      if (seq === regimeSentimentRequestSeq) {
+        setRegimeSentiment(sentimentFromRegime(r, useScanStore.getState().context?.horizon ?? 'Swing'));
+      }
       setRegimeDirection(r.regime_direction ?? null);
       const direction = useScanStore.getState().context?.direction ?? 'Bullish';
       const descriptor = descriptorFromState(r.omm?.state ?? '');
@@ -98,8 +135,9 @@ export default function Step1RegimePage() {
     }).catch(() => {
       setOffline(true);
       setRegimeFetchFailed(true);
+      if (seq === regimeSentimentRequestSeq) setRegimeSentiment(null);
     });
-  }, [setRegime, setRegimeDirection, setCombinedRegime, markov]);
+  }, [setRegime, setRegimeDirection, setCombinedRegime, setRegimeSentiment, markov]);
 
   // The verdict follows the context's direction, not only the moment the
   // regime fetch resolved: StoreHydration can restore a scan's context
@@ -137,21 +175,10 @@ export default function Step1RegimePage() {
   const vix30     = regime?.vix_pct_30d   ?? null;
   const vix252    = regime?.vix_pct_252d  ?? null;
 
-  const pageSentiment = regime && regime.omm ? {
-    horizon: context?.horizon ?? 'Swing',
-    timeframe: 'daily',
-    state: regime.omm.state,
-    p_stay: regime.omm.p_stay,
-    stability: regime.omm.stability,
-    regime_age_days: regime.omm.regime_age_days,
-    avg_regime_duration: regime.omm.avg_regime_duration,
-    conviction_pct: regime.conviction_pct ?? 0,
-    conviction_label: regime.conviction_label ?? 'Neutral',
-    interpretation: `Market conviction: ${regime.conviction_label ?? 'Neutral'}`,
-    hmm_state: regime.hmm_state ?? null,
-    alignment: (regime.alignment ?? 'Unavailable') as 'Aligned' | 'Diverging' | 'Unavailable',
-    insufficient_data: false,
-  } : null;
+  const pageSentiment = useMemo(
+    () => (regime ? sentimentFromRegime(regime, context?.horizon ?? 'Swing') : null),
+    [regime, context?.horizon],
+  );
 
   return (
     <div className={styles.main}>
