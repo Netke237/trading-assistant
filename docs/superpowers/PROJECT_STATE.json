@@ -2517,7 +2517,7 @@
       "id": "FLAKY-TESTS-FIX",
       "name": "Deterministic test suites: Heston timeout test always cleans up (26A); explicit timeout for the long Step 7 ORDER-UNKNOWN test (26B); 26D confirmed on main",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "tracking_issue": 160,
@@ -2528,7 +2528,11 @@
         "pattern": "\\}, 15_000\\)",
         "note": "PRESENCE ONLY of the LAST ticket's (T2) explicit timeout; T1's try/finally is pinned by the plan's red/green evidence."
       },
-      "note": "2026-10-10 taken from the Board (#160) on board/flaky-tests-fix-fec8e2c9 from main e765cf4f. Plan written (ticket-26 evidence: 26A + 26B in scope; 26D already on main; 26C fonts and 26E session-start venv out of scope, reported to Kenneth). Plan round 1 next."
+      "note": "2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = plan 63a6ef4c vs test_scan_endpoint.py L962-1296 + scan.py L362/L400-424/L1006-1016, direct-send-save-first.test.tsx L420-458 + jest config, test_shortlist.py L74-92, the ticket-26 evidence and this entry's probe (0 matches today). 0 GATE FINDINGS; plan stage closed. Build T1-T2 next. || 2026-10-10 taken from the Board (#160) on board/flaky-tests-fix-fec8e2c9 from main e765cf4f. Plan written (ticket-26 evidence: 26A + 26B in scope; 26D already on main; 26C fonts and 26E session-start venv out of scope, reported to Kenneth). Plan round 1 next.",
+      "plan_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      }
     }
   ],
   "already_shipped": [
