@@ -381,3 +381,7 @@ Before you start a task, claim it; the `claims` branch is the shared ledger
 - `python3 scripts/claim.py release <TASK-ID>` when done or giving up.
 - `take --force` only when Kenneth reassigns a task; then `git fetch origin <old-branch>` and continue its work.
 <!-- task-claims:end -->
+
+## The Board (all agents)
+
+When Kenneth says **"work the board"** (or a session starts with no other task), follow `docs/agents/board.md`: resume an abandoned in-progress board item first, otherwise take the first ready item in the pinned `board` issue's Queue, claim it, run it as one phase under `docs/agents/ticket-orchestration.md` (plan → plan audit → tickets → build → code audit → PR), notify Kenneth (`scripts/board_notify.py`), never merge, then take the next item. A board item **is** its phase's tracking issue. Items needing Kenneth's decision get numbered questions and `needs-kenneth`, and are skipped. GitHub commands: `docs/agents/issue-tracker.md`.

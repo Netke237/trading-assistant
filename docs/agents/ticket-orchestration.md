@@ -12,7 +12,7 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 
 - **Phase** (a `phases[]` entry in `PROJECT_STATE.json`, e.g. `STOCKS-STEP-MERGE-S1`) = the claim, the branch, the **audit target**, the round counter.
 - **Ticket** (a GitHub child issue) = one plan task = one build unit. Tickets are never audit targets.
-- One tracking issue per phase.
+- One tracking issue per phase. When the phase is a **board item** (`docs/agents/board.md`), the board item issue *is* that tracking issue: do not create another; START mode cuts the tickets as its sub-issues.
 
 ## Commands
 
