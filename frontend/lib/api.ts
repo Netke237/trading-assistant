@@ -2,7 +2,7 @@ import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCa
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
               ContractGrading } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import { validationMessages } from '@/lib/pydanticError';
@@ -892,7 +892,7 @@ export const api = {
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
   ) =>
-    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+    post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -904,14 +904,7 @@ export const api = {
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
   ) =>
-    post<Array<{
-      symbol: string;
-      direction: string;
-      fib_level_hit: string;
-      fib_dist_pct: number | null;
-      at_level: boolean;
-      confidence: number;
-    }>>(
+    post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),

@@ -115,7 +115,7 @@ _FIB_RATIOS: dict[float, float] = {
 }
 
 
-def _fibonacci_pullback_signal(
+def _fibonacci_pullback_detail(
     bars: list[dict],
     direction: Literal["Bullish", "Bearish"],
     *,
@@ -125,7 +125,7 @@ def _fibonacci_pullback_signal(
     fib_tolerance_pct: float = 0.015,
     impulse_min_pct: float = 0.0,
     retracement_recency_bars: int = 0,
-) -> tuple[bool, float | None, str | None]:
+) -> dict:
     """Check if close is near a Fibonacci retracement level of the dominant swing move.
 
     For Bullish: swing low → swing high within fib_swing_lookback bars.
@@ -137,28 +137,40 @@ def _fibonacci_pullback_signal(
     retracement_recency_bars: for Bullish, the swing high must fall within the most
                               recent N bars; for Bearish, the swing low. 0 disables.
 
-    Returns:
-        (at_level: bool, nearest_pct: float|None, level_label: str|None)
-        nearest_pct is expressed as a percentage (e.g. 1.5 means 1.5% away).
-        Returns (False, None, None) when impulse/recency checks fail.
+    Returns a dict:
+        at_level:   bool
+        dist_pct:   float|None — nearest level distance as a percentage
+                    (e.g. 1.5 means 1.5% away)
+        label:      str|None — nearest level label
+        swing_low / swing_high: float|None — the window low/high the levels are
+                    measured from; None only when the window has < 10 bars.
+        at_level/dist_pct/label are (False, None, None) when impulse/recency
+        checks fail. ``_fibonacci_pullback_signal`` returns the first three as
+        the historical tuple.
     """
     if fib_levels is None:
         fib_levels = [23.6, 38.2, 50.0, 61.8]
     window = bars[-fib_swing_lookback:] if len(bars) >= fib_swing_lookback else bars
     if len(window) < 10:
-        return False, None, None
+        return {"at_level": False, "dist_pct": None, "label": None,
+                "swing_low": None, "swing_high": None}
 
     swing_high = max(b["high"] for b in window)
     swing_low  = min(b["low"]  for b in window)
+
+    def _out(at_level: bool, dist_pct: float | None, label: str | None) -> dict:
+        return {"at_level": at_level, "dist_pct": dist_pct, "label": label,
+                "swing_low": swing_low, "swing_high": swing_high}
+
     move = swing_high - swing_low
     if move <= 0:
-        return False, None, None
+        return _out(False, None, None)
 
     # Impulse size gate: skip trivial drifts that just cross a fib line.
     # Guard swing_low > 0 before division to avoid ZeroDivisionError on bad data.
     if impulse_min_pct > 0:
         if swing_low <= 0 or (move / swing_low) < impulse_min_pct:
-            return False, None, None
+            return _out(False, None, None)
 
     # Recency gate: the swing extreme (peak for bullish, trough for bearish) must
     # have occurred within the most recent N bars, confirming an active retracement.
@@ -168,11 +180,11 @@ def _fibonacci_pullback_signal(
             recent_high = max(b["high"] for b in recent)
             # Allow 0.5% slop: the peak may not be at exactly the lookback max
             if swing_high > 0 and abs(recent_high - swing_high) / swing_high > 0.005:
-                return False, None, None
+                return _out(False, None, None)
         else:
             recent_low = min(b["low"] for b in recent)
             if swing_low > 0 and abs(recent_low - swing_low) / swing_low > 0.005:
-                return False, None, None
+                return _out(False, None, None)
 
     close = (current_price if current_price is not None and current_price > 0
              else bars[-1]["close"])
@@ -204,14 +216,43 @@ def _fibonacci_pullback_signal(
             best_label = str(label)
 
     if best_label is None:
-        return False, None, None
+        return _out(False, None, None)
 
     at_level = best_dist_pct <= fib_tolerance_pct
-    return at_level, round(best_dist_pct * 100, 2), best_label
+    return _out(at_level, round(best_dist_pct * 100, 2), best_label)
 
 
-# Public alias so routers can import without depending on the private name
+def _fibonacci_pullback_signal(
+    bars: list[dict],
+    direction: Literal["Bullish", "Bearish"],
+    *,
+    current_price: float | None = None,
+    fib_swing_lookback: int = 100,
+    fib_levels: list[float] | None = None,
+    fib_tolerance_pct: float = 0.015,
+    impulse_min_pct: float = 0.0,
+    retracement_recency_bars: int = 0,
+) -> tuple[bool, float | None, str | None]:
+    """Tuple form of ``_fibonacci_pullback_detail``:
+    (at_level: bool, nearest_pct: float|None, level_label: str|None).
+    Returns (False, None, None) when impulse/recency checks fail.
+    """
+    d = _fibonacci_pullback_detail(
+        bars,
+        direction,
+        current_price=current_price,
+        fib_swing_lookback=fib_swing_lookback,
+        fib_levels=fib_levels,
+        fib_tolerance_pct=fib_tolerance_pct,
+        impulse_min_pct=impulse_min_pct,
+        retracement_recency_bars=retracement_recency_bars,
+    )
+    return d["at_level"], d["dist_pct"], d["label"]
+
+
+# Public aliases so routers can import without depending on the private names
 fibonacci_pullback_signal = _fibonacci_pullback_signal
+fibonacci_pullback_detail = _fibonacci_pullback_detail
 
 
 # ── Exit-target ladder ────────────────────────────────────────────────────────
@@ -406,6 +447,11 @@ class SetupSignal:
     symbol:     str
     confidence: int   # 0–100
     metrics:    dict  # atr_ratio, range_ratio, vol_ratio, proximity_pct, swing_level
+    # STOCK-PRES-P1: evidence behind `confidence` (sub-scores, weights,
+    # contributions, unrounded sum) and the Fib swing low/high the Fib levels
+    # were measured from (None when Fib was not used). Send-only.
+    confidence_breakdown: dict | None = None
+    fib_swing:            dict | None = None
 
 
 # ── Strategy 1: Pullback to 20-EMA ───────────────────────────────────────────
@@ -1559,6 +1605,8 @@ def breakout_setup_signal(
     fib_at_level: bool = False
     fib_dist_pct: float | None = None
     fib_label: str | None = None
+    fib_swing_low: float | None = None
+    fib_swing_high: float | None = None
 
     if fib_enabled:
         # Guard: if no valid fib levels are provided fall back to non-fib scoring
@@ -1571,13 +1619,15 @@ def breakout_setup_signal(
             fib_label = None
 
     if fib_enabled:
-        fib_at_level, fib_dist_pct, fib_label = _fibonacci_pullback_signal(
+        _fib = _fibonacci_pullback_detail(
             bars,
             direction,
             fib_swing_lookback=fib_swing_lookback,
             fib_levels=fib_levels,
             fib_tolerance_pct=fib_tolerance_pct,
         )
+        fib_at_level, fib_dist_pct, fib_label = _fib["at_level"], _fib["dist_pct"], _fib["label"]
+        fib_swing_low, fib_swing_high = _fib["swing_low"], _fib["swing_high"]
         # If fib helper returned None distance (insufficient bars), fall back to non-fib
         # rather than penalising the confidence score with a 0 fib_score.
         if fib_dist_pct is None and not fib_at_level:
@@ -1587,10 +1637,29 @@ def breakout_setup_signal(
             # Normalise against 2× tolerance expressed in the same percent scale.
             _tol_pct = fib_tolerance_pct * 100
             fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (_tol_pct * 2)))
-            confidence = int(atr_score * 0.24 + vol_score * 0.20 + prox_score * 0.36 + fib_score * 0.20)
+            unrounded = atr_score * 0.24 + vol_score * 0.20 + prox_score * 0.36 + fib_score * 0.20
+            confidence = int(unrounded)
+            weights = {"atr": 0.24, "vol": 0.20, "proximity": 0.36, "fib": 0.20}
+            scores = {"atr": atr_score, "vol": vol_score, "proximity": prox_score, "fib": fib_score}
 
     if not fib_enabled:
-        confidence = int(atr_score * 0.30 + vol_score * 0.25 + prox_score * 0.45)
+        unrounded = atr_score * 0.30 + vol_score * 0.25 + prox_score * 0.45
+        confidence = int(unrounded)
+        weights = {"atr": 0.30, "vol": 0.25, "proximity": 0.45}
+        scores = {"atr": atr_score, "vol": vol_score, "proximity": prox_score}
+
+    # STOCK-PRES-P1: send the evidence behind `confidence` (no formula change).
+    confidence_breakdown: dict = {
+        "fib_used":   fib_enabled,
+        "weights":    weights,
+        "components": {
+            name: {"score": scores[name], "weight": w, "contribution": scores[name] * w}
+            for name, w in weights.items()
+        },
+        "unrounded":  unrounded,
+        "confidence": min(100, max(0, confidence)),
+    }
+    fib_swing = {"low": fib_swing_low, "high": fib_swing_high} if fib_enabled else None
 
     metrics: dict = {
         "atr_ratio":     round(atr_ratio, 3),
@@ -1611,4 +1680,6 @@ def breakout_setup_signal(
         symbol=symbol,
         confidence=min(100, max(0, confidence)),
         metrics=metrics,
+        confidence_breakdown=confidence_breakdown,
+        fib_swing=fib_swing,
     )

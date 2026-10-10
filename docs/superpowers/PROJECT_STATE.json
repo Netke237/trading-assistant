@@ -2381,6 +2381,34 @@
         "board item / tracking issue #158",
         "backlog TICKET-38 (folds reconciliation ticket 30)"
       ]
+    },
+    {
+      "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
+      "name": "Send the already-computed stock score evidence, Pre-Breakout confidence sub-scores and Fib swing low/high (no calculation change)",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [],
+      "plan": "docs/superpowers/plans/2026-10-10-stock-pres-p1-backend-evidence-plan.md",
+      "tracking_issue": 146,
+      "branch": "board/stock-pres-p1-backend-evidence-f4e4b87f",
+      "covers": [
+        "decision STOCK-PRESENTATION-2026-10-10",
+        "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+        "board item #146",
+        "programme #144"
+      ],
+      "verify": {
+        "kind": "absent",
+        "path": "frontend/types/stockDomain.ts",
+        "pattern": "PreBreakoutResultRow",
+        "note": "The LAST build ticket (T3) adds PreBreakoutResultRow; T1's stock_explanation alone must not read as the whole target built. PRESENCE ONLY; behaviour is pinned by the plan's tests."
+      },
+      "note": "2026-10-10 ROUND 3 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 13c8b52c..fd8cdb0b -- backend frontend (the whole integrated phase, main merged) vs the plan incl. the Task 2 amendment: differential run of strategy_engine.py at 13c8b52c vs HEAD over 20,000 random bar series (1,449 signals) - identical Fib tuple, confidence, metrics and None-cases; breakdown sums to unrounded exactly; stock_score/status/gates/sizing untouched; ValidationError never drops a candidate; old scan_sessions / scheduled_scan_runs rows load, new rows round-trip; SIGNAL_CACHE_VERSION only orphans signal-cache files; scanStore version/migrate/merge/partialize unchanged and the merge resolution kept main's regimeSentiment. 0 GATE FINDINGS. Below-gate: ~4.8 KB more per persisted stock candidate in localStorage (quota-safe adapter keeps the previous save). Built, NOT merged; PR next. || 2026-10-10 BUILT, all build tickets closed: #154 T1 dcc015a5, #155 T2 3cb1c5b5, #156 T3 e2b3ada4. Coordinator re-runs on Python 3.11: backend 6857 passed / 9 skipped / 0 failed (at 3cb1c5b5); frontend typecheck clean, Jest 219 suites / 4855 tests (at e2b3ada4). Acceptance checklist checked (no UI file, store version/migrate/partialize untouched, only the planned SIGNAL_CACHE_VERSION bump). origin/main (13c8b52c, incl. STOCK-PRES-P4-STRATEGY) merged before code round 1: conflicts only in PROJECT_STATE.json (re-applied this entry onto main's file) and frontend/lib/scanStore.ts (main's regimeSentiment kept beside P1's row types). Code audit not started; NOT clean. || 2026-10-10 ROUND 2 (plan round 2 of 3): CLEAN. Plan defect reported by the T2 retry implementer: test_horizon_tuning_core pins strategy_engine.py's sha256 per SIGNAL_CACHE_VERSION, so the engine edit needs a version bump. Plan amended at a27bf075 (Task 2 bumps SIGNAL_CACHE_VERSION 1->2 and pins the new hash). Fresh independent gate auditor, scope = git diff 18b3fbb0..a27bf075 on the plan + interactions: version only in signal_key and tune_horizons run_key; gate keys unaffected; no tuned signal function reaches the Fib helper or breakout_setup_signal; no remote branch carries version 2. 0 GATE FINDINGS. Below-gate: tune_horizons --resume recomputes finished cells once (time only). Plan stage closed at round 2. Build: #154 T1 done (dcc015a5); #155 T2 in progress. || 2026-10-10 session hit its usage limit ~12:30 UTC; T2 implementer interrupted; claim re-taken 17:26 UTC on the same branch. || 2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at c9335d89 checked against main 8d1e32e: pinned Pre-Breakout/Fib numbers re-run on Python 3.11; unrounded->int refactor bit-identical; later scan caps replace status only so stock_explanation is the scorer's dict; real score_stock explanations (AAPL/MSFT/NVDA x 2 directions x 3 horizons) validate and round-trip; old rows load (Optional=None); frontend merge passes optional keys. 0 GATE FINDINGS. Below-gate notes applied as plan clarifications (no behaviour change): preBreakoutResults/fibPullbackResults are not persisted (session-only); test_fib_pullback_endpoint.py L96/L177 patches must be repointed at fibonacci_pullback_detail in T2. Plan stage closed; code stage starts at round 1 of 3. || 2026-10-10 taken from the Board (#146) by a board-worker session on board/stock-pres-p1-backend-evidence-f4e4b87f, cut from main 8d1e32e; moved here from task_backlog. Plan written; plan round 1 next (fresh independent gate auditor).",
+      "plan_stage": {
+        "rounds": 2,
+        "closed_by": "clean"
+      }
     }
   ],
   "already_shipped": [
@@ -5622,18 +5650,6 @@
           "docs/adr/0001-stocks-parameters-per-horizon.md"
         ],
         "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery."
-      },
-      {
-        "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
-        "owner": "agent",
-        "status": "not_started",
-        "depends_on": [],
-        "covers": [
-          "decision STOCK-PRESENTATION-2026-10-10",
-          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
-          "tracking issue #144"
-        ],
-        "summary": "Additive backend fields only, no calculation change: stock score factors on /api stock scan candidates (StockScoreCard.explanation, already computed on main), Pre-Breakout confidence sub-scores, Fib swing low/high; frontend types."
       },
       {
         "id": "STOCK-PRES-P2-POSITION",
