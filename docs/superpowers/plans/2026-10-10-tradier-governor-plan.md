@@ -1,9 +1,10 @@
 # TRADIER-GOVERNOR — every Tradier call through the shared rate limiter (board #169)
 
-**Phase id:** `TRADIER-GOVERNOR` · **Board item / tracking issue:** #169 · **Branch:** `board/tradier-governor-889de9f2` (from origin/main e765cf4f)
+**Phase id:** `TRADIER-GOVERNOR` · **Board item / tracking issue:** #169 · **Branch:** `board/tradier-governor-2b6fd1f9` (cut from `board/tradier-governor-889de9f2`; base origin/main e765cf4f + main merge 9e1c55f8)
 **Source:** NO-LIVE-QUOTE ticket TG-1 (`.scratch/no-live-quote/issues/08-tradier-governor.md`), reconciliation ticket 13.
 **Goal (Kenneth, 2026-10-09):** "use the rate limiter for tradier, we don't want my account blocked or flagged."
-**Merge decision reserved for Kenneth (TG-1):** an options scan gets slower. T4 measures by how much, and Kenneth decides before merge whether that is acceptable.
+**Scan slowdown:** pre-accepted by Kenneth ("ok Go ahead", 2026-10-10); T4 still measures and records it.
+**Revision r4 (second plan stage, decision `TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10`):** the overdraft design replaces r3's reserve/priority design (§4a).
 
 ## 1. What is true on main (e765cf4f)
 
@@ -37,110 +38,167 @@ How the sync callers run:
 - Candles, quote, company and calendar calls are added where their caches miss.
 - `_SCAN_CONCURRENCY = 5`.
 
-## 2. Design
+## 2. Design (r4 — overdraft)
 
-**D1 — admission for sync callers (governor.py).**
-- Add `TokenBucket.acquire_blocking(tokens=1.0, *, admit_timeout: float, priority=False) -> bool`. It sleeps the thread (`time.sleep`, the same refill arithmetic as `acquire`) until a token is free or `admit_timeout` (seconds, a plain `float`) elapses, and returns whether it got one.
-- **Priority reserve (plan round 1 G1).** `TokenBucket` gains `reserve: float = 0.0` (must be `< capacity`). A normal acquisition (`acquire`, `acquire_blocking`, `try_acquire`) succeeds only while `tokens >= n + reserve`. A `priority=True` acquisition needs only `tokens >= n`. The refill rate is unchanged, so the total request rate never exceeds the bucket's rate. Priority callers only jump the queue. `tradier` gets `reserve=3`; `tradier_paper` gets `reserve=0`.
-- Add `Governor.admit_sync(provider, *, admit_timeout: float, priority: bool = False) -> bool`:
-  - false at once for an unknown provider or an open circuit;
-  - otherwise waits out any `retry_at` cooldown and then a token, all within `admit_timeout`;
-  - false on timeout, true when admitted.
-- `admit_timeout` is **always a float admission budget, never the HTTP timeout**. Several sites pass an `httpx.Timeout` object as their HTTP timeout (A11: `_TRADIER_CALENDAR_HTTP_TIMEOUT = httpx.Timeout(4.0, connect=2.0)`), and `time.monotonic() + httpx.Timeout(...)` raises `TypeError`. The two values are separate arguments everywhere.
-- Add `Governor.note_rate_limited(provider, retry_after: float | None)`: sets `retry_at = max(retry_at, now + (retry_after or backoff_delay(0)))` and `status = "degraded"`. `Governor.call`'s existing `RateLimited` branch calls it, so sync and async share one cooldown.
+**The rule in one paragraph.** Bulk Tradier traffic (scans, prewarm, monitors, UI, probes) waits for a token as usual. The three deadline-bound **auto-trade fire-path** calls never wait and never fail on the limiter. They take a token if one is free; otherwise they go anyway and **book an overdraft**: the bucket goes negative, floored at `-capacity` (−15). While the bucket is negative, every bulk caller waits until the overdraft has been repaid by the normal refill. The refill rate is unchanged, so the long-run request rate stays at 120/min. The only extra is a one-off burst of at most `capacity` (15) requests, which Kenneth accepted (decision Q3).
 
-**D2 — no new circuit breaking for Tradier.** Today no Tradier call opens a circuit. The breaker would make every Tradier call fail fast for 60 s after 5 consecutive failures, so a short outage would drop scan symbols for a whole minute instead of call by call. The `tradier` provider is therefore built with a fail threshold that never trips (`fail=10**9`, commented). Pacing and the 429 cooldown are the whole change. `try_acquire` (site F) keeps working.
+The three fire-path calls are:
+1. the regime bar fetch, both branches;
+2. the earnings veto's Tradier source;
+3. `_market_is_open`'s price probe.
 
-**D3 — one helper per mode in market.py, used by every market-data site.**
-- **`_tradier_get(url, *, params=None, headers=None, timeout, admit_timeout: float, priority: bool = False)`**, the sync helper:
-  - It calls `get_governor().admit_sync("tradier", admit_timeout=admit_timeout, priority=priority or _TRADIER_PRIORITY.get())`. If not admitted it raises `ProviderUnavailable("tradier rate limiter: no admission within <admit_timeout>s")`. Every A-site already treats any exception as a Tradier failure and takes its existing fallback or empty result, so callers need no change.
-  - Then it calls `httpx.get(url, params=..., headers=..., timeout=timeout)`, where `timeout` is the site's **existing HTTP timeout passed through unchanged** (an int, or A11's `httpx.Timeout`).
-  - On **429** it calls `note_rate_limited("tradier", <Retry-After seconds if numeric>)` and returns the response unchanged, so each call site's own `raise_for_status()` or status check behaves exactly as today.
-  - On a **transport exception** it calls `record_failure` and re-raises (no breaker trip, per D2). On any other response it calls `record_success`.
-  - Sync calls get **no retry**.
-- **Admission budgets (plan round 1 G1).** Admission time adds to a call's latency, so every **deadline-bounded** caller must have `admit_timeout + HTTP timeout` inside its deadline, and must not be starved by bulk traffic:
-  - **A11 `_fundamentals_calendar_sync`** (the earnings source under `auto_trader._TRADIER_LOOKUP_DEADLINE_S = 5.0`, used by the auto-fire event veto and by the stock scan's `_earnings_days_for`): **always `priority=True`, `admit_timeout=0.5`**. With the reserve, a token is normally immediate even while an options scan or the candle prewarm saturates the bucket, so Tradier's date still wins as today.
-  - **The fire-path regime fetch, BOTH branches (plan round 2 R2-G1).** `auto_trader._measure_trade_regime` picks the bar fetch by the horizon's `timeframe` (`auto_trader.py:1268-1275`): `_fetch_scan_window_bars` → A1 `fetch_candles` for daily horizons, and `_fetch_intraday_regime_bars` → A2 `fetch_intraday_candles(symbol, "15min", 55)` for Intraday (`scoring_rules.yaml` `intraday.timeframe: 15min`). It submits the chosen function to a one-worker executor under `_REGIME_FETCH_DEADLINE_S = 25.0`.
-    - **Mechanism:** a module-level `ContextVar` `_TRADIER_PRIORITY` (default False) and a context manager `market.tradier_priority()` mark calls as priority. `fetch_candles` and `fetch_intraday_candles` keep their signatures.
-    - **Where the wrap goes:** `_measure_trade_regime` submits a wrapper, not the bare function: `ex.submit(_with_tradier_priority, _fetch_bars, strategy.symbol)`. The new module-level helper `_with_tradier_priority(fn, *args)` runs `fn(*args)` inside `with market.tradier_priority():`. The `with` therefore executes **inside the worker thread**, where `fetch_candles` / `fetch_intraday_candles` call `_tradier_get` with no further executor hop. Setting the var in the submitting thread would not work: `ThreadPoolExecutor.submit` does not copy context. One wrap covers both branches, and any future branch added to that selector.
-    - **Priority admission budget:** every priority call except A11 uses `admit_timeout=2.0`. `_tradier_get` picks `2.0` when the ContextVar is set, else the site's normal 10.0. With the reserve, admission is normally immediate.
-      - Daily branch: 2 + 10 (HTTP) < 25.
-      - Intraday branch: A2's HTTP timeout is 30 s, which already exceeds the 25 s deadline today. That overrun predates this plan and is out of scope (D5: timeouts unchanged). Admission adds at most 2 s to it.
-      - Any overrun ends in the **existing** `future.result(timeout=25)` → `RegimeDataUnavailableError` refusal, a refused fire rather than a different number.
-    - **Effect:** under bulk load (bucket at its reserve), both branches get a token at once, so Tradier's series is used as today, and the gate and sizer measure the same series the card was scored on.
-  - **`fetch_price` under `_market_is_open`'s 3 s deadline:** not priority. That path is fail-closed (no price → treated as closed → the fire is blocked), so a busy limiter refuses the fire and changes no number.
-  - **Every other A-site call** (bulk/scan/UI traffic, not deadline-bounded, and not inside `tradier_priority()`): normal priority, `admit_timeout=10.0`.
-  - **A 429 cooldown** (`retry_at`) is honoured by priority callers too. If it outlasts their `admit_timeout`, they fall back exactly as they do today when Tradier errors. That is the intended behaviour: Tradier told us to back off.
-- **`_tradier_get_async(client, url, *, params=None, headers=None, timeout=httpx.USE_CLIENT_DEFAULT, retries=2, admit_priority=False)`**, the async helper:
-  - **The timeout default is `httpx.USE_CLIENT_DEFAULT`, never `None` (plan round 1 G2).** In httpx an explicit `timeout=None` means no timeout at all, not the client default. B1–B6, C and D pass no per-call timeout today and rely on their client's default (scan `httpx.Timeout(10.0)`, the booking `AsyncClient(timeout=8)`, daily risk 10). The helper forwards `timeout` to `client.get` only as given, so those sites keep exactly their client's timeout.
-  - `await get_governor().call("tradier", factory, retries=retries)`, where `factory` does `await client.get(...)` and raises `RateLimited(retry_after=...)` on 429, so `call` waits out Retry-After and retries. `Governor.call`'s token acquisition passes `priority` through to `TokenBucket.acquire` (no async caller uses priority in this phase; the parameter exists so async and sync share one bucket rule).
-  - Any other response is returned for the call site to check as today.
-  - If the retries run out on 429, `RateLimited` propagates. `ProviderUnavailable` cannot occur with D2's threshold. Each B-site's existing `except` handles both as a failed fetch, as it handles HTTP errors today.
-- **A1–A11 and B1–B6 call the helpers** instead of `httpx.get` / `client.get`, with the same URL, params, headers and HTTP timeout (an A-site's timeout passed through verbatim; a B-site that passes none today passes none, so the helper's `USE_CLIENT_DEFAULT` applies), plus the A-site `admit_timeout` / `priority` from the budget list above. No other logic changes in those functions.
+**D1 — governor.py.**
+- **`TokenBucket.overdraft(tokens=1.0) -> None`.** Under the lock: refill, then `self._tokens = max(self._tokens - tokens, -self.capacity)`. It never blocks and never fails. Normal `acquire`, `acquire_blocking` and `try_acquire` keep requiring `self._tokens >= tokens`, so they wait while the bucket is negative; that is the repayment. `_refill` already caps at `capacity` and adds `elapsed * rate/per` to whatever the balance is, negative included.
+- **`TokenBucket.acquire_blocking(tokens=1.0, *, admit_timeout: float) -> bool`.** It sleeps the thread (`time.sleep`, the same refill arithmetic as `acquire`) until a token is free or `admit_timeout` (seconds, a plain `float`) elapses, and returns whether it got one.
+- **`Governor.admit_sync(provider, *, admit_timeout: float, overdraft: bool = False) -> bool`:**
+  - unknown provider or open circuit: False at once;
+  - `overdraft=True`: if a 429 cooldown is active (`retry_at > now`), **False at once**, without waiting (see D3, "429"); otherwise `bucket.overdraft()` and True;
+  - otherwise: wait out any `retry_at` cooldown, then `acquire_blocking`, all within `admit_timeout`. False on timeout, True when admitted.
+- `admit_timeout` is **always a float admission budget, never the HTTP timeout**. A11's HTTP timeout is `httpx.Timeout(4.0, connect=2.0)`, and `time.monotonic() + httpx.Timeout(...)` raises `TypeError`. The two are separate arguments everywhere.
+- **`Governor.note_rate_limited(provider, retry_after: float | None)`:** `retry_at = max(retry_at, now + (retry_after or backoff_delay(0)))` and `status = "degraded"`. `Governor.call`'s existing `RateLimited` branch calls it, so sync and async share one cooldown.
+- **No reserve, no priority parameter.** r3's `reserve` / `priority` rule is removed entirely.
+
+**D2 — no new circuit breaking for Tradier.**
+- Today no Tradier call opens a circuit. The breaker would make every Tradier call fail fast for 60 s after 5 consecutive failures, so a short outage would drop scan symbols for a whole minute instead of call by call.
+- The `tradier` provider is therefore built with a fail threshold that never trips (`fail=10**9`, commented). Pacing, the overdraft and the 429 cooldown are the whole change.
+- `try_acquire` (site F) keeps working: it simply sees fewer tokens while an overdraft is being repaid. F is fail-closed: "unavailable" refuses the fire, and changes no number.
+
+**D3 — helpers in market.py, used by every market-data site.**
+- **Fire-path marker.** A module-level `ContextVar` `_TRADIER_FIRE_PATH` (default False), set by the context manager `market.tradier_fire_path()`, and a helper `market.run_on_fire_path(fn, *args)` that runs `fn(*args)` inside `with tradier_fire_path():`. The ContextVar is the only way a fire-path call is recognised: the fetch functions keep their signatures.
+- **Prepaid marker.** A `ContextVar` `_TRADIER_PREPAID` (default 0), and `market.tradier_prepay(admit_timeout: float) -> bool`:
+  - it calls `admit_sync("tradier", admit_timeout=admit_timeout)` (a normal, waiting admission);
+  - on success it sets `_TRADIER_PREPAID` to 1 in the **current** context and returns True; otherwise it returns False.
+- **`_tradier_get(url, *, params=None, headers=None, timeout, admit_timeout: float = 10.0)`**, the sync helper. Admission, in order:
+  1. If `_TRADIER_PREPAID.get() > 0`: decrement it, no further admission (the token was taken before the deadline started).
+  2. Else if `_TRADIER_FIRE_PATH.get()`: `admit_sync("tradier", admit_timeout=0.0, overdraft=True)`.
+  3. Else: `admit_sync("tradier", admit_timeout=admit_timeout)`.
+
+  Then:
+  - **Not admitted:** raise `ProviderUnavailable("tradier rate limiter: no admission")`. Every A-site already treats any exception as a Tradier failure and takes its existing fallback or empty result, so callers need no change.
+  - **The request:** `httpx.get(url, params=..., headers=..., timeout=timeout)`, with `timeout` the site's **existing HTTP timeout passed through unchanged** (an int, or A11's `httpx.Timeout`).
+  - **On 429:** `note_rate_limited("tradier", <Retry-After seconds if numeric>)`, and the response is returned unchanged, so the call site's own `raise_for_status()` or status check behaves exactly as today. On a transport exception: `record_failure` and re-raise (no breaker trip, per D2). Otherwise: `record_success`. There is no sync retry.
+- **Where the marker is set (auto_trader.py only).** Each submits a wrapper rather than the bare function, so the `with` runs **inside the worker thread**: `ThreadPoolExecutor.submit` does not copy context.
+  - `_market_is_open`: `ex.submit(market.run_on_fire_path, fetch_price, symbol)`.
+  - `_measure_trade_regime`: `ex.submit(market.run_on_fire_path, _fetch_bars, strategy.symbol)`. This covers both branches: daily `_fetch_scan_window_bars` → A1 and Intraday `_fetch_intraday_regime_bars` → A2 (plan round 2 R2-G1).
+  - `_apply_event_veto`: `with market.tradier_fire_path(): earnings = _fetch_earnings_date(strategy.symbol)`.
+
+    `_call_source_with_deadline` submits `contextvars.copy_context().run` with `fn, symbol`, so both markers set in the calling thread reach the source's worker thread. This is a single change: `ex.submit(contextvars.copy_context().run, fn, symbol)`. A copied context is a snapshot: the worker's decrement of `_TRADIER_PREPAID` stays in the worker.
+- **The stock scan's earnings lookup waits before its clock starts (R3-G1).** In `_lookup_earnings_date`, immediately before calling the **Tradier** source, and only when `_TRADIER_FIRE_PATH` is not set:
+  - call `market.tradier_prepay(admit_timeout=30.0)` **outside** `_call_source_with_deadline`, so the wait does not count against `_TRADIER_LOOKUP_DEADLINE_S = 5.0`;
+  - if it returns False (only during a 429 cooldown longer than 30 s), record that source as `"error"` with the reason "rate limiter: no admission" and continue to yfinance. That is the same path as any Tradier failure today, and there is no immediate retry (D5);
+  - when it returns True, the copied context carries `_TRADIER_PREPAID = 1` into the worker, where `_tradier_get` consumes it;
+  - if the Tradier source answers from its same-day cache without an HTTP call, the prepaid token goes unused. The cost is one bulk slot, and no number changes.
+
+  The prepay applies to every non-fire caller of `_lookup_earnings_date`, which today is the stock scan's `_earnings_days_for` via `asyncio.to_thread`. The fire path skips it and uses the overdraft. Stock-scan lookups are therefore **normal** admissions and no longer compete with the fire path. r3 made them priority, which was R3-G1.
+- **429 on the fire path.** During an active 429 cooldown, a fire-path call is refused at once (D1). It does not wait and it does not send. The call site then takes its existing failure path:
+  - regime: yfinance or `RegimeDataUnavailableError`, exactly as when Tradier returns 429 today;
+  - earnings: yfinance, then "unknown" → the existing D4 veto rule;
+  - price probe: "closed" → fire blocked.
+
+  Today the same moment sends a request that Tradier answers with 429, followed by the same path. So the outcome equals today's 429 behaviour, without sending a request Tradier told us not to send.
+- **Every other A-site call** (not on the fire path and not prepaid) uses a normal admission with `admit_timeout=10.0`.
+- **`_tradier_get_async(client, url, *, params=None, headers=None, timeout=httpx.USE_CLIENT_DEFAULT, retries=2)`**, the async helper:
+  - **The timeout default is `httpx.USE_CLIENT_DEFAULT`, never `None` (plan round 1 G2).** An explicit `timeout=None` means no timeout at all in httpx. B1–B6, C and D pass no per-call timeout today, so they keep exactly their client's default.
+  - It runs `await get_governor().call("tradier", factory, retries=retries)`. The `factory` does `await client.get(...)` and raises `RateLimited(retry_after=...)` on 429, so `call` waits out Retry-After and retries.
+  - Any other response is returned for the call site to check, as today. If the 429 retries run out, `RateLimited` propagates, and each B-site's existing `except` handles it as a failed fetch.
+  - No async caller is on the fire path in this phase. The booking's quote fetch happens after the order is sent, and D, the daily-risk opening price, uses `retries=0`.
+- **A1–A11 and B1–B6 call the helpers** instead of `httpx.get` / `client.get`, with the same URL, params, headers and HTTP timeout (an A-site's passed through verbatim; a B-site that passes none passes none). No other logic changes in those functions.
 
 **D4 — the other sites.**
 - **C (sectors) and D (daily_risk_hooks):** `_tradier_get_async(client, ...)`. D uses `retries=0`: the budget authorisation fails rather than waits, and its existing `raise_for_status` / `DailyRiskError` path is unchanged.
-- **E:** `_create_session` acquires through `_tradier_get_async`'s admission. Add a `_tradier_post_async` twin, or a `method` argument on the helper. The long-lived stream POST is one connection, not a request rate, and stays as is.
-- **F:** unchanged, already admitted.
-- **G1:** goes through `_tradier_get` with `timeout=_PROBE_TIMEOUT` and `admit_timeout=float(_PROBE_TIMEOUT)` (or 2.0 if `_PROBE_TIMEOUT` is not a number). If not admitted, the probe returns `("degraded", "Tradier rate-limit budget busy; probe skipped")` instead of calling Tradier.
-- **G2 and H** use the **paper sandbox account and token**, which Tradier rate-limits separately from the live account. Add a provider `tradier_paper` to `build_default_governor` (`rate=60/60, capacity=5`, same no-trip breaker). G2 and H call `admit_sync("tradier_paper", admit_timeout=<a float equal to their numeric HTTP timeout>)` before their request. If H is not admitted, it raises the adapter's existing order-failure error **before** anything is sent, so no order goes out and the user sees the error. An order is never sent without admission and never sent twice.
+- **E:** `_create_session` is admitted through the async helper (a `method="POST"` argument). The long-lived stream POST is one connection, not a request rate, and stays as is.
+- **F:** unchanged, already admitted by `try_acquire`.
+- **G1:** goes through `_tradier_get` with `timeout=_PROBE_TIMEOUT` and `admit_timeout=float(_PROBE_TIMEOUT)` (or 2.0 if `_PROBE_TIMEOUT` is not a number). If not admitted, it returns `("degraded", "Tradier rate-limit budget busy; probe skipped")` without calling Tradier.
+- **G2 and H** use the paper sandbox account and token, which Tradier rate-limits separately from the live account. They get a provider `tradier_paper` (`rate=60/60, capacity=5`, the same no-trip breaker, no overdraft use).
+  - G2 and H call `admit_sync("tradier_paper", admit_timeout=<a float equal to their numeric HTTP timeout>)` before their request.
+  - If H is not admitted, it raises the adapter's existing order-failure error **before** anything is sent. An order is never sent without admission and never sent twice.
 
-**D5 — what does not change.** Bucket rate and capacity for `tradier` (120/min, capacity 15) stay as configured (the new `reserve=3` holds back part of the existing capacity for priority callers; it adds no rate). Caches, fallbacks (yfinance, IBKR), scan concurrency, every HTTP timeout and every call site's error handling stay as they are, as do all response parsing and numbers.
+**D5 — what does not change.**
+- **Unchanged:** the `tradier` rate (120/min) and capacity (15), caches, fallbacks (yfinance, IBKR), scan concurrency, every HTTP timeout and deadline (`_TRADIER_LOOKUP_DEADLINE_S`, `_REGIME_FETCH_DEADLINE_S`, the 3 s market-open probe), every call site's error handling, the earnings lookup's retry rule, all response parsing and all numbers.
+- **Changed:** only *when* bulk requests are sent, and that fire-path requests are never delayed by bulk traffic.
 
 ## 3. Tickets
 
-### T1 — governor sync admission and the shared 429 cooldown (blocks T2, T3)
+### T1 — governor: overdraft, sync admission, shared 429 cooldown (blocks T2, T3)
 **Files:** `backend/app/data/governor.py`, new `backend/tests/test_governor_sync_admission.py`.
-- Add `TokenBucket.acquire_blocking`, the `reserve` / `priority` rule on `acquire`, `acquire_blocking` and `try_acquire`, `Governor.admit_sync`, `Governor.note_rate_limited`, a `priority` pass-through on `Governor.call`, and wire the `Governor.call` `RateLimited` branch to `note_rate_limited`.
-- Use `fail=10**9` and `reserve=3` for `tradier`, and add the `tradier_paper` provider (D2, D4).
-- **Tests** (fake clock or tiny real waits, < 1 s total):
-  - `acquire_blocking` admits up to capacity, then waits about 1/rate, and returns False when `timeout` elapses first;
+- Add `TokenBucket.overdraft` and `TokenBucket.acquire_blocking`, `Governor.admit_sync` (with `overdraft`) and `Governor.note_rate_limited`, and wire `Governor.call`'s `RateLimited` branch to `note_rate_limited`.
+- `fail=10**9` for `tradier`; add the `tradier_paper` provider.
+- **Tests** (fake clock or tiny real waits, under 1 s total):
+  - `acquire_blocking` admits up to capacity, then waits about 1/rate, and returns False when `admit_timeout` elapses first;
+  - `overdraft` takes the bucket negative and never below `-capacity`, and never blocks;
+  - a normal `acquire_blocking` / `try_acquire` / async `acquire` issued while the bucket is negative waits (or is refused, for `try_acquire`) until the refill brings it back to ≥ 1;
+  - over a long mixed run (bulk callers saturating the bucket plus periodic overdraft calls), the total admitted count is at most `capacity + capacity + rate × elapsed`: the normal burst, plus at most `capacity` overdraft, plus the refill;
+  - `admit_sync(..., overdraft=True)` returns False at once during an active `retry_at`, without sleeping;
   - `admit_sync` honours a `retry_at` cooldown set by `note_rate_limited`, and refuses on an open circuit;
-  - reserve: with the bucket drained to `reserve`, a normal `acquire_blocking` / `try_acquire` / async `acquire` is refused or waits, while a `priority=True` one is admitted at once; over a long run the admitted rate never exceeds `rate` whatever the mix;
-  - `admit_sync` accepts only a float `admit_timeout` (a test passes A11's `httpx.Timeout` as the HTTP timeout through the T2 helper and asserts no `TypeError` path; see T2);
   - an async `call` that hits `RateLimited(retry_after=x)` sets the same cooldown that `admit_sync` then waits out;
-  - the existing governor tests still pass;
-  - `try_acquire` behaves as before.
+  - the existing governor tests still pass.
 
-### T2 — market.py helpers and the 17 market-data sites (blocked by T1)
+### T2 — market.py helpers, markers and the 17 market-data sites (blocked by T1)
 **Files:** `backend/app/data/market.py`, new `backend/tests/test_tradier_governor_market.py`.
-- Add `_tradier_get`, `_tradier_get_async`, the `_TRADIER_PRIORITY` ContextVar and `tradier_priority()` (D3), and switch A1–A11 and B1–B6 to them with the D3 admission budgets.
-- **Tests:** a fake governor (injected via monkeypatch of `get_governor`) plus `respx`, or a mock `httpx` transport if respx is not installed. Check with `pip show respx`; otherwise use `httpx.MockTransport` for async and monkeypatch `httpx.get` for sync.
-  - Every A and B function makes its Tradier request only after one admission on `tradier`.
+- Add `_tradier_get`, `_tradier_get_async`, `_TRADIER_FIRE_PATH`, `tradier_fire_path()`, `run_on_fire_path()`, `_TRADIER_PREPAID` and `tradier_prepay()` (D3), and switch A1–A11 and B1–B6 to the helpers.
+- **Tests:** a fake or real governor (via monkeypatch of `get_governor`), `httpx.MockTransport` for async, and a monkeypatched `httpx.get` for sync. Check `pip show respx` first and use it if installed.
+  - Every A and B function makes its Tradier request only after exactly one admission on `tradier`.
   - A 429 with `Retry-After: 2` sets the cooldown, and the call site's result is the same as for any other HTTP error today.
-  - Not admitted (fake returns False / raises) gives the same fallback or empty result as a transport error today. Assert each function's documented fallback value.
+  - Not admitted gives the same fallback or empty result as a transport error today. Assert each function's documented fallback value.
   - Async 429 then 200 gives one retry and the 200's parsed result.
-  - **Timeouts pass through (G2):** each B-site request, made through a real `AsyncClient(timeout=X, transport=MockTransport)`, carries the client's timeout `X` in `request.extensions["timeout"]` (not all-None). Each A-site's `httpx.get` receives exactly its existing HTTP timeout, and A11's is the `httpx.Timeout(4.0, connect=2.0)` object.
-  - **Deadline-bounded earnings lookup under load (G1):** with the **real** governor, drain the `tradier` bucket down to its reserve (as a saturating scan would) and keep it there. Then the real `auto_trader._lookup_earnings_date` for a symbol, with Tradier mocked to return a date and yfinance mocked to fail, returns **Tradier's date** within the 5 s deadline. With the bucket fully empty and a 429 cooldown active, it takes the existing fallback.
-  - **ContextVar priority:** inside `with market.tradier_priority():`, `fetch_candles` and `fetch_intraday_candles` are admitted as priority with `admit_timeout=2.0`, and outside it as normal with 10.0. The var is reset on exit, including on exception.
-  - Finite parsing is unchanged: for each function, the same fixture response gives the same output before and after. Pin with existing fixtures where present.
+  - **Timeouts pass through (G2):** each B-site request carries its client's timeout in `request.extensions["timeout"]`. Each A-site's `httpx.get` receives exactly its existing HTTP timeout; A11's is the `httpx.Timeout(4.0, connect=2.0)` object.
+  - **Markers:**
+    - inside `tradier_fire_path()`, an A-call on an **empty** real bucket (drained by normal acquisitions) is admitted at once by overdraft and the request is sent;
+    - outside it, the same call waits up to its `admit_timeout`;
+    - with `_TRADIER_PREPAID = 1`, the call makes no admission and decrements the marker;
+    - both markers reset on context exit, including on exception;
+    - `run_on_fire_path` sets the marker inside a worker thread submitted via `ThreadPoolExecutor.submit`.
+  - Finite parsing is unchanged: the same fixture response gives the same output for each function before and after. Pin with existing fixtures where present.
 
-### T3 — the remaining sites and the ratchet (blocked by T1, T2)
-**Files:** `backend/app/routers/sectors.py`, `backend/app/services/daily_risk_hooks.py`, `backend/app/data/tradier_stream.py`, `backend/app/routers/data_sources.py`, `backend/app/data/tradier_paper.py`, `backend/app/services/auto_trader.py` (only the new `_with_tradier_priority` helper and the one-line change to the `ex.submit(...)` in `_measure_trade_regime`), new `backend/tests/test_tradier_governor_sites.py`.
-- Apply D4, and the D3 fire-path priority wrap.
-- **Tests:**
-  - C, D and E-session are admitted on `tradier`; D's retries=0 behaviour holds; C and D requests carry their client's timeout (G2).
-  - The fire-path regime fetch makes its Tradier request as priority on **both** branches. Spy on `admit_sync` and drive `_measure_trade_regime` with a daily-horizon strategy (A1 history) and with an Intraday strategy (`timeframe: 15min`, A2 timesales). With the real governor drained to its reserve, both branches are admitted at once and return Tradier's bars, not the yfinance fallback. `_fetch_scan_window_bars`'s cache-restore behaviour is unchanged (existing tests pass).
-  - G1 not admitted returns `("degraded", ...)` without an HTTP call.
-  - G2 and H are admitted on `tradier_paper`. H not admitted raises the adapter's error and **makes no POST** (assert the mock transport saw zero requests).
-- **Ratchet:** an AST scan of `backend/app/**/*.py` finds every `httpx.get/post`, `client.get/post` and `client.stream` call whose URL argument references `_tradier_base`, `get_tradier_creds`, `TRADIER_BASE_URL`, `_SANDBOX_BASE` or the literal `tradier.com`. It asserts each lies inside the helpers, site F, the stream connection (E, long-lived), or the G2/H sites that are admitted on `tradier_paper`, each named in an explicit allowlist with its reason. Any new direct Tradier call fails the test.
+### T3 — auto_trader markers, the remaining sites and the ratchet (blocked by T1, T2)
+**Files:**
+- `backend/app/services/auto_trader.py`, limited to:
+  - the two `ex.submit(...)` lines in `_market_is_open` and `_measure_trade_regime`;
+  - the `with market.tradier_fire_path():` around `_fetch_earnings_date` in `_apply_event_veto`;
+  - `contextvars.copy_context().run` in `_call_source_with_deadline`;
+  - the prepay step in `_lookup_earnings_date`.
+- `backend/app/routers/sectors.py`, `backend/app/services/daily_risk_hooks.py`, `backend/app/data/tradier_stream.py`, `backend/app/routers/data_sources.py`, `backend/app/data/tradier_paper.py`.
+- New `backend/tests/test_tradier_governor_sites.py`.
+
+Apply D3's marker placement and D4.
+
+**Tests.** "Saturated bucket" below means the real governor's `tradier` bucket held at 0 by a background thread of normal acquisitions, which simulates an options or stock scan running.
+- **Fire path under a saturated bucket (R3-G1):**
+  - `_measure_trade_regime`, on both the daily-horizon branch (A1 history) and the Intraday branch (`timeframe: 15min`, A2 timesales), gets Tradier's bars (mock), not the yfinance fallback, within `_REGIME_FETCH_DEADLINE_S`;
+  - `_apply_event_veto`'s lookup gets Tradier's date within 5 s;
+  - `_market_is_open` returns True on a mocked Tradier price within 3 s;
+  - each of these made its request by overdraft (spy on `admit_sync`).
+- **Fire path during a 429 cooldown:** each of the three takes exactly its existing failure path (yfinance or refusal, unknown → veto, closed), without sending a Tradier request.
+- **Stock scan earnings lookup with a saturated bucket:** the prepay waits for a token *before* the 5 s deadline starts, and the Tradier source then completes inside its deadline. With prepay returning False, the source is recorded as an error and yfinance is used, which is the existing path.
+- **Repayment:** after an overdraft, a bulk call waits until the bucket is back to ≥ 1.
+- C, D and the E session are admitted on `tradier`. D keeps its `retries=0` behaviour. C and D requests carry their client's timeout.
+- G1 not admitted returns `("degraded", ...)` without an HTTP call.
+- G2 and H are admitted on `tradier_paper`. H not admitted raises the adapter's error and **makes no POST**: the mock transport sees zero requests.
+- The existing auto-trader, earnings-lookup and regime tests still pass (`tests/test_earnings_lookup_fire.py` among them).
+- **Ratchet:** an AST scan of `backend/app/**/*.py` finds every `httpx.get/post`, `client.get/post` and `client.stream` call whose URL argument references `_tradier_base`, `get_tradier_creds`, `TRADIER_BASE_URL`, `_SANDBOX_BASE` or the literal `tradier.com`.
+  - It asserts each one lies inside the helpers, site F, the stream connection (E), or the G2/H sites, each in an explicit allowlist with its reason.
+  - Any new direct Tradier call fails the test.
 
 ### T4 — scan-cost measurement (blocked by T2)
 **Files:** new `backend/tests/test_tradier_scan_call_budget.py` only.
-- Run `_execute_scan_core` (options) on N = 20 fixture symbols with a counting fake transport (no network) and a governor whose bucket is effectively unlimited.
+- Run `_execute_scan_core` (options) on N = 20 fixture symbols, with a counting fake transport (no network) and a governor whose bucket is effectively unlimited.
 - Record and print the Tradier requests per symbol by endpoint, both cold and with the expirations cache warm.
-- Assert every request was admitted through the `tradier` bucket.
-- The coordinator turns the counts into a projected full-universe duration at 120/min (capacity 15) for SP500, NDX100 and DOW30, and records it on #169 for Kenneth's merge decision.
+- Assert that every request was admitted through `tradier`.
+- The coordinator turns the counts into a projected full-universe duration at 120/min (capacity 15) for SP500, NDX100 and DOW30, and records it on #169.
 
 ## 4. Size and order
-T1 → T2 → T3, with T4 after T2. T3 and T4 touch disjoint files. Expected: about 190 lines of code and about 600 of tests.
+T1 → T2 → T3, with T4 after T2. T3 and T4 touch disjoint files. Expected size: about 200 lines of code and about 650 lines of tests.
 
 ## 4a. Plan audit log
-- **Round 1 (41cde651), 2 gate findings, both fixed in this revision:**
-  - **G1:** admission time is added inside deadline-bounded callers, so the earnings veto, the stock scan's earnings flag and the fire-path regime bars lose Tradier to the fallback under load. A literal implementation also passed A11's `httpx.Timeout` as a float budget (`TypeError`). Fixed with a float `admit_timeout` separate from the HTTP timeout, per-site budgets, the `reserve` / priority rule, and the ContextVar for the fire-path regime fetch. New T1/T2/T3 tests.
-  - **G2:** `timeout=None` on the async helper removed every B/C/D timeout. Fixed with the default `httpx.USE_CLIENT_DEFAULT` and a T2/T3 pass-through test.
-- **Round 2 (1071fbd5), 1 gate finding, fixed in this revision:**
-  - **R2-G1:** the priority wrap covered only the daily fire-path branch (`_fetch_scan_window_bars`). Intraday fires go through `_fetch_intraday_regime_bars` → A2 `fetch_intraday_candles`. Under load that branch fell back to yfinance's regular-session bars, so the regime and the vol-sizing quantity differed from the card's. Fixed by wrapping the submitted callable in `_measure_trade_regime` (`_with_tradier_priority`), which covers both branches, plus an explicit 2 s priority admission budget and a two-branch T3 test.
+- **First plan stage: rounds 1–3, capped, not clean.**
+  - **Round 1 (41cde651), 2 gate findings:** G1, deadline-bound callers lose Tradier to the fallback under load (plus the `httpx.Timeout` `TypeError`); G2, the async helper's `timeout=None`. Both were fixed in r2. G2's fix and G1's float `admit_timeout` remain in r4.
+  - **Round 2 (1071fbd5), 1 gate finding:** R2-G1, the Intraday fire-path branch was not covered. Fixed in r3 by wrapping the submitted callable. That wrap remains in r4 as `run_on_fire_path`.
+  - **Round 3, 1 gate finding, not fixed (cap):**
+    - **What it found (R3-G1):** r3 made every earnings lookup priority, so a stock scan's up-to-5 concurrent lookups competed with the fire path's 2 s priority budget. A fire could then miss its slot, fall back to yfinance bars and size the order differently.
+    - **Root cause:** a deadline-bound caller cannot both wait for a slot and stay inside its deadline once other urgent traffic competes.
+- **Second plan stage (decision `TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10`), r4.**
+  - **The fix:** fire-path calls never wait (overdraft, D1/D3), and the stock scan's lookups wait *before* their deadline (prepay), so the two no longer compete.
+  - **Dropped:** r3's reserve and priority rule.
 
 ## 5. Out of scope / residuals
 - **Bucket sizes.** Kenneth's tiers (spec §3) are not re-derived here, and the `tradier_paper` sizing (60/min) is a conservative assumption. Tradier's published limits should be confirmed by Kenneth; changing them is one number.
@@ -153,4 +211,4 @@ T1 → T2 → T3, with T4 after T2. T3 and T4 touch disjoint files. Expected: ab
 - The scan-cost projection is recorded on #169.
 - T1–T4 green; full backend `pytest` (Python 3.11) shows no new failures against main.
 - Plan audit clean, then code audit clean (`audit_rule`, cap 3 per stage).
-- **Merge only after Kenneth accepts the projected scan slowdown (TG-1).**
+- The scan slowdown was pre-accepted by Kenneth ("ok Go ahead", 2026-10-10); the T4 projection is recorded for him anyway. Never merged without his explicit go.
