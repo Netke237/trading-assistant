@@ -349,7 +349,8 @@ export default function Step6Page() {
             // Recommended is always the highest-score contract regardless of active sort column.
             const rescuedIds  = rescuedBySymbol[candidate.symbol] ?? [];
             const byScore     = sortContracts(contracts, 'score', 'desc');
-            const recommended = byScore.find((c) => !rescuedIds.includes(c.id) && !c.noLiveQuote) ?? byScore[0];
+            const recommended = byScore.find((c) => !rescuedIds.includes(c.id) && !c.noLiveQuote)
+              ?? byScore.find((c) => !rescuedIds.includes(c.id));
             // User sort applies to the remaining (chain) contracts.
             const sorted = sortContracts(contracts, sortKey, sortDir);
             const chain  = sorted.filter((c) => c.id !== recommended?.id);

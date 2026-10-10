@@ -713,7 +713,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // Distinct live mids, so a leak is unmistakable.
     (api.getContractQuote as jest.Mock).mockImplementation((sym: string) =>
       Promise.resolve({
-        price: sym === 'BBB' ? 7.77 : 2.22,
+        quoteLive: true, price: sym === 'BBB' ? 7.77 : 2.22,
         delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
       }),
     );

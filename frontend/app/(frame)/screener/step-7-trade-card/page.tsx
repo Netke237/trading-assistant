@@ -1169,7 +1169,7 @@ export default function Step7Page() {
       const keyAtSend = contractKeyFor(card);
       const selectionAtSend = selectionEpochRef.current;
       const cdAtSend = card.contractDetails;
-      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent — contract details unavailable.'); return; }
+      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent â€” contract details unavailable.'); return; }
       const quoteGeneration = ++quoteRequestGenerationRef.current;
       const quoteController = new AbortController();
       const quoteTimeout = setTimeout(() => quoteController.abort(), 8000);
@@ -1183,7 +1183,7 @@ export default function Step7Page() {
         setLiveQuote(freshQuote ? { ...freshQuote, key: keyAtSend } : null);
       }
       if (freshQuote?.quoteLive !== true && quoteConfirmationRef.current?.contractKey !== keyAtSend) {
-        setOrderError('No order was sent — confirm the quote warning for this contract and click again.');
+        setOrderError('No order was sent â€” confirm the quote warning for this contract and click again.');
         return;
       }
       // Captured ONCE; never re-read from `effectiveCard`, which may be another
