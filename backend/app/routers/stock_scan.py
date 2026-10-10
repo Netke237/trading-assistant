@@ -5,6 +5,7 @@ import concurrent.futures
 import dataclasses
 import functools
 import hashlib
+import json
 import logging
 import math
 import os
@@ -62,10 +63,15 @@ from app.services.strategy_engine import (
     mean_reversion_vwap_signal,
     mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
-    resolve_multi_signal,
+    merge_multi_params,
+    multi_signal,
+    SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.strategy_param_store import get_active, get_costs, get_exit
+from app.services.horizon_profiles import (
+    hold_for_backtest, migrate_saved_stock_request, resolve_params_horizon,
+)
+from app.services.strategy_param_store import get_active, get_costs, get_exit, get_profile
 from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.data.confidence_cache import generation as conf_generation
@@ -217,21 +223,38 @@ def _backtest_commission() -> float:
     return commission_for(get_costs())
 
 
-def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
-    """Exit policy, then adopted defaults for this direction, then per-request kwargs.
+def _params_horizon(req: StockScanRequest) -> str | None:
+    """The tuned horizon whose parameters this request reads (STOCKS-HORIZON-T1
+    H4): ``req.params_horizon``, else the tuned horizon nearest the request's
+    hold when the scoring horizon is not Intraday, else None (baseline)."""
+    return resolve_params_horizon(req.params_horizon, req.horizon, req.hold_max_days)
 
-    Precedence is deliberately exit < active < request: the exit block is a
+
+def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict,
+                           params_horizon: str | None = None) -> dict:
+    """Exit policy, then the profile for direction x params horizon, then
+    per-request kwargs.
+
+    Precedence is deliberately exit < profile < request: the exit block is a
     baseline the tuner may later override into `active:` (WFO's adopt() writes
-    there), and an explicit per-scan override always wins over both.
+    there), the profile (``get_profile``: the direction baseline, overlaid by
+    the tuned horizon's profile when one exists) is the adopted value, and an
+    explicit per-scan override (any non-None request field) wins over both.
 
     Note this widens `_backtest_key`'s inputs — `_bt_params` is part of the
     backtest cache key — so every cached BacktestResult is invalidated the first
     time this ships. That is correct: the exits genuinely changed.
     """
     merged = get_exit(strategy)
-    merged.update(get_active(strategy, direction))
+    merged.update(get_profile(strategy, direction, params_horizon)[0])
     merged.update({k: v for k, v in request_kwargs.items() if v is not None})
     return merged
+
+
+def _params_source(req: StockScanRequest) -> str:
+    """The card's params_source: "tuned" when a tuned profile exists for the
+    request's strategy x direction x params horizon, else "baseline"."""
+    return get_profile(req.strategy, req.direction, _params_horizon(req))[1]
 
 
 # ── A5c: scan-drop filters shared by _process_stock and _analyze_core ────────
@@ -246,9 +269,6 @@ def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) 
 
 _SCAN_DROP_PREFIX = "the scan would drop this: "
 _MIN_INTRADAY_BARS = 30
-# mean_reversion_multi is backtested through the RSI variant — a deterministic
-# proxy regardless of which variants fired.
-_MULTI_BT_STRATEGY = "mean_reversion_rsi"
 
 
 def _scan_drop_flag(gate: str, drop: dict) -> dict:
@@ -461,43 +481,48 @@ def _aligned_benchmark(benchmark: list[dict] | None, stock_bars: list[dict]) -> 
     return trimmed
 
 
-def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple[object | None, dict | None]:
-    """mean_reversion_multi's variant loop. Returns (signal, None) on a
-    confirmed setup, else (None, the scan's rejection dict)."""
-    valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
-    fired: list = []
-    for variant in valid_variants:
-        fn = _SIGNAL_FNS[variant]
+def _multi_params(req: StockScanRequest) -> dict:
+    """mean_reversion_multi's effective params shape for this request
+    (STOCKS-HORIZON-T1 H3/H4): the multi profile for direction x params horizon
+    under the request's variants, min_confirmations and per-variant fields
+    (None = not set). The live loop and the backtest are handed this same
+    object."""
+    profile = get_profile("mean_reversion_multi", req.direction, _params_horizon(req))[0]
+    variants = (req.mean_reversion_variants if req.mean_reversion_variants is not None
+                else profile.get("variants") or [])
+    variant_params: dict = {}
+    for variant in variants:
+        kw = dict(_SIGNAL_KWARGS.get(variant, lambda r: {})(req))
         if variant == "mean_reversion_vwap_daily":
-            extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
-        else:
-            extra_kw = {}
-        variant_kwargs = _merge_strategy_params(
-            variant, req.direction,
-            {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
-        )
-        try:
-            sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
-        except Exception:
-            sig = None
-        if sig is not None:
-            fired.append(sig)
-    if len(fired) < req.mean_reversion_min_confirmations:
+            kw.update(vwap_lookback=req.vwap_lookback, vwap_deviation_pct=req.vwap_deviation_pct)
+        variant_params[variant] = kw
+    return merge_multi_params(
+        req.direction,
+        profile,
+        {"variants": req.mean_reversion_variants,
+         "min_confirmations": req.mean_reversion_min_confirmations,
+         "variant_params": variant_params},
+    )
+
+
+def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict],
+                  params: dict | None = None) -> tuple[object | None, dict | None]:
+    """mean_reversion_multi's vote (strategy_engine.multi_signal) over
+    ``params`` (default ``_multi_params(req)``). Returns (signal, None) on a
+    confirmed setup, else (None, the scan's rejection dict)."""
+    if params is None:
+        params = _multi_params(req)
+    valid_variants = [v for v in params["variants"] if v in _SIGNAL_FNS]
+    fired: list = []
+    # Order-independent resolution (resolve_multi_signal): widest stop,
+    # tightest target, pooled ladder.
+    signal = multi_signal(bars[-SIGNAL_WINDOW_BARS:], direction=req.direction, params=params,
+                          signal_fns=_SIGNAL_FNS, fired_out=fired)
+    if len(fired) < params["min_confirmations"]:
         return None, {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
-    # Order-independent resolution: widest stop, tightest target,
-    # pooled ladder. Previously this took fired[0]'s levels verbatim,
-    # so reordering the variant checkboxes changed every level.
-    signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
     if signal is None:
         return None, {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
     return signal, None
-
-
-def _multi_bt_params(req: StockScanRequest) -> dict:
-    return _merge_strategy_params(
-        _MULTI_BT_STRATEGY, req.direction,
-        _SIGNAL_KWARGS.get(_MULTI_BT_STRATEGY, lambda r: {})(req),
-    )
 
 
 def _backtest_drop(symbol: str, bt_result) -> dict | None:
@@ -520,11 +545,27 @@ def _reject_unsupported_multi_variants(req: StockScanRequest) -> None:
     # rejected here rather than left as a live API footgun for the next
     # caller (a future feature, a test, a script) that adds it. Called by
     # both run_stock_scan and analyze_stock (A5c: Analysis runs the loop too).
-    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
+    #
+    # STOCKS-HORIZON-T1 H4: both checks run on the MERGED shape (profile +
+    # request), since the request's multi fields are Optional. A request with
+    # 2 variants against a profile min_confirmations 3 is refused here rather
+    # than silently never firing.
+    if req.strategy != "mean_reversion_multi":
+        return
+    shape = _multi_params(req)
+    variants = shape.get("variants") or []
+    if "mean_reversion_vwap" in variants:
         raise HTTPException(
             status_code=422,
             detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
                    "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
+        )
+    min_conf = shape.get("min_confirmations")
+    if min_conf is None or min_conf > len(variants):
+        raise HTTPException(
+            status_code=422,
+            detail=f"mean_reversion_min_confirmations ({min_conf}) cannot exceed the number "
+                   f"of selected variants ({len(variants)})",
         )
 
 
@@ -686,8 +727,13 @@ async def restore_stock_from_db() -> None:
             # now refuse is worse than offering no replay. The result still
             # loads.
             try:
-                _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
-            except ValidationError as exc:
+                # STOCKS-HORIZON-T1 H4: a request saved before the strategy
+                # fields became Optional carries their frozen defaults; drop
+                # them so a replay follows the profile (idempotent; the row
+                # itself is rewritten by the next scan).
+                _last_stock_request = StockScanRequest.model_validate(
+                    migrate_saved_stock_request(json.loads(row.last_request_json)))
+            except (ValidationError, ValueError) as exc:
                 logger.warning(
                     "restore_stock_from_db: saved stock-scan request no longer "
                     "validates and was dropped (no Analysis replay until the "
@@ -705,11 +751,16 @@ async def restore_stock_from_db() -> None:
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None,
                    commission: float = 0.0, min_trades: int | None = None,
-                   min_win_rate: float | None = None) -> str:
+                   min_win_rate: float | None = None, hold_max_days: int | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
-    params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
+    # Canonical JSON with sorted keys at every depth (STOCKS-HORIZON-T1 H3):
+    # mean_reversion_multi's params are nested, and a nested value or key
+    # order must change, or not change, the key the same way a flat one does.
+    params_hash = hashlib.md5(
+        json.dumps(params or {}, sort_keys=True, default=str).encode()
+    ).hexdigest()[:8]
     # commission is folded into the key (not just the run_strategy_backtest call)
     # so that editing strategy_params.yaml's costs.fee_pct/slippage_pct doesn't
     # leave a stale pre-edit BacktestResult (including passes_gate) served out of
@@ -720,8 +771,9 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
     # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
     # hash (a hash of closes alone does not see a basis change in open/high/low).
+    # STOCKS-HORIZON-T1 H2: the time-exit hold too; it changes every trade's exit.
     return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
-            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}|hold={hold_max_days}")
 
 
 def _get_backtest_cached(key: str):
@@ -781,6 +833,8 @@ class _AnalyzeCore:
     gate_flags: list[dict]
     earnings_days: int | None = None
     earnings_veto: bool = False
+    # The hold passed to bt_result's backtest (hold_for_backtest; None = no hold).
+    bt_hold: int | None = None
 
 
 async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
@@ -917,16 +971,19 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     signal = None
     _bt_strategy = _bt_bars = _bt_params = None
     if req.strategy == "mean_reversion_multi":
-        signal, _drop = _multi_signal(symbol, req, bars)
+        _multi_shape = _multi_params(req)
+        signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
         if signal is not None:
-            _bt_strategy, _bt_bars, _bt_params = _MULTI_BT_STRATEGY, bars, _multi_bt_params(req)
+            # The backtest runs the same vote on the same shape object.
+            _bt_strategy, _bt_bars, _bt_params = "mean_reversion_multi", bars, _multi_shape
     else:
         signal_fn = _SIGNAL_FNS.get(req.strategy)
         if signal_fn:
             signal_kwargs = _merge_strategy_params(
-                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                _params_horizon(req))
             _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
-                         else bars[-120:])
+                         else bars[-SIGNAL_WINDOW_BARS:])
             # Pass live price so signal uses current price, not yesterday's close.
             _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
             try:
@@ -945,12 +1002,14 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
 
     # Backtest + confidence
     bt_result = None
+    _bt_hold = None
     conf_val = conf_txt = None
     if signal is not None:
         _bt_commission = _backtest_commission()
+        _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
         _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, _bt_bars, _bt_params,
                                  commission=_bt_commission, min_trades=req.bt_min_trades,
-                                 min_win_rate=req.bt_min_win_rate)
+                                 min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -958,7 +1017,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=_bt_strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate, params=_bt_params,
-                                  commission=_bt_commission))
+                                  commission=_bt_commission, hold_max_days=_bt_hold))
             # A refresh that landed after this request read its bars has already
             # evicted the symbol: storing now would put the pre-refresh result back
             # for _BACKTEST_TTL. It is still this request's result (T6, HYG-P1-F2).
@@ -1041,6 +1100,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
         daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
         earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
+        bt_hold=_bt_hold,
     )
 
 
@@ -1196,7 +1256,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
             total_return_pct=round(bt.total_return_pct, 2),
             max_drawdown_pct=round(bt.max_drawdown_pct, 2), expectancy=bt.expectancy,
             sharpe=bt.sharpe, confidence=getattr(bt, 'confidence', None), passes_gate=bt.passes_gate,
-            summary_text=bt.summary_text)
+            summary_text=bt.summary_text, n_time_exits=bt.n_time_exits, hold_max_days=core.bt_hold)
 
     fundamentals_out = None
     if core.fundamentals is not None and not is_index:
@@ -1409,12 +1469,14 @@ async def _process_stock(
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             if req.strategy == "mean_reversion_multi":
-                signal, _drop = _multi_signal(symbol, req, bars)
+                _multi_shape = _multi_params(req)
+                signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
                 if _drop:
                     return _drop
-                _bt_strategy = _MULTI_BT_STRATEGY
+                # The backtest runs the same vote on the same shape object.
+                _bt_strategy = "mean_reversion_multi"
                 bt_bars = bars
-                _bt_params = _multi_bt_params(req)
+                _bt_params = _multi_shape
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
@@ -1422,9 +1484,10 @@ async def _process_stock(
                 signal_kwargs = _merge_strategy_params(
                     req.strategy, req.direction,
                     _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                    _params_horizon(req),
                 )
                 # Intraday strategies use intraday bars for both signal and backtest.
-                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-120:]
+                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-SIGNAL_WINDOW_BARS:]
                 _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
                 signal = signal_fn(signal_bars, direction=req.direction,
                                    current_price=_live_price, **signal_kwargs)
@@ -1435,9 +1498,10 @@ async def _process_stock(
                 _bt_params = signal_kwargs
 
             _bt_commission = _backtest_commission()
+            _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
             _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
                                      commission=_bt_commission, min_trades=req.bt_min_trades,
-                                     min_win_rate=req.bt_min_win_rate)
+                                     min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
             bt_result = _get_backtest_cached(_bt_key)
             if bt_result is None:
                 bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -1447,6 +1511,7 @@ async def _process_stock(
                         strategy=_bt_strategy, direction=req.direction,
                         min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
                         params=_bt_params, commission=_bt_commission,
+                        hold_max_days=_bt_hold,
                     ),
                 )
                 # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
@@ -1579,6 +1644,7 @@ async def _process_stock(
                     expectancy=bt_result.expectancy, sharpe=bt_result.sharpe,
                     confidence=bt_result.confidence, passes_gate=bt_result.passes_gate,
                     summary_text=bt_result.summary_text,
+                    n_time_exits=bt_result.n_time_exits, hold_max_days=_bt_hold,
                 ),
                 stock_score=card.score, stock_status=card.status, gate_flags=gate_flags,
                 shares=shares, dollar_risk=dollar_risk,
@@ -1594,6 +1660,8 @@ async def _process_stock(
                     growth_score=_fh.growth_score, quality_score=_fh.quality_score,
                     risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail,
                 ) if _fh else None,
+                params_horizon=_params_horizon(req),
+                params_source=_params_source(req),
             )
         except Exception as exc:
             logger.exception("Error processing %s", symbol)
@@ -1681,6 +1749,13 @@ async def _execute_stock_scan_core(
     today: unlike options mode, stock-mode scans compute no rank/score
     deltas (StockScanResult carries no `deltas` field), so there is nothing
     here to compute against it yet."""
+    # STOCKS-HORIZON-T1 F1: the scheduled runner reaches this core without
+    # run_stock_scan's check, and a stored schedule can turn invalid later (a
+    # profile change raising min_confirmations past its variants). Refuse it
+    # here so the run is recorded as an error with the reason, not as a
+    # 0-candidate success. For run_stock_scan this repeats a check that has
+    # already passed, so its HTTP behaviour is unchanged.
+    _reject_unsupported_multi_variants(req)
     scan_id = new_rec_id()
     # Deliberately NOT hoisted to the module-level import at line 57 — tests
     # patch `app.data.universe_presets.expand_universe` (not

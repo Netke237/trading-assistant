@@ -1254,6 +1254,9 @@ class PortfolioPositionCreate(BaseModel):
     pickedRowOptionPrice: Optional[float] = Field(alias="picked_row_option_price", default=None, gt=0, allow_inf_nan=False)
     pickedStopBasis: Optional[PickedStopBasis] = Field(alias="picked_stop_basis", default=None)
     pickedAt: Optional[PickedAt] = Field(alias="picked_at", default=None)
+    # STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, sent by the
+    # stock sends. None (options, older clients) = no hold, no time stop.
+    holdMaxDays: Optional[int] = Field(alias="hold_max_days", default=None, ge=0)
     # Audit round 1, F1 -- the order this save is about to place, so the D5
     # premium cap is judged at the price the order can FILL at
     # (`portfolio_risk.premium_cap_basis`): max(mid, limit) for LMT, the ask
@@ -1296,6 +1299,7 @@ class PortfolioPositionCreate(BaseModel):
             "picked_row_option_price": "pickedRowOptionPrice",
             "picked_stop_basis": "pickedStopBasis",
             "picked_at": "pickedAt",
+            "hold_max_days": "holdMaxDays",
         }
         for k, v in data.items():
             mapped[aliases.get(k, k)] = v
@@ -1412,6 +1416,8 @@ class PortfolioPositionSchema(BaseModel):
     pickedRowOptionPrice: Optional[float] = None
     pickedStopBasis: Optional[PickedStopBasis] = None
     pickedAt: Optional[str] = None
+    # STOCKS-HORIZON-T1 H6 -- None = no hold (never a stock time stop).
+    holdMaxDays: Optional[int] = None
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
@@ -1444,6 +1450,7 @@ class PortfolioPositionSchema(BaseModel):
             pickedRowOptionPrice=obj.picked_row_option_price,
             pickedStopBasis=obj.picked_stop_basis,
             pickedAt=obj.picked_at,
+            holdMaxDays=getattr(obj, "hold_max_days", None),
         )
 
 

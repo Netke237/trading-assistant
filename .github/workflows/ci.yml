@@ -1,10 +1,23 @@
 name: CI
 
+# Documentation-only changes (plans, state records, tickets, notes) do not run
+# the suites: no test reads these paths, and each run costs ~20 Actions minutes
+# of the free tier. A push or PR that also touches any other file still runs.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.scratch/**'
+      - '.k-session/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.scratch/**'
+      - '.k-session/**'
 
 jobs:
   backend:

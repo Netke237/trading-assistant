@@ -1,0 +1,39 @@
+{
+  "file": "spy-20261016-after-close-20261008-002.json",
+  "raw_payload_sha256": "7f296c9dc0b938a9ede7e7be2cf84467419d000ffd7c2c9b5663b8db93206abf",
+  "symbol": "SPY",
+  "expiration": "2026-10-16",
+  "environment": "production; authenticated direct Tradier chain",
+  "operator": "authorized Codex session",
+  "declared_window": "after-close",
+  "capture_utc": "2026-10-08T20:15:50.785135+00:00",
+  "capture_new_york": "2026-10-08T16:15:50.785135-04:00",
+  "capture_berlin": "2026-10-08T22:15:50.785135+02:00",
+  "equity_calendar_source": "exchange_calendars XNYS 4.13.2",
+  "equity_close_utc": "2026-10-08T20:00:00+00:00",
+  "early_close": false,
+  "product_close_basis": "SPY usual 16:15 America/New_York option close; official Nasdaq hours page blocked by proxy; product-specific confirmation remains pending",
+  "window_verification": "after usual SPY option close; authoritative product-hours confirmation pending",
+  "timestamp_units": "raw values retained; provider documentation verification pending",
+  "counts": {
+    "rows": 474,
+    "positive_bid_and_ask": 392,
+    "zero_bid": 82,
+    "zero_ask": 0,
+    "field_presence_counts": {
+      "bid": 474,
+      "ask": 474,
+      "last": 474,
+      "volume": 474,
+      "open_interest": 474,
+      "bid_date": 474,
+      "ask_date": 474,
+      "trade_date": 474
+    }
+  },
+  "missing_windows": [
+    "premarket",
+    "regular in-session",
+    "weekend"
+  ]
+}

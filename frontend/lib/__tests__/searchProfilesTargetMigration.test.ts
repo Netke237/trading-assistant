@@ -25,7 +25,7 @@ describe('AREA3 target migration through actual hydration', () => {
     useSearchProfilesStore.getState().dismissLegacyTargetPctNotice();
     await useSearchProfilesStore.persist.rehydrate();
     expect(useSearchProfilesStore.getState().legacyTargetPctDropped).toBe(false);
-    expect(JSON.parse(localStorage.getItem(key)!).version).toBe(4);
+    expect(JSON.parse(localStorage.getItem(key)!).version).toBe(5);   // v5: STOCKS-HORIZON-T1 H5
   });
   it('default percentages need no notice', async () => {
     localStorage.setItem(key, JSON.stringify({ version: 3, state: { profiles: [{ scanOverrides: { rr_bullish_target_pct: 0.08, rr_bearish_target_pct: 0.08 } }] } }));

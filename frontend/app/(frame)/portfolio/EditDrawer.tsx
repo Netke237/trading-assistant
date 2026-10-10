@@ -1726,10 +1726,12 @@ function alertFiresAgainst(
           ).toFixed(2)}`
         : null;
     case 'TIME_STOP':
-      // Stock positions carry no expiry and (per alertEngine.ts's isStock
-      // guard) can never fire this type — "not set" rather than a threshold
-      // that looks armed but isn't.
-      return isStock ? null : `${TIME_STOP_DTE} DTE or less`;
+      // Stock positions carry no expiry. STOCKS-HORIZON-T1 H6: one sent with
+      // the scan's hold fires once held that many days (alertEngine.ts's
+      // stock rule); without a hold it never fires — "not set" rather than a
+      // threshold that looks armed but isn't.
+      if (isStock) return position.holdMaxDays != null ? `held ≥ ${position.holdMaxDays} days` : null;
+      return `${TIME_STOP_DTE} DTE or less`;
     case 'EVENT_RISK':
       return 'event within 3 days';
   }

@@ -140,6 +140,7 @@ class _ProviderState:
     breaker: "CircuitBreaker"
     budget: "SymbolBudget | None" = None
     status: str = "unknown"  # unknown | connected | degraded | down | unconfigured
+    retry_at: float = 0.0
 
 
 class Governor:
@@ -206,6 +207,7 @@ class Governor:
         coro_factory: Callable[[], Awaitable[T]],
         *,
         retries: int = 3,
+        symbol: str | None = None,
     ) -> T:
         ps = self._providers.get(provider)
         if ps is None:
@@ -217,6 +219,15 @@ class Governor:
         attempt = 0
         while True:
             await ps.bucket.acquire()
+            delay = ps.retry_at - time.monotonic()
+            if delay > 0:
+                await asyncio.sleep(delay)
+                continue
+            if ps.breaker.is_open:
+                raise ProviderUnavailable(f"{provider} circuit open")
+            if symbol is not None and not self.symbol_allowed(provider, symbol):
+                ps.status = "degraded"
+                raise ProviderUnavailable(f"{provider} symbol budget exhausted")
             try:
                 result = await coro_factory()
                 ps.breaker.record_success()
@@ -225,10 +236,11 @@ class Governor:
             except RateLimited as exc:
                 ps.status = "degraded"
                 ps.breaker.record_failure()
+                delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
+                ps.retry_at = max(ps.retry_at, time.monotonic() + delay)
                 if attempt >= retries:
                     logger.warning("%s rate-limited, retries exhausted", provider)
                     raise
-                delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
                 await asyncio.sleep(delay)
                 attempt += 1
             except Exception:

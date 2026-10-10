@@ -1,6 +1,6 @@
 import { useUniverseStore } from './universeStore';
 import { useScanStore } from './scanStore';
-import { useScanParamsStore } from './scanParamsStore';
+import { useScanParamsStore, OVERRIDE_FIELDS } from './scanParamsStore';
 import { useSettingsStore } from './settingsStore';
 import { horizonDisplayString, presetByKey, resolveParamsHorizon } from './horizonPresets';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
@@ -48,19 +48,17 @@ export function captureCurrentSnapshot(mode: 'options' | 'stocks'): SearchProfil
   return {
     ...base,
     strategy: s.activeStrategy,
+    // STOCKS-HORIZON-T1 H5: only the overrides the user set; every other
+    // strategy field follows the backend horizon profile when the saved
+    // profile is loaded or scheduled.
     strategyParams: {
-      pullbackTolerancePct: p.pullbackTolerancePct, pullbackEmaPeriod: p.pullbackEmaPeriod,
-      pullbackTrendEma:     p.pullbackTrendEma,     pullbackMaType:    p.pullbackMaType,
-      maCrossoverFast:      p.maCrossoverFast,       maCrossoverSlow:  p.maCrossoverSlow,
-      maCrossoverLookback:  p.maCrossoverLookback,   breakoutVolumeMult: p.breakoutVolumeMult,
-      rsiPeriod:            p.rsiPeriod,             rsiOversold:      p.rsiOversold,
-      rsiTrendSma:          p.rsiTrendSma,            requireChoppyRegime: p.requireChoppyRegime,
-      btMinTrades:          p.btMinTrades,            btMinWinRate:     p.btMinWinRate,
-      eventFilter:          p.eventFilter,            stockShortlistMax: p.stockShortlistMax,
-      meanReversionVariants:   p.meanReversionVariants,
-      meanReversionMinConfirm: p.meanReversionMinConfirm,
-      vwapLookback:            p.vwapLookback,
-      vwapDeviationPct:        p.vwapDeviationPct,
+      btMinTrades:       p.btMinTrades,
+      btMinWinRate:      p.btMinWinRate,
+      eventFilter:       p.eventFilter,
+      stockShortlistMax: p.stockShortlistMax,
+      ...Object.fromEntries(
+        OVERRIDE_FIELDS.filter((f) => p[f] !== null).map((f) => [f, p[f]]),
+      ),
     },
   };
 }

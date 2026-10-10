@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { api, type StrategyWatch, type StrategyWatchSchedule } from '@/lib/api';
+import type { TunedHorizon } from '@/lib/horizonPresets';
 
 interface StrategyWatchStore {
   watches: StrategyWatch[];
@@ -9,8 +10,10 @@ interface StrategyWatchStore {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  add: (symbol: string, strategyKey: string, direction?: 'Bullish' | 'Bearish') => Promise<void>;
-  addBulk: (symbols: string[], strategyKey: string, direction?: 'Bullish' | 'Bearish') => Promise<void>;
+  add: (symbol: string, strategyKey: string, direction?: 'Bullish' | 'Bearish',
+        paramsHorizon?: TunedHorizon | null) => Promise<void>;
+  addBulk: (symbols: string[], strategyKey: string, direction?: 'Bullish' | 'Bearish',
+            paramsHorizon?: TunedHorizon | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   saveSchedule: (cfg: StrategyWatchSchedule) => Promise<void>;
@@ -36,18 +39,18 @@ export const useStrategyWatchStore = create<StrategyWatchStore>((set, get) => ({
     }
   },
 
-  add: async (symbol, strategyKey, direction = 'Bullish') => {
+  add: async (symbol, strategyKey, direction = 'Bullish', paramsHorizon = null) => {
     try {
-      await api.addStrategyWatch(symbol, strategyKey, direction);
+      await api.addStrategyWatch(symbol, strategyKey, direction, paramsHorizon);
       await get().refresh();
     } catch (e) {
       set({ error: (e as Error).message });
     }
   },
 
-  addBulk: async (symbols, strategyKey, direction = 'Bullish') => {
+  addBulk: async (symbols, strategyKey, direction = 'Bullish', paramsHorizon = null) => {
     try {
-      await api.addStrategyWatchesBulk(symbols, strategyKey, direction);
+      await api.addStrategyWatchesBulk(symbols, strategyKey, direction, paramsHorizon);
       await get().refresh();
     } catch (e) {
       set({ error: (e as Error).message });

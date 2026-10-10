@@ -4,6 +4,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { scanSizingFromRisk } from '@/lib/stockScan';
 
 export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
@@ -50,6 +51,8 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     horizon: (ctx?.horizon ?? 'Swing (5–15d)').split(' ')[0],
     strategy: scan.activeStrategy ?? 'pullback_ema',
     params: useScanParamsStore.getState(),
+    // The params horizon runStockScan would send (STOCKS-HORIZON-T1 H5).
+    paramsHorizon: ctx ? tunedParamsHorizon(ctx.horizonPreset, ctx.holdMax) : null,
     requireReversal: (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
     scanOverrides: scan.scanOverrides,
     confidenceGate: useSettingsStore.getState().confidenceGate,

@@ -19,6 +19,7 @@ import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStoc
 import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { _horizonEnum } from '@/lib/analysisStore';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 // The SAME prose the options card's Arithmetic Profit Target section uses.
@@ -254,6 +255,12 @@ export function StockPositionCard({
   const scanTimestamp = useScanStore((s) => s.stockScanResult?.timestamp);
   const scanVetoDays  = useScanStore((s) => s.stockScanResult?.veto_days);
   const earningsVeto  = stockEarningsGate(card, scanTimestamp, scanVetoDays).veto;
+  // STOCKS-HORIZON-T1 H6: the scan's hold, written on the position so a stock
+  // raises TIME_STOP once held that long. No scan context -> no hold.
+  const scanContext  = useScanStore((s) => s.context);
+  const holdMaxDays  = scanContext
+    ? sanitizeHoldDays(scanContext.holdMin, scanContext.holdMax).hold_max_days
+    : null;
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const addToBasket  = useScanStore((s) => s.addToStockBasket);
   const removeBasket = useScanStore((s) => s.removeFromStockBasket);
@@ -521,6 +528,7 @@ export function StockPositionCard({
           // Phase G (piece 5) — `methodPick` is this card's own local pick
           // state (synced from stocksCardEdits.picks).
           ...pickedFieldsFrom(methodPick),
+          holdMaxDays,
         },
         broker: execMode,
         orderType,
@@ -732,6 +740,7 @@ export function StockPositionCard({
         ),
         // Phase G (piece 5) — same confirmed send-path gap as submit() above.
         ...pickedFieldsFrom(methodPick),
+        holdMaxDays,
       };
       const ownership = useStockOrderOwnershipStore.getState();
       if (!ownership.claim(card.symbol, { identity: executionIdentity, recId: position.recId, status: 'in-flight' })) return;

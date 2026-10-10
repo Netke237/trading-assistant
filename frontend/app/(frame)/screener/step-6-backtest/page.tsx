@@ -20,6 +20,8 @@ import { stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@
 import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
 import styles from './page.module.css';
 
+const TIME_EXIT_TOOLTIP = "trades closed at the next open after being held the horizon's hold, neither stop nor target reached";
+
 function _startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
@@ -123,7 +125,19 @@ export default function Step6BacktestPage() {
                     >
                       {(bt.win_rate * 100).toFixed(0)}%
                     </Data>
-                    <Data size={12}>{bt.n_trades}</Data>
+                    <span className={styles.tradesCell} data-testid={`trades-${c.symbol}`}>
+                      <Data size={12}>{bt.n_trades}</Data>
+                      {/* n_time_exits null/absent = unknown (saved before the field): never "0", no hold label. */}
+                      {bt.n_time_exits == null ? (
+                        <Text size={10} tone="dim">—</Text>
+                      ) : bt.hold_max_days == null ? (
+                        <Text size={10} tone="dim">no hold</Text>
+                      ) : (
+                        <Tooltip text={TIME_EXIT_TOOLTIP}>
+                          <Text size={10} tone="secondary">{`${bt.n_time_exits} of ${bt.n_trades} on time (hold ${bt.hold_max_days}d)`}</Text>
+                        </Tooltip>
+                      )}
+                    </span>
                     <Data size={12} tone={bt.total_return_pct >= 0 ? 'pass' : 'reject'}>{bt.total_return_pct.toFixed(1)}%</Data>
                     <Data size={12} tone="reject">{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
                     {c.fundamentals ? (

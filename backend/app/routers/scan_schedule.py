@@ -29,9 +29,18 @@ def _build_entry(entry_id: str, body: ScanScheduleEntryCreate) -> ScanScheduleEn
     ScanScheduleEntry itself is constructed here, so a pydantic
     ValidationError at this point is a genuine 422, not a 500."""
     try:
-        return ScanScheduleEntry(id=entry_id, **body.model_dump())
+        entry = ScanScheduleEntry(id=entry_id, **body.model_dump())
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    if entry.mode == "stocks":
+        # STOCKS-HORIZON-T1 F1: the same merged-shape (profile + request)
+        # mean_reversion_multi check run_stock_scan applies, so a schedule
+        # that could never fire a candidate is refused at save time with the
+        # scan's own 422 and reason. Local import, as in the scheduler.
+        from app.schemas.stock_scan import StockScanRequest
+        from app.routers.stock_scan import _reject_unsupported_multi_variants
+        _reject_unsupported_multi_variants(StockScanRequest.model_validate(entry.resolved_request))
+    return entry
 
 
 @router.get("", response_model=list[ScanScheduleEntry])

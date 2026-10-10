@@ -4,6 +4,7 @@ import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile
 import { api } from '@/lib/api';
 import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import { OVERRIDE_FIELDS } from '@/lib/scanParamsStore';
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -67,7 +68,7 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return localStorage;
       }),
       skipHydration: true,
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
         // ROUND 5 finding 3. `seedOverrides` was appended to the `version < 2`
@@ -179,6 +180,24 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
             return { ...profile, scanOverrides: overrides };
           });
           st.legacyTargetPctDropped = dropped;
+        }
+        if (version < 5) {
+          // STOCKS-HORIZON-T1 H5: a saved stocks profile's strategy fields
+          // became overrides of the backend horizon profile. The stored values
+          // were full copies of the old hardcoded defaults, so every override
+          // resets to "follow the profile". Removed rather than written as
+          // null: captureCurrentSnapshot stores only the overrides that are
+          // set, so a migrated profile has the shape a fresh save would have
+          // and does not read as modified. Other saved fields are kept.
+          st.profiles = (Array.isArray(st.profiles) ? st.profiles : []).map((raw) => {
+            if (!raw || typeof raw !== 'object') return raw;
+            const profile = raw as Record<string, unknown>;
+            const sp = profile.strategyParams;
+            if (!sp || typeof sp !== 'object' || Array.isArray(sp)) return raw;
+            const kept = { ...(sp as Record<string, unknown>) };
+            for (const f of OVERRIDE_FIELDS) delete kept[f];
+            return { ...profile, strategyParams: kept };
+          });
         }
         return st as unknown as SearchProfilesState;
       },

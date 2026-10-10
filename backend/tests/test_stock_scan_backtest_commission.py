@@ -1,7 +1,7 @@
 import asyncio
 import concurrent.futures
 import functools
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.strategy_backtest import run_strategy_backtest
 
@@ -28,6 +28,7 @@ def _fake_bt_result():
     bt.expectancy = 1.5
     bt.sharpe = 1.2
     bt.summary_text = "ok"
+    bt.n_time_exits = 0     # a real int: BacktestOut reads it (F2)
     return bt
 
 
@@ -150,12 +151,18 @@ def test_analyze_core_passes_commission_from_get_costs():
     fake_bars = [{"close": 150.0, "open": 148.0, "high": 152.0, "low": 147.0,
                   "volume": 1_000_000, "time": i} for i in range(130)]
 
-    card = MagicMock()
-    card.status = "PASS"
-    card.score = 70
-    card.rules = [_measured_trend()]
+    # A real card, not a MagicMock: _analyze_core caps the status with
+    # dataclasses.replace() (the confidence cap, the bearish cap, the earnings
+    # veto), which raises on anything that is not a dataclass (#129).
+    from app.scoring.stock_scorer import StockScoreCard
+    card = StockScoreCard(symbol="AAPL", direction="Bullish", horizon="Swing",
+                          score=70, status="PASS", rules=[_measured_trend()])
 
     async def run():
+        # The inputs this test does not own are pinned, so its result cannot
+        # depend on the confidence cache's state (machine- and order-dependent)
+        # or on a live earnings lookup: a fixed MEASURED confidence, and a known
+        # earnings date well outside the hold.
         # Same ProcessPoolExecutor-vs-MagicMock pickling problem as
         # test_process_stock_passes_commission_from_get_costs above — swap in
         # a ThreadPoolExecutor for this test only.
@@ -168,6 +175,9 @@ def test_analyze_core_passes_commission_from_get_costs():
              patch("app.routers.stock_scan._get_fundamentals", return_value=None), \
              patch("app.routers.stock_scan.run_strategy_backtest", side_effect=fake_run_strategy_backtest), \
              patch("app.routers.stock_scan.get_costs", return_value={"fee_pct": 0.002, "slippage_pct": 0.003}), \
+             patch("app.routers.stock_scan.get_cached", return_value={"confidence": 70, "sample_size": 50}), \
+             patch("app.routers.stock_scan.set_cached", return_value=None), \
+             patch("app.routers.stock_scan._earnings_days_for", AsyncMock(return_value=90)), \
              patch("app.routers.stock_scan._BACKTEST_POOL", concurrent.futures.ThreadPoolExecutor(max_workers=1)), \
              patch.dict(ss._SIGNAL_FNS, {"pullback_ema": lambda *a, **k: _fake_signal()}):
             await ss._analyze_core("AAPL", req)

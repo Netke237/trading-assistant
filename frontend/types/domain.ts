@@ -546,6 +546,11 @@ export interface PortfolioPosition {
   /** ISO. The vintage of the numbers the pick was made against — see
    *  `MethodPick.pickedAt`'s own doc. */
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, written by the
+   *  stock sends (`ScanContext.holdMax` through `sanitizeHoldDays`). A stock
+   *  position raises TIME_STOP once held this many days. `null`/absent = no
+   *  hold (options rows, rows opened before H6), never a stock time stop. */
+  holdMaxDays?: number | null;
   /** Per-position alert-type overrides — absent key inherits the global
    *  `AlertConfig.enabledTypes` decision (Feature D). */
   alertOverrides?: AlertOverrides;

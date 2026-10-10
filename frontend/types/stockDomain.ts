@@ -17,6 +17,12 @@ export interface BacktestData {
   n_trades: number; win_rate: number; total_return_pct: number;
   max_drawdown_pct: number; expectancy: number; sharpe: number;
   confidence: number | null; passes_gate: boolean; summary_text: string;
+  /** STOCKS-T1-FOLLOWUPS F2: trades the backtest closed on time (held the
+   *  hold, neither stop nor target), and the hold it ran with. n_time_exits
+   *  null or absent = unknown (a result saved before the field); a number with
+   *  hold_max_days null = no hold (Intraday horizon or an intraday strategy). */
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
 export interface PositionCardData {
   symbol: string; company: string; price: number; direction: string;
