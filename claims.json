@@ -15,14 +15,6 @@
       "expires_at": "2026-10-10T23:02:46Z",
       "note": "Board #164: reject NaN/Infinity at the API boundary",
       "task": "NUMERIC-API-INPUTS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/autotrade-fire-hygiene-eb09a476",
-      "claimed_at": "2026-10-10T19:54:43Z",
-      "expires_at": "2026-10-10T23:11:19Z",
-      "note": "Board #133: resume integrated verification and PR after existing clean code audit",
-      "task": "AUTOTRADE-FIRE-HYGIENE"
     }
   ]
 }
