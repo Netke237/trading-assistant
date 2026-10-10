@@ -15,6 +15,14 @@
       "expires_at": "2026-10-11T01:54:43Z",
       "note": "Board #169: route every Tradier call through the governor rate limiter (TG-1)",
       "task": "TRADIER-GOVERNOR"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/flaky-tests-fix-fec8e2c9",
+      "claimed_at": "2026-10-10T22:58:38Z",
+      "expires_at": "2026-10-11T01:58:38Z",
+      "note": "Board #160: deterministic, offline test suites (ticket 26)",
+      "task": "FLAKY-TESTS-FIX"
     }
   ]
 }
