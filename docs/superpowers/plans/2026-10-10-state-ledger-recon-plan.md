@@ -35,3 +35,4 @@ There is no code. The only thing that can go wrong at the gate is persisted-data
 ## Audit record
 
 - Plan round 1 (2026-10-10): fresh independent gate auditor, plan at cbb33f1b — **1 gate finding (F1)**: the original probe pattern appeared verbatim in its own `verify.pattern`, so it always matched and pinned nothing. Fixed above (self-proof pattern requiring all three lines). Merge facts, status rule, other-phase isolation and the decision-record refusal all checked correct.
+- Plan round 2 (2026-10-10): fresh independent gate auditor on `cbb33f1b..b6a42699` (the F1 fix only) — **0 gate findings, clean**. Probe verified on serialised candidates: none/single/pair → no match; all three → match; state.py drift correct. Plan stage closed.
