@@ -76,7 +76,7 @@
       "agent": "codex",
       "branch": "board/approved-board-merge-2026-10-10-4d19dd6e",
       "claimed_at": "2026-10-10T20:58:03Z",
-      "expires_at": "2026-10-10T23:58:03Z",
+      "expires_at": "2026-10-11T00:00:07Z",
       "note": "Integrate and audit seven user-approved waiting-merge PRs",
       "task": "APPROVED-BOARD-MERGE-2026-10-10"
     }
