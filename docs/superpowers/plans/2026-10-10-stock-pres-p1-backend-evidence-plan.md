@@ -24,7 +24,7 @@ Out: any UI change (P2–P5); any scoring / confidence / gate / sizing formula c
 - `PositionCardOut` is constructed only at `stock_scan.py` ~L1632. `StockScanResult` is persisted and re-read with `model_validate_json` at `stock_scan.py:719` (`restore_stock_from_db`) and `scan_schedule_scheduler.py:160`; a new `Optional[...] = None` field validates old rows as `None`. No schema-version bump: an absent field means "not captured", the meaning of no existing field changes (contrast `SCAN_RESULT_SCHEMA_VERSION`, which guards a changed meaning).
 - pydantic serialises NaN/inf in dict values as `null` both in `model_dump_json` and in FastAPI responses (checked on this repo's FastAPI/pydantic), so evidence `detail` dicts cannot break the JSON.
 - `breakout_setup_signal` has one caller (`stock_scan.py` `/scan/prebreakout`, ~L2202); `SetupSignal` is not persisted server-side and is "not watchable" (`strategy_watch_store.py:24`). `_fibonacci_pullback_signal` has two callers: `breakout_setup_signal` (~L1574) and `/scan/fib-pullback` (via the public alias `fibonacci_pullback_signal`, `stock_scan.py:2085`), plus tests.
-- Frontend: `scanStore` persists `stockScanResult`, `previousStockScanResult`, `preBreakoutResults`, `fibPullbackResults` (store `version: 18`). Their element types are inline in `frontend/lib/scanStore.ts` (~L454-470) and `frontend/lib/api.ts` (~L888-916). The Pre-Breakout "pullback" sub-mode calls `api.postStockScan`, so it receives `stock_explanation` through item 1.
+- Frontend: `scanStore` (store `version: 18`) persists `stockScanResult` and `previousStockScanResult`; `preBreakoutResults` and `fibPullbackResults` are **not** in `partialize` (session-only today; corrected after plan round 1). Their element types are inline in `frontend/lib/scanStore.ts` (~L454-470) and `frontend/lib/api.ts` (~L888-916). The Pre-Breakout "pullback" sub-mode calls `api.postStockScan`, so it receives `stock_explanation` through item 1.
 - Size: one stock-mode explanation is ~3.6 KB of JSON (AAPL fixture). With the default `shortlist_max_candidates = 10`, the persisted `stockScanResult` + `previousStockScanResult` grow by ~70 KB. `scanStore`'s storage adapter already survives a quota error (`scanStoreQuotaStorage.test.ts`).
 
 ## Pinned current numbers (must not move)
@@ -85,7 +85,7 @@ Commit: `feat(stock-scan): send the scorer's score evidence on stock-scan candid
 
 ### Task 2 — Pre-Breakout confidence breakdown and Fib swing low/high
 
-Files: `backend/app/services/strategy_engine.py`, `backend/app/routers/stock_scan.py`, new `backend/tests/test_stock_pres_p1_prebreakout_evidence.py`.
+Files: `backend/app/services/strategy_engine.py`, `backend/app/routers/stock_scan.py`, new `backend/tests/test_stock_pres_p1_prebreakout_evidence.py`, `backend/tests/test_fib_pullback_endpoint.py` (only its two patches of `app.services.strategy_engine.fibonacci_pullback_signal`, L96 and L177: once the route calls `fibonacci_pullback_detail` they would no longer take effect — repoint them at `app.services.strategy_engine.fibonacci_pullback_detail` returning the equivalent dict, same assertions).
 
 Tests first (new file):
 
@@ -128,7 +128,7 @@ Files: `frontend/types/stockDomain.ts`, `frontend/lib/api.ts`, `frontend/lib/sca
 
 Tests first (new file):
 
-1. **Old persisted state hydrates.** Using the real persist `merge` (as `scanStoreMergeHydration.test.ts` reaches it) and `migrate` at version 18 (as `scanStoreHorizonMigration.test.ts` reaches it): a blob with a `stockScanResult` whose candidate has no `stock_explanation`, `preBreakoutResults` rows with only `symbol/confidence/direction/metrics`, and `fibPullbackResults` rows with only the six current keys → hydrated values are deep-equal to the input (nothing dropped, nothing added).
+1. **Old persisted state hydrates.** (`preBreakoutResults` / `fibPullbackResults` are session-only, so for them this only pins that `merge` passes old-shape rows through unchanged.) Using the real persist `merge` (as `scanStoreMergeHydration.test.ts` reaches it) and `migrate` at version 18 (as `scanStoreHorizonMigration.test.ts` reaches it): a blob with a `stockScanResult` whose candidate has no `stock_explanation`, `preBreakoutResults` rows with only `symbol/confidence/direction/metrics`, and `fibPullbackResults` rows with only the six current keys → hydrated values are deep-equal to the input (nothing dropped, nothing added).
 2. **New fields survive the store.** `setPreBreakoutResults([...row with confidence_breakdown and fib_swing])` and `setFibPullbackResults([...row with fib_swing])` keep the fields; `setStockScanResult` with a candidate carrying `stock_explanation` keeps it (reference-equal).
    These tests are type-level red today (the new keys are not in the store's element types → `tsc` error in the test file); run `npm run typecheck` to see the red.
 
@@ -186,3 +186,7 @@ T1 and T2 both edit `backend/app/routers/stock_scan.py` → serialized: **T1 →
 - [ ] An old persisted stock scan result (backend JSON and browser store) and old Pre-Breakout / Fib rows still load (T1 test 5, T3 test 1).
 - [ ] No UI file changed; no formula, gate, sort or persistence-version change (diff review).
 - [ ] Python 3.11 backend suite + frontend typecheck/Jest green (failures only where identical on `origin/main`); plan audit and code audit clean (`audit_rule`).
+
+## Audit record
+
+- Plan round 1 (2026-10-10): fresh independent gate auditor, plan at c9335d89 vs main 8d1e32e — **0 gate findings, clean**. Two below-gate notes applied as clarifications without behaviour change: the session-only Pre-Breakout/Fib store fields (Facts), and the two `test_fib_pullback_endpoint.py` patches T2 must repoint.

@@ -2190,7 +2190,7 @@
       "id": "STOCK-PRES-P1-BACKEND-EVIDENCE",
       "name": "Send the already-computed stock score evidence, Pre-Breakout confidence sub-scores and Fib swing low/high (no calculation change)",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-10-stock-pres-p1-backend-evidence-plan.md",
@@ -2208,7 +2208,11 @@
         "pattern": "stock_explanation",
         "note": "T1 adds stock_explanation to PositionCardOut. PRESENCE ONLY; behaviour is pinned by the plan's tests."
       },
-      "note": "2026-10-10 taken from the Board (#146) by a board-worker session on board/stock-pres-p1-backend-evidence-f4e4b87f, cut from main 8d1e32e; moved here from task_backlog. Plan written; plan round 1 next (fresh independent gate auditor)."
+      "note": "2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan file at c9335d89 checked against main 8d1e32e: pinned Pre-Breakout/Fib numbers re-run on Python 3.11; unrounded->int refactor bit-identical; later scan caps replace status only so stock_explanation is the scorer's dict; real score_stock explanations (AAPL/MSFT/NVDA x 2 directions x 3 horizons) validate and round-trip; old rows load (Optional=None); frontend merge passes optional keys. 0 GATE FINDINGS. Below-gate notes applied as plan clarifications (no behaviour change): preBreakoutResults/fibPullbackResults are not persisted (session-only); test_fib_pullback_endpoint.py L96/L177 patches must be repointed at fibonacci_pullback_detail in T2. Plan stage closed; code stage starts at round 1 of 3. || 2026-10-10 taken from the Board (#146) by a board-worker session on board/stock-pres-p1-backend-evidence-f4e4b87f, cut from main 8d1e32e; moved here from task_backlog. Plan written; plan round 1 next (fresh independent gate auditor).",
+      "plan_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      }
     }
   ],
   "already_shipped": [
