@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/stock-presentation-tracking",
-      "claimed_at": "2026-10-10T08:05:24Z",
-      "expires_at": "2026-10-10T11:05:24Z",
-      "note": "Markdown tracking for STOCK-PRES-P1..P5; correct P1 premise, P3/P5 dependencies (docs only)",
-      "task": "STOCK-PRESENTATION-TRACKING"
-    },
-    {
-      "agent": "claude",
       "branch": "board/stock-pres-p1-backend-evidence-f4e4b87f",
       "claimed_at": "2026-10-10T09:39:01Z",
       "expires_at": "2026-10-10T12:39:14Z",
