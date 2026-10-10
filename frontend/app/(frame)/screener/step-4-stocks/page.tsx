@@ -14,6 +14,7 @@ import { runStockScanWithContinuation, isStockManualScanCurrent, stockScanFailur
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { regimeFitTooltip } from '@/lib/statusTooltips';
 import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
+import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { stockExecutionBlock } from '@/lib/stockExecutionSession';
 import { HistoryPrefetchRow } from './HistoryPrefetchRow';
 import styles from './page.module.css';
@@ -137,6 +138,15 @@ export default function Step4StocksPage() {
   // STOCK-PRES-P4-STRATEGY M11: how many symbols carry an after-scan intent
   // (set on the position card). A number selector, so no new object per render.
   const armedCount = useScanStore((s) => Object.values(s.stockAfterScanIntent).filter(Boolean).length);
+  // STOCK-PRES-P4-STRATEGY M10: Step 1's sentiment reading (written only by
+  // Step 1, not persisted). Every number is shown unchanged; only the horizon
+  // label follows the current scan context, since Step 1 may have run before
+  // the horizon was chosen on Step 3.
+  const regimeSentiment = useScanStore((s) => s.regimeSentiment);
+  const stripSentiment = useMemo(
+    () => regimeSentiment && { ...regimeSentiment, horizon: context?.horizon ?? regimeSentiment.horizon },
+    [regimeSentiment, context?.horizon],
+  );
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -255,6 +265,12 @@ export default function Step4StocksPage() {
           Click a card to select a strategy (saved at once; the floating Run button on Steps 1–3 uses it). Adjust parameters, then Run Stock Scan. A successful scan opens Backtest; a failed scan stays here with its reason.
         </Text>
       </details>
+
+      {/* MarketSentiment's own null state reads "insufficient history", which
+        * would be wrong here: no reading means Step 1 has not loaded one. */}
+      {stripSentiment
+        ? <MarketSentiment s={stripSentiment} compact />
+        : <Text size={12} tone="dim">Market sentiment loads on Step 1</Text>}
 
       <div className={styles.layout}>
         <div className={styles.stack}>
