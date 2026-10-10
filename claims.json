@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/trade-card-ui-followup-options-4866cbfb",
       "claimed_at": "2026-10-10T19:21:47Z",
-      "expires_at": "2026-10-10T22:24:01Z",
+      "expires_at": "2026-10-10T22:24:32Z",
       "note": "Board #158: verify, merge origin/main, code audit, PR",
       "task": "TRADE-CARD-UI-FOLLOWUP-OPTIONS"
     }
