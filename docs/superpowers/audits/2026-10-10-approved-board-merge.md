@@ -32,3 +32,10 @@ Local full backend Python 3.11.16: 7018 passed, 9 skipped, two failures (855.05s
 Independent code round 2: fresh `/root/merge_fixture_audit` reviewed only the fixture diff from `3db23735` (SHA256 `8bf237cc2b39f40f17326ff37aa5ca15c69feb4f99c09a6f89e80fc21c7f713c`) and scheduler/schema interactions. Zero gate findings. The empty rejection list and zero missing-quote count match a PASS result; all cancellation/dispatch/booking/arm assertions remain. No production or persistence writer changed, no audit fixes or outstanding findings. Scope verified. Integration code stage clean in two rounds; original source counters untouched.
 
 Fixture validation: full cancellation module 25 passed on Python 3.11.16; frontend typecheck and diff whitespace check passed. Final combined CI on the fixture-adjusted commit must pass before merging.
+
+
+## Merge outcome
+
+Final combined CI on `9dbdfbb14f1b463e3ac41089bebb254cbff36f4e` passed backend (7020 passed, 9 skipped; Python 3.11.17; 466.19s), frontend (230 suites / 4934 tests passed, typecheck and production build passed) and Playwright. Additional local scheduler/cancellation/no-live-quote regression: 93 passed, 4.20s, Python 3.11.16.
+
+User-approved normal merge PR #204 landed at `b741f6104f68cf252be265af18d32ae5f045215c`. All seven frozen source heads are main ancestors; original PRs #193/#202/#195/#192/#201/#200/#203 report merged, and items #142/#119/#158/#146/#133/#166/#159 report closed. Only now are the seven source phases and the integration target marked shipped; source audit counters and histories remain untouched. No deployment or broker action performed.
