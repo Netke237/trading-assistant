@@ -2190,7 +2190,7 @@
       "id": "TRADE-CARD-UI-FOLLOWUP-OPTIONS",
       "name": "Trade card UI follow-up, Options half: aligned order/exit values, selected-method recommendation, loss-budget label, alternative spacing, collapsed scoring evidence, score cards moved up (Options)",
       "status": "built",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": true,
       "depends_on": [],
       "plan": "docs/superpowers/plans/2026-10-09-trade-card-ui-followup-options-integration.md",
@@ -2200,7 +2200,7 @@
         "pattern": "keepMounted\\?: boolean",
         "note": "PRESENCE ONLY: the follow-up's keepMounted CollapsibleSection prop exists. Behaviour is covered by keepMounted.test.tsx, collapsedEvidence.test.tsx, TradeCard tests and the Options e2e spec."
       },
-      "note": "2026-10-10 BOARD #158 (board-worker): taken on board/trade-card-ui-followup-options-4866cbfb, cut from claude/relaxed-fermat-sm9xru (f501ad40); git merge origin/main (13c8b52c, 35 commits) -- only conflict PROJECT_STATE.json (both sides added a phase entry; both kept). Main touched none of the 12 audited frontend files. CLAUDE.md: the branch's 'Working the Markdown backlog in parallel' section dropped in the merge (the Board #151 supersedes that backlog). Ticket-26 evidence doc (f501ad40) and .scratch status lines kept. Code round 3 (stage round 3 of 3) pending on the merge. || PREVIOUS: 2026-10-09 BUILT on claude/relaxed-fermat-sm9xru at d43931e2, NOT MERGED, CODE AUDIT CLEAN at code round 2 of 3 (R1: 1 display finding F1, fixed a8c3b4a4; R2: zero gate findings). Awaiting Kenneth's merge decision. Backlog TICKET-38, decision TICKET-38-OPTIONS-ONLY-2026-10-09. Narrowing of the TRADE-CARD-UI-FOLLOWUP plan (independent plan round 1 clean on that phase); no new behaviour, so no separate plan round. The original code round (4b06656a..bdf3bed2) does not carry over: base moved 141 commits. Path-limited git apply -3 of 4b06656a..origin/codex/trade-card-ui-followup, no merge/cherry-pick, so the Stocks commits stay unmerged for the later Stocks integration. 11 of 12 files byte-identical to the reviewed branch; step-7-trade-card/page.tsx removes only the decisionTarget portal plus one comment correction, P0A/P0B gates unchanged. Implementer: fresh subagent. Coordinator verification: typecheck clean; targeted Jest 13 suites/372 tests pass. Implementer: full Jest 219 suites/4873 tests pass; Options e2e 2/2 at 1200/1920 with mocked fonts (DejaVu metrics; production font metrics unverified). Excluded: TC-UI-07 and the Stocks half of TC-UI-06 (STOCK-DESIGN-GRILLING owner).",
+      "note": "2026-10-10 BOARD #158 (board-worker): taken on board/trade-card-ui-followup-options-4866cbfb, cut from claude/relaxed-fermat-sm9xru (f501ad40); git merge origin/main (13c8b52c, 35 commits) -- only conflict PROJECT_STATE.json (both sides added a phase entry; both kept). Main touched none of the 12 audited frontend files. CLAUDE.md: the branch's 'Working the Markdown backlog in parallel' section dropped in the merge (the Board #151 supersedes that backlog). Ticket-26 evidence doc (f501ad40) and .scratch status lines kept. CODE ROUND 3 (stage round 3 of 3) on the merge: CLEAN, zero gate findings. Coordinator checks on f76eb77: typecheck clean; full Jest 225 suites/4902 tests pass; Options e2e trade-card-ui-followup.spec.ts 2/2 (1200/1920) with the container's Chromium 1194 via launchOptions.executablePath (repo Playwright pins a build this container lacks). Backend: no diff vs main. Built, audit clean, PR open, NOT MERGED. || PREVIOUS: 2026-10-09 BUILT on claude/relaxed-fermat-sm9xru at d43931e2, NOT MERGED, CODE AUDIT CLEAN at code round 2 of 3 (R1: 1 display finding F1, fixed a8c3b4a4; R2: zero gate findings). Awaiting Kenneth's merge decision. Backlog TICKET-38, decision TICKET-38-OPTIONS-ONLY-2026-10-09. Narrowing of the TRADE-CARD-UI-FOLLOWUP plan (independent plan round 1 clean on that phase); no new behaviour, so no separate plan round. The original code round (4b06656a..bdf3bed2) does not carry over: base moved 141 commits. Path-limited git apply -3 of 4b06656a..origin/codex/trade-card-ui-followup, no merge/cherry-pick, so the Stocks commits stay unmerged for the later Stocks integration. 11 of 12 files byte-identical to the reviewed branch; step-7-trade-card/page.tsx removes only the decisionTarget portal plus one comment correction, P0A/P0B gates unchanged. Implementer: fresh subagent. Coordinator verification: typecheck clean; targeted Jest 13 suites/372 tests pass. Implementer: full Jest 219 suites/4873 tests pass; Options e2e 2/2 at 1200/1920 with mocked fonts (DejaVu metrics; production font metrics unverified). Excluded: TC-UI-07 and the Stocks half of TC-UI-06 (STOCK-DESIGN-GRILLING owner).",
       "audit_history": [
         {
           "round": 1,
@@ -2223,6 +2223,17 @@
           "stage_round": 2,
           "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-09",
           "scope": "git diff f73952da..a8c3b4a4 (F1 fix only: TradeCard/index.tsx, TradeCard.methodPick.test.tsx, +19/-2) and interactions; range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 3,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "merge f76eb77 (parents f501ad40 + origin/main 13c8b52c, base a2b6935c): git diff 13c8b52c..f76eb77 (conflict resolution; 19 of 20 files match the branch's own diff, only PROJECT_STATE.json differs; CLAUDE.md equals main) and git diff f501ad40..f76eb77 for interactions with the audited Options trade-card files (scanStore persist version 18 unchanged, regimeSentiment not persisted; api.ts/stockDomain.ts gain optional Stocks-only fields; audited files byte-identical to a8c3b4a4); range verified by reviewer",
           "findings": [],
           "fixes": [],
           "outstanding": [],
