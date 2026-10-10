@@ -18,14 +18,6 @@
     },
     {
       "agent": "codex",
-      "branch": "board/trade-card-ui-followup-options-merge-065b8d86",
-      "claimed_at": "2026-10-10T20:57:06Z",
-      "expires_at": "2026-10-11T00:29:04Z",
-      "note": "User-approved merge of board #158, PR #195; integration pending",
-      "task": "TRADE-CARD-UI-FOLLOWUP-OPTIONS"
-    },
-    {
-      "agent": "codex",
       "branch": "board/stock-pres-p1-backend-evidence-merge-e405d5ba",
       "claimed_at": "2026-10-10T20:57:17Z",
       "expires_at": "2026-10-10T23:57:19Z",
