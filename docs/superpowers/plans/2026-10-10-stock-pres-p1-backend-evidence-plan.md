@@ -120,6 +120,11 @@ Implementation:
   - `/scan/fib-pullback`: import and call `fibonacci_pullback_detail` with the same arguments; derive `at_level, dist_pct, level_hit` from it (same values); add `"fib_swing": {"low": d["swing_low"], "high": d["swing_high"]}` to the result dict. The existing `level_hit is None` skip, EMA filter, confidence formula and sort are unchanged.
   - `PreBreakoutResult` model (L122, currently unused by the route): add `confidence_breakdown: dict | None = None` and `fib_swing: dict | None = None` so the model matches what the route sends.
 
+**Amendment after plan round 1 (plan round 2 scope).** `backend/tests/test_horizon_tuning_core.py::test_signal_cache_version_tracks_strategy_engine_source` pins the sha256 of `strategy_engine.py` (LF line endings) per `SIGNAL_CACHE_VERSION` (`backend/app/services/horizon_tuning/cache.py:35`, currently `1` → `a43b311f…aa2519`, the main/dcc015a5 bytes). Any edit to `strategy_engine.py` fails it until the version is bumped and the new hash pinned. The STOCKS-HORIZON-T1 tuning disk cache (`backend/data/tuning_cache/signals/`, gitignored, local) keys every cached signal series on `SIGNAL_CACHE_VERSION` (`signal_key`). No tuned signal function's output changes in this task (`breakout_setup_signal` and the Fib helper are not used by `horizon_tuning`; `confidence` / `metrics` / the Fib tuple are pinned unchanged), but the conservative step is the guard's documented convention — bump, so no cached series computed under the old source can be reused:
+- Task 2's file list adds `backend/app/services/horizon_tuning/cache.py` (`SIGNAL_CACHE_VERSION = 1` → `2`, comment unchanged) and `backend/tests/test_horizon_tuning_core.py` (add `2: "<sha256 of the final strategy_engine.py, LF>"` to `_ENGINE_SOURCE_PINS`, keeping the `1:` pin).
+- Effect: every signal key changes, so the next tuning run recomputes signal series once (cost only; old files are orphaned and never read). Gate-mask keys do not include `SIGNAL_CACHE_VERSION` and are unaffected. No live-scan, backtest-cache, confidence-cache or persisted scan-result behaviour changes.
+- The pin must be the hash of the bytes actually committed; if `strategy_engine.py` changes again (e.g. a code-audit fix), re-pin `2` before any audit round closes (the version stays `2` while the branch is unmerged — nothing outside this branch ever wrote a version-2 key).
+
 Commit: `feat(prebreakout): send the confidence sub-scores and Fib swing low/high (STOCK-PRES-P1 T2)`
 
 ### Task 3 — optional frontend types; old persisted results still load
@@ -190,3 +195,4 @@ T1 and T2 both edit `backend/app/routers/stock_scan.py` → serialized: **T1 →
 ## Audit record
 
 - Plan round 1 (2026-10-10): fresh independent gate auditor, plan at c9335d89 vs main 8d1e32e — **0 gate findings, clean**. Two below-gate notes applied as clarifications without behaviour change: the session-only Pre-Breakout/Fib store fields (Facts), and the two `test_fib_pullback_endpoint.py` patches T2 must repoint.
+- Plan amendment (2026-10-10, after the T2 implementer reported a plan defect): Task 2 also bumps `SIGNAL_CACHE_VERSION` 1→2 and pins the new `strategy_engine.py` hash. Plan round 2 audits only this amendment and its interactions.
