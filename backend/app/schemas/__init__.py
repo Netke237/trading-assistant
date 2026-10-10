@@ -651,6 +651,15 @@ class FinalStopOut(BaseModel):
     computedAt: str
 
 
+class FinalStopIn(FinalStopOut):
+    """Request-only FinalStopOut (NUMERIC-API-INPUTS T2): the block a card
+    round-trips into POST /contracts/recompute-plan, where a non-finite
+    number is a 422. FinalStopOut itself stays unguarded: exit_plan.py builds
+    it and every response returns it. A FinalStopIn echoed into a
+    FinalStopOut-typed response field serialises with the parent's fields."""
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+
+
 class TradeExit(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     # PIECE 3: the resolved stock stop — the wider of the structural level and
@@ -817,6 +826,11 @@ class TradeCardData(BaseModel):
 # ── Scan ─────────────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422 -- also when a
+    # stored schedule entry is re-validated (the scheduler records a failed
+    # run; GET /api/scan-schedule skips the entry with a warning).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     direction:   Direction
     horizon:     Horizon
@@ -1157,7 +1171,10 @@ class ScanSessionStatus(BaseModel):
 # ── Portfolio persistence ─────────────────────────────────────────────────────
 
 class PortfolioPositionCreate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float is persisted, so
+    # each is finite or a 422. Also reached by auto_trade_booking._build_body,
+    # whose existing except refuses the booking instead of writing the value.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     recId: str = Field(alias="rec_id")
     symbol: str
@@ -1336,7 +1353,8 @@ class PortfolioPositionUpdate(BaseModel):
     `exitPlan`/`maxLossOverride`/`alertOverrides` follow the exclude_unset
     pattern so `{"exitPlan": null}` can still explicitly clear a previously
     computed value."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): persisted; finite or a 422.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
@@ -1456,7 +1474,8 @@ class PortfolioPositionSchema(BaseModel):
 
 class ClosePositionRequest(BaseModel):
     """Body for POST /api/portfolio/{rec_id}/close."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): exitPrice is persisted.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     qtyToClose: Optional[int] = None        # None -> close the whole position
     exitPrice: Optional[float] = None       # None -> server fetches the live quote
     exitDate: Optional[str] = None          # None -> today (YYYY-MM-DD)

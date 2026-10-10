@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +60,9 @@ async def get_alerts(db: AsyncSession = Depends(get_db)) -> list[AlertItem]:
 
 
 class AlertNotifyRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: a non-finite price/referenceValue is a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     # symbol is accepted but intentionally unused below (post_alert_notify
     # derives it from the DB row instead) — kept on the wire schema since the
     # frontend already sends it and it's harmless input.
