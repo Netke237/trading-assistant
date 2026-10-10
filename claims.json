@@ -15,6 +15,14 @@
       "expires_at": "2026-10-10T11:10:45Z",
       "note": "Skip CI + Playwright on docs-only pushes/PRs to save Actions minutes",
       "task": "CI-DOCS-PATHS-IGNORE"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/board-worker",
+      "claimed_at": "2026-10-10T08:56:24Z",
+      "expires_at": "2026-10-10T11:56:24Z",
+      "note": "Board issue + board-worker contract/skill + Telegram notify script; STOCK-PRES P1-P5 as board items",
+      "task": "BOARD-WORKER-SETUP"
     }
   ]
 }
