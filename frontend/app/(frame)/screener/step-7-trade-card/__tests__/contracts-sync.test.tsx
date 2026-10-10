@@ -36,7 +36,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
     getContractQuote: jest.fn().mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
@@ -116,7 +116,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });

@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
+import { NoLiveQuoteTag } from '@/components/atoms/NoLiveQuoteTag';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
 import { ContractStar } from '@/components/atoms/ContractStar';
@@ -348,7 +349,8 @@ export default function Step6Page() {
             // Recommended is always the highest-score contract regardless of active sort column.
             const rescuedIds  = rescuedBySymbol[candidate.symbol] ?? [];
             const byScore     = sortContracts(contracts, 'score', 'desc');
-            const recommended = byScore.find((c) => !rescuedIds.includes(c.id));
+            const recommended = byScore.find((c) => !rescuedIds.includes(c.id) && !c.noLiveQuote)
+              ?? byScore.find((c) => !rescuedIds.includes(c.id));
             // User sort applies to the remaining (chain) contracts.
             const sorted = sortContracts(contracts, sortKey, sortDir);
             const chain  = sorted.filter((c) => c.id !== recommended?.id);
@@ -385,6 +387,7 @@ export default function Step6Page() {
                   <div className={tbl.scoreCell}>
                     <Data size={13} weight={500}>{c.score}</Data>
                     <StatusBadge status={status} tooltip={getExplanationSummaryLine(c)} tooltipAlign="right" />
+                    <NoLiveQuoteTag noLiveQuote={c.noLiveQuote} quoteState={c.quoteState} />
                   </div>
                   <ContractExplanationToggle
                     isOpen={!!expandedExplanations[c.id]}

@@ -17,6 +17,7 @@ import { Title, Text } from '@/components/primitives';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
+import { quoteWarning } from '@/lib/quoteWarning';
 import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -586,7 +587,14 @@ export default function Step7Page() {
    * every path, including the next early return someone adds: a quote whose
    * key does not match the card on screen is not this card's quote, and
    * `liveQuoteForCard` below is the only thing any consumer may read. */
-  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number } | null>(null);
+  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null } | null>(null);
+  const [quoteConfirmation, setQuoteConfirmation] = useState<{ contractKey: string } | null>(null);
+  const quoteConfirmationRef = useRef<{ contractKey: string } | null>(null);
+  const quoteRequestGenerationRef = useRef(0);
+  const updateQuoteConfirmation = (confirmation: { contractKey: string } | null) => {
+    quoteConfirmationRef.current = confirmation;
+    setQuoteConfirmation(confirmation);
+  };
   const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
   const [fetchingQuote,  setFetchingQuote]    = useState(false);
   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
@@ -702,6 +710,15 @@ export default function Step7Page() {
 
   const liveQcd = pickedCard?.contractDetails;
   const contractKey = contractKeyFor(pickedCard);
+  const currentContractKeyRef = useRef(contractKey);
+  const selectionEpochRef = useRef(0);
+  if (currentContractKeyRef.current !== contractKey) {
+    selectionEpochRef.current += 1;
+    quoteConfirmationRef.current = null;
+  }
+  currentContractKeyRef.current = contractKey;
+  useEffect(() => () => { currentContractKeyRef.current = null; }, []);
+  useEffect(() => { updateQuoteConfirmation(null); }, [contractKey]);
   // The looser key the three edit caches use — see editKeyFor. Declared from
   // `effectiveCard` (not `pickedCard`) so it matches what the writer reports
   // and what `entryLimitFor`/`premiumStopDollarFor` read on the send paths.
@@ -878,6 +895,9 @@ export default function Step7Page() {
     // closure, never via React state (whose read timing can't be trusted
     // relative to when cleanup runs for an unrelated reason).
     let settled = false;
+    // Only a run that actually issues a request may supersede a pending
+    // send-time probe -- hence below the claimed-plan early return above.
+    const quoteGeneration = ++quoteRequestGenerationRef.current;
     setLiveQuote(null);
     setLiveStockPrice(null);
     setFetchingQuote(true);
@@ -896,7 +916,10 @@ export default function Step7Page() {
     ])
       .then(([q, sq]) => {
         if (!controller.signal.aborted) {
-          setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          // A send-time probe owns the quote display over an older card-open fetch.
+          if (quoteGeneration === quoteRequestGenerationRef.current) {
+            setLiveQuote(q ? { ...q, key: keyAtRequest } : null);
+          }
           if (sq) setLiveStockPrice({ symbol, price: sq.price });
         }
         return [q, sq] as const;
@@ -916,7 +939,8 @@ export default function Step7Page() {
           dte:         liveQcd.dte,
           premium:     q?.price ?? liveQcd.mid,
           delta:       liveQcd.delta,
-          spread:      q?.spread ?? 0,
+          spread:      q?.spread ?? liveQcd.spread!,
+          quote_live:  q?.quoteLive ?? !pickedCard.noLiveQuote,
           // PIECE 3 — round-trip the stop this card already resolved. The
           // endpoint echoes it and builds the plan around it, so an override
           // changes the CONTRACT and nothing about where the stock stop sits.
@@ -993,7 +1017,8 @@ export default function Step7Page() {
         dte: cd.dte,
         premium: cd.mid,
         delta: cd.delta,
-        spread: 0,
+        spread: cd.spread!,
+        quote_live: !resolved.noLiveQuote,
         final_stop: resolved.exit.finalStop ?? null,
           ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
@@ -1141,6 +1166,26 @@ export default function Step7Page() {
     setPaperOrderId(null);
     let label = card.contract;
     try {
+      const keyAtSend = contractKeyFor(card);
+      const selectionAtSend = selectionEpochRef.current;
+      const cdAtSend = card.contractDetails;
+      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent — contract details unavailable.'); return; }
+      const quoteGeneration = ++quoteRequestGenerationRef.current;
+      const quoteController = new AbortController();
+      const quoteTimeout = setTimeout(() => quoteController.abort(), 8000);
+      let freshQuote: Awaited<ReturnType<typeof api.getContractQuote>> | null;
+      try {
+        freshQuote = await api.getContractQuote(card.symbol, cdAtSend.strike, cdAtSend.expiry, cdAtSend.right, quoteController.signal).catch(() => null);
+      } finally { clearTimeout(quoteTimeout); }
+      // Navigation during the probe cancels this send; neither quote nor tick can cross contracts.
+      if (currentContractKeyRef.current !== keyAtSend || selectionEpochRef.current !== selectionAtSend) return;
+      if (quoteGeneration === quoteRequestGenerationRef.current) {
+        setLiveQuote(freshQuote ? { ...freshQuote, key: keyAtSend } : null);
+      }
+      if (freshQuote?.quoteLive !== true && quoteConfirmationRef.current?.contractKey !== keyAtSend) {
+        setOrderError('No order was sent — confirm the quote warning for this contract and click again.');
+        return;
+      }
       // Captured ONCE; never re-read from `effectiveCard`, which may be another
       // candidate by the time the broker answers.
       label = contractLabelFor(card);
@@ -1152,7 +1197,7 @@ export default function Step7Page() {
       // throw here happens before anything is written.
       const optionSymbol = toOptionSymbol(card);
       const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
-      const pos = buildPaperPosition(card, orderType, broker, 'pending', liveQuoteForCard?.price, contracts);
+      const pos = buildPaperPosition(card, orderType, broker, 'pending', freshQuote?.price, contracts);
       const recId = pos.recId;
 
       // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
@@ -1573,7 +1618,13 @@ export default function Step7Page() {
           {fetchingQuote && (
             <Text size={11} tone="dim">Fetching live price…</Text>
           )}
-          {liveQuoteForCard && !fetchingQuote && (
+          {quoteWarning(liveQuoteForCard) && (
+            <div role="status">
+              <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
+              <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
+            </div>
+          )}
+          {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
             <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
           )}
           {liveStockPriceForCard != null && !fetchingQuote && (
@@ -1777,6 +1828,10 @@ export default function Step7Page() {
       {dialogOpen && (
         <SendToBrokerDialog
           cards={basketCards}
+          quoteWarningsByContract={Object.fromEntries(basketCards.map((c) => {
+            const key = contractKeyFor(c);
+            return [key ?? c.contract, quoteWarning(key === contractKey ? liveQuoteForCard : null)];
+          }))}
           contractsBySymbol={orderContractsBySymbol}
           overridesBySymbol={maxLossOverrideBySymbol}
           invalidationBySymbol={Object.fromEntries(
