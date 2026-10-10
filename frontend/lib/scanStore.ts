@@ -5,7 +5,7 @@ import { defaultStockOverlay, stockExecutionIdentity, type StockExecutionRecord,
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
-import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
+import type { Direction, OptionContract, TradeCardData, DteWindow, SentimentData } from '@/types/domain';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 import type { StockScanRequestBody } from './resolveStockScanRequest';
 import type { HorizonKey } from './horizonPresets';
@@ -450,6 +450,14 @@ interface ScanStoreState {
   /** Session-only — not persisted; cleared on page load. */
   regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
+  /** Market sentiment built from the regime response Step 1 already fetched.
+   *  Written only by Step 1 (`fetchRegime`: null when a fetch starts, the
+   *  reading when it answers, null when it fails); read by the Stocks Strategy
+   *  page's Market Sentiment strip. Deliberately NOT in `partialize`: a stored
+   *  sentiment would show stale numbers after a reload — the strip then shows
+   *  "loads on Step 1" instead. */
+  regimeSentiment:    SentimentData | null;
+  setRegimeSentiment: (s: SentimentData | null) => void;
   preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
   setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
   fibPullbackResults: Array<{
@@ -517,6 +525,8 @@ export const useScanStore = create<ScanStoreState>()(
       setCombinedRegime: (r) => set({ combinedRegime: r }),
       regimeDirection:    null,
       setRegimeDirection: (d) => set({ regimeDirection: d }),
+      regimeSentiment:    null,
+      setRegimeSentiment: (s) => set({ regimeSentiment: s }),
       preBreakoutResults: [],
       setPreBreakoutResults: (results) => set({ preBreakoutResults: results }),
       fibPullbackResults: [],
