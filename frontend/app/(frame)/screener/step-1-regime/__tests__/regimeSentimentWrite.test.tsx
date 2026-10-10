@@ -116,6 +116,44 @@ describe('Step 1 — writes scanStore.regimeSentiment from the regime fetch', ()
     expect(useScanStore.getState().regimeSentiment).toEqual(SENTIMENT_B);
   });
 
+  it('an older request answering after a newer one does not overwrite the newer reading', async () => {
+    const REGIME_A = {
+      ...REGIME_B,
+      omm: { ...REGIME_B.omm, state: 'Bear', p_stay: 0.6, stability: 'Fragile', regime_age_days: 3,
+        avg_regime_duration: 9 },
+      conviction_pct: 10, conviction_label: 'Weak', alignment: 'Diverging', hmm_state: null,
+    };
+    const a = deferred<typeof REGIME_A>();
+    const b = deferred<typeof REGIME_B>();
+    (api.getRegime as jest.Mock).mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const first = render(<Step1RegimePage />);
+    first.unmount();
+    render(<Step1RegimePage />);
+    expect(api.getRegime).toHaveBeenCalledTimes(2);
+    await act(async () => { b.resolve(REGIME_B); await b.promise; });
+    await flush();
+    expect(useScanStore.getState().regimeSentiment).toEqual(SENTIMENT_B);
+    await act(async () => { a.resolve(REGIME_A); await a.promise; });
+    await flush();
+    expect(useScanStore.getState().regimeSentiment).toEqual(SENTIMENT_B);
+  });
+
+  it('an older request failing after a newer one answered does not clear the newer reading', async () => {
+    const a = deferred<typeof REGIME_B>();
+    const b = deferred<typeof REGIME_B>();
+    (api.getRegime as jest.Mock).mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
+    const first = render(<Step1RegimePage />);
+    first.unmount();
+    render(<Step1RegimePage />);
+    expect(api.getRegime).toHaveBeenCalledTimes(2);
+    await act(async () => { b.resolve(REGIME_B); await b.promise; });
+    await flush();
+    expect(useScanStore.getState().regimeSentiment).toEqual(SENTIMENT_B);
+    await act(async () => { a.reject(new Error('offline')); await a.promise.catch(() => {}); });
+    await flush();
+    expect(useScanStore.getState().regimeSentiment).toEqual(SENTIMENT_B);
+  });
+
   it('the full MarketSentiment receives the same object it did before', async () => {
     (api.getRegime as jest.Mock).mockResolvedValue(REGIME_B);
     render(<Step1RegimePage />);

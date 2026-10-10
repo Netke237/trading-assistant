@@ -84,6 +84,11 @@ function sentimentFromRegime(r: MarketRegime, horizon: string): SentimentData | 
   };
 }
 
+/** Bumped by every `fetchRegime` call. Module-level, not a ref: it must
+ *  outlive the component, because an earlier mount's request can still answer
+ *  after a later mount's request has started (or answered). */
+let regimeSentimentRequestSeq = 0;
+
 export default function Step1RegimePage() {
   const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
@@ -110,15 +115,19 @@ export default function Step1RegimePage() {
   const fetchRegime = useCallback(() => {
     setRegimeFetchFailed(false);
     // Written here, not by an effect: these callbacks still run after the
-    // user leaves Step 1 (as setRegime does), so the shared reading is never
-    // older than the latest request.
+    // user leaves Step 1 (as setRegime does). Only the latest request writes
+    // the shared reading: an older request answering or failing after a newer
+    // one started leaves it alone, so the latest request wins.
+    const seq = ++regimeSentimentRequestSeq;
     setRegimeSentiment(null);
     // Always fetch with 'intraday' so the HMM is always computed —
     // the regime step is visited before horizon selection (step 3).
     api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
       setRegimeData(r);
       setRegime(r.overall);
-      setRegimeSentiment(sentimentFromRegime(r, useScanStore.getState().context?.horizon ?? 'Swing'));
+      if (seq === regimeSentimentRequestSeq) {
+        setRegimeSentiment(sentimentFromRegime(r, useScanStore.getState().context?.horizon ?? 'Swing'));
+      }
       setRegimeDirection(r.regime_direction ?? null);
       const direction = useScanStore.getState().context?.direction ?? 'Bullish';
       const descriptor = descriptorFromState(r.omm?.state ?? '');
@@ -126,7 +135,7 @@ export default function Step1RegimePage() {
     }).catch(() => {
       setOffline(true);
       setRegimeFetchFailed(true);
-      setRegimeSentiment(null);
+      if (seq === regimeSentimentRequestSeq) setRegimeSentiment(null);
     });
   }, [setRegime, setRegimeDirection, setCombinedRegime, setRegimeSentiment, markov]);
 
