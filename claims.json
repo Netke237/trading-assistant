@@ -2,27 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "claude/stock-presentation-design",
-      "claimed_at": "2026-10-09T22:44:30Z",
-      "expires_at": "2026-10-10T02:28:20Z",
-      "note": "Stocks + Pre-Breakout presentation design in the Options style: grilling, mockup, approval (docs only)",
-      "task": "STOCK-DESIGN-GRILLING"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/hopeful-rubin-64bowt",
-      "claimed_at": "2026-10-09T23:09:15Z",
-      "expires_at": "2026-10-10T02:09:15Z",
-      "note": "Resume after restart: H1+H2 built (#134 closed, #135 verified), H3 next, then integrated code audit",
-      "task": "AUTOTRADE-FIRE-HYGIENE"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/stocks-t1-followups",
-      "claimed_at": "2026-10-09T23:30:16Z",
-      "expires_at": "2026-10-10T03:35:05Z",
-      "note": "Fix #129 test isolation + show time exits on Step 6",
-      "task": "STOCKS-T1-FOLLOWUPS"
+      "branch": "claude/stock-presentation-tracking",
+      "claimed_at": "2026-10-10T08:05:24Z",
+      "expires_at": "2026-10-10T11:05:24Z",
+      "note": "Markdown tracking for STOCK-PRES-P1..P5; correct P1 premise, P3/P5 dependencies (docs only)",
+      "task": "STOCK-PRESENTATION-TRACKING"
     }
   ]
 }
