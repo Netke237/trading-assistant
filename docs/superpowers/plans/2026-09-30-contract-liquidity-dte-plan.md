@@ -1,79 +1,90 @@
-# CONTRACT-LIQUIDITY-DTE — plan (r5: round-4 findings fixed, line refs re-based on main 4c520006; NOT audited clean; nothing built)
+# CONTRACT-LIQUIDITY-DTE — plan (r6: r5 refreshed onto main 48ff4ce9 after NO-LIVE-QUOTE; new plan stage; nothing built)
 
-- **Phase:** `CONTRACT-LIQUIDITY-DTE` (PROJECT_STATE.json). Status `not_started`.
-- **Branch:** `claude/contract-liquidity-dte` (from `origin/main` at `599b9da2`).
-- **Origin:** Kenneth, 2026-09-30, looking at the Semi-annual Bullish SP500 options scan (518 scanned → 2
-  candidates) and at Step 6, where almost every contract in the MSFT and AAPL chains read REJECT. An
-  adversarial review of the first proposal ("drop the volume hard reject") found it weaker than stated; this
-  plan replaces it and starts from measured data instead.
-- **Kenneth answered §6 on 2026-09-30** (all recommendations). No code until a plan round is clean.
+- **Phase:** `CONTRACT-LIQUIDITY-DTE` (PROJECT_STATE.json). Board item / tracking issue **#161**.
+- **Branch:** `board/contract-liquidity-dte-3c0a1edd`, cut from `board/contract-liquidity-dte-b714cd2a`
+  (= `claude/contract-liquidity-dte`, bed0ab4f), with `origin/main` 48ff4ce9 merged in (dcb3bca5).
+- **Why r6.** r5 was written on 2026-09-30 against main 4c520006. Since then NO-LIVE-QUOTE (#119, PR #202) has
+  rewritten the quote side of contract selection, and main has moved about 540 commits. Kenneth chose option (a)
+  on #161 (2026-10-10): refresh r5 onto current main, keep **only fix 1 and fix 2 exactly as answered on
+  2026-09-30**, check what NO-LIVE-QUOTE already covers, and open **one new plan stage** (cap 3), then tickets,
+  build and a code audit (cap 3). Decision `CONTRACT-LIQUIDITY-DTE-REFRESH-STAGE-2026-10-10`.
+- **What r6 changes against r5:** line references re-based; §0 re-derives the round-5 gate finding against
+  current main; §1 adds the consumers main grew since r5 (`contract_explanation`, config health, the
+  pipeline-diagnostics parser, `test_step6_contract_rules.py`'s liquidity tests); §3 drops the merge-hold
+  residual; §4 lists the tests the change breaks, **measured** by applying fixes 1+2 to a scratch copy and running
+  the full backend suite; §5 cuts the work into three tickets; §6 replaces r5's `shipped_unaudited` bookkeeping
+  with today's `built` rules. The design (fix 1, fix 2) is unchanged.
 
-## 1. What is true on main (599b9da2)
+## 0. The round-5 gate finding, re-derived on main 48ff4ce9
 
-*Line references in `contract_validator.py` and `auto_trader.py` are re-based onto main `4c520006`,
-merged into this branch 2026-09-30. DOCC-4 added 11 lines to `contract_validator.py` (the config-health
-watch); nothing else in scope moved.*
+Round 5 (2026-09-30) found that after the close fix 1 let a volume 1–49 contract with a **fabricated 0% spread**
+reach a broker order: via the scan's PASS trigger and an armed Step 7 card, or Step 7's direct send. Kenneth held
+the merge until NO-LIVE-QUOTE landed. Each link of that path on current main:
 
-1. `contract_validator._hard_reject_reasons` (`contract_validator.py:95-98`):
-   - `volume < min_volume` (50) is a hard reject **unless** `volume == 0 and oi >= min_open_interest`.
-     The comment calls 0 "Tradier's off-hours sentinel" and OI "the real liquidity proxy".
-   - `oi < min_open_interest` (200) is a separate hard reject.
-   - Result: volume 0 with OI 319 passes; volume 3 with OI 1,534 is rejected. The better-traded contract
-     loses (AAPL 315C 2027-04-16: vol 3, OI 1,534, spread 1.2%, REJECT).
-2. `_score_liquidity` (`:163-176`) raises **two** soft flags from one axis: `low_volume` (< 200) and
-   `low_open_interest` (< 1,000). `validate_contract` rejects at `max_soft_fail_count` = 3 flags
-   (`:464-467`). A long-dated contract usually carries both liquidity flags, so a single further flag
-   (spread > 8%, delta outside 0.30–0.70, DTE, IV) rejects it.
-3. `volume` is Tradier's **session-to-date** count: `market.py:817` reads `int(c.get("volume") or 0)`, so a
-   missing value also becomes 0. The option chain is Tradier-only (the yfinance `volume` lines in
-   `market.py` are candle bars, not chains — this corrects my earlier review, finding 6).
-4. **Spread off-hours is fabricated, not measured.** `market.py:808-813`: when `ask == 0` (Tradier outside
-   market hours) the contract's price falls back to `last` and `spread = 0.0`; `augment.py:94-95` then builds
-   `bid = ask = last`, so `spread_pct` is 0 and passes both the hard spread cap and the soft 8% preference.
-   PRD FR-24 lists "missing bid or ask" and "spread cannot be calculated" as **hard rejects**. (From reading
-   the code; not yet observed off-hours — the sample below was taken in session and saw 1 zero spread in
-   8,389 contracts.)
-5. Callers of `validate_contract`: `routers/scan.py` (scan) and `routers/contracts.py:244` (Step 6 and the
-   Watchlist refresh). `augment.py` only mentions it in a docstring. **Auto-trade does not inherit the
-   scan's grade** (corrected in r2, round 1 H2):
-   - `auto_trader.maybe_fire_on_scan` (`auto_trader.py:2736`) fires the strategy the user *armed* from a
-     card. The scan's grade is not re-checked on the armed contract, but the scan IS a gate on *when* it
-     fires: `scan.py:2036` calls it only if some candidate is PASS (corrected after plan round 5).
-   - The armed contract can be a Step 6 pick.
-   - The only fire-time market check, `_market_is_open` (`:418`), probes whether a *stock* price comes
-     back, and one does off-hours too.
-   - Booking (`auto_trade_booking.py:366`) happens *after* the broker order.
-   So auto-trade needs its own gate (now phase `NO-LIVE-QUOTE`).
-6. `min_volume` is a user-facing Step 3 parameter ("Min option volume", `step-3-direction/page.tsx:299`),
-   in all four presets of `executionParamDefaults.ts`, and can be carried by saved search profiles and by a
-   scan's `contract_rules` (STEP6-SCAN-CONTRACT-RULES).
-7. **The PRD already says volume is soft.** FR-24 (hard) lists "open interest equals zero" and spread over
-   the hard threshold, not volume. FR-25 (soft) lists "daily volume below preferred threshold" and "open
-   interest below preferred threshold but above zero". Today's code is stricter than the spec on volume and
-   looser than it on missing quotes (item 4). My earlier review (finding 12) had this backwards.
-8. Tests that may pin the current behaviour (r2, re-derived by grep; the full suites are the arbiter).
-   - Backend (`backend/tests/`): `test_contract_validator.py`, `test_contracts_scoring.py`, `test_overrides.py`,
-     `test_step6_contract_rules.py`, `test_iv_null_wire.py`, `test_market_data_fixes.py`, `test_alternatives.py`,
-     `test_scan_endpoint.py`, `test_scan_iv_rank.py`, `test_scan_router_spreads.py`, `test_trade_plan.py`,
-     `test_integration.py`, `test_horizon_dte.py`.
-   - Frontend: `step-6-contracts/__tests__/contractRules.test.tsx` (LOOSE `min_volume: 20`),
-     `lib/__tests__/api.test.ts:147`, `__tests__/step6-topN.test.tsx`, `TradeCard/__tests__/*`,
-     `SendToBrokerDialog/__tests__/index.test.tsx`, `AutoTradeArm/__tests__/AutoTradeArm.test.tsx`,
-     `ScanLog/__tests__/*`.
-   - `tests/test_strategy_engine.py` is **not** relevant: its one match is a stock-bar volume test. r1
-     listed it wrongly.
+1. **The fabricated spread no longer exists.** `market.py:907-917` and `:1665-1676` (the two chain builders) drop a row
+   whose ask is not > 0; the fallback to `last` with `spread = 0.0` is gone. Off-hours rows carry the last close's
+   real two-sided quotes (NLQ plan §1, measured 0 of 4,868 rows with ask 0).
+2. **Every chain row carries `quoteLive`/`quoteState`** (`market.py:813-828`, `app/data/quote_liveness.py`).
+   Outside the session every row is `session_closed`, so `quoteLive` is False.
+3. **The scan rejects a non-live row outright.** `validate_contract(..., quote_mode="reject")` is the default
+   (`contract_validator.py:481-531`): `reject_reasons == ["no_live_quote"]` and no other rule is judged. So an
+   after-close scan has no PASS candidate and cannot reach `maybe_fire_on_scan`.
+4. **Auto-trade re-checks the exact option's quote at fire time** (`auto_trader._option_quote_state`,
+   `auto_trader.py:685-743`, called at `:2709` before the disarm): session closed → refused with the arm preserved, before any broker call.
+5. **Step 7's direct send fetches a fresh quote at send time** and, when it is not live, sends nothing without an
+   explicit per-contract confirm tick (NLQ plan §3e).
+6. **Step 6 / the Watchlist** grade a non-live row in `quote_mode="label"` (`contracts.py:309`): graded as live
+   on its **real** closing quote, then capped at CAUTION and flagged `no_live_quote`.
 
-### Corrections to the conversation that led here
+So the finding's premise (a fabricated spread graded as perfect) is gone, and every order path refuses or asks
+first when the quote is not live. What fix 1 still changes after the close: Step 6 / the Watchlist show volume
+1–49 contracts that today are `volume_too_low`, graded on their real closing spread and capped at CAUTION. That
+is the intended effect of fix 1 (PRD FR-25), on real numbers. **No merge hold remains**; the plan does not
+depend on decision `CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30` any more (NO-LIVE-QUOTE is on main).
 
-- The scan ran at **15:24 UTC (11:24 ET), mid-session** — its volumes were partial-day. "Same contract,
-  different verdict by time of day" holds for the scan (my review's finding 9 wrongly said the screenshots
-  were after the close).
-- Step 6's MSFT "A — Recommended" row (575C, REJECT 34) is **not** the scan's contract. The scan picked
-  **MSFT 515C** (contract score 50, CAUTION); Step 6 never lists it because `max_price` filters it out
-  (~$58 premium). That is the residual `contracts.py` already documents ("the card's contract can still be
-  absent here"). Out of scope here; noted under §7.
+## 1. What is true on main (48ff4ce9)
 
-## 2. Measurement (2026-09-30, 13:24 ET, in session)
+1. `contract_validator._hard_reject_reasons` (`contract_validator.py:123-178`), volume branch `:144-147`:
+   - `volume < hr["min_volume"]` (50) is a hard reject **unless** `volume == 0 and oi >= min_open_interest`.
+   - `oi < min_open_interest` (200) is a separate hard reject (`:148-149`).
+   - Result: volume 0 with OI 319 passes; volume 3 with OI 1,534 is rejected. The better-traded contract loses.
+   - Since NO-LIVE-QUOTE, `_hard_reject_reasons` is not called at all for a non-live row in reject mode
+     (`:527-533`).
+2. `_score_liquidity` (`:196-227`) raises **two** soft flags from one axis, `low_volume` (< 200) and
+   `low_open_interest` (< 1,000), at `:223-226`. `validate_contract` rejects at `max_soft_fail_count` = 3 flags
+   (`:579-583`). A long-dated contract usually carries both, so one further soft miss rejects it.
+3. `volume` is Tradier's session-to-date count (`market.py:920` and `:1679`, `int(c.get("volume") or 0)`).
+4. Consumers of the liquidity flag names (grep of `backend/app`, `frontend/` excluding tests, `llm-contexts/`):
+   - `validate_contract`: `soft_flags` and `len(soft_flags)` (`:579-580`);
+   - the score explanation: `components.liquidity.flags = liq_flags` (`:742`), rendered raw by
+     `frontend/components/molecules/ContractScoreExplanation/index.tsx:221-223` as "Rule notes: <flag>" (only
+     `iv_rank_elevated` gets special text). A merged flag renders as `thin_liquidity`; no number changes;
+   - `llm-contexts/22-contract-validation.md:221-223` (docs).
+   Nothing branches on `low_volume` / `low_open_interest`.
+5. Consumers of `min_volume` outside tests:
+   - `backend/config/contract_rules.yaml:18` (the default) — the phase's defect-marker probe;
+   - `contract_validator.py:146` (rule), `:374` (`_CONTRACT_OVERRIDES` key), `:613-620` (the blocker detail,
+     threshold = the floor), `:872` (echo);
+   - `backend/app/services/config_health.py:189` — key-presence/staleness only; after the YAML edit the
+     config-health banner reads stale until the backend restarts (expected, as for any YAML change);
+   - `frontend/lib/executionParamDefaults.ts:31` (`PARAM_DEFAULTS_POSITION`, shared by Position, Quarterly,
+     SemiAnnual and Annual), `:59` (Intraday), `:85` (Swing), `:115` (Custom);
+   - `frontend/app/(frame)/screener/step-3-direction/page.tsx:163-166` (field + hints), `:173-181` (block
+     comment), `:182-185` (Preferred hints);
+   - `frontend/lib/parsePipelineDiagnostics.ts:261` — labels a recorded `min_volume` override; reads no
+     default; unchanged;
+   - the seed profiles under `docs/search-profiles/` (§3 fix 1);
+   - `frontend/e2e/fixtures/generate_contract_boundaries.json` — a captured scorer wire whose recorded config
+     says `min_volume: 50.0`; its spec asserts spread inequalities only. Not regenerated (§7).
+6. **Step 3 presets reach the scan only when edited.** `buildOptionsScanRequestBody`
+   (`frontend/lib/resolveOptionsScanRequest.ts:92-121`) posts `scanOverrides`, which holds only user-edited keys.
+   So the backend YAML is what grades a default scan; the preset value is what Step 3 shows and what an edit
+   starts from. Both must move together (fix 1).
+7. Stored values that carry an explicit `min_volume` keep it (Q1 (b)): saved search profiles (browser), a scan's
+   stored `contract_rules`, and scheduled-scan entries' frozen request.
+8. `_load_config` is `lru_cache`d (`contract_validator.py:56`).
+
+## 2. Measurement (2026-09-30, 13:24 ET, in session; r5, unchanged — not re-measured, Kenneth chose (a) over (c))
 
 **Method:** 60 symbols drawn at random (seed 7) from the scan's names that reached an option chain.
 `GET /api/contracts` with calls, `limit=100`, `max_price=500`, and hold windows 5–15 / 15–45 / 45–60 / 98–105
@@ -110,245 +121,217 @@ position 148 (32), quarterly 268 (43), semi-annual 38 (8).
 3. **Semi-annual is thin for real.** Only 29 of 60 names even list a ~198-day expiry, and their median OI is
    16. Even with fixes 1 and 2, about 10 of those 29 have a gradeable contract. Loosening the OI floor to
    make Semi-annual look healthy would admit genuinely illiquid contracts, so this plan does **not** scale
-   the OI floor by DTE. The honest answer for Semi-annual is in §6 Q4, not in a lower bar.
+   the OI floor by DTE. The honest answer for Semi-annual is in §9 Q4, not in a lower bar.
 4. The review's idea of DTE-scaled *preferred* minimums is not supported by the data: OI grows with DTE up to
    quarterly and then collapses; volume is low everywhere. A merged flag (fix 2) does the work without
    inventing a DTE curve.
 
-## 3. Design (r5 — fixes 1 and 2 only; fix 3 split out)
 
-**Fix 3 moved to its own phase** on 2026-09-30, by Kenneth's call (decision
-`CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30`). It is the off-hours "no live quote" treatment; see
-`docs/superpowers/plans/2026-09-30-no-live-quote-plan.md` and phase `NO-LIVE-QUOTE`. It produced every high
-finding across plan rounds 1 and 2, and its input (what Tradier returns off-hours) has never been observed.
-This plan changes nothing about quotes or spreads, so the fabricated off-hours 0% spread (§1 item 4) is
-still built exactly as on main. **One accepted residual (round 3, finding 4):** fix 1 changes *which*
-fabricated-spread rows survive.
-- **Pre-market:** volume is 0, and the kept exemption already lets those rows through on main. No change.
-- **After the close and overnight:** volume keeps the day's count. Rows with volume 1–49 that main rejected
-  as `volume_too_low` now pass the hard gates with a fabricated 0% spread.
-- So an evening scan and Step 6 after the close show more contracts graded on a spread nobody measured.
-- **The blast radius reaches broker orders (corrected after plan round 5).** The scan's pick favours a
-  fabricated 0% spread (`scan.py:870-872`), Step 7 cards built from it can be armed regardless of contract
-  status (`AutoTradeArm/index.tsx:519`), a re-scan with any PASS candidate fires the armed order
-  (`scan.py:2036` → `maybe_fire_on_scan`) within `max_arm_age_minutes` (30), and `_market_is_open`
-  (`auto_trader.py:418`) is a price probe, not an hours test. Step 7's direct Place Limit/Market send is
-  reachable from the same cards. So after the close fix 1 can put a vol 1–49 / fabricated-spread contract
-  on a broker order.
-- **Therefore this phase does not merge to main until NO-LIVE-QUOTE has landed** (decision
-  `CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30`, Kenneth). On the branch the window reaches nobody; once
-  NO-LIVE-QUOTE's hard reject is on main the fabricated-spread rows are rejected before fix 1 matters.
-  This is an ordering constraint on the merge, not a code dependency, so neither phase lists the other in
-  `depends_on`.
+## 3. Design (fixes 1 and 2, as answered 2026-09-30; unchanged from r5 except where marked)
 
 **Fix 1 — volume is no longer a hard reject by default (FR-25; Q1 (b)).**
 - Default `min_volume` goes from 50 to 0:
-  - `backend/config/contract_rules.yaml`, `hard_reject.min_volume`, with its comment changed to "optional
-    hard floor; 0 = off (FR-25 treats volume as soft)";
-  - every row of `PARAM_DEFAULTS_PER_HORIZON` in `frontend/lib/executionParamDefaults.ts`. There are four
-    literals (:31, :59, :85, :115), but the test covers every horizon key: Intraday, Swing, Position,
-    Quarterly, SemiAnnual, Annual and Custom.
-- `_hard_reject_reasons` (`contract_validator.py:95-96`): the volume branch gains an explicit
-  `hr["min_volume"] > 0 and` guard.
-  - The guard changes nothing for integer volumes: `volume < 0` is never true. It only states the
-    "0 = off" meaning in code; the phase probe does not depend on it.
-  - The new YAML comment must not contain the string `min_volume: 50`, because the PROJECT_STATE defect
-    marker matches `min_volume: 50\b` in that file.
-  - The **zero-volume exemption stays** for an explicit floor above 0. Without a live-quote signal
-    (NO-LIVE-QUOTE) volume 0 off-hours cannot be told apart from no trades, and deleting the exemption
-    would reject every off-hours row for anyone with a floor.
-  - So for a user who opts into a floor, "vol 0 / OI ≥ 200 passes, vol 3 fails" stays as it is today. That
-    is a known, recorded residual that NO-LIVE-QUOTE revisits. At the default floor of 0 it disappears.
-- Step 3 (`step-3-direction/page.tsx:299-300`):
-  - the label becomes "Min option volume (0 = off)";
-  - the hint says it is an optional hard floor, off by default, because volume is scored softly under
-    Preferred Liquidity;
-  - the hint also says the figure is **session-to-date** volume (§1 item 3), not a full-day total, so with
-    a floor set, results change with the time of day;
-  - the `preferred_volume_min` hint (:319), which calls it "the hard 'Min option volume' floor above", is
-    reworded to match;
-  - the field, its `min: 0` and `CONTRACT_OVERRIDE_KEYS` stay.
-- Stored values are not rewritten; each of these keeps an explicit `min_volume` as its floor, and one
-  without the key gets the new default of 0:
-  - saved search profiles (browser);
-  - a scan's stored `contract_rules`;
-  - scheduled-scan entries' frozen `resolved_request` (`scan_schedule_scheduler.py:138`).
-
-  Step 3's `scanOverrides` holds only user-edited keys and is not persisted.
-- **Canonical profile seed (round 3, finding 5).** `docs/search-profiles/search-profiles-export.json` and the
-  identical `RAW` string in `docs/search-profiles/import-search-profiles.js:21` seed 18 profiles:
-  - `*_Loose_*` has `min_volume: 20`;
-  - Intraday and Swing `*_Restrictive_*` have 200;
-  - SemiAnnual `*_Restrictive_*` has 50;
-  - the Baselines have none.
-
-  After fix 1, every Loose profile would be *stricter* on volume than its Baseline. So the seed changes,
-  all in one commit.
-  - **JSON and JS:** `min_volume: 0` on the six Loose profiles, and their `updatedAt` moves to the build
-    date, per the README's convention for edited profiles (`README.md:69-71`). The JS `RAW` string stays
-    byte-identical to the JSON. Restrictive and Baseline profiles are untouched.
-  - **The xlsx** mirrors the JSON; its legend says so. Update:
-    - the six Baseline rows' Min Volume, 50 → 0 (they show the app default);
-    - the six Loose rows' Min Volume, 20 → 0;
-    - the legend's "SemiAnnual_Restrictive keeps volume at the Baseline floor (50)" → "keeps an explicit
-      50; the Baseline floor is now 0 (off)";
-    - the legend's "flagged 'low_volume'" and "flagged 'low_open_interest'" → "flagged 'thin_liquidity'
-      (volume and open interest together count as one soft miss)";
-    - the legend's Min Volume row → "optional hard floor; 0 = off".
-  - **README.md:**
-    - `:23` "min volume 50 (the Baseline floor)" → "an explicit min volume of 50 (the Baseline floor is now
-      0, off)";
-    - `:125` "0.30/20/75" → "0.30/0/75".
-  - Profiles already imported into the browser are **not** touched (settled in §6). Kenneth re-imports or
-    edits them if he wants the new Loose value.
-- `min_open_interest` (200) and `max_bid_ask_spread_pct` (0.20) are unchanged. They remain the liquidity
-  hard gates.
+  - `backend/config/contract_rules.yaml:18`, `hard_reject.min_volume: 0`, with the comment changed to
+    "optional hard floor; 0 = off (FR-25 treats volume as soft)". The comment must not contain the string
+    `min_volume: 50` (the phase's defect marker matches `min_volume: 50\b` in that file).
+  - the four literals in `frontend/lib/executionParamDefaults.ts` (`:31`, `:59`, `:85`, `:115`). The test covers
+    every `PARAM_DEFAULTS_PER_HORIZON` key: Intraday, Swing, Position, Quarterly, SemiAnnual, Annual, Custom.
+- `_hard_reject_reasons` (`contract_validator.py:146`): the volume branch gains an explicit
+  `hr["min_volume"] > 0 and` guard. It changes nothing for integer volumes (`volume < 0` is never true); it states
+  "0 = off" in code.
+  - The **zero-volume exemption stays** for an explicit floor above 0, so for a user who opts into a floor,
+    "vol 0 / OI ≥ 200 passes, vol 3 fails" stays as today (recorded residual). Its comment
+    (`:144-145`, "volume == 0 is Tradier's off-hours sentinel") is **r6: reworded** to what NO-LIVE-QUOTE measured
+    — the exemption is kept for an explicit floor, because a volume of 0 cannot be told apart from "no trades yet
+    this session"; off-hours rows are rejected or labelled by the quote-liveness rule, not by this branch. No
+    behaviour change.
+- Step 3 (`step-3-direction/page.tsx`):
+  - `:163` label → "Min option volume (0 = off)";
+  - `:164` hint → an optional hard floor, off by default because volume is scored softly under Preferred
+    Liquidity; the figure is **session-to-date** volume, so with a floor set, results change with the time of
+    day; it keeps the "Hard floor only…" sentence, reworded for fix 2 (below);
+  - `:166` (`min_open_interest` hint) and `:183` (`preferred_volume_min` hint, "Independent of the hard 'Min
+    option volume' floor above, which rejects outright") reworded to match;
+  - the field, its `min: 0` and the override key stay.
+- Stored values are not rewritten (§1 item 7): each keeps its explicit `min_volume`; one without the key gets 0.
+- **Canonical profile seed** (r5, round 3 finding 5). `docs/search-profiles/search-profiles-export.json` and the
+  identical `RAW` string in `docs/search-profiles/import-search-profiles.js:21` seed 18 profiles: six `*_Loose_*`
+  carry `min_volume: 20`; Intraday/Swing `*_Restrictive_*` 200; SemiAnnual `*_Restrictive_*` 50; Baselines none.
+  After fix 1 every Loose profile would be stricter on volume than its Baseline, so:
+  - **JSON and JS:** `min_volume: 0` on the six Loose profiles; their `updatedAt` moves to the build date
+    (`README.md:69-71` convention). The JS `RAW` string stays byte-identical to the JSON (checked by a script:
+    `JSON.parse` of `RAW` deep-equals the JSON file). Restrictive and Baseline profiles are untouched.
+  - **The xlsx** (`Bamendjou_Options_Search_Profiles.xlsx`) mirrors the JSON: the six Baseline rows' Min Volume
+    50 → 0; the six Loose rows' 20 → 0; the legend's "SemiAnnual_Restrictive keeps volume at the Baseline floor
+    (50)" → "keeps an explicit 50; the Baseline floor is now 0 (off)"; "flagged 'low_volume'" / "flagged
+    'low_open_interest'" → "flagged 'thin_liquidity' (volume and open interest together count as one soft
+    miss)"; the Min Volume legend row → "optional hard floor; 0 = off". Edited with `openpyxl` from a throwaway
+    install (not added to any requirements file); every other cell is checked unchanged by a before/after cell
+    dump.
+  - **README.md:** `:23` "min volume 50 (the Baseline floor)" → "an explicit min volume of 50 (the Baseline floor
+    is now 0, off)"; `:125` "0.30/20/75" → "0.30/0/75".
+  - Profiles already imported into a browser are not touched (settled 2026-09-30). Board item #187 (recalibrate
+    the 18 profiles) runs after this phase and may change these values again.
+- `min_open_interest` (200) and `max_bid_ask_spread_pct` (0.20) are unchanged; they remain the liquidity hard
+  gates.
 
 **Fix 2 — one liquidity soft flag (Q2).**
-- `_score_liquidity` (`contract_validator.py:145-176`, flags at :172-175) appends one `thin_liquidity` flag when either of
-  these holds:
-  - `pref_volume_min > 0 and volume < pref_volume_min`;
-  - `pref_oi_min > 0 and oi < pref_oi_min`.
-- It replaces `low_volume` and `low_open_interest`.
-- The score arithmetic is unchanged: volume and OI still each weigh half.
-- No UI or backend code reads the old flag names. I checked with grep over `frontend/` and `backend/app`;
-  the only consumer is `len(soft_flags)` at `:464`.
-- The reason stays visible through `detail["liquidity"]`, which already emits volume, OI and both preferred
-  minimums.
-- The Step 3 hints for `preferred_volume_min` and `preferred_oi_min` (:319, :321) say each "counts as one
-  soft miss". They are reworded: "volume and open interest together count as at most one soft miss".
-  The block comment above them (:309-317) is updated the same way.
+- `_score_liquidity` (`contract_validator.py:223-226`) appends one `thin_liquidity` flag when either
+  `pref_volume_min > 0 and volume < pref_volume_min` or `pref_oi_min > 0 and oi < pref_oi_min`. It replaces
+  `low_volume` and `low_open_interest`.
+- The score arithmetic is unchanged (volume and OI still each weigh half); `detail["liquidity"]` and
+  `explanation.components.liquidity` still carry volume, OI and both preferred minimums.
+- Step 3: the `preferred_volume_min` / `preferred_oi_min` hints (`:183`, `:185`) say each "counts as one soft
+  miss" → "volume and open interest together count as at most one soft miss"; the `min_volume` /
+  `min_open_interest` hints' "(each Preferred floor it misses counts as one)" → "(the two Preferred liquidity
+  floors together count as at most one)"; the block comment `:173-181` is updated the same way.
+- `llm-contexts/22-contract-validation.md`: only the volume floor (`:113`, `:187-188`), the kept exemption, the
+  merged flag (`:221-223`) and the "`volume=0` → `volume_too_low`" example (`:408`, `:427`). Other stale content
+  in that file is not this phase's.
 
-**Fix 4 — tests, mutations, docs.** Each test names its home file.
+## 4. Tests, mutations, docs
 
-*Backend, `backend/tests/test_contract_validator.py`* — **fixture rules (round 3, findings 2 and 3).**
-- Use the existing `_contract_with_expiry(40, …)` (`test_contract_validator.py:159-162`), not a new
-  helper. It gives:
-  - a computed expiry 40 days out, avoiding `_base_contract`'s past literal `2026-09-19` and 315C's real
-    198 DTE, which `max_dte: 90` rejects;
-  - bid 2.00 / ask 2.10 (4.9% spread);
-  - delta 0.45;
-  - `iv_rank` 30, snake_case, with no `iv_basis`, so it is judged as absolute against 55.
-    (`test_overrides._make_contract`'s camelCase `ivRank` is never read, and a missing rank adds
-    `no_iv_rank_data`.)
-  - vol 500 and OI 2,000.
+**Measured, not guessed (r6).** Fixes 1 and 2 were applied to a scratch worktree of this branch (YAML
+`min_volume: 0`; the two flags merged into `thin_liquidity`; nothing else) and the full backend suite was run on
+Python 3.11 (Telegram env vars unset): **13 failed, 7763 passed, 9 skipped.** Every failure is an assertion of
+the old default or the old flag names; there is no other kind. Each is handled below. **Rule for all of them:**
+an assertion's *intent* is kept. A test that used the default floor of 50 to exercise the volume rule is
+re-pointed at an explicit `overrides={"min_volume": 50}` (Q1 (b) keeps that floor available); a test of the soft
+flags gets the new name; nothing is deleted or weakened, and no fixture is changed except where named.
 
-  Call it with `stock_score=70`.
-- Every test overrides only the fields it is about, and asserts the **exact** `soft_flags` list, so a stray
-  flag cannot hide.
-
-The tests:
-- **AAPL-315C liquidity shape:** vol 3, OI 1,534, spread 1.2% (bid/ask chosen to give it), on the helper's
-  40-DTE base → `reject_reasons == []` at the default config, with no overrides.
-- At the default floor, vol 0 and vol 3 (everything else identical) → identical `reject_reasons` and
-  `soft_flags`. Scores are not compared: `int(3/200*60) == 0` makes them equal only by truncation.
-- With `overrides={"min_volume": 50}`:
-  - vol 3 → `volume_too_low`;
-  - vol 0 with OI ≥ 200 → no `volume_too_low` (the exemption is kept).
+*`backend/tests/test_contract_validator.py`* — new tests on `_contract_with_expiry(40, …)` (`:159-162`: expiry 40
+days out, bid 2.00 / ask 2.10, delta 0.45, `iv_rank` 30 with no basis, vol 500, OI 2,000), `stock_score=70`,
+each asserting the **exact** `soft_flags` list:
+- **AAPL-315C shape:** vol 3, OI 1,534, spread 1.2% (bid 2.00 / ask 2.025) → `reject_reasons == []` at the
+  default config.
+- At the default floor, vol 0 and vol 3 (all else equal) → identical `reject_reasons` and `soft_flags` (scores
+  not compared: `int(3/200*60) == 0`).
+- `overrides={"min_volume": 50}`: vol 3 → `volume_too_low`; vol 0 with OI ≥ 200 → no `volume_too_low`
+  (exemption kept); vol 0 with OI 150 → both `volume_too_low` and `open_interest_too_low` (kills a mutant that
+  drops the exemption's OI clause).
 - OI 150 → `open_interest_too_low`, at vol 0, 3 and 500.
-- `thin_liquidity` appears exactly once when vol < pref and OI < pref, when only vol < pref, and when only
-  OI < pref. No flag when both are at or above pref. `low_volume` and `low_open_interest` never appear.
-- **One axis costs one slot.** Base: vol 100 (< 200) **and** OI 500 (in [200, 1000)), so both liquidity
-  sub-conditions are below preference.
-  - With the spread in (8%, 20%) → `soft_flags == ["thin_liquidity", "spread_elevated"]` and
-    `reject_reasons == []`.
-    - Assert **only** `reject_reasons`, never `status`: this contract's weighted score is 44 (liquidity
-      30, spread 0, delta 75, DTE 97, IV 45), below `caution` 45. So its status is "REJECT" by score,
-      with no reasons, on the unmutated code.
-  - Adding delta 0.25 (in [0.20, 0.30)) → three flags → `"too_many_soft_failures" in reject_reasons`.
-  - Under mutation 3, the first case has three flags and `"too_many_soft_failures" in reject_reasons`, so
-    it goes red independently of the flag-name test.
-- **Score unchanged.** vol 100 / OI 500 → `breakdown.liquidity_score == 30`, an exact value. This kills a
-  merge that also changed the arithmetic; today's assertions only check `== 100` / `< 100`.
-- **Exemption keeps its OI clause.** `min_volume=50`, vol 0, OI 150 → both `volume_too_low` and
-  `open_interest_too_low`. This kills a mutant that drops `oi >= min_open_interest` from the exemption.
-  - Flag names verified: `spread_elevated` (`contract_validator.py:202`) and `delta_outside_preferred`
-    (`:222`). The order follows the liquidity + spread + delta concatenation at `:463`.
+- `thin_liquidity` exactly once when vol < pref and OI < pref, when only vol < pref, when only OI < pref; absent
+  when both ≥ pref; `low_volume` / `low_open_interest` never appear.
+- **One axis costs one slot:** vol 100, OI 500, spread in (8%, 20%) → `soft_flags == ["thin_liquidity",
+  "spread_elevated"]`, `reject_reasons == []` (assert reasons only, never status: its weighted score, 44, is
+  below caution 45 on the unmutated code — the implementer recomputes this and records it); adding delta 0.25 →
+  three flags → `"too_many_soft_failures" in reject_reasons`.
+- **Score unchanged:** vol 100 / OI 500 → `breakdown.liquidity_score == 30` exactly.
+- Existing NO-LIVE-QUOTE label-mode tests (both fail under the fixes):
+  - `test_label_mode_flag_does_not_count_as_a_soft_failure` (`:348-357`): its premise is "two real soft flags
+    plus the label stay below 3". With fix 2, vol 100 / OI 500 gives one flag. The fixture gains **one more
+    real soft miss** chosen so the live card is still `CAUTION` with exactly two flags (e.g. delta in
+    [0.20, 0.30) or a spread just above 8%; the implementer picks one, asserts the exact two-flag list, and
+    records the score). Every other assertion stays.
+  - `test_label_mode_still_applies_every_other_hard_rule` (`:360-367`): uses vol 1 as "the other hard rule";
+    re-pointed at `overrides={"min_volume": 50}` so `volume_too_low` is still the rule exercised.
 
-*Backend, `backend/tests/test_overrides.py`* — updated deliberately, one assertion at a time:
-- `:204` (`test_loose_tier_combined_override_…`): vol 25 at the default config now asserts
-  `volume_too_low` **not** in `reject_reasons`, while `open_interest_too_low` still is.
-- `:296-300` (`test_zero_volume_with_adequate_oi_is_not_rejected`): re-pointed at
-  `overrides={"min_volume": 50}`, so it pins the kept exemption.
-- `:310-314` (`test_low_nonzero_volume_is_rejected`): re-pointed at `overrides={"min_volume": 50}`, so it
-  pins that an explicit floor rejects vol 10.
-- Mutation 5 is killed by the `:296-300` test above.
-- Every positive `low_volume` / `low_open_interest` assertion (:158, :169, :191, :283, :290) →
-  `thin_liquidity`. Tests named `…still_flags_low_volume` / `…low_open_interest` are renamed.
-- Every **negative** assertion → `"thin_liquidity" not in …`, each checked to hold under fix 2. Left on the
-  old names they would pass vacuously:
-  - `:160`: vol 100 / OI 2000 with a lowered volume preference;
-  - `:171`: vol 2000 / OI 500 with `preferred_oi_min` 400;
-  - `:213-214`, `:231`, `:238`.
-- `:185-191` (`test_preferred_liquidity_overrides_do_not_mutate_cached_config`): the fixture moves to
-  `oi=2000`. With OI 500, `card_a` would carry `thin_liquidity` from OI alone, and the cache-mutation guard
-  would stop discriminating. After the change `card_a` has no `thin_liquidity` and `card_b` has it. This
-  test is added to mutation 3's kill list.
-- Docstrings:
-  - `:152` "above the hard default (50)" is corrected;
-  - `:195-201` "fails the DEFAULT hard floor on two axes (volume<50, oi<200)" → one axis (OI), matching
-    the `:204` edit;
-  - `:297` and `:311` mention the explicit `min_volume` 50 they now use;
-  - `:124` "passes default" stays true (vol 50 passes a floor of 0) and is left alone.
-- `test_min_volume_override_rejects_illiquid` (:123) keeps its meaning.
+*`backend/tests/test_overrides.py`* (all seven failures, plus the vacuous negatives):
+- `test_preferred_volume_min_override_removes_soft_flag` (`:246-256`), `test_preferred_oi_min_override_removes_soft_flag`
+  (`:258-267`), the two `…fractional_override_still_flags_…` tests (`:372-386`, renamed `…_still_flags_thin_liquidity`):
+  `low_volume` / `low_open_interest` → `thin_liquidity`. Each fixture already sets the other axis at or above
+  its preference (oi 2000 / vol 2000), so the positive and negative assertions both still discriminate.
+- `test_preferred_liquidity_overrides_do_not_mutate_cached_config` (`:280-287`): fixture `oi=500` → `oi=2000`, so
+  `card_a` carries no `thin_liquidity` from OI alone and the cache-mutation guard still discriminates; then
+  `low_volume` → `thin_liquidity`.
+- `test_loose_tier_combined_override_clears_both_hard_and_soft_liquidity_gates` (`:289-317`): the default card
+  no longer has `volume_too_low` (vol 25 ≥ floor 0); the assertion becomes `"volume_too_low" not in` with
+  `open_interest_too_low` still `in`; docstring "fails the DEFAULT hard floor on two axes" → one axis (OI); the
+  Loose card's negatives → `"thin_liquidity" not in`.
+- `test_low_nonzero_volume_is_rejected` (`:405-410`) and `test_zero_volume_with_adequate_oi_is_not_rejected`
+  (`:391-396`, passes but would pin nothing): both re-pointed at `overrides={"min_volume": 50}`, docstrings
+  updated.
+- `test_preferred_volume_min_zero_…` / `test_preferred_oi_min_zero_…` (`:319-335`) negatives →
+  `"thin_liquidity" not in` (each fixture's other axis is ≥ pref, so they still hold).
+- `test_min_volume_override_rejects_illiquid` (`:218-224`): "passes default" stays true; docstring untouched.
+- The `:247` docstring "above the hard default (50)" corrected.
 
-*Backend, others:*
-- `test_step6_contract_rules.py`: `_THIN` (vol 47, OI 162) is still rejected on OI; its soft count drops
-  from 2 to 1 with no status change. Edited only if an assertion names an old flag.
-- The rest of §1 item 8 runs as part of the full suite. Any failure is examined and fixed or justified in the
-  commit, never bulk-edited.
+*`backend/tests/test_step6_contract_rules.py`* (three failures; `_DUST` = vol 3 / OI 10):
+- `test_zero_liquidity_floors_reach_the_validator` (`:268-277`): its point is "a non-zero floor rejects, zero
+  floors do not". The non-zero baseline becomes an explicit `{"min_volume": 50}` scan (default `{}` now rejects
+  on OI only); the expected reason string stays `volume_too_low(1), open_interest_too_low(1)`.
+- `test_zero_floors_reach_the_validator_on_the_hold_window_path` (`:300-307`): same — baseline scan with
+  `{"min_volume": 50}`.
+- `test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures` (`:310-315`): its premise ("the two
+  Preferred-floor misses plus one more") is exactly what fix 2 changes. It is rewritten to the new rule: the
+  liquidity miss (one flag) plus **two** more soft misses (spread 0.30 on 2.50 = 12% → `spread_elevated`, plus a
+  delta in [0.20, 0.30) → `delta_outside_preferred`) → `too_many_soft_failures(1)`; the docstring says one
+  liquidity slot plus two others. The Step 3 hint the docstring cites is reworded in T3.
+- The comment at `:21-24` ("below the YAML floor on volume AND OI") → "below the YAML OI floor (and below the
+  former volume floor of 50)".
 
-*Frontend (Jest):*
-- `lib/__tests__/executionParamDefaults.minVolume.test.ts` (new) asserts `min_volume === 0` for every
-  `PARAM_DEFAULTS_PER_HORIZON` key, and that `min_open_interest` and `max_bid_ask_spread_pct` are unchanged.
-  It follows the pattern of `executionParamDefaults.preferredLiquidity.test.ts`.
-- `step-6-contracts/__tests__/contractRules.test.tsx` and `lib/__tests__/api.test.ts:147` pass explicit
-  `min_volume` values and are expected to stay green unchanged.
+*`backend/tests/test_contract_explanation.py`*:
+- `test_multi_blocker_fixture_shows_all_causes` (`:215-246`): it lists every blocker the explanation can show,
+  volume included; it passes `overrides={"min_volume": 50}` so `volume_too_low` stays one of them. Its inline
+  comment `# volume_too_low (< 50)` stays true.
+- `test_zero_overrides_disable_soft_checks` (`:114-136`): its negatives at `:132-133` → `"thin_liquidity" not in liq["flags"]`.
 
-*Mutations*, each of which must turn a named test red:
-1. The YAML default goes back to `min_volume: 50`. The AAPL-shape test in `test_contract_validator.py`
-   goes red.
-2. One horizon row in `executionParamDefaults.ts` goes back to 50. `executionParamDefaults.minVolume.test.ts`
-   goes red.
-3. Restore two flags (`low_volume` + `low_open_interest`). The exactly-once test, the soft-slot test and
-   `test_overrides.py:185-191` go red.
-4. The merged flag only fires on volume. The OI-only case goes red.
-5. Delete the zero-volume exemption. The `min_volume=50`, vol 0 cases in `test_contract_validator.py` and
-   `test_overrides.py:296-300` go red.
+*Frontend (Jest), T3:* `frontend/lib/__tests__/executionParamDefaults.minVolume.test.ts` (new, pattern of
+`executionParamDefaults.preferredLiquidity.test.ts`) asserts `min_volume === 0` for every
+`PARAM_DEFAULTS_PER_HORIZON` key and that `min_open_interest` (200) and `max_bid_ask_spread_pct` (0.20) are
+unchanged. Existing tests that pass explicit `min_volume` values (`contractRules.test.tsx`, `api.test.ts:147`,
+`contractGrading.test.ts`, `watchlist/__tests__/page.test.tsx`, …) are expected to stay green unchanged; full
+Jest is the arbiter.
 
-*Docs:*
-- CLAUDE.md needs no change.
-- `llm-contexts/22-contract-validation.md` (:113, :187-188, :221-223, :408-427) documents `min_volume: 50`,
-  the two old flags and "`volume=0` → `volume_too_low`".
-  - The edit is limited to the volume floor, the kept exemption and `thin_liquidity`.
-  - Other stale content in that file is not part of this phase and is logged in `open_questions` at build:
-    - a `_score_liquidity` snippet without its `<= 0` guards;
-    - "4+ soft failures" where the code rejects at 3;
-    - a YAML block missing `max_iv_abs` / `preferred_iv_abs_max`.
-- The seed-profile files: see fix 1.
-- FR-25 is now satisfied for volume. FR-24's missing-quote clause is NO-LIVE-QUOTE's job.
-- `contract_rules.yaml` comments are updated as above.
+*Mutations* (scratch only, each must turn a named test red):
+1. YAML default back to `min_volume: 50` → the AAPL-shape test.
+2. One horizon row in `executionParamDefaults.ts` back to 50 → `executionParamDefaults.minVolume.test.ts`.
+3. Restore the two flags → the exactly-once test, the one-axis-one-slot test, and
+   `test_preferred_liquidity_overrides_do_not_mutate_cached_config`.
+4. The merged flag fires on volume only → the OI-only case.
+5. Delete the zero-volume exemption → the `min_volume=50`, vol 0 / OI ≥ 200 cases (new test and
+   `test_zero_volume_with_adequate_oi_is_not_rejected`).
 
-*Operational:*
-- `_load_config` is `lru_cache`d (`contract_validator.py:45`), so the backend must restart to pick up the
-  YAML default. Since DOCC-4 (on main), the config-health poll flags that stale cache until the restart.
-- A persisted `scanResult` whose `contract_rules` lack `min_volume` is re-graded in Step 6 at the new
-  default of 0, while its cards were graded at 50. Step 6 and Step 7 disagree until the next scan; this is
-  accepted and needs no migration.
+*Operational:* `_load_config` is cached, so the backend must restart to pick up the YAML default; config health
+flags the stale cache until then. A persisted `scanResult` whose `contract_rules` lack `min_volume` is
+re-graded in Step 6 at the new default 0 while its cards were graded at 50; Step 6 and Step 7 disagree until the
+next scan. Accepted (r5).
 
-## 4. Out of scope (named, not done)
+## 5. Tickets (sequential; files disjoint)
 
-- DTE-scaled OI or preferred minimums (data does not support them; see §2 point 4).
-- Step 6 not listing the scan's own contract when `max_price` cuts it (MSFT 515C) — existing documented
-  residual; separate task if wanted.
-- Why IV rank 52 against a preferred max of 55 scores only 4–5/100 on IV attractiveness — worth a look,
-  separate task.
+| Ticket | Files (only these) | Done when |
+|---|---|---|
+| **T1 — backend: fixes 1 + 2** | `backend/config/contract_rules.yaml`; `backend/app/scoring/contract_validator.py`; the backend test files named in §4; `llm-contexts/22-contract-validation.md` | §4's backend tests written first and red for the predicted reason, then green; the five mutations each turn their named test red (scratch only, never committed); full backend suite (Python 3.11) green |
+| **T2 — seed profiles** | `docs/search-profiles/search-profiles-export.json`, `import-search-profiles.js`, `Bamendjou_Options_Search_Profiles.xlsx`, `README.md` | the six Loose profiles carry `min_volume: 0` with a new `updatedAt`; `RAW` deep-equals the JSON; xlsx cell dump differs only in the cells §3 names; README `:23`/`:125` edited |
+| **T3 — frontend: presets + Step 3 wording** | `frontend/lib/executionParamDefaults.ts`; `frontend/app/(frame)/screener/step-3-direction/page.tsx`; new `frontend/lib/__tests__/executionParamDefaults.minVolume.test.ts` | the new test red on main values, green after; mutation 2 red; typecheck clean; full Jest green |
+
+Commits (one per ticket, plus the repo trailers):
+- T1 `fix(contracts): volume is an optional hard floor (default 0) and liquidity is one soft flag (CONTRACT-LIQUIDITY-DTE T1)`
+- T2 `docs(profiles): Loose seed profiles drop their volume floor to 0, matching the new default (CONTRACT-LIQUIDITY-DTE T2)`
+- T3 `feat(step3): Min option volume defaults to 0 (off); liquidity hints name the merged soft miss (CONTRACT-LIQUIDITY-DTE T3)`
+
+## 6. Bookkeeping (PROJECT_STATE.json; coordinator only)
+
+- **This plan's record commit** (before plan round 6): `active_phase` → `CONTRACT-LIQUIDITY-DTE`; status
+  `in_progress`; `tracking_issue` 161; `plan` stays this file; decision
+  `CONTRACT-LIQUIDITY-DTE-REFRESH-STAGE-2026-10-10` added (Kenneth's option (a) on #161).
+- **`verify` is replaced** now, because T1 removes the defect marker (`min_volume: 50\b`) while T2 and T3 are
+  still to come, and `in_progress` with the marker gone is drift. New probe: `kind: absent`, path
+  `frontend/lib/__tests__/executionParamDefaults.minVolume.test.ts` (T3, the last ticket), pattern
+  `min_volume`. Absent today; present once T3 lands, when the status moves to `built`. PRESENCE ONLY: fix 1's
+  backend default and fix 2 are pinned by §4's tests and mutations, not by the probe.
+- **Rounds.** `audit_rounds` keeps the five historical plan rounds. The new plan stage numbers its rounds
+  continuously: round 6 = new-stage plan round 1, cap 3 (rounds 6–8). The code stage that follows has its own
+  cap of 3. `state.py` models one plan stage of at most three rounds (`plan_stage`) and cannot express a 5-round
+  first stage plus a second stage, so while this phase is active and not clean its hard-cap line ("STOP
+  AUDITING AND TELL KENNETH") stays on. That line is **retained and explained**, not silenced, exactly as for
+  NO-LIVE-QUOTE's scoped caps: the stage was opened by Kenneth's own answer on #161. No `plan_stage` field is
+  written (it would have to claim fewer rounds than were run).
+- After a clean code round: `audit_clean: true`, status stays `built` until merged; `shipped` only on merge.
+
+## 7. Out of scope (named, not done)
+
+- DTE-scaled OI or preferred minimums (data does not support them; §2 point 4).
+- Step 6 not listing the scan's own contract when `max_price` cuts it (MSFT 515C) — documented residual.
+- IV rank 52 vs preferred max 55 scoring only 4–5/100 — separate task.
 - The funnel's single "Score + contracts" row hiding `failed_score` vs `failed_contracts` — separate UI task.
-- Everything about quotes and spreads — fix 3 of r0–r2 — is now phase `NO-LIVE-QUOTE`
-  (`2026-09-30-no-live-quote-plan.md`), which carries the round-2 findings as its starting list.
-- ScanLog's reason parser mismatch (`[reason×N]` expected vs `reason(N)` emitted) — pre-existing, separate.
+- `frontend/e2e/fixtures/generate_contract_boundaries.json` keeps its captured `min_volume: 50.0`: it is a
+  recorded wire of a scorer run, its spec asserts spread inequalities only, and regenerating it is a separate
+  e2e task (#175 covers disabled e2e coverage).
+- Re-measuring the liquidity-by-DTE sample after NO-LIVE-QUOTE (Kenneth's option (c), not chosen).
+- Everything about quotes and spreads (NO-LIVE-QUOTE, shipped).
 
-## 5. Expected effect
+## 8. Expected effect (r5, unchanged)
 
 On the §2 sample (optimistic, see caveats): names with a gradeable contract roughly Swing 9 → 28,
 Position 19 → 35, Quarterly 28 → 48, Semi-annual 3 → 10 of 29. The sample was taken in session, so it
@@ -356,7 +339,8 @@ measures fixes 1 and 2 alone; the split-off fix 3 does not change these numbers.
 stock-score gates (`min_stock_score` 55 cut 97 of the 148 contract-stage names in the 2026-09-30 scan), which
 this plan does not touch. Expect Semi-annual scans to stay small.
 
-## 6. Questions for Kenneth
+
+## 9. Questions for Kenneth (answered)
 
 **ANSWERED 2026-09-30 (decision `CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30`): all four recommendations —
 Q1 (b), Q2 yes, Q3 (a) in scan/auto-trade with a label-only treatment in Step 6/Watchlist, Q4 (a).**
@@ -378,7 +362,8 @@ hard floor; profiles are not rewritten.
   contracts land in the liquid ~100–150 day band and are rolled; (c) steer long horizons to Stocks mode.
   Recommendation: **(a) now**, (b) as a separate measured task if you want it.
 
-## 7. Loop
+
+## 10. Loop — first plan stage (r1–r5, history, unchanged)
 
 - **Rounds so far:**
   - Round 1 (r1): 3 high, 7 medium, 6 low, all fixed in r2.
@@ -447,3 +432,10 @@ hard floor; profiles are not rewritten.
   - Fix 1 is pinned by a new `already_shipped` entry, "min_volume default 0 (optional floor)", with its own
     `present` probe on `min_volume: 0\b` in `contract_rules.yaml` (`state.py:763-770`).
   - After a clean code round: `shipped`, with `audit_clean` true.
+
+## 11. Loop — second plan stage (r6, opened by Kenneth on #161, 2026-10-10)
+
+- Cap 3 plan rounds (rounds 6–8), then tickets T1–T3, then a code stage with its own cap of 3.
+- Auditor brief restricted to gate-level findings (audit_rule clause 1), as r5's brief-defect note requires.
+- §10's last line ("Code stage starts at round 6") is superseded: round 6 is this stage's first plan round, and
+  §10's references to §1/§3 are to r5's text, not to this revision's.
