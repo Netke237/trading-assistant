@@ -15,7 +15,7 @@ dte_holding_multiplier: 2.0
 
 # Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
 hard_reject:
-  min_volume: 50                # contracts per day — below this = illiquid
+  min_volume: 0                 # optional hard floor; 0 = off (FR-25 treats volume as soft)
   min_open_interest: 200        # open interest — below this = illiquid
   max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
   min_delta: 0.20               # absolute delta — below this = too far OTM
