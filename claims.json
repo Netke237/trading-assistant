@@ -21,20 +21,6 @@
         }
       ],
       "task": "TRADIER-GOVERNOR"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/agent-self-merge-1bcca909",
-      "claimed_at": "2026-10-11T11:52:43Z",
-      "expires_at": "2026-10-11T15:02:24Z",
-      "note": "User explicitly reassigned active claim in this chat: correct, push and merge PR #219",
-      "previous": [
-        {
-          "branch": "board/agent-self-merge-43c45c00",
-          "claimed_at": "2026-10-11T10:44:47Z"
-        }
-      ],
-      "task": "AGENT-SELF-MERGE"
     }
   ]
 }
