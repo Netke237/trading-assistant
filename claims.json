@@ -29,6 +29,14 @@
       "expires_at": "2026-10-11T13:47:01Z",
       "note": "User explicitly requested fix and merge PR #219 and refresh Board #151 in this chat",
       "task": "AGENT-SELF-MERGE"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/stock-pres-p2-position-de44d008",
+      "claimed_at": "2026-10-11T10:55:51Z",
+      "expires_at": "2026-10-11T13:55:51Z",
+      "note": "Resume interrupted Position task #147 and ticket #208 after usage limit",
+      "task": "STOCK-PRES-P2-POSITION"
     }
   ]
 }
