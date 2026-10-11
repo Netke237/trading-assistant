@@ -2620,8 +2620,8 @@
       ],
       "summary": "Position page + StockPositionCard in the Options layout per proposal 02; every mapped item kept; approved NEW items only.",
       "name": "Approved Stocks Position presentation, all mapped information and execution behavior preserved",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "branch": "board/stock-pres-p2-position-de44d008",
       "plan": "docs/superpowers/plans/2026-10-11-stock-pres-p2-plan.md",
       "verify": {
@@ -2630,7 +2630,7 @@
         "pattern": "presentation === 'position'",
         "note": "Presence only: opt-in Position variant exists; checked mapping, behavioral regressions and independent code audit establish preservation."
       },
-      "note": "Recovered interrupted #208 on board/stock-pres-p2-position-de44d008. Plan round 1 clean; bounded Position-only 1200px gate extension independently clean at plan follow-up round 2. Build 5cd6b8f9; all 31 mapping rows checked. Source/calculation/send tests and numerical pins unchanged except authorized viewport boundary assertion. Current main integrated; state conflict resolved using latest main plus this phase only. Code audit pending. At 1200 the existing context rail narrows the workspace; prose wraps and qualification stacks, all values remain readable without overflow.",
+      "note": "Built audit-clean, unmerged. Recovery from interrupted #208; implementation 5cd6b8f9 on board/stock-pres-p2-position-de44d008. Plan round 1 clean; bounded Position-only 1200px allowance independently cleared in plan round 2. Code round 1 (overall round 3) clean on integrated 4ecfdf0f..99a090ff, all 11 files reviewed, zero gate findings. Main merged with only shared state JSON conflict, resolved with latest main plus this phase. All 31 mapping rows checked. Typecheck, full Jest 232 suites/4950 tests, browser 2/2 at 1200/1920 and independent 132 focused tests pass. Existing trading assertions/numeric pins unchanged except authorized viewport test. Browser previews inspected; context rail narrows primary column at 1200, causing readable wrapping and stacked qualification without overflow. PR and board notification next; no merge authorized in this chat.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
@@ -2653,6 +2653,17 @@
           "findings": [],
           "fixes": [],
           "outstanding": []
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/position_code_audit",
+          "reviewed": "4ecfdf0f6e67bf4b7eddd7ece589955a9feb0c64..99a090ffe6db1cc1650fcaa16cb5034ae425a28f; complete 11-file integrated diff",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "evidence": "13 focused Jest suites / 132 tests passed independently; state.py no drift; confidence scales, captured scan provenance, chronology/invalidation, directional allocated race weights, embedded controls and unchanged handlers/payloads checked."
         }
       ],
       "implementation_commit": "5cd6b8f9",
@@ -2662,8 +2673,14 @@
       "mapping_checked": 31,
       "validation": {
         "frontend_typecheck": "passed",
-        "jest": "231 suites / 4942 tests passed before integrating current main",
-        "browser": "2/2 native Chromium at 1200/1920; no overflow, navigation/disclosures, exact save qty/entry/stop/method/ladder parity; six visual captures inspected"
+        "jest": "232 suites / 4950 tests passed after integrating origin/main 4ecfdf0f",
+        "browser": "2/2 native Chromium at 1200/1920; no overflow, navigation/disclosures, exact save qty/entry/stop/method/ladder parity; six visual captures inspected",
+        "independent_focused_jest": "13 suites / 132 tests passed"
+      },
+      "code_audit_clean": true,
+      "code_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
       }
     }
   ],
