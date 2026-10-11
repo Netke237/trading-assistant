@@ -4351,6 +4351,11 @@
       "q": "Board #161: nothing was built on the branch; main moved ~500 commits and NO-LIVE-QUOTE rewrote contract selection since plan r5. Build how: (a) refresh r5 onto main keeping only fixes 1+2 as answered 2026-09-30, check what NO-LIVE-QUOTE covers, one NEW plan stage (cap 3), then tickets, build, code audit (cap 3); (b) build from r5 with mechanical re-basing only; (c) re-measure first, then (a)?",
       "a": "Kenneth, 2026-10-10, untagged comment on #161 after the questions, needs-kenneth removed: 'I follow your recommendation a'. One new plan stage opened (cap 3), historical rounds not reset (audit_rounds keeps the five first-stage rounds; new rounds number from 6). Item-body wording (question 2) left to Kenneth.",
       "by": "Kenneth 2026-10-10"
+    },
+    {
+      "id": "AGENT-SELF-MERGE-2026-10-11",
+      "q": "Should agents keep stopping at waiting-merge for Kenneth to approve every audited PR?",
+      "a": "Kenneth, 2026-10-11 (in chat): no. Agents merge their own PR without asking when every condition in docs/agents/board.md step 7 holds -- own claimed item, not draft, no needs-kenneth/blocked/hold; clean independent plan + code audit recorded under audit_rule; head unchanged since the clean round except main merges with PROJECT_STATE-only conflicts and the merge-record commit; MERGEABLE and every CI check green on the exact head, with one re-run of failed jobs allowed for an infrastructure flake (e.g. next/font Google Fonts download) or an already-logged flaky test; merge recorded on the branch first; gh pr merge --merge only (never --auto/--admin/--squash/--rebase, never a push to main). Any failed condition -> waiting-merge/blocked/needs-kenneth as before. Option chosen: 'Strict + flake retry'. Supersedes the 'never merge' limit of BOARD-WORKER-2026-10-10 and ticket-orchestration.md's 'never merge without Kenneth's explicit go'."
     }
   ],
   "pending_kenneth": [
