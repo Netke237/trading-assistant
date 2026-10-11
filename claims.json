@@ -7,14 +7,6 @@
       "expires_at": "2026-10-11T16:53:23Z",
       "note": "",
       "task": "STOCK-PRES-P2-POSITION"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/kenneth-a4-codex-skill-prs-4421a9e1",
-      "claimed_at": "2026-10-11T13:54:24Z",
-      "expires_at": "2026-10-11T16:54:26Z",
-      "note": "",
-      "task": "KENNETH-A4-CODEX-SKILL-PRS"
     }
   ]
 }
