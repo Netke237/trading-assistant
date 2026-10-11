@@ -15,6 +15,14 @@
       "expires_at": "2026-10-11T03:12:41Z",
       "note": "Board #169: new plan stage (overdraft redesign) per Kenneth 2026-10-10",
       "task": "TRADIER-GOVERNOR"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/screen-labels-19-20-156bd346",
+      "claimed_at": "2026-10-11T01:06:24Z",
+      "expires_at": "2026-10-11T04:06:24Z",
+      "note": "Board #163: resume abandoned item; confirm Kenneth's two answers (only a [codex] comment records them)",
+      "task": "SCREEN-LABELS-19-20"
     }
   ]
 }
