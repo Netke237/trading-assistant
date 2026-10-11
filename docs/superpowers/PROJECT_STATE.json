@@ -2586,7 +2586,7 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "in_progress",
-      "audit_rounds": 5,
+      "audit_rounds": 6,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2602,7 +2602,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Plan round 4 (new stage round 1): R4-G1 fixed in r5. Plan round 5 (new stage round 2): R5-G1, R5-G2 fixed in r6; round 6 is the LAST of this stage. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "note": "2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
       "audit_history": [
         {
           "round": 1,
@@ -2673,11 +2673,31 @@
           ],
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 6,
+          "stage": "plan",
+          "stage_round": 3,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-11",
+          "scope": "git diff ded2e378..6562920f -- the plan (r6: R5-G1/R5-G2 fixes) and interactions with the plan and code; range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_notes": [
+            "Plan text 'the order is refused' for D during a 429 cooldown holds only for the option branch; the stock branch's fetch_price_async catches RateLimited and takes today's 429 fallback. Not fixed in-branch (below gate); implementers keep each site's existing handling.",
+            "The booking's quote fetch stays a normal admission and can wait behind queued bulk waiters (tens of seconds); the stored value is still the save-time quote as defined."
+          ],
+          "clean": true
         }
       ],
       "plan_stage": {
-        "rounds": 3,
-        "closed_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10"
+        "rounds": 6,
+        "closed_by": "clean",
+        "first_stage": {
+          "rounds": 3,
+          "closed_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10"
+        }
       },
       "decisions": [
         "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI.",
