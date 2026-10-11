@@ -2586,7 +2586,7 @@
       "id": "STOCK-PRES-P5-PREBREAKOUT",
       "name": "Pre-Breakout setup scanner in the Options layout: how-to, row details (why it's a setup, confidence breakdown, Fib swing, mini chart); thresholds tied to the scan; presentation only",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "STOCK-PRES-P1-BACKEND-EVIDENCE"
@@ -2599,14 +2599,14 @@
       ],
       "tracking_issue": 150,
       "plan": "docs/superpowers/plans/2026-10-11-stock-pres-p5-prebreakout-plan.md",
-      "branch": "board/stock-pres-p5-prebreakout-2e4085d3",
+      "branch": "board/stock-pres-p5-prebreakout-f3563f64",
       "verify": {
         "kind": "absent",
         "path": "frontend/app/(frame)/screener/step-4-prebreakout/__tests__/rowDetails.test.tsx",
         "pattern": "Why it's a setup",
         "note": "PRESENCE ONLY of the LAST ticket's (T3) row-details test."
       },
-      "note": "2026-10-11 taken from the Board (#150) on board/stock-pres-p5-prebreakout-2e4085d3 from main 48ff4ce9; moved here from task_backlog. Plan written: T1 CandlestickChart optional priceLines (additive), T2 Options layout + how-to + actions card + thresholds tied to the scan (today a remount shows default thresholds against rows judged on other ones), T3 row details. Plan round 1 next. || Backlog summary: Pre-Breakout page layout; row details (why it is a setup, confidence breakdown, mini chart, fib swing); three tables and all controls kept. Must not pre-empt reconciliation ticket 10 (Pre-Breakout exit semantics, STOCKS-HORIZON-T4)."
+      "note": "2026-10-11 PLAN ROUND 1 (plan round 1 of 3): NOT CLEAN, 3 gate findings, all fixed in the plan at 7f97995d — F1 the Pre-Breakout description's proximity % reads the scanned params while rows show; F2 (pre-existing) Set Alert passes the clicked row's direction to CompositeAlertDialog (a remount after a direction switch saved a wrong-direction watch); F3 thresholds remembered as the backend applied them (Math.trunc on int keys) and printed exactly (fmtThreshold), off-step tests. Resumed 2026-10-11 08:36 UTC on board/stock-pres-p5-prebreakout-f3563f64 after the previous take's claim expired. Plan round 2 (fixes only) next. || 2026-10-11 taken from the Board (#150) on board/stock-pres-p5-prebreakout-2e4085d3 from main 48ff4ce9; moved here from task_backlog. Plan written: T1 CandlestickChart optional priceLines (additive), T2 Options layout + how-to + actions card + thresholds tied to the scan (today a remount shows default thresholds against rows judged on other ones), T3 row details. Plan round 1 next. || Backlog summary: Pre-Breakout page layout; row details (why it is a setup, confidence breakdown, mini chart, fib swing); three tables and all controls kept. Must not pre-empt reconciliation ticket 10 (Pre-Breakout exit semantics, STOCKS-HORIZON-T4)."
     }
   ],
   "already_shipped": [
