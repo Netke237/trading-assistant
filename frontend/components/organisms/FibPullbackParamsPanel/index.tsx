@@ -90,7 +90,7 @@ export function FibPullbackParamsPanel({ params, setParams, onReset }: Props) {
           <div className={styles.paramInput}>
             <input
               type="number"
-              value={Math.round(params.fibTolerancePct * 100 * 10) / 10}
+              value={Number((params.fibTolerancePct * 100).toFixed(6))}
               min={0.5} max={5.0} step={0.1}
               onChange={(e) =>
                 setParams((p) => ({ ...p, fibTolerancePct: Number(e.target.value) / 100 }))

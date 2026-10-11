@@ -14,7 +14,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
   CandlestickSeries,
+  LineStyle,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type Time,
 } from 'lightweight-charts';
@@ -34,6 +36,12 @@ interface CandlestickChartProps {
   className?: string;
   showToggles?: boolean;
   defaultIndicators?: IndicatorType[];
+  /**
+   * Optional horizontal price lines on the candle series (e.g. a swing high or
+   * a Fibonacci level). Absent or empty → no line is drawn. Entries whose
+   * `price` is not a finite number are skipped.
+   */
+  priceLines?: { price: number; title: string }[];
 }
 
 /** Read a CSS custom property off :root. */
@@ -50,6 +58,7 @@ export function CandlestickChart({
   className,
   showToggles = true,
   defaultIndicators = ['volume', 'rsi'],
+  priceLines,
 }: CandlestickChartProps) {
   const theme = useThemeStore((s) => s.theme);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -164,6 +173,42 @@ export function CandlestickChart({
     );
     chartRef.current?.timeScale().fitContent();
   }, [cleanCandles, chartVersion]);
+
+  // Price lines — keyed on the candle series lifecycle (chartVersion, as the
+  // data effect) and on the array's content, not its identity, so a caller
+  // passing a fresh literal each render does not churn the lines.
+  // chartVersion 0 is the mount pass: the lifecycle effect has just created
+  // the series and bumped chartVersion, so this effect re-runs on the next
+  // render anyway — skipping it avoids a create → remove → create on mount.
+  const priceLinesKey = JSON.stringify(priceLines ?? []);
+  useEffect(() => {
+    const candle = candleSeriesRef.current;
+    if (!candle || chartVersion === 0) return;
+    const entries = JSON.parse(priceLinesKey) as { price: number; title: string }[];
+    if (entries.length === 0) return;
+    const color = token('--accent');
+    const handles: IPriceLine[] = [];
+    for (const { price, title } of entries) {
+      if (typeof price !== 'number' || !Number.isFinite(price)) continue;
+      handles.push(
+        candle.createPriceLine({
+          price,
+          title,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+        }),
+      );
+    }
+    return () => {
+      // The chart-lifecycle cleanup (declared earlier, so it runs first on
+      // unmount / theme rebuild) has already removed the whole chart and
+      // repointed the ref; only a still-live series has lines to remove.
+      if (candleSeriesRef.current !== candle) return;
+      for (const h of handles) candle.removePriceLine(h);
+    };
+  }, [priceLinesKey, chartVersion]);
 
   const indicatorData = useMemo(
     () => ({

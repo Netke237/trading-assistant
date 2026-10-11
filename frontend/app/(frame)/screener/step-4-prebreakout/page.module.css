@@ -1,8 +1,26 @@
 .main { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
 .header { display: flex; flex-direction: column; gap: 4px; }
-.inputRow { display: flex; gap: 10px; align-items: flex-start; }
+
+/* STOCK-PRES-P5-PREBREAKOUT: the Options layout, as P4's step-4-stocks —
+ * main column (the mode's description, table, empty state) + side column
+ * ("Scan": symbols, Run Scan, the mode's parameters; "What you can do"). */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.stack, .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel {
+  padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: var(--bg-surface); display: flex; flex-direction: column; gap: 12px;
+}
+.cardTitle { margin: 0; }
+
+/* Copied from the Options pages' "How this page works" (step-7-trade-card). */
+.pageExplanation { font-size: 12px; color: var(--text-secondary); }
+.pageExplanation > summary { cursor: pointer; color: var(--accent); }
+.pageExplanation[open] > summary { margin-bottom: var(--space-2); }
+
+/* Inside the side "Scan" card: textarea and Run Scan stacked, full width. */
+.inputRow { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .symbolInput {
-  flex: 1; padding: 8px 10px; font-size: 12px;
+  width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 12px;
   border: 1px solid var(--border-subtle); border-radius: 6px;
   background: var(--bg-surface); color: var(--text-primary);
   resize: vertical; font-family: inherit;
@@ -11,13 +29,16 @@
 .runBtn {
   padding: 8px 16px; border: 1px solid var(--accent); border-radius: 6px;
   background: var(--accent); color: var(--accent-fg); cursor: pointer; font-size: 13px;
-  white-space: nowrap; align-self: flex-end;
+  white-space: nowrap; align-self: stretch;
 }
 .runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 .tableWrap { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
 .tableHeader, .tableRow {
   display: grid;
-  grid-template-columns: 52px 80px 32px 80px 80px 72px 90px 80px;
+  /* today's pixel widths as fr shares, so the table fits the main column at the 1280px minimum */
+  grid-template-columns:
+    minmax(0, 52fr) minmax(0, 80fr) minmax(0, 32fr) minmax(0, 80fr)
+    minmax(0, 80fr) minmax(0, 72fr) minmax(0, 90fr) minmax(0, 80fr);
   gap: 8px; align-items: center; padding: 6px 12px;
 }
 .tableHeader { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
@@ -65,7 +86,9 @@
 .fibTableHeader,
 .fibTableRow {
   display: grid;
-  grid-template-columns: 52px 80px 32px 80px 72px 72px 72px 32px;
+  grid-template-columns:
+    minmax(0, 52fr) minmax(0, 80fr) minmax(0, 32fr) minmax(0, 80fr)
+    minmax(0, 72fr) minmax(0, 72fr) minmax(0, 72fr) minmax(0, 32fr) minmax(0, 28fr);
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -152,3 +175,32 @@
   cursor: pointer;
 }
 .resetBtn:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+/* ── STOCK-PRES-P5-PREBREAKOUT T3: row details (Pre-Breakout and Fib) ── */
+/* The Pre-Breakout table gains a trailing ▸/▾ column (the Fib grid above has
+ * it too); the Pullback table, which shares .tableHeader/.tableRow, does not. */
+.tableHeader.withDetails, .tableRow.withDetails {
+  grid-template-columns:
+    minmax(0, 52fr) minmax(0, 80fr) minmax(0, 32fr) minmax(0, 80fr)
+    minmax(0, 80fr) minmax(0, 72fr) minmax(0, 90fr) minmax(0, 80fr) minmax(0, 28fr);
+}
+.detailsBtn {
+  justify-self: end;
+  padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px;
+  background: transparent; cursor: pointer; color: var(--text-secondary); font-size: 12px; line-height: 1;
+}
+.detailsBtn:hover, .detailsBtn[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+.details {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;
+  padding: 12px; border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
+}
+.details:last-child { border-bottom: none; }
+.detailsSection { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.detailsTitle { margin: 0; }
+.breakdownRow {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; gap: 8px; align-items: center;
+}
+.breakdownLabel { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.breakdownBar { height: 6px; border-radius: 3px; background: var(--border-subtle); overflow: hidden; }
+.breakdownFill { height: 100%; background: var(--accent); }

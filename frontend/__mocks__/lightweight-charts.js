@@ -21,6 +21,7 @@ function makeSeriesApi(seriesOptions) {
     setData: jest.fn(),
     applyOptions: jest.fn(),
     createPriceLine: jest.fn(),
+    removePriceLine: jest.fn(),
     priceToCoordinate: jest.fn(() => (api.__removed ? null : 100)),
   };
   return api;
@@ -106,4 +107,7 @@ const createChart = jest.fn((_container, options) => {
   };
 });
 
-module.exports = { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries };
+// Mirrors the real library's LineStyle enum values.
+const LineStyle = { Solid: 0, Dotted: 1, Dashed: 2, LargeDashed: 3, SparseDotted: 4 };
+
+module.exports = { createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, LineStyle };
