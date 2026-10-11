@@ -88,7 +88,7 @@
   display: grid;
   grid-template-columns:
     minmax(0, 52fr) minmax(0, 80fr) minmax(0, 32fr) minmax(0, 80fr)
-    minmax(0, 72fr) minmax(0, 72fr) minmax(0, 72fr) minmax(0, 32fr);
+    minmax(0, 72fr) minmax(0, 72fr) minmax(0, 72fr) minmax(0, 32fr) minmax(0, 28fr);
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -175,3 +175,32 @@
   cursor: pointer;
 }
 .resetBtn:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+/* ── STOCK-PRES-P5-PREBREAKOUT T3: row details (Pre-Breakout and Fib) ── */
+/* The Pre-Breakout table gains a trailing ▸/▾ column (the Fib grid above has
+ * it too); the Pullback table, which shares .tableHeader/.tableRow, does not. */
+.tableHeader.withDetails, .tableRow.withDetails {
+  grid-template-columns:
+    minmax(0, 52fr) minmax(0, 80fr) minmax(0, 32fr) minmax(0, 80fr)
+    minmax(0, 80fr) minmax(0, 72fr) minmax(0, 90fr) minmax(0, 80fr) minmax(0, 28fr);
+}
+.detailsBtn {
+  justify-self: end;
+  padding: 2px 6px; border: 1px solid var(--border-subtle); border-radius: 4px;
+  background: transparent; cursor: pointer; color: var(--text-secondary); font-size: 12px; line-height: 1;
+}
+.detailsBtn:hover, .detailsBtn[aria-expanded='true'] { border-color: var(--accent); color: var(--accent); }
+.details {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;
+  padding: 12px; border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-surface));
+}
+.details:last-child { border-bottom: none; }
+.detailsSection { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.detailsTitle { margin: 0; }
+.breakdownRow {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; gap: 8px; align-items: center;
+}
+.breakdownLabel { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.breakdownBar { height: 6px; border-radius: 3px; background: var(--border-subtle); overflow: hidden; }
+.breakdownFill { height: 100%; background: var(--accent); }

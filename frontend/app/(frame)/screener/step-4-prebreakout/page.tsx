@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { Fragment, useState, useCallback, useEffect, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api } from '@/lib/api';
-import type { PositionCardData } from '@/types/stockDomain';
+import type { PositionCardData, PreBreakoutConfidenceBreakdown, FibSwing } from '@/types/stockDomain';
 import { CompositeAlertDialog } from '@/components/organisms/CompositeAlertDialog';
 import {
   PreBreakoutParamsPanel,
@@ -33,6 +33,7 @@ import {
   truncPreBreakoutInts,
   truncFibInts,
 } from './scanThresholds';
+import { PreBreakoutRowDetails, FibRowDetails, detailsId } from './PreBreakoutRowDetails';
 
 type ScanRowMetrics = {
   atr_ratio?: number;
@@ -46,7 +47,10 @@ type ScanRowMetrics = {
   fib_dist_pct?: number | null;
   [key: string]: number | boolean | string | null | undefined;
 };
-type ScanRow = { symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics };
+type ScanRow = {
+  symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics;
+  confidence_breakdown?: PreBreakoutConfidenceBreakdown | null;
+};
 type ScanMode = 'prebreakout' | 'pullback' | 'fib';
 
 type FibScanRow = {
@@ -56,6 +60,7 @@ type FibScanRow = {
   fib_dist_pct: number | null;
   at_level: boolean;
   confidence: number;
+  fib_swing?: FibSwing | null;
 };
 
 const SECTOR_LABELS: Record<string, string> = {
@@ -112,6 +117,16 @@ export default function Step4PreBreakoutPage() {
   // kept from a scan in the other direction must not save an opposite watch.
   const [alertTarget, setAlertTarget]       = useState<{ symbol: string; direction: string } | null>(null);
   const isFirstRender                       = useRef(true);
+  // T3: the one expanded Pre-Breakout / Fib row (by symbol). Changing mode or a
+  // new result set closes it -- during render (React's "adjust state when a
+  // prop changes" pattern), so a row of the other table or of the new result
+  // set never mounts its details, even for one frame.
+  const [expanded, setExpanded]             = useState<string | null>(null);
+  const [expandedFor, setExpandedFor]       = useState({ scanMode, preResults, fibResults });
+  if (expandedFor.scanMode !== scanMode || expandedFor.preResults !== preResults || expandedFor.fibResults !== fibResults) {
+    setExpandedFor({ scanMode, preResults, fibResults });
+    setExpanded(null);
+  }
 
   // R2-3: the backend applies the integer keys with Python int() (truncation),
   // so the panels store them truncated: what is shown is what is sent and applied.
@@ -229,6 +244,23 @@ export default function Step4PreBreakoutPage() {
   // rows are in memory, the live inputs otherwise (F1, R2-1).
   const preDescParams = sorted.length > 0 ? scanned : params;
   const fibDescParams = fibResults.length > 0 ? fibScanned : fibParams;
+
+  // T3: the ▸/▾ toggle in the last column of the Pre-Breakout and Fib tables.
+  const detailsToggle = (table: 'prebreakout' | 'fib', symbol: string) => {
+    const open = expanded === symbol;
+    return (
+      <button
+        type="button"
+        className={styles.detailsBtn}
+        aria-expanded={open}
+        aria-controls={open ? detailsId(table, symbol) : undefined}
+        aria-label={`${open ? 'Hide' : 'Show'} details for ${symbol}`}
+        onClick={() => setExpanded(open ? null : symbol)}
+      >
+        {open ? '▾' : '▸'}
+      </button>
+    );
+  };
 
   const universeLabel =
     symbolOverride.trim()          ? 'manual symbols'
@@ -364,55 +396,60 @@ export default function Step4PreBreakoutPage() {
                       <Text size={11} tone="dim" weight={500}>At Level</Text>
                       <Text size={11} tone="dim" weight={500}>Confidence</Text>
                       <span />
+                      <span />
                     </div>
                     {(fibResults as FibScanRow[]).map((row) => (
-                      <div key={row.symbol} className={styles.fibTableRow}>
-                        <div className={styles.iconCell}>
-                          <WatchStar symbol={row.symbol} size="sm" />
+                      <Fragment key={row.symbol}>
+                        <div className={styles.fibTableRow}>
+                          <div className={styles.iconCell}>
+                            <WatchStar symbol={row.symbol} size="sm" />
+                            <button
+                              type="button"
+                              className={styles.chartBtn}
+                              title="Open in Chart"
+                              onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                            >
+                              📈
+                            </button>
+                          </div>
+                          <Text size={13} weight={500}>{row.symbol}</Text>
+                          <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
+                            {row.direction === 'Bullish' ? '↑' : '↓'}
+                          </Text>
+                          <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
+                          <Data
+                            size={12}
+                            tone={row.fib_dist_pct != null && row.fib_dist_pct <= fibScanned.fibTolerancePct * 100 ? 'pass' : 'caution'}
+                            title={`Distance from current price to the nearest Fibonacci level. ≤${fmtThreshold(fibScanned.fibTolerancePct * 100, 1)}% (the tolerance band, adjustable above) = within range.`}
+                          >
+                            {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
+                          </Data>
+                          <Data
+                            size={12}
+                            tone={row.at_level ? 'pass' : 'dim'}
+                            title={row.at_level ? 'Price is currently within the tolerance band of the Fib level.' : 'Price is outside the tolerance band right now.'}
+                          >
+                            {row.at_level ? 'YES' : 'no'}
+                          </Data>
+                          <Data
+                            size={13}
+                            tone={confidenceTone(confidenceTier(row.confidence))}
+                            title={`Fib proximity confidence: ${row.confidence}%.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the tolerance band (default 1.5%). Falls below 60% once price is outside that band. This score only measures distance to the fib level — it does NOT check volatility, volume, or trend.`}
+                          >
+                            {row.confidence}%
+                          </Data>
                           <button
                             type="button"
-                            className={styles.chartBtn}
-                            title="Open in Chart"
-                            onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                            className={styles.alertBtn}
+                            onClick={() => setAlertTarget({ symbol: row.symbol, direction: row.direction })}
+                            title="Set alert"
                           >
-                            📈
+                            +
                           </button>
+                          {detailsToggle('fib', row.symbol)}
                         </div>
-                        <Text size={13} weight={500}>{row.symbol}</Text>
-                        <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
-                          {row.direction === 'Bullish' ? '↑' : '↓'}
-                        </Text>
-                        <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
-                        <Data
-                          size={12}
-                          tone={row.fib_dist_pct != null && row.fib_dist_pct <= fibScanned.fibTolerancePct * 100 ? 'pass' : 'caution'}
-                          title={`Distance from current price to the nearest Fibonacci level. ≤${fmtThreshold(fibScanned.fibTolerancePct * 100, 1)}% (the tolerance band, adjustable above) = within range.`}
-                        >
-                          {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
-                        </Data>
-                        <Data
-                          size={12}
-                          tone={row.at_level ? 'pass' : 'dim'}
-                          title={row.at_level ? 'Price is currently within the tolerance band of the Fib level.' : 'Price is outside the tolerance band right now.'}
-                        >
-                          {row.at_level ? 'YES' : 'no'}
-                        </Data>
-                        <Data
-                          size={13}
-                          tone={confidenceTone(confidenceTier(row.confidence))}
-                          title={`Fib proximity confidence: ${row.confidence}%.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the tolerance band (default 1.5%). Falls below 60% once price is outside that band. This score only measures distance to the fib level — it does NOT check volatility, volume, or trend.`}
-                        >
-                          {row.confidence}%
-                        </Data>
-                        <button
-                          type="button"
-                          className={styles.alertBtn}
-                          onClick={() => setAlertTarget({ symbol: row.symbol, direction: row.direction })}
-                          title="Set alert"
-                        >
-                          +
-                        </button>
-                      </div>
+                        {expanded === row.symbol && <FibRowDetails row={row} />}
+                      </Fragment>
                     ))}
                   </div>
                 )}
@@ -433,7 +470,7 @@ export default function Step4PreBreakoutPage() {
 
                 {sorted.length > 0 && (
                   <div className={styles.tableWrap}>
-                    <div className={styles.tableHeader}>
+                    <div className={`${styles.tableHeader} ${styles.withDetails}`}>
                       <span />
                       <Text size={11} tone="dim" weight={500}>Symbol</Text>
                       <Text size={11} tone="dim" weight={500}>Dir</Text>
@@ -442,66 +479,71 @@ export default function Step4PreBreakoutPage() {
                       <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
                       <Text size={11} tone="dim" weight={500}>Proximity %</Text>
                       <span />
+                      <span />
                     </div>
                     {sorted.map((row) => (
-                      <div key={row.symbol} className={styles.tableRow}>
-                        <div className={styles.iconCell}>
-                          <WatchStar symbol={row.symbol} size="sm" />
+                      <Fragment key={row.symbol}>
+                        <div className={`${styles.tableRow} ${styles.withDetails}`}>
+                          <div className={styles.iconCell}>
+                            <WatchStar symbol={row.symbol} size="sm" />
+                            <button
+                              type="button"
+                              className={styles.chartBtn}
+                              title="Open in Chart"
+                              onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                            >
+                              📈
+                            </button>
+                          </div>
+                          <Text size={13} weight={500}>{row.symbol}</Text>
+                          <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
+                            {row.direction === 'Bullish' ? '↑' : '↓'}
+                          </Text>
+                          <Data
+                            size={13}
+                            tone={confidenceTone(confidenceTier(row.confidence))}
+                            title={`Setup quality confidence: ${row.confidence}%.\nHow it's calculated: weighted composite of three factors — ATR compression (30%), volume quiet (25%), proximity to key level (45%). Each factor scores 0–100 based on how extreme the reading is. Example: ATR ratio 0.60 on a 0.85 threshold scores ~29/100 on that factor. All four hard gates must pass first (ATR compressed, range tight, volume quiet, price near resistance) — the score then reflects how good each factor is within the gates.`}
+                          >
+                            {row.confidence}%
+                          </Data>
+                          <Data
+                            size={12}
+                            tone="secondary"
+                            title={row.metrics.atr_ratio != null
+                              ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ ${scanned.atrAvgLookback}-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${fmtThreshold(scanned.atrCompressionRatio, 2)} to pass. Contributes 30% of the confidence score.`
+                              : undefined}
+                          >
+                            {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
+                          </Data>
+                          <Data
+                            size={12}
+                            tone="secondary"
+                            title={row.metrics.vol_ratio != null
+                              ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${fmtThreshold(scanned.volCompressionRatio, 2)} to pass. Contributes 25% of the confidence score.`
+                              : undefined}
+                          >
+                            {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
+                          </Data>
+                          <Data
+                            size={12}
+                            tone="secondary"
+                            title={row.metrics.proximity_pct != null
+                              ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${fmtThreshold(scanned.resistanceProximityPct * 100, 1)}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
+                              : undefined}
+                          >
+                            {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
+                          </Data>
                           <button
                             type="button"
-                            className={styles.chartBtn}
-                            title="Open in Chart"
-                            onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
+                            className={styles.alertBtn}
+                            onClick={() => setAlertTarget({ symbol: row.symbol, direction: row.direction })}
                           >
-                            📈
+                            <Text size={11} weight={500}>Set Alert</Text>
                           </button>
+                          {detailsToggle('prebreakout', row.symbol)}
                         </div>
-                        <Text size={13} weight={500}>{row.symbol}</Text>
-                        <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
-                          {row.direction === 'Bullish' ? '↑' : '↓'}
-                        </Text>
-                        <Data
-                          size={13}
-                          tone={confidenceTone(confidenceTier(row.confidence))}
-                          title={`Setup quality confidence: ${row.confidence}%.\nHow it's calculated: weighted composite of three factors — ATR compression (30%), volume quiet (25%), proximity to key level (45%). Each factor scores 0–100 based on how extreme the reading is. Example: ATR ratio 0.60 on a 0.85 threshold scores ~29/100 on that factor. All four hard gates must pass first (ATR compressed, range tight, volume quiet, price near resistance) — the score then reflects how good each factor is within the gates.`}
-                        >
-                          {row.confidence}%
-                        </Data>
-                        <Data
-                          size={12}
-                          tone="secondary"
-                          title={row.metrics.atr_ratio != null
-                            ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ ${scanned.atrAvgLookback}-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${fmtThreshold(scanned.atrCompressionRatio, 2)} to pass. Contributes 30% of the confidence score.`
-                            : undefined}
-                        >
-                          {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
-                        </Data>
-                        <Data
-                          size={12}
-                          tone="secondary"
-                          title={row.metrics.vol_ratio != null
-                            ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${fmtThreshold(scanned.volCompressionRatio, 2)} to pass. Contributes 25% of the confidence score.`
-                            : undefined}
-                        >
-                          {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
-                        </Data>
-                        <Data
-                          size={12}
-                          tone="secondary"
-                          title={row.metrics.proximity_pct != null
-                            ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${fmtThreshold(scanned.resistanceProximityPct * 100, 1)}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
-                            : undefined}
-                        >
-                          {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
-                        </Data>
-                        <button
-                          type="button"
-                          className={styles.alertBtn}
-                          onClick={() => setAlertTarget({ symbol: row.symbol, direction: row.direction })}
-                        >
-                          <Text size={11} weight={500}>Set Alert</Text>
-                        </button>
-                      </div>
+                        {expanded === row.symbol && <PreBreakoutRowDetails row={row} scanned={scanned} />}
+                      </Fragment>
                     ))}
                   </div>
                 )}
