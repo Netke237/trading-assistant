@@ -480,6 +480,11 @@ export interface PortfolioPosition {
   currentStockPrice?: number;
   pnlDollar:     number;
   pnlPct:        number;
+  /** True when the last GET /api/portfolio had no quote for this position
+   *  (NO-LIVE-QUOTE NLQ-1). `currentPrice`/`pnlDollar`/`pnlPct` then hold 0
+   *  defaults, not a price: the table shows "—" and the totals leave the row
+   *  out. Absent on a row that never synced. */
+  quoteUnavailable?: boolean;
   stop:          number | null;
   /** Structural (order-block/swing) stop level — set only when "Check structure"
    *  was run on the trade card before sending to broker. Optional/opt-in, unlike
@@ -541,6 +546,11 @@ export interface PortfolioPosition {
   /** ISO. The vintage of the numbers the pick was made against — see
    *  `MethodPick.pickedAt`'s own doc. */
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, written by the
+   *  stock sends (`ScanContext.holdMax` through `sanitizeHoldDays`). A stock
+   *  position raises TIME_STOP once held this many days. `null`/absent = no
+   *  hold (options rows, rows opened before H6), never a stock time stop. */
+  holdMaxDays?: number | null;
   /** Per-position alert-type overrides — absent key inherits the global
    *  `AlertConfig.enabledTypes` decision (Feature D). */
   alertOverrides?: AlertOverrides;
@@ -611,6 +621,7 @@ export interface UpcomingEvent {
 }
 
 export interface TradeCardData {
+  noLiveQuote?: boolean;
   symbol:        string;
   company:       string;
   price:         number;
@@ -636,6 +647,7 @@ export interface TradeCardData {
     strike: number;
     expiry: string;              // YYYY-MM-DD
     right:  'C' | 'P';
+    spread?: number;
     mid:    number;              // premium, $
     delta:  number;
     theta:  number;              // $/day
@@ -872,6 +884,8 @@ export interface StockExplanation {
 export type OptionRight = 'C' | 'P';
 
 export interface OptionContract {
+  noLiveQuote?: boolean;
+  quoteState?: string | null;
   id:           string;
   symbol:       string;
   strike:       number;

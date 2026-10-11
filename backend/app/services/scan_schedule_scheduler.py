@@ -98,11 +98,34 @@ async def _notify_scan_schedule_error(label: str, error: str) -> None:
         logger.error("scan_schedule: failure notification itself failed for %s", label, exc_info=True)
 
 
-async def _notify_scan_schedule_success(label: str, candidate_count: int) -> None:
+# NO-LIVE-QUOTE (plan 3f): appended to the success notice of an options run
+# whose every rejected name was rejected only for no_live_quote.
+NO_LIVE_QUOTE_NOTICE_CLAUSE = "ran outside market hours — no live option quotes"
+
+
+def _ran_without_live_quotes(candidate_count: int, rejected_count: int, no_live_quote_names: int) -> bool:
+    """True when an options run found nothing and EVERY rejected name was
+    rejected only because none of its contracts had a live quote
+    (ScanResult.noLiveQuoteNames, counted by the scan core -- no reason string
+    is parsed here). A run with a candidate had a live quote somewhere, so the
+    clause would be false there."""
+    return (
+        candidate_count == 0
+        and rejected_count > 0
+        and no_live_quote_names == rejected_count
+    )
+
+
+async def _notify_scan_schedule_success(
+    label: str, candidate_count: int, *, no_live_quotes: bool = False,
+) -> None:
     from app.services.notifications.dispatch import notify_enabled_channels
     subject = f"Scheduled scan complete: {label}"
     plain = f"Scan entry '{label}': {candidate_count} candidate(s) found"
     html_body = f"<b>Scheduled scan complete</b>\nScan entry '{html.escape(label)}': {candidate_count} candidate(s) found"
+    if no_live_quotes:
+        plain += f" — {NO_LIVE_QUOTE_NOTICE_CLAUSE}"
+        html_body += f" — {html.escape(NO_LIVE_QUOTE_NOTICE_CLAUSE)}"
     try:
         await notify_enabled_channels(subject, plain, html_body)
     except Exception:
@@ -127,6 +150,7 @@ async def _run_scheduled_entry(entry_id: str) -> None:
 
     label = entry.get("label", entry_id)
     mode = entry.get("mode")
+    no_live_quotes = False
 
     async with _SCHEDULED_SCAN_SEMAPHORE:
         from app.database import AsyncSessionLocal
@@ -151,6 +175,9 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                     result = await _execute_scan_core(req, db, previous_result=previous_result)
                     result_json = result.model_dump_json()
                     candidate_count = len(result.candidates)
+                    no_live_quotes = _ran_without_live_quotes(
+                        candidate_count, len(result.rejected), result.noLiveQuoteNames,
+                    )
                 elif mode == "stocks":
                     from app.schemas.stock_scan import StockScanRequest
                     from app.schemas.stock_scan import StockScanResult
@@ -178,7 +205,9 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                 db, schedule_entry_id=entry_id, mode=mode,
                 status="success", result_json=result_json,
             )
-            await _notify_scan_schedule_success(label, candidate_count)
+            await _notify_scan_schedule_success(
+                label, candidate_count, no_live_quotes=no_live_quotes,
+            )
 
 
 class ScanScheduleLoopRunner:

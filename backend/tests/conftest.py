@@ -621,3 +621,10 @@ def _explicit_legacy_daily_risk_hooks(request, monkeypatch):
     async def record_loss(*args, **kwargs):
         pass
     monkeypatch.setattr(daily_risk, 'record_realized_loss', record_loss)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_option_quote_gate(request, monkeypatch):
+    """Legacy fire tests isolate their original gates; dedicated tests opt in."""
+    if request.node.get_closest_marker("real_quote_gate") is None:
+        monkeypatch.setattr("app.services.auto_trader._option_quote_state", lambda _: "live")

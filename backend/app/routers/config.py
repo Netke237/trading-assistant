@@ -2,8 +2,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.services import strategy_param_store
 from app.services.config_health import config_health
 from app.services.config_loader import load_scoring_cfg
+from app.services.horizon_profiles import TUNED_HORIZONS
+
+# The strategies with per-horizon profiles (STOCKS-HORIZON-T1 cells).
+_PROFILE_STRATEGIES = (
+    "pullback_ema", "breakout_base", "ma_crossover",
+    "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_multi",
+)
 
 router = APIRouter(prefix="/api/config", tags=["config"])
 
@@ -79,3 +87,27 @@ def get_config_health() -> dict:
     500 over the config it reports on. Re-reads the three files on every call
     (decision DOCC-9.4-9.5-RATIFIED-RESTAT-2026-09-28)."""
     return config_health.report()
+
+
+@router.get("/strategy-profiles")
+def get_strategy_profiles() -> dict:
+    """Per-horizon strategy parameter profiles (STOCKS-HORIZON-T1 H4):
+    ``{strategy: {"Bullish"|"Bearish": {"baseline": {...}, "horizons":
+    {<TunedHorizon>: {"params": {...}, "source": "tuned"|"baseline"}}}}}``
+    for the six tuned strategies. ``params`` is what a scan with that params
+    horizon reads before request overrides (baseline overlaid by the tuned
+    profile when one exists). Read fresh each call (the store's cache applies).
+    """
+    out: dict = {}
+    for strategy in _PROFILE_STRATEGIES:
+        out[strategy] = {}
+        for direction in ("Bullish", "Bearish"):
+            horizons = {}
+            for h in TUNED_HORIZONS:
+                params, source = strategy_param_store.get_profile(strategy, direction, h)
+                horizons[h] = {"params": params, "source": source}
+            out[strategy][direction] = {
+                "baseline": strategy_param_store.get_active(strategy, direction),
+                "horizons": horizons,
+            }
+    return out

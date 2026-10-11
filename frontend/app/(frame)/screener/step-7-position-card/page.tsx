@@ -3,14 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text, Data } from '@/components/primitives';
-import { StatusBadge } from '@/components/atoms/StatusBadge';
-import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { StockSendDialog } from '@/components/organisms/StockSendDialog';
 import { DirectSendNotesPanel } from '@/components/organisms/DirectSendNotesPanel';
 import { useScanStore } from '@/lib/scanStore';
 import { stockExecutionIdentity } from '@/lib/stockExecutionSession';
-import { stockStatusTooltip } from '@/lib/statusTooltips';
 import styles from './page.module.css';
 
 export default function Step7PositionCardPage() {
@@ -63,18 +60,9 @@ export default function Step7PositionCardPage() {
           </nav>
 
           <section className={styles.card} aria-label={`${card.symbol} position`}>
-            <div className={styles.cardHeader}>
-              <div>
-                <Text size={14} weight={600}>{card.company}</Text>
-                <Text size={11} tone="secondary">{card.direction} · {card.strategy.strategy.replace(/_/g, ' ')}</Text>
-              </div>
-              <div className={styles.badges}>
-                <ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} />
-                <StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} />
-              </div>
-            </div>
             <StockPositionCard
               key={stockExecutionIdentity({ stockScanResult: result, stockExecutionGeneration: generation }, card.symbol) ?? card.symbol}
+              presentation="position"
               card={card}
               strategyKey={card.strategy.strategy}
             />

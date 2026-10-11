@@ -145,10 +145,11 @@ describe('applyPickedContract', () => {
     expect(applyPickedContract(card, undefined)).toBe(card);
   });
 
-  it('returns the card unchanged when the pick matches the auto-picked contract', () => {
+  it('preserves the card data and copies liveness when the pick matches the auto-picked contract', () => {
     const card = makeCard();
     const picked = makeOption({ id: card.contract });
-    expect(applyPickedContract(card, picked)).toBe(card);
+    expect(applyPickedContract(card, picked)).toEqual({ ...card, noLiveQuote: false });
+    expect(applyPickedContract(card, { ...picked, noLiveQuote: true })).toEqual({ ...card, noLiveQuote: true });
   });
 
   it('carries the picked contract\'s BREAKDOWN across, not the auto-picked one\'s', () => {

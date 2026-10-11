@@ -14,6 +14,7 @@ import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalid
 import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 import { api } from '@/lib/api';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
@@ -153,6 +154,10 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
           } : undefined),
           { stop: execution.stop, targets: execution.targets, structuralStop: execution.structuralStop }),
         ...pickedFieldsFrom(execution.pick),
+        // STOCKS-HORIZON-T1 H6: the scan's hold; no scan context -> no hold.
+        holdMaxDays: scan.context
+          ? sanitizeHoldDays(scan.context.holdMin, scan.context.holdMax).hold_max_days
+          : null,
       };
       if (r.autoSend && broker !== 'recommendation') {
         const vetoed = earningsVetoed(c);

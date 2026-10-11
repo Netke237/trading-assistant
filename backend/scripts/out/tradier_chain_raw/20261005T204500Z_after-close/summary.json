@@ -1,0 +1,260 @@
+{
+ "meta": {
+  "capture_utc": "2026-10-05T20:45:00+00:00",
+  "capture_et": "2026-10-05T16:45:00-04:00",
+  "session_phase": "after-close",
+  "label": "after-close",
+  "base_url": "https://api.tradier.com",
+  "sandbox": false,
+  "tradier_clock": {
+   "date": "2026-10-05",
+   "description": "Market is in postmarket hours from 16:00 to 19:55",
+   "state": "postmarket",
+   "timestamp": 1791233100,
+   "next_change": "19:55",
+   "next_state": "closed"
+  },
+  "tradier_clock_error": null,
+  "symbols": [
+   "AAPL",
+   "MSFT",
+   "XOM",
+   "LYB",
+   "SRE",
+   "CPRT",
+   "TSCO"
+  ],
+  "expiries": {
+   "AAPL": [
+    "2026-10-12",
+    "2026-11-06"
+   ],
+   "MSFT": [
+    "2026-10-12",
+    "2026-11-06"
+   ],
+   "XOM": [
+    "2026-10-16",
+    "2026-11-06"
+   ],
+   "LYB": [
+    "2026-10-16",
+    "2026-11-20"
+   ],
+   "SRE": [
+    "2026-10-16",
+    "2026-11-20"
+   ],
+   "CPRT": [
+    "2026-10-16",
+    "2026-11-20"
+   ],
+   "TSCO": [
+    "2026-10-16",
+    "2026-11-06"
+   ]
+  },
+  "errors": [],
+  "script": "backend/scripts/tradier_chain_raw_sample.py"
+ },
+ "counts": {
+  "rows": 972,
+  "bid_0": 235,
+  "ask_0": 0,
+  "both_0": 0,
+  "ask_0_last_gt_0": 0,
+  "bid_0_ask_gt_0": 235,
+  "two_sided": 737,
+  "crossed_ask_lt_bid": 0,
+  "both_0_last_0": 0,
+  "bid_null": 0,
+  "ask_null": 0
+ },
+ "per_symbol": {
+  "AAPL": {
+   "rows": 222,
+   "bid_0": 44,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 44,
+   "two_sided": 178,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "CPRT": {
+   "rows": 54,
+   "bid_0": 19,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 19,
+   "two_sided": 35,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "LYB": {
+   "rows": 82,
+   "bid_0": 20,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 20,
+   "two_sided": 62,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "MSFT": {
+   "rows": 254,
+   "bid_0": 39,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 39,
+   "two_sided": 215,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "SRE": {
+   "rows": 78,
+   "bid_0": 30,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 30,
+   "two_sided": 48,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "TSCO": {
+   "rows": 132,
+   "bid_0": 46,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 46,
+   "two_sided": 86,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  },
+  "XOM": {
+   "rows": 150,
+   "bid_0": 37,
+   "ask_0": 0,
+   "both_0": 0,
+   "ask_0_last_gt_0": 0,
+   "bid_0_ask_gt_0": 37,
+   "two_sided": 113,
+   "crossed_ask_lt_bid": 0,
+   "both_0_last_0": 0,
+   "bid_null": 0,
+   "ask_null": 0
+  }
+ },
+ "quote_age_all_rows": {
+  "bid_date": {
+   "n": 972,
+   "missing_or_zero": 0,
+   "buckets": {
+    "<1m": 0,
+    "1-15m": 0,
+    "15-60m": 938,
+    "1-6h": 14,
+    "6-24h": 20,
+    "1-3d": 0,
+    ">=3d": 0
+   },
+   "min_s": 2694.805,
+   "p25_s": 2701.805,
+   "median_s": 2701.805,
+   "p75_s": 2709.805,
+   "max_s": 26097.805
+  },
+  "ask_date": {
+   "n": 972,
+   "missing_or_zero": 0,
+   "buckets": {
+    "<1m": 0,
+    "1-15m": 0,
+    "15-60m": 940,
+    "1-6h": 14,
+    "6-24h": 18,
+    "1-3d": 0,
+    ">=3d": 0
+   },
+   "min_s": 2694.805,
+   "p25_s": 2701.805,
+   "median_s": 2701.805,
+   "p75_s": 2711.805,
+   "max_s": 26099.805
+  },
+  "trade_date": {
+   "n": 972,
+   "missing_or_zero": 304,
+   "buckets": {
+    "<1m": 0,
+    "1-15m": 0,
+    "15-60m": 128,
+    "1-6h": 222,
+    "6-24h": 45,
+    "1-3d": 0,
+    ">=3d": 273
+   },
+   "min_s": 2703.277,
+   "p25_s": 4633.56325,
+   "median_s": 19880.6705,
+   "p75_s": 369529.88375,
+   "max_s": 16168508.076
+  }
+ },
+ "quote_age_two_sided_rows": {
+  "bid_date": {
+   "n": 737,
+   "missing_or_zero": 0,
+   "buckets": {
+    "<1m": 0,
+    "1-15m": 0,
+    "15-60m": 732,
+    "1-6h": 4,
+    "6-24h": 1,
+    "1-3d": 0,
+    ">=3d": 0
+   },
+   "min_s": 2695.805,
+   "p25_s": 2701.805,
+   "median_s": 2701.805,
+   "p75_s": 2702.805,
+   "max_s": 26097.805
+  },
+  "ask_date": {
+   "n": 737,
+   "missing_or_zero": 0,
+   "buckets": {
+    "<1m": 0,
+    "1-15m": 0,
+    "15-60m": 733,
+    "1-6h": 4,
+    "6-24h": 0,
+    "1-3d": 0,
+    ">=3d": 0
+   },
+   "min_s": 2694.805,
+   "p25_s": 2701.805,
+   "median_s": 2701.805,
+   "p75_s": 2702.805,
+   "max_s": 9862.805
+  }
+ }
+}

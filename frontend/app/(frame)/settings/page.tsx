@@ -2346,6 +2346,39 @@ function Sp500ScheduleSection() {
 
 /* ---------- Strategy scan form ---------- */
 
+/** STOCKS-HORIZON-T1 H5: these three strategy fields are overrides of the
+ *  backend horizon profile, edited here with no horizon or direction in view.
+ *  Empty (null) follows the profile; a value overrides it everywhere. */
+function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, step }: {
+  field: 'pullbackTolerancePct' | 'maCrossoverLookback' | 'breakoutVolumeMult';
+  label: string; unit: string; scale?: number; decimals?: number; min: number; max: number; step: number;
+}) {
+  const value = useScanParamsStore((s) => s[field]);
+  const setParam = useScanParamsStore((s) => s.setParam);
+  const f = 10 ** decimals;
+  return (
+    <>
+      <input
+        type="number"
+        className={styles.numInput}
+        aria-label={label}
+        placeholder="follows horizon profile"
+        value={value === null ? '' : Math.round(value * scale * f) / f}
+        min={min} max={max} step={step}
+        onChange={(e) =>
+          setParam(field, e.target.value === '' ? null : Number(e.target.value) / scale)
+        }
+      />
+      <Text size={12} tone="secondary">{unit}</Text>
+      {value !== null && (
+        <button type="button" className={styles.btn} aria-label={`Clear ${label}`} onClick={() => setParam(field, null)}>
+          clear
+        </button>
+      )}
+    </>
+  );
+}
+
 function StrategyScanForm() {
   const store = useScanParamsStore();
 
@@ -2355,56 +2388,35 @@ function StrategyScanForm() {
         title="Strategy scan parameters"
         blurb="These values control how strictly each strategy filter and backtest gate applies. Lower tolerances mean fewer matches; higher means more (but potentially noisier) signals."
       />
+      <Text size={12} tone="secondary">
+        A value here overrides the tuned setting for every horizon and direction.
+      </Text>
 
       <Row
         label="Pullback tolerance"
         hint="How far above the 20-EMA price can be and still count as a pullback"
-        defaultValue="4%"
+        defaultValue="horizon profile"
       >
-        <input
-          type="number"
-          className={styles.numInput}
-          value={Math.round(store.pullbackTolerancePct * 100 * 10) / 10}
-          min={0.5} max={15} step={0.5}
-          onChange={(e) =>
-            store.setParam('pullbackTolerancePct', Number(e.target.value) / 100)
-          }
-        />
-        <Text size={12} tone="secondary">%</Text>
+        <OverrideInput field="pullbackTolerancePct" label="Pullback tolerance" unit="%" scale={100} decimals={1}
+          min={0.5} max={15} step={0.5} />
       </Row>
 
       <Row
         label="MA crossover lookback"
         hint="How many bars ago the 20/50-SMA cross can have occurred"
-        defaultValue="10 bars"
+        defaultValue="horizon profile"
       >
-        <input
-          type="number"
-          className={styles.numInput}
-          value={store.maCrossoverLookback}
-          min={1} max={30} step={1}
-          onChange={(e) =>
-            store.setParam('maCrossoverLookback', Number(e.target.value))
-          }
-        />
-        <Text size={12} tone="secondary">bars</Text>
+        <OverrideInput field="maCrossoverLookback" label="MA crossover lookback" unit="bars"
+          min={1} max={30} step={1} />
       </Row>
 
       <Row
         label="Breakout volume multiplier"
         hint="Today's volume must exceed N × the 20-day average"
-        defaultValue="1.1×"
+        defaultValue="horizon profile"
       >
-        <input
-          type="number"
-          className={styles.numInput}
-          value={store.breakoutVolumeMult}
-          min={1.0} max={3.0} step={0.05}
-          onChange={(e) =>
-            store.setParam('breakoutVolumeMult', Number(e.target.value))
-          }
-        />
-        <Text size={12} tone="secondary">×</Text>
+        <OverrideInput field="breakoutVolumeMult" label="Breakout volume multiplier" unit="×" decimals={2}
+          min={1.0} max={3.0} step={0.05} />
       </Row>
 
       <Row

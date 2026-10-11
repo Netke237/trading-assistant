@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { type ReactNode, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
@@ -19,7 +19,8 @@ import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStoc
 import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { _horizonEnum } from '@/lib/analysisStore';
-import { winRateTooltip } from '@/lib/statusTooltips';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
+import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 // The SAME prose the options card's Arithmetic Profit Target section uses.
 // The stocks plan is built from the same compute_final_stop /
@@ -31,6 +32,19 @@ import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import styles from './StockPositionCard.module.css';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
+import { PositionEvidence } from './PositionEvidence';
+
+function PositionDisclosure({ active, children }: { active: boolean; children: ReactNode }) {
+  return active ? <details className={styles.autoTrade}><summary>Auto-trade execution</summary>{children}</details> : <>{children}</>;
+}
+
+function PositionGroup({ active, tag = 'div', children, ...props }: { active: boolean; tag?: 'div' | 'section' | 'aside'; children: ReactNode; className?: string; id?: string }) {
+  if (!active) return <>{children}</>;
+  const Tag = tag;
+  return <Tag {...props}>{children}</Tag>;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,6 +98,7 @@ function concentrationFlag(
 }
 
 interface StockPositionCardProps {
+  presentation?: 'embedded' | 'position';
   card: PositionCardData;
   strategyKey: string;
   afterScanArmed?: boolean;
@@ -175,12 +190,15 @@ export function clearedPickMessage(method: PickedMethod | null): string | null {
 }
 
 export function StockPositionCard({
+  presentation = 'embedded',
   card,
   strategyKey,
   afterScanArmed,
   onAfterScanToggle,
 }: StockPositionCardProps) {
   const executionIdentity = useStockExecutionIdentity(card.symbol);
+  const position = presentation === 'position';
+  const [latest, setLatest] = useState<{ identity: string | null; method: 'arithmetic' | 'monte_carlo' } | null>(null);
   const sessionAfterScanArmed = useScanStore(s => !!s.stockAfterScanIntent[card.symbol]);
   const toggleAfterScanIntent = useScanStore(s => s.setStockAfterScanIntent);
   const orderOwnership = useStockOrderOwnershipStore(s => s.bySymbol[card.symbol]);
@@ -254,6 +272,12 @@ export function StockPositionCard({
   const scanTimestamp = useScanStore((s) => s.stockScanResult?.timestamp);
   const scanVetoDays  = useScanStore((s) => s.stockScanResult?.veto_days);
   const earningsVeto  = stockEarningsGate(card, scanTimestamp, scanVetoDays).veto;
+  // STOCKS-HORIZON-T1 H6: the scan's hold, written on the position so a stock
+  // raises TIME_STOP once held that long. No scan context -> no hold.
+  const scanContext  = useScanStore((s) => s.context);
+  const holdMaxDays  = scanContext
+    ? sanitizeHoldDays(scanContext.holdMin, scanContext.holdMax).hold_max_days
+    : null;
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const addToBasket  = useScanStore((s) => s.addToStockBasket);
   const removeBasket = useScanStore((s) => s.removeFromStockBasket);
@@ -521,6 +545,7 @@ export function StockPositionCard({
           // Phase G (piece 5) — `methodPick` is this card's own local pick
           // state (synced from stocksCardEdits.picks).
           ...pickedFieldsFrom(methodPick),
+          holdMaxDays,
         },
         broker: execMode,
         orderType,
@@ -583,6 +608,7 @@ export function StockPositionCard({
       }, ctrl.signal);
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimate(res);
+      setLatest({ identity: executionIdentity, method: 'monte_carlo' });
     } catch (e) {
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimateErr(String(e));
@@ -624,6 +650,7 @@ export function StockPositionCard({
       }, ctrl.signal);
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlan(res);
+      setLatest({ identity: executionIdentity, method: 'arithmetic' });
     } catch (e) {
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlanErr(String(e));
@@ -732,6 +759,7 @@ export function StockPositionCard({
         ),
         // Phase G (piece 5) — same confirmed send-path gap as submit() above.
         ...pickedFieldsFrom(methodPick),
+        holdMaxDays,
       };
       const ownership = useStockOrderOwnershipStore.getState();
       if (!ownership.claim(card.symbol, { identity: executionIdentity, recId: position.recId, status: 'in-flight' })) return;
@@ -778,12 +806,56 @@ export function StockPositionCard({
   const bearishUnvalidated = isBearishUnvalidated(card.direction);
 
   return (
-    <div className={styles.wrap} key={executionIdentity ?? card.symbol}>
+    <div className={position ? styles.workspace : styles.wrap} key={executionIdentity ?? card.symbol}>
+      {position && <>
+        <section id="market-sentiment"><MarketSentiment s={card.sentiment} compact /></section>
+        <header className={styles.identity}>
+          <div><Data size={24}>{card.symbol}</Data><Text size={14} weight={600}>{card.company}</Text><Text size={11} tone="secondary">{card.direction} · {card.strategy.strategy.replace(/_/g, ' ')}</Text></div>
+          <div className={styles.identityBadges}><ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} /><StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} /></div>
+          <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
+          <div className={styles.actionRow}>        <a
+          href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.actionBtn}
+        >
+          <Text size={12}>View Chart</Text>
+        </a>
+        <button
+          type="button"
+          className={styles.actionBtn}
+          onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}
+        >
+          <Text size={12}>{pinned ? 'Unpin from Basket' : 'Pin to Basket'}</Text>
+        </button>
+</div>
+        </header>
+        <nav aria-label="Position sections" className={styles.sectionLinks}>
+          <a href="#order-exits">Order &amp; exits</a><a href="#calculations">Calculations</a><a href="#qualification">Qualification</a><a href="#decision">Your decision</a><a href="#race">Which comes first</a><a href="#market-sentiment">Market sentiment</a><a href="#fundamentals">Fundamentals</a>
+        </nav>
+        <details className={styles.help}><summary>How this page works</summary><Text size={12}>Review the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.</Text></details>
+      </>}
+      <PositionGroup active={position} className={styles.workspaceNotes}>
       <Text size={12} tone="caution">{bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : stockExecutionBlock()}</Text>
       {earningsVeto && <Text size={12} tone="reject">{EARNINGS_VETO_MESSAGE}</Text>}
-      <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
+      {!position && <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>}
 
       {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
+      </PositionGroup>
+      {position && <section id="fundamentals"><FundamentalHealthCard f={card.fundamentals} compact /></section>}
+      {position && <section className={styles.latest} aria-label="Latest calculation">
+        <Text size={11} tone="dim">Latest calculation</Text>
+        {!latest || latest.identity !== executionIdentity ? <Text size={12}>Calculation chronology unavailable</Text>
+          : !(latest.method === 'arithmetic' ? plan : estimate) ? <Text size={12}>Latest result unavailable — recalculate</Text>
+          : <><Text size={12}>Latest: {latest.method === 'arithmetic' ? 'Arithmetic' : 'Monte Carlo'}</Text>
+            {latest.method === 'arithmetic' && plan && <Data size={12}>Stop {plan.stop.price.toFixed(2)} · risk/share {plan.stop.riskPerShare.toFixed(2)} · {plan.horizonDays} trading days</Data>}
+            {latest.method === 'monte_carlo' && estimate && <Data size={12}>Stop {overlay.stop.toFixed(2)} · {(estimate.invalidation.probability * 100).toFixed(0)}% · {estimate.horizonDays} trading days</Data>}
+            {(latest.method === 'arithmetic' ? plan?.targets : estimate?.targets)?.map((t, i) => <Data key={i} size={12}>T{i + 1} {t.price.toFixed(2)} · {(t.probability * 100).toFixed(0)}%{t.expectedDays != null ? ` · ~${t.expectedDays.toFixed(0)}d` : ' · unlikely'}</Data>)}</>}
+      </section>}
+      <PositionGroup active={position} className={styles.workspaceColumns}>
+      <PositionGroup active={position} className={styles.workspaceMain}>
+      <PositionGroup active={position} tag="section" id="order-exits" className={styles.workspaceCard}>
+      {position && <h3>Order &amp; exits</h3>}
       {/* Section 1 — Sizing grid, Row 1 */}
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
@@ -882,12 +954,51 @@ export function StockPositionCard({
         })}
       </div>
 
+      {position && err?.includes('wrong side of entry') && <Text size={12} tone="reject">{err}</Text>}
+      {position && <div className={styles.targetsSection}><h3>Structural stop</h3>          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={onCheckStructure}
+            disabled={checkingStructure}
+          >
+            <Text size={12}>{checkingStructure ? 'Checking…' : 'Check structure'}</Text>
+          </button>        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
+
+        {structural && (
+          <div className={styles.estimateBlock}>
+            <div className={styles.estimateRow}>
+              <Text size={11} tone="dim">STRUCTURAL</Text>
+              <Data size={12}>{structural.price.toFixed(2)}</Data>
+              {structural.distancePct != null && (
+                // Same "(N% away)" format the options TradeCard already shows next
+                // to its own structural-stop price — distancePct was captured here
+                // but had never actually been rendered.
+                <Text size={11} tone="dim">({structural.distancePct.toFixed(1)}% away)</Text>
+              )}
+              <Text size={11} tone="dim">{structural.source ?? '—'}</Text>
+              <Data size={12} tone="dim">
+                {/* Guarded: a structural level that lands exactly on entry would
+                    otherwise divide by zero and render Infinity. */}
+                {Math.abs(overlay.entry - structural.price) > 0
+                  ? `${(Math.abs(overlay.t1 - overlay.entry) / Math.abs(overlay.entry - structural.price)).toFixed(1)}× R:R`
+                  : '—'}
+              </Data>
+            </div>
+            <Text size={11} tone="dim">
+              Reference level only — the risk basis stays your STOP. Saved with the
+              position so STRUCTURAL STOP BREACHED can fire.
+            </Text>
+          </div>
+        )}</div>}
+      </PositionGroup>
+      <PositionGroup active={position} tag="section" id="calculations" className={styles.workspaceMain}>
+      {position && <h3>Calculations</h3>}
       {/* Section 2b — On-demand analytics: first-passage estimate + structural stop.
           Both are explicit user actions, never fired by the scan — the Monte
           Carlo is CPU work and the structural lookup is a candle fetch. */}
-      <div className={styles.targetsSection}>
+      <div className={position ? styles.workspaceCard : styles.targetsSection}>
         <div className={styles.targetsHeading}>
-          <Text size={11} tone="dim">PROBABILITY &amp; STRUCTURE</Text>
+          <Text size={11} tone="dim">{position ? 'Monte Carlo Estimate' : 'PROBABILITY & STRUCTURE'}</Text>
         </div>
 
         <div className={styles.actionRow}>
@@ -899,14 +1010,14 @@ export function StockPositionCard({
           >
             <Text size={12}>{estimating ? 'Estimating…' : 'Estimate'}</Text>
           </button>
-          <button
+          {!position && <>          <button
             type="button"
             className={styles.actionBtn}
             onClick={onCheckStructure}
             disabled={checkingStructure}
           >
             <Text size={12}>{checkingStructure ? 'Checking…' : 'Check structure'}</Text>
-          </button>
+          </button></>}
         </div>
 
         {estimateErr && <Text size={11} tone="reject">{estimateErr}</Text>}
@@ -949,7 +1060,7 @@ export function StockPositionCard({
           </div>
         )}
 
-        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
+        {!position && <>        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
 
         {structural && (
           <div className={styles.estimateBlock}>
@@ -976,7 +1087,7 @@ export function StockPositionCard({
               position so STRUCTURAL STOP BREACHED can fire.
             </Text>
           </div>
-        )}
+        )}</>}
       </div>
 
       {/* Section 2c — ARITHMETIC PROFIT TARGET (piece 6, the stocks arithmetic
@@ -990,9 +1101,9 @@ export function StockPositionCard({
 
           Click-gated like the two fetches above, and for the same reason: a
           candle fetch plus a Monte Carlo is not scan work. */}
-      <div className={styles.targetsSection}>
+      <div className={position ? styles.workspaceCard : styles.targetsSection}>
         <div className={styles.targetsHeading}>
-          <Text size={11} tone="dim">ARITHMETIC PROFIT TARGET</Text>
+          <Text size={11} tone="dim">{position ? 'Arithmetic' : 'ARITHMETIC PROFIT TARGET'}</Text>
         </div>
 
         <div className={styles.actionRow}>
@@ -1167,13 +1278,18 @@ export function StockPositionCard({
 
             {/* ── The two-barrier race ─────────────────────────────────── */}
             {plan.race && (
-              <div className={styles.planRace}>
+              <div id={position ? 'race' : undefined} className={styles.planRace}>
                 <Text size={10} tone="dim">
                   Which comes first, over {plan.horizonDays} trading days
                   ({plan.race.nPaths.toLocaleString()} simulated paths). These three
                   add to 100% because every path is counted once — unlike the
                   percentages above, which are each measured on their own.
                 </Text>
+                {position && <h3>Which comes first</h3>}
+                {position && plan.race.outcomes.map((o, i) => <div key={`bar-${i}`} className={styles.raceDrawing} aria-label={`${card.direction} target ${o.targetPrice.toFixed(2)} race`}>
+                  <Data size={12}>Target {o.targetPrice.toFixed(2)}</Data>
+                  {[['Target', o.weightTarget], ['Stop', o.weightStop], ['Neither', o.weightNeither]].map(([label, weight]) => <label key={String(label)}><Text size={11}>{label}</Text><meter className={label === 'Target' ? styles.raceTarget : label === 'Stop' ? styles.raceStop : styles.raceNeither} min="0" max="1" value={Number(weight)} /><Data size={11} tone={label === 'Target' ? 'pass' : label === 'Stop' ? 'reject' : 'dim'}>{(Number(weight) * 100).toFixed(0)}%</Data></label>)}
+                </div>)}
                 {plan.race.outcomes.map((o, i) => (
                   <div key={`race-${i}`} className={styles.planRow}>
                     <Data size={11} tone="dim">{o.targetPrice.toFixed(2)}</Data>
@@ -1210,9 +1326,13 @@ export function StockPositionCard({
         )}
       </div>
 
-      <MarketSentiment s={card.sentiment} />
-
-      <FundamentalHealthCard f={card.fundamentals} />
+      </PositionGroup>
+      {position && <PositionEvidence card={card} pickMissing={pickMissing} earningsVeto={earningsVeto} ownership={orderOwnership?.status} />}
+      </PositionGroup>
+      {!position && <MarketSentiment s={card.sentiment} />}
+      {!position && <FundamentalHealthCard f={card.fundamentals} />}
+      <PositionGroup active={position} tag="aside" id="decision" className={styles.decision}>
+      {position && <h3>Your decision</h3>}
 
       {/* Section 2d — Phase G piece 5 (§6.3): which exit method this trade is
            being taken on. Placed directly above the actions, after all three
@@ -1224,9 +1344,10 @@ export function StockPositionCard({
         onChange={applyMethodPick}
       />
 
+      {position && <h3>Execution</h3>}
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>
-        <a
+        {!position && <>        <a
           href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -1241,6 +1362,7 @@ export function StockPositionCard({
         >
           <Text size={12}>{pinned ? 'Unpin from Basket' : 'Pin to Basket'}</Text>
         </button>
+</>}
         <button
           type="button"
           className={styles.actionBtn}
@@ -1307,11 +1429,12 @@ export function StockPositionCard({
 
       {/* Section 6 — Order result / error */}
       {orderId && orderMsg && <Text size={12} tone={orderMsg.tone}>{orderMsg.text}</Text>}
-      {err      && <Text size={12} tone="reject">{err}</Text>}
+      {err && !(position && err.includes('wrong side of entry')) && <Text size={12} tone="reject">{err}</Text>}
       {warning  && <Text size={12} tone="caution">{warning}</Text>}
       {queued   && <Text size={12} tone="caution">Queued — backend unreachable, will sync automatically.</Text>}
 
       {/* Section 7 — Auto-trade arm */}
+      <PositionDisclosure active={position}>
       <StockAutoTradeArm
         symbol={card.symbol}
         strategyKey={strategyKey}
@@ -1319,7 +1442,10 @@ export function StockPositionCard({
         afterScanArmed={afterScanArmed ?? sessionAfterScanArmed}
         onAfterScanToggle={onAfterScanToggle ?? toggleAfterScanIntent}
       />
-
+      </PositionDisclosure>
+      {position && <PositionEvidence checklistOnly card={card} pickMissing={pickMissing} earningsVeto={earningsVeto} ownership={orderOwnership?.status} />}
+      </PositionGroup>
+      </PositionGroup>
     </div>
   );
 }

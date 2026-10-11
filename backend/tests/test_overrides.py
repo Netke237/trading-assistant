@@ -244,26 +244,29 @@ def test_contract_override_does_not_mutate_cached_config():
 # defect already fixed once for DTE.
 
 def test_preferred_volume_min_override_removes_soft_flag():
-    """volume=100 is above the hard default (50) but below the soft default
-    (200), so it passes but carries low_volume. Lowering preferred_volume_min
-    to 50 removes the flag without touching the hard floor."""
+    """volume=100 clears the hard floor (an optional floor, 0 = off by
+    default) but is below the soft default (200), so it passes but carries
+    thin_liquidity (OI 2000 is above its own Preferred floor, so volume is the
+    only cause). Lowering preferred_volume_min to 50 removes the flag without
+    touching the hard floor."""
     contract = _make_contract(volume=100, oi=2000)
     card_default = validate_contract(contract, 70)
     assert "volume_too_low" not in card_default.reject_reasons
-    assert "low_volume" in card_default.soft_flags
+    assert "thin_liquidity" in card_default.soft_flags
     card_override = validate_contract(contract, 70, overrides={"preferred_volume_min": 50})
-    assert "low_volume" not in card_override.soft_flags
+    assert "thin_liquidity" not in card_override.soft_flags
 
 
 def test_preferred_oi_min_override_removes_soft_flag():
     """oi=500 is above the hard default (200) but below the soft default
-    (1000), so it passes but carries low_open_interest."""
+    (1000), so it passes but carries thin_liquidity (volume 2000 is above its
+    own Preferred floor, so OI is the only cause)."""
     contract = _make_contract(volume=2000, oi=500)
     card_default = validate_contract(contract, 70)
     assert "open_interest_too_low" not in card_default.reject_reasons
-    assert "low_open_interest" in card_default.soft_flags
+    assert "thin_liquidity" in card_default.soft_flags
     card_override = validate_contract(contract, 70, overrides={"preferred_oi_min": 400})
-    assert "low_open_interest" not in card_override.soft_flags
+    assert "thin_liquidity" not in card_override.soft_flags
 
 
 def test_preferred_spread_pct_max_override_removes_soft_flag():
@@ -278,25 +281,27 @@ def test_preferred_spread_pct_max_override_removes_soft_flag():
 
 
 def test_preferred_liquidity_overrides_do_not_mutate_cached_config():
-    """Same regression guard as the hard-reject overrides above, for the new keys."""
-    contract = _make_contract(volume=100, oi=500)
+    """Same regression guard as the hard-reject overrides above, for the new keys.
+    OI 2000 clears its Preferred floor, so thin_liquidity on these cards comes
+    from the volume override alone."""
+    contract = _make_contract(volume=100, oi=2000)
     card_a = validate_contract(contract, 70, overrides={"preferred_volume_min": 50})
     card_b = validate_contract(contract, 70, overrides={"preferred_volume_min": 5000})
-    assert "low_volume" not in card_a.soft_flags
-    assert "low_volume" in card_b.soft_flags
+    assert "thin_liquidity" not in card_a.soft_flags
+    assert "thin_liquidity" in card_b.soft_flags
 
 
 def test_loose_tier_combined_override_clears_both_hard_and_soft_liquidity_gates():
     """The actual fix this override set exists for: a thin-but-not-worthless
     contract (volume=25, oi=90, spread~10%) that fails the DEFAULT hard floor
-    on two axes (volume<50, oi<200) must, under a 'Loose' profile moving both
-    the hard floor and its preferred counterpart to the same value per axis,
-    pass the hard reject AND carry none of the three liquidity/spread soft
-    flags -- not merely avoid outright rejection while still losing the
-    soft-score/soft-fail-count battle on the same axes."""
+    on one axis (oi<200; the volume floor is 0, off, by default) must, under a
+    'Loose' profile moving both the hard floor and its preferred counterpart to
+    the same value per axis, pass the hard reject AND carry neither the
+    liquidity nor the spread soft flag -- not merely avoid outright rejection
+    while still losing the soft-score/soft-fail-count battle on the same axes."""
     contract = _make_contract(bid=1.0, ask=1.11, volume=25, oi=90)  # spread ~10.4%
     card_default = validate_contract(contract, 70)
-    assert "volume_too_low" in card_default.reject_reasons
+    assert "volume_too_low" not in card_default.reject_reasons
     assert "open_interest_too_low" in card_default.reject_reasons
 
     loose_overrides = {
@@ -305,8 +310,7 @@ def test_loose_tier_combined_override_clears_both_hard_and_soft_liquidity_gates(
     }
     card_loose = validate_contract(contract, 70, overrides=loose_overrides)
     assert card_loose.reject_reasons == []
-    assert "low_volume" not in card_loose.soft_flags
-    assert "low_open_interest" not in card_loose.soft_flags
+    assert "thin_liquidity" not in card_loose.soft_flags
     assert "spread_elevated" not in card_loose.soft_flags
 
 
@@ -323,14 +327,14 @@ def test_preferred_volume_min_zero_does_not_raise_and_scores_full():
     rejection reading the literal exception text."""
     contract = _make_contract(volume=1, oi=2000)  # volume deliberately tiny
     card = validate_contract(contract, 70, overrides={"preferred_volume_min": 0})
-    assert "low_volume" not in card.soft_flags
+    assert "thin_liquidity" not in card.soft_flags
     assert card.breakdown.liquidity_score == 100
 
 
 def test_preferred_oi_min_zero_does_not_raise_and_scores_full():
     contract = _make_contract(volume=2000, oi=1)  # oi deliberately tiny
     card = validate_contract(contract, 70, overrides={"preferred_oi_min": 0})
-    assert "low_open_interest" not in card.soft_flags
+    assert "thin_liquidity" not in card.soft_flags
     assert card.breakdown.oi_score == 100
 
 
@@ -369,29 +373,31 @@ def test_preferred_volume_min_override_survives_liquidity_detail_construction():
 # except this interval, where they actively conflict. `_int_pref_override`
 # floors (0, 1) to 1 -- still "> 0" -- instead of letting it fall to 0.
 
-def test_preferred_volume_min_fractional_override_still_flags_low_volume():
+def test_preferred_volume_min_fractional_override_still_flags_thin_liquidity():
     """override=0.5 must NOT be silently read as 'no preference' (int(0.5)==0
     would fall into the <= 0 branch); it must behave as a strict near-zero
     floor of 1, still catching a genuinely zero-volume contract."""
     contract = _make_contract(volume=0, oi=2000)
     card = validate_contract(contract, 70, overrides={"preferred_volume_min": 0.5})
-    assert "low_volume" in card.soft_flags
+    assert "thin_liquidity" in card.soft_flags
     assert card.breakdown.liquidity_score < 100
 
 
-def test_preferred_oi_min_fractional_override_still_flags_low_open_interest():
+def test_preferred_oi_min_fractional_override_still_flags_thin_liquidity():
     contract = _make_contract(volume=2000, oi=0)
     card = validate_contract(contract, 70, overrides={"preferred_oi_min": 0.9})
-    assert "low_open_interest" in card.soft_flags
+    assert "thin_liquidity" in card.soft_flags
     assert card.breakdown.oi_score < 100
 
 
 # ── WI-12: off-hours null-data guard ─────────────────────────────────────────
 
 def test_zero_volume_with_adequate_oi_is_not_rejected():
-    """volume=0 is Tradier's off-hours sentinel; if OI >= min_open_interest, pass through."""
+    """With an explicit volume floor (the default is 0, off), volume=0 is
+    exempt when OI >= min_open_interest: a 0 cannot be told apart from "no
+    trades yet this session", so OI is the liquidity proxy."""
     contract = _make_contract(volume=0, oi=1000)  # OI well above 200 default
-    card = validate_contract(contract, 70)
+    card = validate_contract(contract, 70, overrides={"min_volume": 50})
     assert "volume_too_low" not in card.reject_reasons
 
 
@@ -403,7 +409,8 @@ def test_zero_volume_with_zero_oi_is_rejected():
 
 
 def test_low_nonzero_volume_is_rejected():
-    """volume=10 (real but below threshold) must still trigger volume_too_low."""
+    """volume=10 (real but below an explicit floor of 50) must still trigger
+    volume_too_low; the default floor is 0 (off)."""
     contract = _make_contract(volume=10, oi=1000)
-    card = validate_contract(contract, 70)
+    card = validate_contract(contract, 70, overrides={"min_volume": 50})
     assert "volume_too_low" in card.reject_reasons

@@ -114,7 +114,12 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             except ValueError:
                 pass
 
-        if isinstance(quote, dict) and quote:
+        if not (isinstance(quote, dict) and quote):
+            # No quote (fetch failed, an unlisted expiry, an ask of 0 -- see
+            # fetch_contract_quote_async). currentPrice/pnl stay at their 0.0
+            # defaults, which are not a price, so the row says so.
+            schema.quoteUnavailable = True
+        else:
             schema.currentPrice = quote.get("price") or 0.0
             schema.delta        = quote.get("delta")
             schema.theta        = quote.get("theta")
@@ -138,6 +143,14 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
             else stock_prices.get(schema.symbol)
         )
 
+    # A position without a quote would count at 0 in open_value, and the
+    # snapshot would PERSIST that understated account value. Skip the write for
+    # this request instead; today's row, if any, stays as last written.
+    unquoted = [s.contract for s in schemas if s.quoteUnavailable]
+    if unquoted:
+        _log.info("equity snapshot not written: no quote for %d position(s): %s",
+                  len(unquoted), ", ".join(unquoted))
+        return schemas
     open_value = sum(s.currentPrice * _contract_multiplier(s.contract) * s.qty for s in schemas)
     open_pnl = sum(s.pnlDollar or 0.0 for s in schemas)
     await _upsert_equity_snapshot(db, open_value, open_pnl)
