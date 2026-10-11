@@ -162,8 +162,18 @@ and handlers):**
 1. **Thresholds tied to the scan.** `scanThresholds.ts` holds module-level state with the same lifetime as the
    in-memory results (lost on reload together with them):
    `rememberPreBreakoutScan(p: PreBreakoutParams)`, `preBreakoutScanParams(): PreBreakoutParams | null`,
-   `rememberFibScan(p: FibPullbackParams)`, `fibScanParams(): FibPullbackParams | null`, and
-   `__resetScanThresholdsForTests()`. In `runScan`, call `rememberPreBreakoutScan(params)` immediately before
+   `rememberFibScan(p: FibPullbackParams)`, `fibScanParams(): FibPullbackParams | null`,
+   `fmtThreshold(x: number, minDecimals: number): string` and `__resetScanThresholdsForTests()`.
+   **The remembered values are the ones the backend applied** (plan round 1, F3): the inputs are free-typed
+   numbers, and the backend coerces the integer keys with Python `int()` (truncation toward zero;
+   `routers/stock_scan.py` `_INT_OVERRIDE_KEYS` / `_FIB_INT_OVERRIDE_KEYS`) and uses the floats as sent. So
+   `remember*` stores `Math.trunc(v)` for `atrAvgLookback`, `rangeLookbackBars`, `swingLookback` (Fib:
+   `fibSwingLookback`) and the floats unchanged. **Every threshold the page prints** (existing tooltips, the
+   description, the new detail lines) goes through `fmtThreshold`. It returns the value without lossy
+   rounding: `Number(x.toFixed(6))` as a string, padded with zeros to at least `minDecimals` decimals. So
+   0.85 → "0.85", 3 → "3.0" with minDecimals 1, 0.875 → "0.875", 2.75 → "2.75". Percentages format
+   `x * 100` the same way: 0.08 → "8.0", 0.0725 → "7.25". At today's step values the printed text is
+   byte-identical to today's. In `runScan`, call `rememberPreBreakoutScan(params)` immediately before
    `setResults(results)` and `rememberFibScan(fibParams)` immediately before `setFibResults(results)` — the
    **same closure values** the request was built from, so a param change while a scan is pending still
    pairs the rows with the params they were judged on.
@@ -173,7 +183,16 @@ and handlers):**
    Every **existing tooltip** that prints a threshold (ATR ratio `atrCompressionRatio`, Vol ratio
    `volCompressionRatio`, Proximity `resistanceProximityPct`) and the Fib Distance cell (its tone and its
    tooltip's tolerance) read `scanned` / `fibScanned` instead of the live params. Tooltip **wording is
-   unchanged**. The mode description texts keep reading the live params (they describe the next scan).
+   unchanged**. The Pre-Breakout mode description's proximity % (M3, "close within …% of swing high") reads
+   `scanned` **while Pre-Breakout rows are in memory**, because it then sits directly above rows judged on it,
+   and the live params otherwise (plan round 1, F1). The Fib and Pullback descriptions print no threshold
+   (Fib: static "38.2%, 61.8%" text; Pullback rows are local state, cleared on every remount).
+1b. **Set Alert uses the row's own direction** (plan round 1, F2; pre-existing defect). Today all three
+   tables call `setAlertSymbol(row.symbol)` and the dialog gets the page's current `direction`, so after a
+   Bullish scan, a switch to Bearish on Step 3 and a return, the kept Bullish rows would save a **Bearish**
+   composite watch. Change: the alert state holds `{ symbol, direction }` from the clicked row
+   (`row.direction`; every row type carries it), and `CompositeAlertDialog` receives that direction. The
+   dialog itself is not edited. For a row from the current context this is the same value as today.
 2. Restructure the JSX into the target layout: `<aside className={styles.side} aria-label="Scan">` holding a
    "Scan" card (textarea, Run Scan, then the current mode's parameters exactly as today — the Pullback
    `<details>` block moved verbatim; the two panels as they are) and a "What you can do" card; the main
@@ -204,6 +223,15 @@ and handlers):**
   default 0.85); the ATR Ratio cell's `title` says "Must be below 0.70 to pass" (not 0.85). Same for Fib:
   tolerance changed to 0.02, scan, remount → the Distance tooltip says "≤2.0%" and a row at 1.8% is `pass`
   toned. With no scan this page load, the tooltip reads the live params (as today).
+- **Off-step values (F3):** ATR compression typed 0.875, range bars 10.5, range × ATR 2.75, proximity 0.0725 →
+  after the scan, the request carried them as typed, and the ATR tooltip says "below 0.875", the proximity
+  tooltip "within 7.25%". `scanThresholds.test.tsx` pins `fmtThreshold` (0.85 / 3 → "3.0" / 0.875 / 2.75 /
+  0.0725×100 → "7.25") and `Math.trunc` on the integer keys (10.5 → 10, 10.9 → 10).
+- **Description follows the scan (F1):** proximity 0.12 → scan → remount → the description reads "12.0%"
+  while the rows show; with no rows it reads the live default "8.0%".
+- **Alert direction (F2):** Bullish scan with one row → remount with the scan context direction Bearish →
+  "Set Alert" on that row → the mocked `CompositeAlertDialog` receives `direction="Bullish"`. Same for the
+  Fib "+" button.
 - A param change while a scan is pending: start a scan with ATR 0.70 (deferred promise), change ATR to 0.80,
   resolve → the effect cleared the rows before the resolve; after the resolve the row's tooltip says 0.70.
 - `p3aScanSizing.test.tsx` and all other existing suites stay green **without edits**.
@@ -224,11 +252,13 @@ and handlers):**
 2. **Pre-Breakout details** (`row`, `scanned` from T2):
    - **"Why it's a setup"** — four lines, each `value · threshold`, values from `row.metrics`, thresholds from
      `scanned`; a line whose metric is `null`/absent shows "—" for the value and keeps its threshold:
-     - `ATR ratio {atr_ratio.toFixed(2)} · must be below {scanned.atrCompressionRatio.toFixed(2)}`
-     - `Range ratio {range_ratio.toFixed(2)} · {scanned.rangeLookbackBars}-bar range must be below {scanned.rangeAtrMult.toFixed(1)} × ATR`
-     - `Volume ratio {vol_ratio.toFixed(2)} · must be below {scanned.volCompressionRatio.toFixed(2)}`
-     - Bullish: `{proximity_pct.toFixed(1)}% from swing high ${swing_level.toFixed(2)} · within {(scanned.resistanceProximityPct*100).toFixed(1)}%`;
+     - `ATR ratio {atr_ratio.toFixed(2)} · must be below {fmtThreshold(scanned.atrCompressionRatio, 2)}`
+     - `Range ratio {range_ratio.toFixed(2)} · {scanned.rangeLookbackBars}-bar range must be below {fmtThreshold(scanned.rangeAtrMult, 1)} × ATR`
+       (`rangeLookbackBars` is already the truncated, backend-applied integer)
+     - `Volume ratio {vol_ratio.toFixed(2)} · must be below {fmtThreshold(scanned.volCompressionRatio, 2)}`
+     - Bullish: `{proximity_pct.toFixed(1)}% from swing high ${swing_level.toFixed(2)} · within {fmtThreshold(scanned.resistanceProximityPct * 100, 1)}%`;
        Bearish: same with "swing low".
+     (Row *values* keep today's display rounding; only the *thresholds* must equal what the backend applied.)
      Then the dim note "Same facts as the hover tooltips." (the preview's note, shortened to what is true on the
      page). No trend-filter line (not in the approved mockup).
    - **"Confidence {row.confidence}%"** — when `row.confidence_breakdown` is present: one row per entry of
@@ -293,3 +323,10 @@ and handlers):**
 - Probe: `kind: absent`, path `frontend/app/(frame)/screener/step-4-prebreakout/__tests__/rowDetails.test.tsx`
   (T3, the last ticket), pattern `Why it's a setup`. PRESENCE ONLY.
 - After the last ticket: `built`; after a clean code round: `audit_clean: true`; `shipped` only on merge.
+
+## Audit record
+
+- Plan round 1 (2026-10-11): fresh independent gate auditor, plan at 4358b7a2 — **3 gate findings**, all fixed in this revision:
+  - F1: the Pre-Breakout description kept the live proximity % above rows judged on another one → it reads `scanned` while rows show.
+  - F2: a pre-existing defect. After a direction switch and a remount, Set Alert would save a watch in the wrong direction → the dialog receives the clicked row's direction.
+  - F3: the remembered or printed thresholds could differ from the backend's (`int()` truncation, lossy `toFixed`) → effective values are remembered and `fmtThreshold` prints them exactly; off-step tests added.
