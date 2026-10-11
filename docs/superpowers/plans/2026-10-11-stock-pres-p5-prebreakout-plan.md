@@ -366,3 +366,4 @@ and handlers):**
   - R2-2: the ATR tooltip hardcoded "20-bar" against the applied `atr_avg_lookback` → it prints the scanned lookback, and so does the panel help line.
   - R2-3: the panels displayed off-step percents rounded (7.25 → "7.2") and stored decimal integer keys the backend truncates → display `Number((x*100).toFixed(6))` and integer keys truncated on store. This is a display-only scope extension to the two panel files.
   - Round 3 is the plan stage's last allowed round.
+- Plan round 3 (2026-10-11): fresh independent gate auditor on `7f97995d..058d4711` (round-2 fixes only) — **0 gate findings, clean**. Plan stage closed at round 3.
