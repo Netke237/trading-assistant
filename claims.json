@@ -24,10 +24,16 @@
     },
     {
       "agent": "claude",
-      "branch": "board/agent-self-merge-43c45c00",
-      "claimed_at": "2026-10-11T10:44:47Z",
-      "expires_at": "2026-10-11T13:47:01Z",
-      "note": "User explicitly requested fix and merge PR #219 and refresh Board #151 in this chat",
+      "branch": "board/agent-self-merge-1bcca909",
+      "claimed_at": "2026-10-11T11:52:43Z",
+      "expires_at": "2026-10-11T14:52:43Z",
+      "note": "User explicitly reassigned active claim in this chat: correct, push and merge PR #219",
+      "previous": [
+        {
+          "branch": "board/agent-self-merge-43c45c00",
+          "claimed_at": "2026-10-11T10:44:47Z"
+        }
+      ],
       "task": "AGENT-SELF-MERGE"
     }
   ]
