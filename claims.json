@@ -2,10 +2,16 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/tradier-governor-eebde90e",
-      "claimed_at": "2026-10-11T18:07:49Z",
-      "expires_at": "2026-10-11T23:27:14Z",
-      "note": "Kenneth requested highest-priority unclaimed in-progress task; resume #169 T3/T4, leave other chat 55\u219245 alone",
+      "branch": "board/tradier-governor-933676cd",
+      "claimed_at": "2026-10-11T20:43:33Z",
+      "expires_at": "2026-10-11T23:43:33Z",
+      "note": "User explicitly reassigned #169 to this chat; continue T3/T4 and code audit",
+      "previous": [
+        {
+          "branch": "board/tradier-governor-eebde90e",
+          "claimed_at": "2026-10-11T18:07:49Z"
+        }
+      ],
       "task": "TRADIER-GOVERNOR"
     }
   ]
