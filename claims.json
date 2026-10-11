@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tradier-governor-933676cd",
       "claimed_at": "2026-10-11T20:43:33Z",
-      "expires_at": "2026-10-11T23:43:33Z",
+      "expires_at": "2026-10-11T23:43:55Z",
       "note": "User explicitly reassigned #169 to this chat; continue T3/T4 and code audit",
       "previous": [
         {
