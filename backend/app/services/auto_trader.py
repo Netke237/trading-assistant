@@ -682,6 +682,68 @@ def _market_is_open(symbol: str) -> bool:
         return False
 
 
+def _option_quote_state(option_symbol: str) -> str:
+    """Probe one exact OCC row, outside the state lock, on a bounded deadline."""
+    import concurrent.futures
+    import time
+    import httpx
+    from app.data.option_symbol import to_occ
+    from app.data.governor import get_governor
+    from app.data.market import get_tradier_creds, _headers, intraday_feed_lag_seconds
+    from app.data.quote_liveness import classify_quote
+    from app.scoring.contract_validator import max_quote_age_seconds
+    from app.services.market_session import MARKET_TZ, _market_session_open
+
+    try:
+        occ = to_occ(option_symbol)
+        expiry = datetime.strptime(occ[-15:-9], "%y%m%d").date().isoformat()
+    except (ValueError, TypeError):
+        return "invalid_symbol"
+    if not _market_session_open(datetime.now(MARKET_TZ)):
+        return "session_closed"
+
+    governor = get_governor()
+    def probe() -> str:
+        token, base = get_tradier_creds()
+        if not token or not governor.try_acquire("tradier"):
+            return "unavailable"
+        try:
+            response = httpx.get(
+                f"{base.rstrip('/')}/v1/markets/options/chains",
+                params={"symbol": occ[:-15], "expiration": expiry, "greeks": "false"},
+                headers=_headers(token), timeout=2.5,
+            )
+            response.raise_for_status()
+            rows = response.json().get("options", {}).get("option", [])
+            if isinstance(rows, dict):
+                rows = [rows]
+            row = next((r for r in rows if r.get("symbol") == occ), None)
+            governor.record_success("tradier")
+            if row is None:
+                return "unavailable"
+            bid, ask = float(row.get("bid") or 0), float(row.get("ask") or 0)
+            if not math.isfinite(bid) or not math.isfinite(ask):
+                return "unavailable"
+            if ask <= 0:
+                return "one_sided"
+            return classify_quote(
+                bid, ask, row.get("bid_date"), row.get("ask_date"), now_s=time.time(),
+                session_open=True, feed_lag_s=intraday_feed_lag_seconds(),
+                max_age_s=max_quote_age_seconds(),
+            )[0]
+        except Exception:
+            governor.record_failure("tradier")
+            return "unavailable"
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return executor.submit(probe).result(timeout=3.0)
+    except Exception:
+        return "unavailable"
+    finally:
+        executor.shutdown(wait=False)
+
+
 _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 
@@ -1781,10 +1843,13 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
     refusal is the 400 body of POST /auto-trade/fire (a prefixed 500 for the
     two config faults), with a human reading it.
-    The scan trigger has no reader at all: POST /scan calls it through
-    `asyncio.to_thread` and discards the outcome, so without this the refusal
-    is a log line on a box nobody is watching while an armed order silently
-    does not happen.
+    The scan trigger has no reader at all: POST /scan runs
+    `maybe_fire_on_scan` on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker thread
+    and acts only on a returned `FiredOrder`, which it books back on the event
+    loop through `book_fired_order`. A refusal is caught inside
+    `maybe_fire_on_scan` and comes back as None, which POST /scan reports to
+    no one, so without this the refusal is a log line on a box nobody is
+    watching while an armed order silently does not happen.
 
     SHARED BY EVERY REFUSAL KIND SINCE TARGET 2a ROUND 1, which found the
     headwind refusal — the one that is EXPECTED to happen in normal operation,
@@ -1793,17 +1858,26 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     ValueError)`. `what` and `reason` are the caller's words; everything below
     is the same for all of them.
 
-    WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
-    `asyncio.to_thread` created, which has no event loop of its own, so a
-    fresh loop is the only way to await an async notifier. Keeping it at the
-    scan-trigger boundary rather than inside fire() is what makes that true —
-    fire() is also reachable from the event-loop thread, via the /fire
-    endpoint, where asyncio.run raises.
+    WHY asyncio.run IS CORRECT HERE: this runs in a worker thread with no
+    event loop of its own — `routers/scan._SCAN_FIRE_EXECUTOR`'s worker for
+    the scan trigger's refusals, an `asyncio.to_thread` worker for the booking
+    alerts below — so a fresh loop is the only way to await an async notifier.
+    Booking itself (`book_fired_order`) never moves into such a thread: it
+    stays on the originating request's event loop with that request's session.
+    The thread, not the call site inside or outside fire(), is what makes
+    asyncio.run safe: since P3c item 7 no production caller runs fire() on
+    the event loop either — POST /auto-trade/fire calls it from
+    `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, and the scan trigger
+    reaches it inside `maybe_fire_on_scan` on `_SCAN_FIRE_EXECUTOR`'s. What
+    keeping these alerts at the scan-trigger boundary rather than inside
+    fire() still decides is WHO is alerted: a manual refusal already reaches
+    a human as the /fire response body (above), so only the scan trigger needs
+    a channel; inside fire() every manual refusal would page as well.
 
     THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
     so: every caller reaches this from a thread with no loop. The refusal
     helpers are called from maybe_fire_on_scan, whose only caller is POST
-    /scan through asyncio.to_thread; the two booking alerts (O4 steps 4+5,
+    /scan on `_SCAN_FIRE_EXECUTOR`'s worker thread; the two booking alerts (O4 steps 4+5,
     `services/auto_trade_booking.py`) run ON the event loop and so call this
     through `await asyncio.to_thread(...)` -- called directly there, this guard
     would drop every one of them. It stays because the cost of being wrong
@@ -2374,8 +2448,9 @@ def _alert_stale_arm(symbol: str, age_minutes: float, max_age: int) -> None:
     above the three `d8a8e2c1` fixed. The staleness guard consumes the armed
     order and returns BEFORE `maybe_fire_on_scan`'s try, so none of the routing
     added by round 1 could ever see it: no history row, no alert, one
-    `logger.warning` on a box nobody watches, which POST /scan discards along
-    with the rest of the trigger's outcome. Against `max_arm_age_minutes: 30`
+    `logger.warning` on a box nobody watches, and the trigger's only result for
+    this exit is None, which POST /scan surfaces to no one (it acts only on a
+    returned `FiredOrder`, which it books). Against `max_arm_age_minutes: 30`
     (risk_rules.yaml) and a scan cadence in minutes, this is plausibly THE MOST
     FREQUENT way an armed trade dies — the common case was the unreported one.
 
@@ -2588,8 +2663,10 @@ class AutoTradeService:
         Passed by callers that read the armed slot, decided something about
         what they read, and only then called — `maybe_fire_on_scan` checks the
         staleness of the order it read. Without it, a disarm-and-re-arm inside
-        the window (a manual POST /auto-trade/fire on the event loop while the
-        scan runs in a worker thread) had this attempt fire AAPL on the
+        the window (a manual POST /auto-trade/fire, whose fire() runs on
+        `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, while the scan
+        trigger runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s — two executors,
+        so neither serialises the other) had this attempt fire AAPL on the
         strength of MSFT's age check and then alert about MSFT for a row that
         says AAPL — F1's third interleaving. Identity, not equality: a re-arm
         with an equal-valued strategy is still a different decision. Mismatch
@@ -2607,6 +2684,8 @@ class AutoTradeService:
                     "— armed state preserved for the next trigger"
                 )
             _symbol = self._state.strategy.symbol
+            _option_symbol = self._state.strategy.option_symbol
+            _probed_strategy = self._state.strategy
             # An unsupported arm is consumed even outside market hours. Take it
             # under the same lock as the identity check; record outside the lock.
             unvalidated = self._state.strategy.direction == "Bearish"
@@ -2627,6 +2706,14 @@ class AutoTradeService:
                 f"— armed state preserved for retry"
             )
 
+        _qs = _option_quote_state(_option_symbol)
+        if _qs != "live":
+            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
+            raise ArmPreservedError(
+                f"No live option quote for {_option_symbol} ({_qs}) "
+                "— armed state preserved for retry"
+            )
+
         with self._lock:
             # Re-check: another thread may have disarmed while we checked market.
             if not self._state.armed or self._state.strategy is None:
@@ -2641,6 +2728,8 @@ class AutoTradeService:
                     "AutoTrader re-armed since this attempt read it "
                     "— armed state preserved for the next trigger"
                 )
+            if self._state.strategy is not _probed_strategy or self._state.strategy.option_symbol != _option_symbol:
+                raise ArmPreservedError("AutoTrader re-armed during quote probe — armed state preserved for retry")
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
@@ -3112,7 +3201,10 @@ class AutoTradeService:
         """Trigger #2: called after each scan completes. Fires if armed and fresh.
 
         Returns the `FiredOrder` on a fire, for POST /scan to book on the event
-        loop (O4 step 5). Every other exit -- not armed, stale, and every
+        loop (O4 step 5). Runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker
+        thread; if the request is cancelled before booking starts, the scan
+        router logs this return value instead of booking it
+        (`_log_scan_fire_outcome`). Every other exit -- not armed, stale, and every
         refusal handler below -- returns None, unchanged.
         """
         with self._lock:
@@ -3145,7 +3237,7 @@ class AutoTradeService:
         # `self.disarm()`, a `logger.warning` and a `return` — placed ABOVE the
         # try, so every routing branch below was structurally blind to it. The
         # armed order was consumed and the only trace was a log line inside a
-        # worker thread whose return value POST /scan throws away. It is also
+        # worker thread whose None return POST /scan surfaces to no one. It is also
         # the refusal most likely to actually happen, which is the wrong one to
         # have made invisible.
         max_age = self._max_arm_age_minutes()

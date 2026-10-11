@@ -7,7 +7,7 @@ import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,12 +25,19 @@ class DrawingPoint(BaseModel):
     price: float
 
 
+class DrawingPointIn(DrawingPoint):
+    """Request-only point (NUMERIC-API-INPUTS T2): a non-finite price is a 422.
+    `DrawingPoint` stays unguarded because `DrawingOut` lists stored rows, and
+    a drawing stored before this guard must still list."""
+    model_config = ConfigDict(allow_inf_nan=False)
+
+
 class DrawingIn(BaseModel):
     id: str
     symbol: str
     interval: str
     kind: Literal['trendline', 'hline', 'rect', 'text', 'arrow', 'arrow_up', 'arrow_down', 'circle', 'path']
-    points: list[DrawingPoint] = Field(default_factory=list)
+    points: list[DrawingPointIn] = Field(default_factory=list)
     color: str
     width: int = 1
     text: str | None = None

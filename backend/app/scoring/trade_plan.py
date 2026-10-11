@@ -65,6 +65,7 @@ def build_trade_plan(
     hold_min: float | None = None,
     hold_max: float | None = None,
     reprice_cfg: dict | None = None,
+    quote_live: bool | None = None,
 ) -> TradePlan:
     """Compute the full trade plan for one contract.
 
@@ -105,6 +106,9 @@ def build_trade_plan(
                      a "Custom" that arrives on one path and not the other is
                      exactly how the two cards diverge.
         reprice_cfg: the reprice_horizon config block; None loads risk_rules.yaml.
+        quote_live:  passed to assess_entry (NO-LIVE-QUOTE plan 3e). False =
+                     the entry bid/ask/mid are not a live quote; None = not
+                     stated (the scan, whose contracts were live when graded).
     """
     is_call = direction == "Bullish"
     premium = max(float(premium), 0.01)
@@ -148,7 +152,7 @@ def build_trade_plan(
     # applies and rr_risk_basis is "full_premium".
     invalidation_price = max(float(final_stop_price), 0.01)
 
-    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
+    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid, quote_live=quote_live)
     # Captured plans price the cents midpoint that is displayed and replayed.
     if captured_stock_risk(premium, stop_cost_fraction) is not None:
         premium = round(premium, 2)

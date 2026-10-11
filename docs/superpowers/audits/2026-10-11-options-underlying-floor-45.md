@@ -52,3 +52,30 @@ and pandas; no application behavior was exercised by those attempts.
 
 The validator caches YAML configuration, so a running backend needs a restart
 to adopt the new default. Explicit contract-floor overrides keep precedence.
+
+## Authorized main integration — round 1 of 3 clean
+
+Fresh independent reviewer `/root/options_floor_merge_audit` applied both
+required audit skills and the numeric/persistence gate to the complete six-file
+working-tree task diff against main `a120caa57adf857919e1998c41426804bf13ad24`,
+integrating original task commit `0018d4d1e3cb93dc34fb6d82b7be180de920412d`.
+Zero gate findings after recheck; no fixes or outstanding findings. This is a
+separate integration stage, preserving the original clean implementation round.
+
+Scope verified: shared validator, selection, schedule override stripping,
+unchanged stock classification and PASS-only auto-fire trigger, blocker
+threshold explanations and project-state record preservation.
+
+Reviewed production/test blobs (config, validator, validator tests, reproducibility):
+
+```
+d07d906bd3ceb37c3d634203ae496240de886bd7
+6d58cdf4551d7d7bf9016599a2ba11de6e3edd81
+e890fb6a800266f2917c76b82380966e90578651
+03cbcca131d69481c4fbbdff75320c6d99eb2d2f
+```
+
+Combined-result validation: Python 3.11.9, 85 focused backend tests passed in
+28.67s; frontend typecheck passed; state verification exited zero with only
+existing unrelated unaudited-target warnings. User explicitly authorized merge
+and push. Main's newer state metadata was preserved during conflict resolution.

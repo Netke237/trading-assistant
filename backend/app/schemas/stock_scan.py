@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.schemas import SentimentData, FundamentalsOut
+from app.schemas import SentimentData, FundamentalsOut, StockExplanation
 from app.services.horizon_profiles import TunedHorizon
 
 
@@ -9,6 +9,10 @@ Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_revers
 
 
 class StockScanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422. Inherited by
+    # StockAnalysisRequest (pydantic merges a parent's config into a subclass).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     symbols:     Optional[list[str]] = None   # when set, scan only these tickers
     direction:   Literal["Bullish", "Bearish"]
@@ -184,6 +188,13 @@ class PositionCardOut(BaseModel):
     # (STOCKS-HORIZON-T1 H4). Defaults so a persisted older result validates.
     params_horizon: Optional[str] = None
     params_source: Literal["tuned", "baseline"] = "baseline"
+    # STOCK-PRES-P1: the scorer's own evidence for stock_score (weights, factor
+    # components, scorer caps), exactly StockScoreCard.explanation. Scorer-time:
+    # its `status` is the SCORER's verdict, before the scan's later caps
+    # (missing/low confidence, Bearish, earnings veto). The verdict is
+    # stock_status. None on results persisted before P1, or if the evidence
+    # failed validation (logged; the candidate is kept).
+    stock_explanation: Optional[StockExplanation] = None
 
 
 class GateFlag(BaseModel):

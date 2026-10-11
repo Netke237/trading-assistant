@@ -12,6 +12,9 @@ from app.services.config_health import config_health
 OrderType = Literal["Limit", "Market"]
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
+# NO-LIVE-QUOTE (plan 3e): the entry reason when the quote is not live.
+NO_LIVE_QUOTE_REASON = "no live quote — entry priced off the last close"
+
 CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
 
 
@@ -64,7 +67,15 @@ def assess_entry(
     ask: float,
     mid: float,
     config: EntryConfig | None = None,
+    quote_live: bool | None = None,
 ) -> EntryAssessment:
+    """Grade the entry off bid/ask/mid.
+
+    quote_live (NO-LIVE-QUOTE plan 3e): False means bid/ask/mid are not a live
+    quote (Step 7's live quote failed or came back not live), so the entry is
+    at best CAUTION with the reason NO_LIVE_QUOTE_REASON. None (every caller
+    that does not say) and True leave the grade as before.
+    """
     if config is None:
         config = EntryConfig()
 
@@ -93,6 +104,11 @@ def assess_entry(
         if worst_status == "PASS":
             worst_status = "CAUTION"
         quality_reasons.append("elevated spread")
+
+    if quote_live is False:
+        if worst_status == "PASS":
+            worst_status = "CAUTION"
+        quality_reasons.append(NO_LIVE_QUOTE_REASON)
 
     return EntryAssessment(
         limit_price=limit_price,

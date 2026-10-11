@@ -1,0 +1,7 @@
+{
+  "backend/app/data/governor.py": "a7aa3ce70df248b3207675eb18626f4afdd1abbee47371a2401c4d0b1797728b",
+  "backend/app/services/auto_trader.py": "6d0a7312e7edad9ca1d224b1ecbc7f0421004a62bc79e8a8f27c14636f77dc6f",
+  "backend/tests/conftest.py": "85c2cd14c596cc4170a36c27b35fb96d60d6fed23cc32c6dbf4866ee71fb2567",
+  "backend/pytest.ini": "9c11b3d87b9631c623f0ad279073673711af1e16193342d59acbb2f8e43d4375",
+  "backend/tests/test_no_live_quote_fire_gate.py": "14927b783543f7e9e98fa3957391bae7184c7aca099e4f2af1bb218decd124b8"
+}

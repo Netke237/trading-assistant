@@ -354,6 +354,12 @@ class OptionContract(BaseModel):
     score: int
     contractConfidence: Status
     explanation: Optional[ContractExplanation] = None
+    # NO-LIVE-QUOTE (plan 3c): /api/contracts grades in label mode, so a row
+    # whose quote is not live comes back capped at CAUTION with these set from
+    # the score card. quoteState: 'one_sided' | 'session_closed' | 'stale';
+    # None on a live row.
+    noLiveQuote: bool = False
+    quoteState: Optional[str] = None
 
 
 # ── Candles ──────────────────────────────────────────────────────────────────
@@ -645,6 +651,15 @@ class FinalStopOut(BaseModel):
     computedAt: str
 
 
+class FinalStopIn(FinalStopOut):
+    """Request-only FinalStopOut (NUMERIC-API-INPUTS T2): the block a card
+    round-trips into POST /contracts/recompute-plan, where a non-finite
+    number is a 422. FinalStopOut itself stays unguarded: exit_plan.py builds
+    it and every response returns it. A FinalStopIn echoed into a
+    FinalStopOut-typed response field serialises with the parent's fields."""
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
+
+
 class TradeExit(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     # PIECE 3: the resolved stock stop — the wider of the structural level and
@@ -755,6 +770,11 @@ class TradeCardData(BaseModel):
     isEtf: bool = False
     # Days to EARNINGS alone (nextEventDays is the nearer of earnings/dividend).
     earningsDays: Optional[int] = None
+    # NO-LIVE-QUOTE (plan 3c): carries a Step 6 pick's flag onto the card. A
+    # scan card is built only from contracts that were live WHEN THE SCAN RAN
+    # (reject mode), so the scan always leaves this False -- which is never
+    # proof that the quote is live now (the result is persisted).
+    noLiveQuote: bool = False
     alternatives:      list[AlternativeContract] = []
     alternativesCount: int = 0
     confidence:        Optional[int] = None
@@ -806,6 +826,11 @@ class TradeCardData(BaseModel):
 # ── Scan ─────────────────────────────────────────────────────────────────────
 
 class ScanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422 -- also when a
+    # stored schedule entry is re-validated (the scheduler records a failed
+    # run; GET /api/scan-schedule skips the entry with a warning).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     direction:   Direction
     horizon:     Horizon
@@ -1095,6 +1120,11 @@ class ScanResult(BaseModel):
     # back to Bullish / Swing (STEP3-PARAM-REACH). None = a result from before
     # 2026-10-02.
     request_context: Optional[ScanRequestContext] = None
+    # NO-LIVE-QUOTE (plan 3f): how many rejected names were rejected only
+    # because none of their contracts had a live quote (reason exactly
+    # "contracts rejected: no_live_quote(N)"). The scheduled-scan notice reads
+    # this rather than parsing reasons. 0 on results persisted before it.
+    noLiveQuoteNames: int = 0
 
 
 class ScanSessionStatus(BaseModel):
@@ -1141,7 +1171,10 @@ class ScanSessionStatus(BaseModel):
 # ── Portfolio persistence ─────────────────────────────────────────────────────
 
 class PortfolioPositionCreate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float is persisted, so
+    # each is finite or a 422. Also reached by auto_trade_booking._build_body,
+    # whose existing except refuses the booking instead of writing the value.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     recId: str = Field(alias="rec_id")
     symbol: str
@@ -1320,7 +1353,8 @@ class PortfolioPositionUpdate(BaseModel):
     `exitPlan`/`maxLossOverride`/`alertOverrides` follow the exclude_unset
     pattern so `{"exitPlan": null}` can still explicitly clear a previously
     computed value."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): persisted; finite or a 422.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
 
     stop: Optional[float] = None
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
@@ -1366,6 +1400,10 @@ class PortfolioPositionSchema(BaseModel):
     currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
+    # True when GET /portfolio got no quote for this position (NO-LIVE-QUOTE
+    # NLQ-1 round-1 F2). currentPrice / pnlDollar / pnlPct then hold their 0.0
+    # defaults, which are NOT a price: the table renders "—" instead.
+    quoteUnavailable: bool = False
     dteRemaining: int = 0
     delta: Optional[float] = None
     theta: Optional[float] = None
@@ -1436,7 +1474,8 @@ class PortfolioPositionSchema(BaseModel):
 
 class ClosePositionRequest(BaseModel):
     """Body for POST /api/portfolio/{rec_id}/close."""
-    model_config = ConfigDict(populate_by_name=True)
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): exitPrice is persisted.
+    model_config = ConfigDict(populate_by_name=True, allow_inf_nan=False)
     qtyToClose: Optional[int] = None        # None -> close the whole position
     exitPrice: Optional[float] = None       # None -> server fetches the live quote
     exitDate: Optional[str] = None          # None -> today (YYYY-MM-DD)
