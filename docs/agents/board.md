@@ -83,7 +83,7 @@ You act with Kenneth's own GitHub account, and `main` has no server-side protect
 
 Notify on `waiting-merge`, `needs-kenneth`, `blocked`, and "nothing ready":
 - a **comment on the Board issue** (`[tag] #<item> <PHASE-ID>: <what is needed> <link>`) — never edit the Board body; the Board's "Waiting for Kenneth" links show the live lists by label;
-- `python3 scripts/board_notify.py "<same line>"` — Telegram when `BAMENDJOU_TELEGRAM_BOT_TOKEN` / `BAMENDJOU_TELEGRAM_CHAT_ID` are set, otherwise it just prints (never fatal). No secrets, tokens, account numbers or personal data. "Nothing ready": only if no such Board comment exists from today;
+- `python3 scripts/board_notify.py "<same line>"` — Telegram when `BAMENDJOU_TELEGRAM_BOT_TOKEN` / `BAMENDJOU_TELEGRAM_CHAT_ID` are set, otherwise it just prints (never fatal). Pass the full line, tag and link included; as a safety net the script adds a missing `[claude]`/`[codex]` tag (from the environment, else `[agent?]`) and a missing GitHub link (to the first `#<n>`, else the Board). No secrets, tokens, account numbers or personal data. "Nothing ready": only if no such Board comment exists from today;
 - end with the report below.
 
 GitHub does not notify Kenneth of actions taken with his own token, so the Board and Telegram are the only signals he gets.
