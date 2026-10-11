@@ -15,7 +15,7 @@ dte_holding_multiplier: 2.0
 
 # Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
 hard_reject:
-  min_volume: 50                # contracts per day — below this = illiquid
+  min_volume: 0                 # optional hard floor; 0 = off (FR-25 treats volume as soft)
   min_open_interest: 200        # open interest — below this = illiquid
   max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
   min_delta: 0.20               # absolute delta — below this = too far OTM
@@ -40,9 +40,7 @@ hard_reject:
   # IV. Same standing as the iv_rank_* thresholds in scoring_rules.yaml.
   max_iv_rank: 70               # long-premium strategy: never buy when IV rank > 70
   max_soft_fail_count: 3        # reject if this many soft rules fail
-  min_stock_score: 55           # contracts only recommended when the underlying's stock score is at least this
-                                 # (matches scoring_rules.yaml's stock `pass` bar exactly — CAUTION-grade
-                                 # underlyings, 35-54, no longer qualify for options recommendations)
+  min_stock_score: 45           # options underlying-score floor; independent of the stock PASS threshold (55)
 
 # Soft-rank rules (FR-25) — penalise score but do not block
 soft_rank:

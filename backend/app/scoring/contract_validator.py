@@ -141,9 +141,17 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    # volume == 0 is Tradier's off-hours sentinel (resets daily before market open).
-    # When OI is adequate, skip the volume gate — OI is the real liquidity proxy.
-    if volume < hr["min_volume"] and not (volume == 0 and oi >= hr["min_open_interest"]):
+    # min_volume is an optional hard floor, 0 = off (the default; FR-25 treats
+    # volume as soft, scored under the Preferred liquidity floors). For an
+    # explicit floor above 0, volume == 0 is exempt when OI is adequate: a 0 is
+    # Tradier's session-to-date count and cannot be told apart from "no trades
+    # yet this session", so OI is the liquidity proxy there. Off-hours rows are
+    # rejected or labelled by the quote-liveness rule (no_live_quote), not here.
+    if (
+        hr["min_volume"] > 0
+        and volume < hr["min_volume"]
+        and not (volume == 0 and oi >= hr["min_open_interest"])
+    ):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
@@ -220,10 +228,14 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     oi_score = 100 if pref_oi_min <= 0 else min(100, int(oi / pref_oi_min * 60))
     score = (vol_score + oi_score) // 2
 
-    if pref_volume_min > 0 and volume < pref_volume_min:
-        flags.append("low_volume")
-    if pref_oi_min > 0 and oi < pref_oi_min:
-        flags.append("low_open_interest")
+    # ONE soft flag for the liquidity axis (CONTRACT-LIQUIDITY-DTE fix 2):
+    # volume and open interest together count as at most one soft miss toward
+    # max_soft_fail_count. It replaces low_volume / low_open_interest, which
+    # spent two slots on one axis. The score above is unchanged.
+    if (pref_volume_min > 0 and volume < pref_volume_min) or (
+        pref_oi_min > 0 and oi < pref_oi_min
+    ):
+        flags.append("thin_liquidity")
     return score, oi_score, flags
 
 
@@ -491,8 +503,8 @@ def validate_contract(
     Args:
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
-                     Contracts are only recommended when stock_score >= 55
-                     (matches the stock `pass` bar in scoring_rules.yaml).
+                     The configured options floor defaults to 45, independently
+                     of the stock `pass` bar (55) in scoring_rules.yaml.
         overrides:   Optional dict of hard-reject and soft-rank overrides; the
                      keys read are _CONTRACT_OVERRIDES' (others are ignored).
         quote_mode:  What a row whose quote is not live does (NO-LIVE-QUOTE,

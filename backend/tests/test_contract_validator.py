@@ -53,29 +53,28 @@ def test_iv_rank_none_is_not_rejected():
     assert "iv_rank_too_high" not in card.reject_reasons
 
 
-def test_caution_tier_stock_score_hard_rejects():
-    """A CAUTION-tier stock score (35-54, below the documented >=55 gate but
-    above the separate REJECT-status cutoff elsewhere) must reject here —
-    previously this parameter was accepted but never checked."""
-    card = validate_contract(_base_contract(), stock_score=45)
+def test_stock_score_below_options_floor_hard_rejects():
+    """An underlying below 45 still fails the options floor."""
+    card = validate_contract(_base_contract(), stock_score=44)
     assert card.status == "REJECT"
     assert "stock_score_below_threshold" in card.reject_reasons
 
 
 def test_stock_score_at_threshold_passes():
-    """stock_score exactly at the gate (55, matching scoring_rules.yaml's stock
-    `pass` bar) should not be rejected on this basis."""
-    card = validate_contract(_base_contract(), stock_score=55)
+    """The options floor is inclusive at 45."""
+    card = validate_contract(_base_contract(), stock_score=45)
     assert "stock_score_below_threshold" not in card.reject_reasons
 
 
-def test_stock_score_just_below_new_threshold_rejects():
-    """stock_score=50 passed under the old 50-point gate; after raising
-    min_stock_score to 55 (matching the stock pass bar), a CAUTION-grade
-    underlying (35-54) no longer qualifies for an options recommendation."""
-    card = validate_contract(_base_contract(), stock_score=50)
-    assert card.status == "REJECT"
-    assert "stock_score_below_threshold" in card.reject_reasons
+@pytest.mark.parametrize("stock_score", [45, 50, 54, 55])
+def test_options_floor_is_independent_of_stock_pass_threshold(stock_score):
+    from app.scoring.stock_scorer import _load_config
+
+    thresholds = _load_config()["stock_score_thresholds"]
+    assert thresholds["pass"] == 55
+    assert thresholds["caution"] == 35
+    card = validate_contract(_base_contract(), stock_score=stock_score)
+    assert "stock_score_below_threshold" not in card.reject_reasons
 
 
 def test_override_raises_max_iv_abs():
@@ -347,10 +346,15 @@ def test_label_mode_caps_pass_at_caution_and_flags_the_card():
 
 def test_label_mode_flag_does_not_count_as_a_soft_failure():
     """Two real soft flags plus the label must not reach max_soft_fail_count
-    (3) and turn into too_many_soft_failures: the label changes no grade."""
-    thin = _live_pass_contract(volume=100, open_interest=500)
+    (3) and turn into too_many_soft_failures: the label changes no grade.
+    Thin liquidity is ONE flag (volume and OI together), so the second real
+    miss is an IV just above the Preferred ceiling (56 > 55); the live card
+    scores 48, CAUTION. (A delta of 0.25 or a spread just above 8% would
+    each sink it below caution 45.)"""
+    thin = {**_live_pass_contract(volume=100, open_interest=500), "iv_rank": 56}
     live = validate_contract(thin, stock_score=70, quote_mode="label")
-    assert live.status == "CAUTION" and len(live.soft_flags) == 2
+    assert live.status == "CAUTION"
+    assert live.soft_flags == ["thin_liquidity", "iv_rank_elevated"]
     card = validate_contract(_not_live(thin), stock_score=70, quote_mode="label")
     assert card.status == "CAUTION"
     assert card.reject_reasons == []
@@ -358,8 +362,11 @@ def test_label_mode_flag_does_not_count_as_a_soft_failure():
 
 
 def test_label_mode_still_applies_every_other_hard_rule():
+    # min_volume defaults to 0 (off); an explicit floor keeps volume_too_low
+    # the hard rule exercised here.
     card = validate_contract(
         _not_live(_live_pass_contract(volume=1)), stock_score=70, quote_mode="label",
+        overrides={"min_volume": 50},
     )
     assert card.status == "REJECT"
     assert "volume_too_low" in card.reject_reasons
@@ -400,3 +407,104 @@ def test_missing_or_true_quote_live_reads_as_live(mode):
 def test_unknown_quote_mode_is_refused():
     with pytest.raises(ValueError):
         validate_contract(_live_pass_contract(), stock_score=70, quote_mode="ignore")
+
+
+# ── CONTRACT-LIQUIDITY-DTE (fixes 1 + 2) ─────────────────────────────────────
+#
+# Fix 1: hard_reject.min_volume defaults to 0 (an optional hard floor, off by
+# default; FR-25 treats volume as soft). The zero-volume exemption is kept for
+# an explicit floor above 0. Fix 2: volume and open interest below their
+# Preferred floors raise ONE soft flag, thin_liquidity, so a long-dated
+# contract no longer spends two of its max_soft_fail_count (3) slots on one axis.
+# Every case is _contract_with_expiry(40, ...): bid 2.00 / ask 2.10, delta
+# 0.45, iv_rank 30 (absolute), vol 500, OI 2,000 -- no soft flag of its own.
+
+def _liq_contract(**overrides):
+    return _contract_with_expiry(40, **overrides)
+
+
+def test_aapl_315c_shape_is_not_rejected_at_the_default_config():
+    """The case that opened the phase: vol 3, OI 1,534, a 1.2% spread. Today's
+    floor of 50 rejected it while a vol-0 / OI-319 contract passed."""
+    card = validate_contract(
+        _liq_contract(volume=3, open_interest=1534, bid=2.00, ask=2.025), stock_score=70,
+    )
+    assert card.reject_reasons == []
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+def test_zero_and_small_volume_grade_alike_at_the_default_floor():
+    """Scores are not compared: int(3 / 200 * 60) == 0, the same as volume 0."""
+    zero = validate_contract(_liq_contract(volume=0), stock_score=70)
+    three = validate_contract(_liq_contract(volume=3), stock_score=70)
+    assert zero.reject_reasons == three.reject_reasons == []
+    assert zero.soft_flags == three.soft_flags == ["thin_liquidity"]
+
+
+def test_explicit_volume_floor_still_rejects_small_nonzero_volume():
+    card = validate_contract(_liq_contract(volume=3), stock_score=70,
+                             overrides={"min_volume": 50})
+    assert card.reject_reasons == ["volume_too_low"]
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+@pytest.mark.parametrize("oi", [200, 2000])
+def test_explicit_volume_floor_keeps_the_zero_volume_exemption(oi):
+    """For a user who opts into a floor, volume 0 with OI >= min_open_interest
+    still passes the volume rule (recorded residual)."""
+    card = validate_contract(_liq_contract(volume=0, open_interest=oi), stock_score=70,
+                             overrides={"min_volume": 50})
+    assert card.reject_reasons == []
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+def test_explicit_volume_floor_exemption_needs_adequate_open_interest():
+    """Kills a mutant that drops the exemption's OI clause."""
+    card = validate_contract(_liq_contract(volume=0, open_interest=150), stock_score=70,
+                             overrides={"min_volume": 50})
+    assert card.reject_reasons == ["volume_too_low", "open_interest_too_low"]
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+@pytest.mark.parametrize("volume", [0, 3, 500])
+def test_open_interest_floor_is_still_a_hard_reject(volume):
+    card = validate_contract(_liq_contract(volume=volume, open_interest=150), stock_score=70)
+    assert card.reject_reasons == ["open_interest_too_low"]
+    assert card.soft_flags == ["thin_liquidity"]
+
+
+@pytest.mark.parametrize(("volume", "oi", "expected"), [
+    (100, 500, ["thin_liquidity"]),    # both below their Preferred floors (200 / 1000)
+    (100, 2000, ["thin_liquidity"]),   # volume only
+    (500, 500, ["thin_liquidity"]),    # open interest only
+    (500, 2000, []),                   # neither
+])
+def test_thin_liquidity_is_raised_at_most_once(volume, oi, expected):
+    card = validate_contract(_liq_contract(volume=volume, open_interest=oi), stock_score=70)
+    assert card.soft_flags == expected
+    assert card.explanation["components"]["liquidity"]["flags"] == expected
+    assert "low_volume" not in card.soft_flags
+    assert "low_open_interest" not in card.soft_flags
+
+
+def test_one_liquidity_axis_costs_one_soft_failure_slot():
+    """Thin on both volume and OI plus an elevated spread is two soft misses,
+    not three. Reasons only, never status: the weighted score is 43.8, below
+    caution 45, on this code."""
+    two = validate_contract(
+        _liq_contract(volume=100, open_interest=500, bid=2.00, ask=2.25), stock_score=70,
+    )  # spread 0.25 / 2.125 = 11.8%, inside (8%, 20%)
+    assert two.soft_flags == ["thin_liquidity", "spread_elevated"]
+    assert two.reject_reasons == []
+    three = validate_contract(
+        _liq_contract(volume=100, open_interest=500, bid=2.00, ask=2.25, delta=0.25),
+        stock_score=70,
+    )
+    assert three.soft_flags == ["thin_liquidity", "spread_elevated", "delta_outside_preferred"]
+    assert "too_many_soft_failures" in three.reject_reasons
+
+
+def test_merged_flag_leaves_the_liquidity_score_unchanged():
+    """Volume and OI still each weigh half: (int(100/200*60) + int(500/1000*60)) // 2."""
+    card = validate_contract(_liq_contract(volume=100, open_interest=500), stock_score=70)
+    assert card.breakdown.liquidity_score == 30

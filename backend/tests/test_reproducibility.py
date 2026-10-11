@@ -94,7 +94,7 @@ class TestContractValidatorReproducibility:
         card_low = validate_contract(contract, stock_score=30)
         assert isinstance(card_high.score, int)
         assert isinstance(card_low.score, int)
-        # stock_score=30 is below the hard-reject gate (min_stock_score=55,
+        # stock_score=30 is below the hard-reject gate (min_stock_score=45,
         # contract_rules.yaml) — must reject, not silently score it anyway.
         assert card_low.status == "REJECT"
         assert "stock_score_below_threshold" in card_low.reject_reasons

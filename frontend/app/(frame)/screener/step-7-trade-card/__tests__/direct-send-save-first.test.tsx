@@ -423,6 +423,7 @@ describe('P1b-i — everything else keeps the row, with an ORDER-UNKNOWN note', 
 });
 
 describe('P1b-i — the notes outlive the card', () => {
+  // Explicit timeout: this long multi-step test exceeds Jest's 5 s default under CPU load (ticket 26, FIX-26B).
   it('8. an ORDER-UNKNOWN note survives Next, Prev, a basket submit, a new send and a remount', async () => {
     (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('boom'));
     await renderPage();
@@ -453,7 +454,7 @@ describe('P1b-i — the notes outlive the card', () => {
     cleanup();
     await renderPage();
     expect(noteText(firstNote)).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('8b. two UNKNOWN sends leave two notes', async () => {
     (api.postOptionOrder as jest.Mock).mockRejectedValue(new Error('boom'));
