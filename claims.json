@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tradier-governor-eebde90e",
       "claimed_at": "2026-10-11T18:07:49Z",
-      "expires_at": "2026-10-11T23:23:59Z",
+      "expires_at": "2026-10-11T23:24:09Z",
       "note": "Kenneth requested highest-priority unclaimed in-progress task; resume #169 T3/T4, leave other chat 55\u219245 alone",
       "task": "TRADIER-GOVERNOR"
     }
