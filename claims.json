@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/yaml-depth-bound-b7c4dc2b",
       "claimed_at": "2026-10-11T09:29:10Z",
-      "expires_at": "2026-10-11T12:29:10Z",
+      "expires_at": "2026-10-11T12:59:49Z",
       "note": "Board #167: bounded deep-YAML handling (ticket 24)",
       "task": "YAML-DEPTH-BOUND"
     }
