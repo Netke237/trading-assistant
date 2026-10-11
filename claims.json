@@ -15,14 +15,6 @@
       "expires_at": "2026-10-11T12:29:10Z",
       "note": "Board #167: bounded deep-YAML handling (ticket 24)",
       "task": "YAML-DEPTH-BOUND"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/confident-brahmagupta-b4fr58",
-      "claimed_at": "2026-10-11T09:48:49Z",
-      "expires_at": "2026-10-11T12:48:49Z",
-      "note": "board_notify.py: always tag sender + GitHub link (Kenneth chat request)",
-      "task": "BOARD-NOTIFY-FORMAT"
     }
   ]
 }
