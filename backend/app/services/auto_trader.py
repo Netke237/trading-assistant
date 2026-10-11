@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import logging
 import math
@@ -200,7 +201,9 @@ def _call_source_with_deadline(fn, symbol: str, deadline: float):
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(fn, symbol).result(timeout=deadline)
+        # A copied context carries the caller's Tradier markers (fire path,
+        # prepaid token) into the source's worker (TRADIER-GOVERNOR D3).
+        return ex.submit(contextvars.copy_context().run, fn, symbol).result(timeout=deadline)
     except concurrent.futures.TimeoutError:
         raise _SourceTimeout from None
     finally:
@@ -232,17 +235,32 @@ def _lookup_earnings_date(symbol: str):
     from app.data import market
     # Looked up at call time, so a test patch on either module lands.
     sources = (
-        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S),
-        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S),
+        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S, True),
+        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S, False),
     )
     outcome: dict[str, str] = {}     # name -> "answered" | "timeout" | "error"
     failures: dict[str, str] = {}    # name -> why, for the sources still failed
     for attempt in range(2):
-        for name, fn, deadline in sources:
+        for name, fn, deadline, is_tradier in sources:
             if attempt == 1 and outcome.get(name) != "error":
                 continue
+            # TRADIER-GOVERNOR D3 (R3-G1/R5-G1): off the fire path, the Tradier
+            # source's slot is taken HERE, before its deadline starts, waiting
+            # as long as the queue needs; the copied context then carries the
+            # prepaid token into the source's worker. Skipped on a same-day
+            # cache hit (no request will be made). The fire path never
+            # prepays: its calls book an overdraft. Prepay and call run in one
+            # copied context, so the marker never leaks into the caller.
+            ctx = contextvars.copy_context()
+            if is_tradier and not market._TRADIER_FIRE_PATH.get():
+                cached = market._fundamentals_calendar_cache.get(symbol)
+                if not (cached is not None and cached[1] == date.today().isoformat()):
+                    if not ctx.run(market.tradier_prepay, None):
+                        outcome[name] = "error"
+                        failures[name] = f"{name}: rate limiter refused admission"
+                        continue
             try:
-                found = _call_source_with_deadline(fn, symbol, deadline)
+                found = ctx.run(_call_source_with_deadline, fn, symbol, deadline)
             except _SourceTimeout:
                 outcome[name] = "timeout"
                 failures[name] = f"{name}: no answer within {deadline:g}s"
@@ -337,8 +355,11 @@ def _apply_event_veto(strategy) -> None:
             unknown=True,
         )
 
+    from app.data import market
     try:
-        earnings = _fetch_earnings_date(strategy.symbol)
+        # TRADIER-GOVERNOR D3: a fire-path call, admitted by overdraft.
+        with market.tradier_fire_path():
+            earnings = _fetch_earnings_date(strategy.symbol)
     except Exception as exc:  # noqa: BLE001 -- a failed lookup is an unknown date (D4)
         logger.warning("Event veto: earnings lookup failed for %s: %s", strategy.symbol, exc)
         _unknown(f"lookup failed: {exc}")
@@ -668,8 +689,10 @@ def _market_is_open(symbol: str) -> bool:
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
+        from app.data import market
         from app.data.market import fetch_price
-        future = ex.submit(fetch_price, symbol)
+        # TRADIER-GOVERNOR D3: the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, fetch_price, symbol)
         try:
             price = future.result(timeout=3.0)
         except concurrent.futures.TimeoutError:
@@ -705,7 +728,7 @@ def _option_quote_state(option_symbol: str) -> str:
     governor = get_governor()
     def probe() -> str:
         token, base = get_tradier_creds()
-        if not token or not governor.try_acquire("tradier"):
+        if not token or not governor.admit_sync("tradier", admit_timeout=0.0, overdraft=True):
             return "unavailable"
         try:
             response = httpx.get(
@@ -1270,7 +1293,10 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
         _fetch_bars = (_fetch_intraday_regime_bars
                        if rcfg.get("timeframe") == "15min"
                        else _fetch_scan_window_bars)
-        future = ex.submit(_fetch_bars, strategy.symbol)
+        from app.data import market
+        # TRADIER-GOVERNOR D3: both branches' Tradier fetch (A1 / A2) is a
+        # fire-path call; the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, _fetch_bars, strategy.symbol)
         try:
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:

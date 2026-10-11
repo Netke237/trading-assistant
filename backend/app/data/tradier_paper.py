@@ -93,7 +93,15 @@ class TradierPaperAdapter:
         return params
 
     def place_order(self, order: BrokerOrder) -> OrderResult:
+        from app.data.governor import get_governor
         url = f"{_SANDBOX_BASE}/accounts/{self._account}/orders"
+        # Admitted on the sandbox account's own budget before anything is sent
+        # (TRADIER-GOVERNOR D4). Not admitted -> the adapter's order-failure
+        # error, and the order is never sent.
+        if not get_governor().admit_sync("tradier_paper", admit_timeout=float(self._timeout)):
+            msg = "Tradier paper order failed: rate-limit budget busy — order not sent"
+            logger.error(msg)
+            raise RuntimeError(msg)
         try:
             resp = httpx.post(
                 url, data=self._build_params(order),
