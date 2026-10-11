@@ -2627,8 +2627,8 @@
       "verify": {
         "kind": "present",
         "path": "frontend/components/organisms/StockPositionCard/index.tsx",
-        "pattern": "data-stock-position-layout",
-        "note": "Presence only; mapping, behavioral regressions and independent audit establish preservation."
+        "pattern": "presentation === 'position'",
+        "note": "Presence only: opt-in Position variant exists; checked mapping, behavioral regressions and independent code audit establish preservation."
       },
       "note": "Recovered interrupted #208 on board/stock-pres-p2-position-de44d008. Plan round 1 clean; bounded Position-only 1200px gate extension independently clean at plan follow-up round 2. Build 5cd6b8f9; all 31 mapping rows checked. Source/calculation/send tests and numerical pins unchanged except authorized viewport boundary assertion. Current main integrated; state conflict resolved using latest main plus this phase only. Code audit pending. At 1200 the existing context rail narrows the workspace; prose wraps and qualification stacks, all values remain readable without overflow.",
       "plan_stage": {
