@@ -7,6 +7,14 @@
       "expires_at": "2026-10-11T12:19:20Z",
       "note": "Board #169: build T1-T4 (plan clean at round 6; Kenneth: build anyway)",
       "task": "TRADIER-GOVERNOR"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/yaml-depth-bound-b7c4dc2b",
+      "claimed_at": "2026-10-11T09:29:10Z",
+      "expires_at": "2026-10-11T12:29:10Z",
+      "note": "Board #167: bounded deep-YAML handling (ticket 24)",
+      "task": "YAML-DEPTH-BOUND"
     }
   ]
 }
