@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tradier-governor-2b6fd1f9",
       "claimed_at": "2026-10-11T08:08:58Z",
-      "expires_at": "2026-10-11T13:03:40Z",
+      "expires_at": "2026-10-11T13:05:09Z",
       "note": "Board #169: build T1-T4 (plan clean at round 6; Kenneth: build anyway)",
       "task": "TRADIER-GOVERNOR"
     },
