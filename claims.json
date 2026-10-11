@@ -7,14 +7,6 @@
       "expires_at": "2026-10-11T21:07:51Z",
       "note": "Kenneth requested highest-priority unclaimed in-progress task; resume #169 T3/T4, leave other chat 55\u219245 alone",
       "task": "TRADIER-GOVERNOR"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/options-underlying-floor-45",
-      "claimed_at": "2026-10-11T20:21:05Z",
-      "expires_at": "2026-10-11T23:21:05Z",
-      "note": "User-authorized merge of audited options floor45 into main",
-      "task": "OPTIONS-UNDERLYING-FLOOR-45"
     }
   ]
 }
