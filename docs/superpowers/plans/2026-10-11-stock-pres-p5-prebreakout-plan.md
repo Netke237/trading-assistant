@@ -27,6 +27,9 @@ persisted data**. A comment blocks only if it misstates mechanism.
   (`scanThresholds.ts`, `PreBreakoutRowDetails.tsx` or similar, `__tests__/**`)
 - `frontend/components/organisms/CandlestickChart/index.tsx` and its `__tests__/` — **one additive optional
   prop** (T1), and `frontend/__mocks__/lightweight-charts.js` — add `removePriceLine` to the fake series (T1)
+- `frontend/components/organisms/PreBreakoutParamsPanel/index.tsx` and `FibPullbackParamsPanel/index.tsx` —
+  **display-only** lines, added after plan round 2 (R2-2, R2-3); see T2 item 1c. No prop, state, handler or
+  layout change.
 - this plan and `docs/superpowers/PROJECT_STATE.json` (coordinator only)
 
 The item's "Touches" line names the page folder and the panels' placement. The CandlestickChart prop is the
@@ -185,8 +188,30 @@ and handlers):**
    tooltip's tolerance) read `scanned` / `fibScanned` instead of the live params. Tooltip **wording is
    unchanged**. The Pre-Breakout mode description's proximity % (M3, "close within …% of swing high") reads
    `scanned` **while Pre-Breakout rows are in memory**, because it then sits directly above rows judged on it,
-   and the live params otherwise (plan round 1, F1). The Fib and Pullback descriptions print no threshold
-   (Fib: static "38.2%, 61.8%" text; Pullback rows are local state, cleared on every remount).
+   and the live params otherwise (plan round 1, F1). The **Fib description's level list** ("Stocks retracing to a key Fibonacci level (38.2%, 61.8%) …")
+   is also a scan parameter (`fib_levels`; the panel lets the user pick any subset of 23.6 / 38.2 / 50.0 /
+   61.8 / 78.6, and the backend measures only those). It follows the same rule (plan round 2, R2-1):
+   `(fibScanned or fibParams).fibLevels.map((l) => `${l}%`).join(', ')` — `fibScanned` while Fib rows are in
+   memory, the live params otherwise. The panel keeps the array sorted, so the defaults print exactly
+   "38.2%, 61.8%" as today. The Pullback description prints no threshold (its rows are local state, cleared
+   on every remount).
+1c. **Every printed lookback and percent equals the applied value** (plan round 2):
+   - R2-2: the ATR Ratio tooltip's "Current ATR ÷ 20-bar average ATR" prints `${scanned.atrAvgLookback}-bar`
+     (byte-identical at the default 20). The backend averages ATR over `atr_avg_lookback`
+     (`strategy_engine.py` ~L1553). The Vol tooltip's "20-bar average volume" stays: the backend's volume
+     average is fixed at 20 (~L1567). `PreBreakoutParamsPanel`'s help line "Current ATR must be below this
+     fraction of the 20-bar average ATR." prints `{params.atrAvgLookback}-bar` (it describes the live input
+     beside it).
+   - R2-3, integer keys: the page passes the panels normalising setters, not the raw `setParams` /
+     `setFibParams`. They apply the panel's update, then `Math.trunc` the integer keys (`atrAvgLookback`,
+     `rangeLookbackBars`, `swingLookback`; Fib `fibSwingLookback`, `emaFilterPeriod`) before storing. A typed
+     10.5 is therefore stored, shown and sent as 10, which is exactly what the backend's `int()` applied to
+     10.5 anyway, so no scan result changes. `Math.trunc` in `remember*` stays as a second guard.
+   - R2-3, percent display: both panels show their percent input as `Number((x * 100).toFixed(6))` instead of
+     `Math.round(x * 100 * 10) / 10` (`PreBreakoutParamsPanel` ~L160 proximity, `FibPullbackParamsPanel` ~L93
+     tolerance). So a typed 7.25 stays "7.25", the value the request sends and the backend applies; today it
+     snaps to "7.2". At every 0.1-step value both expressions give the same number. The onChange handlers do
+     not change.
 1b. **Set Alert uses the row's own direction** (plan round 1, F2; pre-existing defect). Today all three
    tables call `setAlertSymbol(row.symbol)` and the dialog gets the page's current `direction`, so after a
    Bullish scan, a switch to Bearish on Step 3 and a return, the kept Bullish rows would save a **Bearish**
@@ -227,6 +252,12 @@ and handlers):**
   after the scan, the request carried them as typed, and the ATR tooltip says "below 0.875", the proximity
   tooltip "within 7.25%". `scanThresholds.test.tsx` pins `fmtThreshold` (0.85 / 3 → "3.0" / 0.875 / 2.75 /
   0.0725×100 → "7.25") and `Math.trunc` on the integer keys (10.5 → 10, 10.9 → 10).
+- **Round-2 cases:** Fib levels set to [50] → scan → remount → the description reads "(50%)"; with no Fib
+  rows it reads "(38.2%, 61.8%)". ATR average lookback 30 → scan → remount → the ATR tooltip says
+  "30-bar average ATR"; the panel help line reads "30-bar". Range bars typed 10.5 → the input shows 10 and
+  the request carries `range_lookback_bars: 10`. Proximity typed 7.25 → the input keeps "7.25", the request
+  carries 0.0725, the tooltip says "within 7.25%". Fib tolerance typed 1.25 → the input keeps "1.25". The
+  existing `PreBreakoutParamsPanel` / `FibPullbackParamsPanel` tests (if any) stay green unedited.
 - **Description follows the scan (F1):** proximity 0.12 → scan → remount → the description reads "12.0%"
   while the rows show; with no rows it reads the live default "8.0%".
 - **Alert direction (F2):** Bullish scan with one row → remount with the scan context direction Bearish →
@@ -330,3 +361,8 @@ and handlers):**
   - F1: the Pre-Breakout description kept the live proximity % above rows judged on another one → it reads `scanned` while rows show.
   - F2: a pre-existing defect. After a direction switch and a remount, Set Alert would save a watch in the wrong direction → the dialog receives the clicked row's direction.
   - F3: the remembered or printed thresholds could differ from the backend's (`int()` truncation, lossy `toFixed`) → effective values are remembered and `fmtThreshold` prints them exactly; off-step tests added.
+- Plan round 2 (2026-10-11): fresh independent gate auditor on the round-1 fixes — **3 gate findings**, all fixed in this revision (T2 items 1 and 1c):
+  - R2-1: the Fib description's levels are a scan parameter → the description prints the scanned levels while rows show.
+  - R2-2: the ATR tooltip hardcoded "20-bar" against the applied `atr_avg_lookback` → it prints the scanned lookback, and so does the panel help line.
+  - R2-3: the panels displayed off-step percents rounded (7.25 → "7.2") and stored decimal integer keys the backend truncates → display `Number((x*100).toFixed(6))` and integer keys truncated on store. This is a display-only scope extension to the two panel files.
+  - Round 3 is the plan stage's last allowed round.
