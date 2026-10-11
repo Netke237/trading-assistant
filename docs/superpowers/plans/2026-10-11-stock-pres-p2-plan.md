@@ -39,36 +39,36 @@ Coordinator checks every mapping row below against the implementation, including
 
 ## Position mapping acceptance (all rows from proposal 02)
 
-- [ ] P01: Header: STEP 6 OF 6, Position Card, Send basket → Page head / candidate bar (MOVED).
-- [ ] P02: Prev / n of N / Next, symbol buttons (gate-passing candidates only) → Candidate bar (MOVED).
-- [ ] P03: Company, direction · strategy, ConfidenceBadge, StatusBadge + tooltip → Identity header (MOVED).
-- [ ] P04: Unvalidated text, bearish Unvalidated text, earnings-veto text, in-flight warning → Notes above the card (EXISTING).
-- [ ] P05: Now: quote (loading / — ) → Identity header (MOVED).
-- [ ] P06: ENTRY, STOP, T1, R:R AT T1, SHARES, RISK $, SIZE $, WIN % → Order & exits fields + identity facts (MOVED).
-- [ ] P07: Sell-to-close plan T1–T3: price, R:R, return %, shares (editable) → Order & exits table (MOVED).
-- [ ] P08: Wrong-side-target error → Order & exits (EXISTING).
-- [ ] P09: Check structure + structural price, % away, source, R:R, reference note, error → Order & exits “Structural stop” (MOVED).
-- [ ] P10: Estimate (Monte Carlo /api/stocks/first-passage): window, T1–T3 %, days / unlikely, STOP %, days, caveat, error → Monte Carlo Estimate card (MOVED).
-- [ ] P11: Arithmetic plan: stop + source + ATR(14), justification, risk/share + % + days, second-opinion warning → Arithmetic card (MOVED).
-- [ ] P12: Arithmetic targets: R, price, % reached, days, reward/share, equation, structure · away · tol, compare label, stop-widened note → Arithmetic card (MOVED).
-- [ ] P13: Arithmetic sizing: shares, risk budget ÷ risk/share, ≈ position, concentration flag, Apply N shares, sized-for note → Arithmetic card (MOVED).
-- [ ] P14: Two-barrier race: window, paths, target / stop / neither % with days and ~$ → “Which comes first” card (MOVED).
-- [ ] P15: (none) → Bar drawing of the race numbers (NEW).
-- [ ] P16: Model caveat, “Independent of the other methods…” → Arithmetic card (MOVED).
-- [ ] P17: MarketSentiment (full) → Compact strip at the top, same content (MOVED).
-- [ ] P18: FundamentalHealthCard (full) → Compact strip under identity, same content (MOVED).
-- [ ] P19: MethodPickSelector (Ladder / Arithmetic / Monte Carlo, rows, unavailable reason) → Right column “Your decision” (MOVED).
-- [ ] P20: Missing-pick / cleared-pick message → Your decision (MOVED).
-- [ ] P21: View Chart, Pin / Unpin, Add to Portfolio (states) → Identity / candidate bar / Execution (MOVED).
-- [ ] P22: Broker modes: Recommendation, IBKR, Tradier, Alpaca, Tastytrade (+ not-configured) → Execution (MOVED).
-- [ ] P23: Limit @ entry, Market Order, disabled reasons; order result, err, warning, queued → Execution (MOVED).
-- [ ] P24: StockAutoTradeArm + after-scan toggle → Execution disclosure (MOVED).
-- [ ] P25: DirectSendNotesPanel, StockSendDialog → Under the page / dialog (EXISTING).
-- [ ] P26: (none) → Latest calculation strip (NEW).
-- [ ] P27: (stock score total only) → Stock Scorecard factor rows (backend field) (NEW).
-- [ ] P28: Backtest stats + confidence_text (Backtest page / tooltip) → Backtest evidence card (MOVED).
-- [ ] P29: (none) → Sharpe (NEW).
-- [ ] P30: (none) → Pre-trade checklist (existing gates only) (NEW).
-- [ ] P31: (none) → Section links, “How this page works” (NEW).
+- [x] P01: Header: STEP 6 OF 6, Position Card, Send basket → Page head / candidate bar (MOVED).
+- [x] P02: Prev / n of N / Next, symbol buttons (gate-passing candidates only) → Candidate bar (MOVED).
+- [x] P03: Company, direction · strategy, ConfidenceBadge, StatusBadge + tooltip → Identity header (MOVED).
+- [x] P04: Unvalidated text, bearish Unvalidated text, earnings-veto text, in-flight warning → Notes above the card (EXISTING).
+- [x] P05: Now: quote (loading / — ) → Identity header (MOVED).
+- [x] P06: ENTRY, STOP, T1, R:R AT T1, SHARES, RISK $, SIZE $, WIN % → Order & exits fields + identity facts (MOVED).
+- [x] P07: Sell-to-close plan T1–T3: price, R:R, return %, shares (editable) → Order & exits table (MOVED).
+- [x] P08: Wrong-side-target error → Order & exits (EXISTING).
+- [x] P09: Check structure + structural price, % away, source, R:R, reference note, error → Order & exits “Structural stop” (MOVED).
+- [x] P10: Estimate (Monte Carlo /api/stocks/first-passage): window, T1–T3 %, days / unlikely, STOP %, days, caveat, error → Monte Carlo Estimate card (MOVED).
+- [x] P11: Arithmetic plan: stop + source + ATR(14), justification, risk/share + % + days, second-opinion warning → Arithmetic card (MOVED).
+- [x] P12: Arithmetic targets: R, price, % reached, days, reward/share, equation, structure · away · tol, compare label, stop-widened note → Arithmetic card (MOVED).
+- [x] P13: Arithmetic sizing: shares, risk budget ÷ risk/share, ≈ position, concentration flag, Apply N shares, sized-for note → Arithmetic card (MOVED).
+- [x] P14: Two-barrier race: window, paths, target / stop / neither % with days and ~$ → “Which comes first” card (MOVED).
+- [x] P15: (none) → Bar drawing of the race numbers (NEW).
+- [x] P16: Model caveat, “Independent of the other methods…” → Arithmetic card (MOVED).
+- [x] P17: MarketSentiment (full) → Compact strip at the top, same content (MOVED).
+- [x] P18: FundamentalHealthCard (full) → Compact strip under identity, same content (MOVED).
+- [x] P19: MethodPickSelector (Ladder / Arithmetic / Monte Carlo, rows, unavailable reason) → Right column “Your decision” (MOVED).
+- [x] P20: Missing-pick / cleared-pick message → Your decision (MOVED).
+- [x] P21: View Chart, Pin / Unpin, Add to Portfolio (states) → Identity / candidate bar / Execution (MOVED).
+- [x] P22: Broker modes: Recommendation, IBKR, Tradier, Alpaca, Tastytrade (+ not-configured) → Execution (MOVED).
+- [x] P23: Limit @ entry, Market Order, disabled reasons; order result, err, warning, queued → Execution (MOVED).
+- [x] P24: StockAutoTradeArm + after-scan toggle → Execution disclosure (MOVED).
+- [x] P25: DirectSendNotesPanel, StockSendDialog → Under the page / dialog (EXISTING).
+- [x] P26: (none) → Latest calculation strip (NEW).
+- [x] P27: (stock score total only) → Stock Scorecard factor rows (backend field) (NEW).
+- [x] P28: Backtest stats + confidence_text (Backtest page / tooltip) → Backtest evidence card (MOVED).
+- [x] P29: (none) → Sharpe (NEW).
+- [x] P30: (none) → Pre-trade checklist (existing gates only) (NEW).
+- [x] P31: (none) → Section links, “How this page works” (NEW).
 
 These mapping rows preserve every existing item and enumerate approved additions; no additional behavior is in scope.

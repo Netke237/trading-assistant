@@ -1016,34 +1016,35 @@ async def test_process_symbol_falls_back_when_calibration_exceeds_timeout(monkey
     sem = asyncio.Semaphore(10)
     mock_client = MagicMock()
 
-    start = time.perf_counter()
-    with (
-        patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
-        patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
-        patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
-        patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
-        patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
-        patch("app.routers.scan.score_stock", return_value=pass_card),
-        patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
-        patch("app.routers.scan.validate_contract", return_value=contract_score),
-        patch("app.routers.scan.build_trade_plan", return_value=fake_plan) as mock_build_plan,
-        patch("app.routers.scan.log_event"),
-        patch("app.routers.scan.calibrate_heston", side_effect=_slow_calibrate),
-    ):
-        result = await _process_symbol(
-            "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
-        )
-    elapsed = time.perf_counter() - start
+    try:
+        start = time.perf_counter()
+        with (
+            patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=_MOCK_CANDLES)),
+            patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=185.0)),
+            patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Apple")),
+            patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)),
+            patch("app.routers.scan.fetch_calendar_dates_async", AsyncMock(return_value=(None, None))),
+            patch("app.routers.scan.score_stock", return_value=pass_card),
+            patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=_MOCK_CHAIN)),
+            patch("app.routers.scan.validate_contract", return_value=contract_score),
+            patch("app.routers.scan.build_trade_plan", return_value=fake_plan) as mock_build_plan,
+            patch("app.routers.scan.log_event"),
+            patch("app.routers.scan.calibrate_heston", side_effect=_slow_calibrate),
+        ):
+            result = await _process_symbol(
+                "AAPL", "Bullish", "Swing", mock_client, sem, "test-scan-id",
+            )
+        elapsed = time.perf_counter() - start
 
-    assert elapsed < 0.4, f"_process_symbol took {elapsed:.3f}s — the wait_for ceiling did not bound it"
-    assert mock_build_plan.call_args.kwargs["heston_params"] is None
-    assert result is not None
-
-    # By design (see _run_heston_calibration's docstring), the abandoned
-    # calibration keeps running in the background and holds _HESTON_SEMAPHORE
-    # until it actually finishes. Wait for it to do so before this test ends,
-    # so its event loop doesn't tear down with that task still pending.
-    await _await_abandoned_heston_calibrations()
+        assert elapsed < 0.4, f"_process_symbol took {elapsed:.3f}s — the wait_for ceiling did not bound it"
+        assert mock_build_plan.call_args.kwargs["heston_params"] is None
+        assert result is not None
+    finally:
+        # By design (see _run_heston_calibration's docstring), the abandoned
+        # calibration keeps running in the background and holds _HESTON_SEMAPHORE
+        # until it actually finishes. Wait for it to do so before this test ends,
+        # so its event loop doesn't tear down with that task still pending.
+        await _await_abandoned_heston_calibrations()
 
 
 _MULTI_MOCK_CHAIN = [

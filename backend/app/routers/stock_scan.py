@@ -19,7 +19,7 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2245,6 +2245,9 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
 # ── Stock first-passage (Approach B) ──────────────────────────────────────────
 
 class StockFirstPassageRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:       str
     direction:    Literal["Bullish", "Bearish"]
     horizon:      Literal["Intraday", "Swing", "Position"]
@@ -2428,6 +2431,9 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
 
 
 class StockExitPlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     entry_price: float = Field(..., gt=0)
