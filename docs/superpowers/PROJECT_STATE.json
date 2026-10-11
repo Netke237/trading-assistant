@@ -2586,7 +2586,7 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "in_progress",
-      "audit_rounds": 4,
+      "audit_rounds": 5,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2602,7 +2602,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Plan round 4 (new stage round 1): 1 gate finding R4-G1, fixed in plan r5; round 5 next. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "note": "2026-10-10 board #169: plan rounds 1-3 ran (2, 1, 1 gate findings) and the first plan stage hit its cap NOT clean (R3-G1). Kenneth opened a NEW PLAN STAGE (decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10, up to 3 rounds = plan rounds 4-6) for the overdraft redesign. No code written. Plan round 4 (new stage round 1): R4-G1 fixed in r5. Plan round 5 (new stage round 2): R5-G1, R5-G2 fixed in r6; round 6 is the LAST of this stage. Note: state.py models one plan stage; until the new stage closes, plan rounds 4+ can read past the first stage's cap (tooling limitation). Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
       "audit_history": [
         {
           "round": 1,
@@ -2653,6 +2653,23 @@
           ],
           "fixes": [
             "plan r5: bulk sync admission waits without limit; the four on-loop sync callers move to asyncio.to_thread with an overdraft safety net + AST ratchet; D5 corrected; below-gate notes: site F uses the overdraft, D's text and the price-probe cooldown outcome corrected"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 5,
+          "stage": "plan",
+          "stage_round": 2,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-11",
+          "scope": "git diff a6a959c5..ded2e378 -- the plan (r5: R4-G1 fixes) and interactions with the plan and code; simulations with the real TokenBucket",
+          "findings": [
+            "R5-G1 (gate): the earnings prepay's finite 30 s budget still turns waiting into the yfinance date (non-FIFO polling; 2/3009 admissions >30 s with 10 sync waiters), also on a same-day cache hit",
+            "R5-G2 (gate): sync pollers starve async waiters (time.sleep wakes before asyncio.sleep), so the fire path's daily-risk opening price (D) can wait a whole scan and the MKT order is sent minutes after its gates, at a price they never saw"
+          ],
+          "fixes": [
+            "plan r6: prepay admit_timeout=None and skipped on a cache hit; one FIFO ticket queue shared by sync and async waiters; D joins the fire-path overdraft via opening_price's tradier_fire_path() and Governor.call_overdraft; regime_monitor removed from the on-loop list (already in an executor)"
           ],
           "outstanding": [],
           "clean": false
