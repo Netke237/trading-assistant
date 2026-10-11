@@ -187,6 +187,7 @@ The three fire-path calls are:
 - The three on-loop callers move to `await asyncio.to_thread(...)` with the same arguments: `backend/app/services/strategy_watch_evaluator.py:616`, `backend/app/routers/candles.py:10`, `backend/app/routers/composite_watch.py:93`.
 - `backend/app/routers/sectors.py`, `backend/app/services/daily_risk_hooks.py`, `backend/app/data/tradier_stream.py`, `backend/app/routers/data_sources.py`, `backend/app/data/tradier_paper.py`.
 - New `backend/tests/test_tradier_governor_sites.py`.
+- `backend/tests/test_no_live_quote_fire_gate.py`, `test_no_token_and_open_circuit_no_http` only (coordinator correction during the build, 2026-10-11). Its empty-bucket half pins F's old `try_acquire` refusal, which D3's "Site F joins the fire path" deliberately replaces. On an empty bucket F is now admitted by overdraft and makes its request. Its open-circuit half (no HTTP on an open breaker) is unchanged. This adds a missing test-file entry for behaviour the clean plan already specifies; no design change.
 
 Apply D3's marker placement and D4.
 
