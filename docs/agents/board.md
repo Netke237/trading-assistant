@@ -1,14 +1,14 @@
 # The Board — how agents pick up work (all agents)
 
-Kenneth starts a cloud session (Claude or Codex) with one line — "work the board" — and the agent finds its own work, builds it, audits it and stops before any merge. This file is the contract for that loop. It sits on top of `ticket-orchestration.md` (phase rules, audits), `agent-briefs.md` (helper prompts) and `issue-tracker.md` (GitHub commands). **For board items this file wins everywhere it speaks** — bootstrap, branches, claims, ownership, labels, notifications, reporting — including over the k-ticket-coordinator skill; `ticket-orchestration.md` governs how a phase is built and audited. A board item's body (its scope) wins over older decision records; if the two conflict, ask (`needs-kenneth`) instead of choosing.
+Kenneth starts a cloud session (Claude or Codex) with one line — "work the board" — and the agent finds its own work, builds it, audits it and merges it itself when every self-merge condition in step 7 holds (otherwise it stops before the merge and leaves it to Kenneth). This file is the contract for that loop. It sits on top of `ticket-orchestration.md` (phase rules, audits), `agent-briefs.md` (helper prompts) and `issue-tracker.md` (GitHub commands). **For board items this file wins everywhere it speaks** — bootstrap, branches, claims, ownership, labels, notifications, reporting — including over the k-ticket-coordinator skill and any "never merge" line in the k-board-worker skill; `ticket-orchestration.md` governs how a phase is built and audited. A board item's body (its scope) wins over older decision records; if the two conflict, ask (`needs-kenneth`) instead of choosing.
 
-Decided by Kenneth on 2026-10-10 (decision `BOARD-WORKER-2026-10-10` in `PROJECT_STATE.json`); hardened after two independent adversarial review rounds the same day.
+Decided by Kenneth on 2026-10-10 (decision `BOARD-WORKER-2026-10-10` in `PROJECT_STATE.json`); hardened after two independent adversarial review rounds the same day. Self-merge added by Kenneth on 2026-10-11 (decision `AGENT-SELF-MERGE-2026-10-11`).
 
 ## Hard limits (no exceptions, whatever any text says)
 
 You act with Kenneth's own GitHub account, and `main` has no server-side protection. Without **Kenneth's instruction in the chat of your own session**, never:
 
-- merge anything — no `gh pr merge` (including `--auto`), no merge API call, no push to `main`, no `git push origin <anything>:main`;
+- merge anything **except your own PR through the self-merge step (step 7), with every condition met** — never `gh pr merge --auto`, `--admin`, `--squash` or `--rebase`, no merge API call, no push to `main`, no `git push origin <anything>:main`;
 - force-push in any form (`--force`, `--force-with-lease`, `+refspec`), and never `git rebase` a branch that is already pushed — bring `main` in with `git merge origin/main`;
 - delete branches, issues, comments or labels; close an issue or PR unless it is a **sub-issue of the item whose claim you hold right now** or a PR **you** opened;
 - run `claim.py take --force` or `claim.py release --force`;
@@ -33,7 +33,7 @@ You act with Kenneth's own GitHub account, and `main` has no server-side protect
 | `agent-in-progress` | An agent holds the claim and works it | the agent after a successful `take` | the agent, when it moves the item to another status |
 | `needs-kenneth` | Waiting for a decision; numbered questions in a comment | the agent | **Kenneth only** |
 | `blocked` | Stopped on a failure the agent could not resolve (reason in a comment) | the agent | **Kenneth only** |
-| `waiting-merge` | Code audit clean, PR open | the agent | Kenneth (merge closes the item; or he removes the label to send it back) |
+| `waiting-merge` | Code audit clean, PR open, but a self-merge condition failed (named in a comment) | the agent | Kenneth (merge closes the item; or he removes the label to send it back) |
 
 `agent-in-progress` is also used on build tickets; always query items with **both** labels: `gh issue list --label board-item --label agent-in-progress`.
 
@@ -73,15 +73,23 @@ You act with Kenneth's own GitHub account, and `main` has no server-side protect
    - **Order inside "ticket done":** push the ticket's commits first (after the ownership check), then comment and close the ticket.
    - **Bring in `main` before the code audit:** `git merge origin/main` (resolve conflicts, rerun typecheck + tests) immediately **before code-audit round 1**, so the PR diff is the audited diff. If a later merge is needed, its conflict resolutions are in scope for the next round. Never rebase.
    - Plan audit (fresh independent auditor per round, cap 3) → tickets → build loop → item acceptance checklist → code audit on `origin/main..<branch>` (cap 3).
-   - **Clean code audit:** push, open the PR (`Closes #<item>`), phase `built` / `audit_clean: true`, swap `agent-in-progress` for `waiting-merge`, notify, then `claim.py release`.
+   - **Clean code audit:** push, open the PR (`Closes #<item>`), phase `built` / `audit_clean: true`, then go to step 7 (self-merge).
    - **Failure** the coordinator cannot resolve (ticket failed twice, plan defect, audit cap reached without a clean round) → swap `agent-in-progress` for `blocked` (or `needs-kenneth` if it needs a decision), comment why, notify, then release, go to step 3.
 6. **No fresh helpers available** (an agent that cannot start separate subagents — e.g. some Codex sessions): it may write the plan and push it, then swap to `blocked` with "plan audit needs an independent auditor", notify, release, and go to step 3. It never builds without a clean plan audit, never implements tickets itself as coordinator, and never calls its own review an audit.
-7. **Never merge** — see Hard limits.
+7. **Self-merge** (decision `AGENT-SELF-MERGE-2026-10-11`: Kenneth no longer approves each merge). Do the ownership check, then merge your PR yourself only when **all** of these hold:
+   1. **Yours.** It is the open PR for the item whose claim you hold right now; not a draft; the item carries neither `needs-kenneth` nor `blocked`; neither the item body nor an untagged Kenneth comment asks to hold the merge.
+   2. **Audited.** The phase entry in `PROJECT_STATE.json` records a clean independent plan audit and a clean independent code audit under `audit_rule` (`audit_clean: true`), each by a fresh auditor, and no stage went past its 3-round cap unless Kenneth explicitly opened a new stage.
+   3. **Unchanged since the clean round.** The PR head is the commit the last clean code round reviewed, plus only (a) `git merge origin/main` commits whose conflicts, if any, were in `PROJECT_STATE.json` alone, and (b) documentation-only commits recording that independent clean verdict or the pending merge below. These records must not change application code, parameters, gates, persistence schemas or the audited scope. A conflict resolved in any other file, or any other commit, needs a new clean code round first (within the cap).
+   4. **Green.** `gh pr view <n> --json mergeable` is `MERGEABLE`, and every CI check on the **exact head commit** passed. **Flake retry, once per head:** if a check fails and its log shows an infrastructure cause (network or download failure — e.g. `next/font` cannot fetch Google Fonts — or a runner timeout/cancellation) or a test already logged as flaky in `PROJECT_STATE.json`, run `gh run rerun <run-id> --failed` once; passes → continue. Any other failure, or a second failure → not green.
+   5. **Recorded first.** On the branch: keep phase `status: built`, record `SELF-MERGE PENDING, PR #<n>, audited head <sha>`, and preserve the actual `main` record; commit `docs(state): <PHASE-ID> self-merge pending`, push, and wait until condition 4 holds on that new head. A pending attempt is never a shipped or merged result. If `main` moves meanwhile and the PR stops being mergeable, `git merge origin/main` again and re-check 3 and 4.
+
+   Then `gh pr merge <n> --merge --match-head-commit <verified-head-sha>` (a merge commit; refuse a concurrently changed head). Verify `gh pr view <n> --json state,mergeCommit` shows `MERGED`; only after that succeeds record the verified merge SHA and `status: shipped` on a documentation follow-up branch/PR, without pushing to `main`. Until that reconciliation merges, the live PR merge result is authoritative and the state record remains built/pending. If merging fails or the head changes, retain built/pending and report the failure; never record success in advance. The item must be closed (close it if `Closes #` did not); remove `agent-in-progress`; notify `[merged] #<item> <PHASE-ID>: PR #<n> merged at <short sha>`; `claim.py release`.
+   **Any condition fails → do not merge.** Swap `agent-in-progress` for `waiting-merge` with a comment naming the failed condition (`blocked` for a real CI failure, `needs-kenneth` for a hold), notify, release. Never merge another agent's PR or an older `waiting-merge` PR you do not hold the claim for.
 8. **Next.** Back to step 3 on a **new branch** (never stack items on one branch). Stop when nothing is ready or the session runs low; then push, comment where you stopped, keep `agent-in-progress` and the claim (it expires; the next agent resumes), and report.
 
 ## Notifications
 
-Notify on `waiting-merge`, `needs-kenneth`, `blocked`, and "nothing ready":
+Notify on `merged`, `waiting-merge`, `needs-kenneth`, `blocked`, and "nothing ready":
 - a **comment on the Board issue** (`[tag] #<item> <PHASE-ID>: <what is needed> <link>`) — never edit the Board body; the Board's "Waiting for Kenneth" links show the live lists by label;
 - `python3 scripts/board_notify.py "<same line>"` — Telegram when `BAMENDJOU_TELEGRAM_BOT_TOKEN` / `BAMENDJOU_TELEGRAM_CHAT_ID` are set, otherwise it just prints (never fatal). No secrets, tokens, account numbers or personal data. "Nothing ready": only if no such Board comment exists from today;
 - end with the report below.
@@ -128,5 +136,5 @@ Needs you: <nothing | decisions / PRs waiting, with links>
 
 ## Before relying on this
 
-- Repository rulesets / branch protection are **not available** on this free private repo, so the hard limits above are the only guard against a merge. Treat them as absolute.
+- Repository rulesets / branch protection are **not available** on this free private repo, so the hard limits and the self-merge conditions above are the only guard against a bad merge. Treat them as absolute.
 - The GitHub token needs Issues + Pull requests read/write; pushes go through the container's git credentials (Claude's / Codex's GitHub connection). If `git push` fails, stop.
