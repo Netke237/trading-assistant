@@ -34,7 +34,7 @@
       "agent": "claude",
       "branch": "board/stock-pres-p2-position-de44d008",
       "claimed_at": "2026-10-11T10:55:51Z",
-      "expires_at": "2026-10-11T14:18:33Z",
+      "expires_at": "2026-10-11T14:19:56Z",
       "note": "Resume interrupted Position task #147 and ticket #208 after usage limit",
       "task": "STOCK-PRES-P2-POSITION"
     }
