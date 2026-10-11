@@ -7,14 +7,6 @@
       "expires_at": "2026-10-11T12:19:20Z",
       "note": "Board #169: build T1-T4 (plan clean at round 6; Kenneth: build anyway)",
       "task": "TRADIER-GOVERNOR"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/stock-pres-p5-prebreakout-f3563f64",
-      "claimed_at": "2026-10-11T08:35:45Z",
-      "expires_at": "2026-10-11T12:28:20Z",
-      "note": "Board #150: resume P5 Pre-Breakout (plan written, plan audit pending)",
-      "task": "STOCK-PRES-P5-PREBREAKOUT"
     }
   ]
 }
