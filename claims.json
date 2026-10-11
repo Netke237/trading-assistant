@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/contract-liquidity-dte-3c0a1edd",
       "claimed_at": "2026-10-10T23:36:49Z",
-      "expires_at": "2026-10-11T03:23:39Z",
+      "expires_at": "2026-10-11T03:43:56Z",
       "note": "Board #161: refresh r5 plan onto main (fixes 1+2 only, Kenneth option a), new plan stage, build, audit, PR",
       "task": "CONTRACT-LIQUIDITY-DTE"
     }
