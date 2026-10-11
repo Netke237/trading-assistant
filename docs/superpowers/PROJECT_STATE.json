@@ -2610,8 +2610,8 @@
       "id": "AGENT-SELF-MERGE",
       "name": "Truthful self-merge policy and audit-record allowance",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "branch": "board/agent-self-merge-1bcca909",
       "plan": "docs/superpowers/plans/2026-10-11-agent-self-merge-plan.md",
       "pr": "https://github.com/Netke237/trading-assistant/pull/219",
@@ -2634,9 +2634,24 @@
           "findings": [],
           "fixes": [],
           "outstanding": []
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/self_merge_code_audit",
+          "reviewed": "4ecfdf0f6e67bf4b7eddd7ece589955a9feb0c64..d5b57e20f299c1bb6d30cde32415a0aa9d42ed9f; complete policy/plan/state diff",
+          "findings": [],
+          "fixes": [],
+          "outstanding": []
         }
       ],
-      "note": "User explicitly reassigned active claim and requested fix/push/merge PR #219. Plan round 1 clean. Corrected policy keeps built/pending before merge, records verified success afterward, allows bounded audit records, and pins the merge to the verified head. No runtime or schema change; docs-only CI skips verified from actual workflows. Independent code audit pending."
+      "note": "SELF-MERGE PENDING, PR #219, audited head d5b57e20. User explicitly authorized takeover/fix/push/merge in this chat. Plan round 1 and code round 1 clean independently; zero gate findings. Typecheck and state.py pass. CI workflows intentionally skip all documentation-only changed paths, not recorded as successful runs. Keep built until GitHub confirms merge; reconcile verified completion afterward.",
+      "code_audit_clean": true,
+      "code_stage": {
+        "rounds": 1,
+        "closed_by": "clean"
+      }
     }
   ],
   "already_shipped": [
