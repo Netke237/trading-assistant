@@ -261,3 +261,29 @@ const FULL = {
   next_event_label: null, rules: [], gate_flags: [], ema_trend: null, iv_rank: null,
   regime_by_horizon: {}, sector: null, sector_rs: null, market_backdrop: null,
 };
+
+describe('B6 (STOCKS-HORIZON-P0B) — Analysis sends the scan\'s hold', () => {
+  it('current-settings: a Custom 60-185 context sends hold_max_days 185', () => {
+    act(() => useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)',
+        horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+    } as never));
+    const { req, basis } = analysisRequestFor('MSFT');
+    expect(basis).toBe('current-settings');
+    expect(req.horizon).toBe('Position');
+    expect(req.hold_max_days).toBe(185);
+  });
+
+  it('last-scan: replays the scan body\'s hold_max_days', async () => {
+    act(() => useScanStore.setState({
+      context: { universe: 'SP500', direction: 'Bullish', horizon: 'Position (60–185d)',
+        horizonPreset: 'Custom', holdMin: 60, holdMax: 185 },
+    } as never));
+    m(api.postStockScan).mockResolvedValue(RESULT('S-B6'));
+    await runStockScan('ma_crossover');
+    expect(m(api.postStockScan).mock.calls[0][0].hold_max_days).toBe(185);
+    const { req, basis } = analysisRequestFor('AAPL');
+    expect(basis).toBe('last-scan');
+    expect(req.hold_max_days).toBe(185);
+  });
+});

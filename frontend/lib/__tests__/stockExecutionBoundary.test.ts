@@ -1,3 +1,4 @@
+import { BEARISH_UNVALIDATED_MESSAGE } from '@/lib/unvalidated';
 import { api } from '@/lib/api';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
@@ -16,8 +17,10 @@ afterEach(() => { global.fetch = originalFetch; });
 it.each(['Bullish', 'Bearish'] as const)('denies %s new orders even when hydrated fields claim permission or stale provenance', async direction => {
   (useScanStore.setState as (value: unknown) => void)({ stockValidation: { available: true, verdict: 'PASS', allowed: true, scanId: 'prior', strategy: 'other', direction: 'other' }, executionEligible: true });
   const addPosition = jest.fn();
-  const outcome = await sendStockSaveFirst({ pos: buildPaperStockPosition('AAPL', 150, 30, direction), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 150, action: direction === 'Bullish' ? 'BUY' : 'SELL', addPosition });
-  expect(outcome).toEqual({ kind: 'refused', message: STOCK_VALIDATION_UNAVAILABLE });
+  const outcome = await sendStockSaveFirst({ pos: buildPaperStockPosition('AAPL', 150, 30, direction), broker: 'ibkr_paper', orderType: 'LMT', limitPrice: 150, action: direction === 'Bullish' ? 'BUY' : 'SELL', addPosition, earningsVeto: false });
+  expect(outcome).toEqual(direction === 'Bearish'
+    ? { kind: 'not-placed', message: BEARISH_UNVALIDATED_MESSAGE }
+    : { kind: 'refused', message: STOCK_VALIDATION_UNAVAILABLE });
   expect(global.fetch).not.toHaveBeenCalled();
   expect(api.postStockOrder).not.toHaveBeenCalled(); expect(addPosition).not.toHaveBeenCalled();
 });

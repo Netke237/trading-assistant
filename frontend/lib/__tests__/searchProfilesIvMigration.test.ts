@@ -49,7 +49,7 @@ function legacyBlob() {
 
 describe('searchProfilesStore v1 → v3 (PHASE-A-SPREAD-BASIS-2026-09-06)', () => {
   it('is registered at the version the migration branch expects', () => {
-    expect(version).toBe(4);
+    expect(version).toBe(5);   // v5: STOCKS-HORIZON-T1 H5 override reset
   });
 
   it("seeds a profile's absolute threshold from THAT profile's own pre-split knob", () => {

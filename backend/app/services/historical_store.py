@@ -45,7 +45,8 @@ from app.database import AsyncSessionLocal
 # would make an import cycle with this module (plan 2.10, round 3).
 from app.services.scheduling_tz import MARKET_TZ
 from app.data.tiingo import fetch_historical_candles
-from app.models.ohlcv_daily import OhlcvDailyModel
+from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
+from app.services.history_basis import verified_boundary
 from app.scoring.signal_confidence import compute_confidence
 from app.data.confidence_cache import (
     cache_key as conf_cache_key, generation as conf_generation, get_cached,
@@ -196,23 +197,26 @@ async def _store_bars(symbol: str, bars: list[dict], db: AsyncSession) -> set[da
         for b in bars
     ]
     insert = _dialect_insert()
-    stmt = insert(OhlcvDailyModel).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["symbol", "date"],
-        set_={
-            "open":         stmt.excluded.open,
-            "high":         stmt.excluded.high,
-            "low":          stmt.excluded.low,
-            "close":        stmt.excluded.close,
-            "volume":       stmt.excluded.volume,
-            "adj_factor":   stmt.excluded.adj_factor,
-            "split_factor": stmt.excluded.split_factor,
-            "div_cash":     stmt.excluded.div_cash,
-            "source":       stmt.excluded.source,
-            "fetched_at":   stmt.excluded.fetched_at,
-        },
-    )
-    await db.execute(stmt)
+    # Twelve binds per row: keep each statement below asyncpg's 32,767 limit.
+    # No commits here: both provider segments and every chunk share the caller's transaction.
+    for offset in range(0, len(rows), 500):
+        stmt = insert(OhlcvDailyModel).values(rows[offset:offset + 500])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["symbol", "date"],
+            set_={
+                "open":         stmt.excluded.open,
+                "high":         stmt.excluded.high,
+                "low":          stmt.excluded.low,
+                "close":        stmt.excluded.close,
+                "volume":       stmt.excluded.volume,
+                "adj_factor":   stmt.excluded.adj_factor,
+                "split_factor": stmt.excluded.split_factor,
+                "div_cash":     stmt.excluded.div_cash,
+                "source":       stmt.excluded.source,
+                "fetched_at":   stmt.excluded.fetched_at,
+            },
+        )
+        await db.execute(stmt)
     return {r["date"] for r in rows}
 
 
@@ -364,7 +368,7 @@ async def _fetch_chain(
 
     # 2. Tiingo fallback
     try:
-        new_bars = await asyncio.to_thread(fetch_historical_candles, symbol, start, end)
+        new_bars = await fetch_historical_candles(symbol, start, end)
         if await _ok("Tiingo", new_bars):
             return new_bars
     except Exception as exc:
@@ -414,15 +418,17 @@ def _fetch_date(fetched_at: datetime) -> date:
     return _as_utc(fetched_at).astimezone(MARKET_TZ).date()
 
 
-def stale_reasons(rows) -> StaleReport | None:
+def stale_reasons(rows, verified_seam: dict | None = None) -> StaleReport | None:
     """Pure stale-basis rules over one symbol's stored rows, ordered by date.
 
     Each row is ``(date, close, adj_factor, split_factor, div_cash, source, fetched_at)``
-    with raw ``close``. Returns None when no rule holds.
+    with raw ``close``. A verified seam exempts only its exact source partition
+    and that boundary's batch step. Returns None when no rule holds.
     """
     rows = list(rows)
     if not rows:
         return None
+    boundary = verified_boundary(rows, verified_seam)
     first = rows[0][0]
     flagged: dict[str, date] = {}
 
@@ -444,10 +450,10 @@ def stale_reasons(rows) -> StaleReport | None:
                 break  # rows are date-ordered: the first hit is the earliest
 
     # (d) more than one source.
-    if len({r[5] for r in rows if r[5] is not None}) > 1:
+    if boundary is None and len({r[5] for r in rows if r[5] is not None}) > 1:
         _flag("mixed_basis", first)
 
-    for prev, nxt in zip(rows, rows[1:]):
+    for index, (prev, nxt) in enumerate(zip(rows, rows[1:]), start=1):
         p_adj, n_adj = _f(prev[2]), _f(nxt[2])
         # (a) unexplained jump in the adjusted close.
         p_close = float(prev[1]) * (p_adj if p_adj is not None else 1.0)
@@ -459,7 +465,8 @@ def stale_reasons(rows) -> StaleReport | None:
             _flag("mixed_basis", first)
         # (c) factor step at a fetch-batch boundary.
         if (
-            p_adj is not None and n_adj is not None and p_adj != 0
+            index != boundary
+            and p_adj is not None and n_adj is not None and p_adj != 0
             and prev[6] is not None and nxt[6] is not None
             and _fetch_date(prev[6]) != _fetch_date(nxt[6])
             and abs(n_adj / p_adj - 1.0) > _FACTOR_STEP_TOL
@@ -490,7 +497,8 @@ async def find_stale_adjustment(symbol: str, db: AsyncSession) -> StaleReport | 
         .where(OhlcvDailyModel.symbol == symbol)
         .order_by(OhlcvDailyModel.date)
     )
-    return stale_reasons(result.all())
+    state = await db.get(OhlcvHistoryStateModel, symbol)
+    return stale_reasons(result.all(), state.verified_seam() if state else None)
 
 
 async def _fetch_window(symbol: str, start: date, end: date) -> list[dict]:
@@ -508,12 +516,11 @@ async def refresh_adjustments(
     """Re-fetch and upsert the whole stored window of every stale symbol. Never deletes.
 
     An empty ``symbols`` list means every symbol in ``ohlcv_daily``. ``fetch`` exists for
-    tests; by default the provider chain get_bars uses (Alpaca → Tiingo → yfinance).
+    tests; production uses the same coherent prefix/suffix writer as ingestion.
     ``on_refreshed`` is called once per refreshed symbol, right after its confidence
     eviction; the endpoint passes the stock-scan backtest-cache eviction (a service
     must not import a router; TRADING-REVIEW-PHASE-C-HYGIENE T6).
     """
-    fetch = fetch if fetch is not None else _fetch_window
     stale: list[dict] = []
     refreshed: list[str] = []
     failed: list[str] = []
@@ -538,10 +545,35 @@ async def refresh_adjustments(
             )
             first, last = span.one()
             try:
-                bars = await fetch(symbol, first, last)
-                in_range = [b for b in (bars or []) if first <= _bar_date(b) <= last]
-                stored = await _store_bars(symbol, in_range, db)
-                await db.commit()
+                if fetch is None:
+                    from app.services.history_backfill import update_history
+                    # Release the read transaction before the coherent writer opens its own.
+                    await db.rollback()
+                    result = await update_history(symbol, first, last, force_backfill=True)
+                    stored = result.stored
+                else:
+                    from app.services.history_basis import history_lock
+                    from app.services.history_backfill import _validated, HistorySeamMismatch
+                    from app.services.bars_changed import notify_bars_changed
+                    from app.models.ohlcv_daily import OhlcvHistoryStateModel
+                    async with history_lock(symbol):
+                        required = set((await db.execute(select(OhlcvDailyModel.date).where(
+                            OhlcvDailyModel.symbol == symbol,
+                            OhlcvDailyModel.date >= first, OhlcvDailyModel.date <= last
+                        ))).scalars().all())
+                        required = {d for d in required if is_settled(d, _utcnow())}
+                        bars = await fetch(symbol, first, last)
+                        candidate = _validated(bars, first, last)
+                        if not candidate or not required <= set(candidate):
+                            raise HistorySeamMismatch("refresh omits stored settled dates")
+                        stored = await _store_bars(symbol, list(candidate.values()), db)
+                        state = await db.get(OhlcvHistoryStateModel, symbol)
+                        if state is not None:
+                            state.seam_date = state.old_source = state.seam_signature = None
+                            state.floor_requested_start = state.floor_date = None
+                            state.floor_provider = state.floor_checked_at = None
+                        await db.commit()
+                        notify_bars_changed(symbol)
             except Exception as exc:
                 await db.rollback()
                 logger.warning(
@@ -557,13 +589,9 @@ async def refresh_adjustments(
                 continue
             logger.info(
                 "historical_store: refreshed adjustment factors for %s (%s..%s, %d bars, %s)",
-                symbol, first, last, len(stored), ",".join(report.reasons),
+                symbol, first, last, len(stored) if isinstance(stored, set) else stored, ",".join(report.reasons),
             )
-            # The confidence cache key does not depend on the bars: evict the cached
-            # values computed on the pre-refresh series (audit finding R1-F1).
-            invalidate_symbol(symbol)
-            # After the invalidation, with no await between: a backtest in flight
-            # across this refresh sees the symbol invalidated and does not store.
+            # The coherent writer already notified cache owners after commit.
             if on_refreshed is not None:
                 on_refreshed(symbol)
             refreshed.append(symbol)
@@ -578,6 +606,12 @@ async def refresh_adjustments(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
+    from app.services.history_basis import history_lock
+    async with history_lock(symbol):
+        return await _get_bars_locked(symbol, start, end)
+
+
+async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
     """Return OHLCV bars for `symbol` from `start` to `end`.
 
     Algorithm:
@@ -622,8 +656,16 @@ async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
                     return False
                 # Nothing past the caller's `end` (the heal-only `+1` day is request slack).
                 in_range = [b for b in new_bars if _bar_date(b) <= end]
-                stored_dates = await _store_bars(symbol, in_range, db)
-                await db.commit()
+                try:
+                    stored_dates = await _store_bars(symbol, in_range, db)
+                    await db.commit()
+                except Exception:
+                    # Discard earlier chunks before the provider chain retries this session.
+                    await db.rollback()
+                    raise
+                if stored_dates:
+                    from app.services.bars_changed import notify_bars_changed
+                    notify_bars_changed(symbol)
                 logger.debug(
                     "historical_store: %s stored %d bars for %s",
                     name, len(stored_dates), symbol,

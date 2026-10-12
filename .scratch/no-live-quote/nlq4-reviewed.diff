@@ -1,0 +1,476 @@
+diff --git a/frontend/app/(frame)/screener/step-6-contracts/page.tsx b/frontend/app/(frame)/screener/step-6-contracts/page.tsx
+index f0b2e9e7..d53f41c3 100644
+--- a/frontend/app/(frame)/screener/step-6-contracts/page.tsx
++++ b/frontend/app/(frame)/screener/step-6-contracts/page.tsx
+@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ import { Title, Text, Data } from '@/components/primitives';
+ import { TableRow } from '@/components/molecules/TableRow';
++import { NoLiveQuoteTag } from '@/components/atoms/NoLiveQuoteTag';
+ import { StatusBadge } from '@/components/atoms/StatusBadge';
+ import { DTEProgressBar } from '@/components/molecules/DTEProgressBar';
+ import { ContractStar } from '@/components/atoms/ContractStar';
+@@ -348,7 +349,7 @@ export default function Step6Page() {
+             // Recommended is always the highest-score contract regardless of active sort column.
+             const rescuedIds  = rescuedBySymbol[candidate.symbol] ?? [];
+             const byScore     = sortContracts(contracts, 'score', 'desc');
+-            const recommended = byScore.find((c) => !rescuedIds.includes(c.id));
++            const recommended = byScore.find((c) => !rescuedIds.includes(c.id) && !c.noLiveQuote) ?? byScore[0];
+             // User sort applies to the remaining (chain) contracts.
+             const sorted = sortContracts(contracts, sortKey, sortDir);
+             const chain  = sorted.filter((c) => c.id !== recommended?.id);
+@@ -385,6 +386,7 @@ export default function Step6Page() {
+                   <div className={tbl.scoreCell}>
+                     <Data size={13} weight={500}>{c.score}</Data>
+                     <StatusBadge status={status} tooltip={getExplanationSummaryLine(c)} tooltipAlign="right" />
++                    <NoLiveQuoteTag noLiveQuote={c.noLiveQuote} quoteState={c.quoteState} />
+                   </div>
+                   <ContractExplanationToggle
+                     isOpen={!!expandedExplanations[c.id]}
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/a8-rail-and-structural-cache.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/a8-rail-and-structural-cache.test.tsx
+index 5ec3693d..370f2391 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/a8-rail-and-structural-cache.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/a8-rail-and-structural-cache.test.tsx
+@@ -27,7 +27,7 @@ jest.mock('@/lib/api', () => ({
+   api: {
+     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
+     getContractQuote: jest.fn().mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     }),
+     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
+@@ -118,7 +118,7 @@ describe('step-7-trade-card -- publishes the shown card for the context rail (A8
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
++      quoteLive: true, price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
+     });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+     global.fetch = echoFetch();
+@@ -189,7 +189,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+     (api.getStructuralStop as jest.Mock).mockResolvedValue({
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx
+index 5a3cfdd8..08bf4cc7 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx
+@@ -36,7 +36,7 @@ jest.mock('@/lib/api', () => ({
+   api: {
+     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
+     getContractQuote: jest.fn().mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     }),
+     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
+@@ -116,7 +116,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx
+index bab23174..18f9b4cf 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx
+@@ -182,7 +182,7 @@ beforeEach(() => {
+   getReplies = [];
+   (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+   (api.getContractQuote as jest.Mock).mockResolvedValue({
+-    price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++    quoteLive: true, price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+   });
+   (api.postOptionOrder as jest.Mock).mockImplementation(async () => {
+     callLog.push('order');
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx
+index c5e08873..45c78aec 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx
+@@ -62,7 +62,7 @@ jest.mock('@/lib/api', () => ({
+   api: {
+     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
+     getContractQuote: jest.fn().mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     }),
+     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
+@@ -177,7 +177,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop',
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+@@ -290,7 +290,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+@@ -371,7 +371,7 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+@@ -502,7 +502,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/edited-fields-sync.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/edited-fields-sync.test.tsx
+index b51535e3..90c91b87 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/edited-fields-sync.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/edited-fields-sync.test.tsx
+@@ -54,7 +54,7 @@ jest.mock('@/lib/api', () => ({
+   api: {
+     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
+     getContractQuote: jest.fn().mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     }),
+     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
+@@ -167,7 +167,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+@@ -639,7 +639,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
+     // and the basket path took the scan mid, and with both set to 2.5 the two
+     // were trivially equal. 4.0 makes the divergence visible.
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 4.0, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 4.0, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     });
+     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/rr-overrides-from-scan.test.tsx b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/rr-overrides-from-scan.test.tsx
+index a09eafdc..ee09a2ac 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/__tests__/rr-overrides-from-scan.test.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/__tests__/rr-overrides-from-scan.test.tsx
+@@ -27,7 +27,7 @@ jest.mock('@/lib/api', () => ({
+   api: {
+     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
+     getContractQuote: jest.fn().mockResolvedValue({
+-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
++      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+     }),
+     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
+     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
+@@ -136,7 +136,7 @@ describe('step-7-trade-card -- recompute-plan sends the scan\'s rr_* (STEP3-PARA
+     jest.clearAllMocks();
+     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
+     (api.getContractQuote as jest.Mock).mockResolvedValue({
+-      price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
++      quoteLive: true, price: 1.1, delta: 0.3, theta: -0.05, ivRank: 77, spread: 0.05, volume: 500,
+     });
+     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
+     const b = makeCard('AAA');
+diff --git a/frontend/app/(frame)/screener/step-7-trade-card/page.tsx b/frontend/app/(frame)/screener/step-7-trade-card/page.tsx
+index ac3e17f8..874b7cac 100644
+--- a/frontend/app/(frame)/screener/step-7-trade-card/page.tsx
++++ b/frontend/app/(frame)/screener/step-7-trade-card/page.tsx
+@@ -17,6 +17,7 @@ import { Title, Text } from '@/components/primitives';
+ import { MarketSentiment } from '@/components/molecules/MarketSentiment';
+ import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
+ import { CandidateNav } from '@/components/molecules/CandidateNav';
++import { quoteWarning } from '@/lib/quoteWarning';
+ import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
+ import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
+ import { useRiskStore } from '@/lib/riskStore';
+@@ -586,7 +587,8 @@ export default function Step7Page() {
+    * every path, including the next early return someone adds: a quote whose
+    * key does not match the card on screen is not this card's quote, and
+    * `liveQuoteForCard` below is the only thing any consumer may read. */
+-  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number } | null>(null);
++  const [liveQuote,      setLiveQuote]        = useState<{ key: string; price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null } | null>(null);
++  const [quoteConfirmation, setQuoteConfirmation] = useState<{ contractKey: string } | null>(null);
+   const [liveStockPrice, setLiveStockPrice]   = useState<{ symbol: string; price: number } | null>(null);
+   const [fetchingQuote,  setFetchingQuote]    = useState(false);
+   // Recomputed Entry/Exit/RR/targets, per SYMBOL, for every overridden contract —
+@@ -702,6 +704,12 @@ export default function Step7Page() {
+ 
+   const liveQcd = pickedCard?.contractDetails;
+   const contractKey = contractKeyFor(pickedCard);
++  const currentContractKeyRef = useRef(contractKey);
++  const selectionEpochRef = useRef(0);
++  if (currentContractKeyRef.current !== contractKey) selectionEpochRef.current += 1;
++  currentContractKeyRef.current = contractKey;
++  useEffect(() => () => { currentContractKeyRef.current = null; }, []);
++  useEffect(() => { setQuoteConfirmation(null); }, [contractKey]);
+   // The looser key the three edit caches use — see editKeyFor. Declared from
+   // `effectiveCard` (not `pickedCard`) so it matches what the writer reports
+   // and what `entryLimitFor`/`premiumStopDollarFor` read on the send paths.
+@@ -916,7 +924,8 @@ export default function Step7Page() {
+           dte:         liveQcd.dte,
+           premium:     q?.price ?? liveQcd.mid,
+           delta:       liveQcd.delta,
+-          spread:      q?.spread ?? 0,
++          spread:      q?.spread ?? liveQcd.spread!,
++          quote_live:  q?.quoteLive ?? !pickedCard.noLiveQuote,
+           // PIECE 3 — round-trip the stop this card already resolved. The
+           // endpoint echoes it and builds the plan around it, so an override
+           // changes the CONTRACT and nothing about where the stock stop sits.
+@@ -993,7 +1002,8 @@ export default function Step7Page() {
+         dte: cd.dte,
+         premium: cd.mid,
+         delta: cd.delta,
+-        spread: 0,
++        spread: cd.spread!,
++        quote_live: !resolved.noLiveQuote,
+         final_stop: resolved.exit.finalStop ?? null,
+           ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
+         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+@@ -1141,6 +1151,23 @@ export default function Step7Page() {
+     setPaperOrderId(null);
+     let label = card.contract;
+     try {
++      const keyAtSend = contractKeyFor(card);
++      const selectionAtSend = selectionEpochRef.current;
++      const cdAtSend = card.contractDetails;
++      if (!keyAtSend || !cdAtSend) { setOrderError('No order was sent � contract details unavailable.'); return; }
++      const quoteController = new AbortController();
++      const quoteTimeout = setTimeout(() => quoteController.abort(), 8000);
++      let freshQuote: Awaited<ReturnType<typeof api.getContractQuote>> | null;
++      try {
++        freshQuote = await api.getContractQuote(card.symbol, cdAtSend.strike, cdAtSend.expiry, cdAtSend.right, quoteController.signal).catch(() => null);
++      } finally { clearTimeout(quoteTimeout); }
++      // Navigation during the probe cancels this send; neither quote nor tick can cross contracts.
++      if (currentContractKeyRef.current !== keyAtSend || selectionEpochRef.current !== selectionAtSend) return;
++      setLiveQuote(freshQuote ? { ...freshQuote, key: keyAtSend } : null);
++      if (freshQuote?.quoteLive !== true && quoteConfirmation?.contractKey !== keyAtSend) {
++        setOrderError('No order was sent � confirm the quote warning for this contract and click again.');
++        return;
++      }
+       // Captured ONCE; never re-read from `effectiveCard`, which may be another
+       // candidate by the time the broker answers.
+       label = contractLabelFor(card);
+@@ -1152,7 +1179,7 @@ export default function Step7Page() {
+       // throw here happens before anything is written.
+       const optionSymbol = toOptionSymbol(card);
+       const limitPrice = orderType === 'LMT' ? entryLimitFor(card) : null;
+-      const pos = buildPaperPosition(card, orderType, broker, 'pending', liveQuoteForCard?.price, contracts);
++      const pos = buildPaperPosition(card, orderType, broker, 'pending', freshQuote?.price, contracts);
+       const recId = pos.recId;
+ 
+       // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
+@@ -1573,7 +1600,13 @@ export default function Step7Page() {
+           {fetchingQuote && (
+             <Text size={11} tone="dim">Fetching live price…</Text>
+           )}
+-          {liveQuoteForCard && !fetchingQuote && (
++          {quoteWarning(liveQuoteForCard) && (
++            <div role="status">
++              <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
++              <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => setQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
++            </div>
++          )}
++          {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
+             <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
+           )}
+           {liveStockPriceForCard != null && !fetchingQuote && (
+@@ -1777,6 +1810,10 @@ export default function Step7Page() {
+       {dialogOpen && (
+         <SendToBrokerDialog
+           cards={basketCards}
++          quoteWarningsByContract={Object.fromEntries(basketCards.map((c) => {
++            const key = contractKeyFor(c);
++            return [key ?? c.contract, quoteWarning(key === contractKey ? liveQuoteForCard : null)];
++          }))}
+           contractsBySymbol={orderContractsBySymbol}
+           overridesBySymbol={maxLossOverrideBySymbol}
+           invalidationBySymbol={Object.fromEntries(
+diff --git a/frontend/app/(frame)/watchlist/page.tsx b/frontend/app/(frame)/watchlist/page.tsx
+index 309161f6..3fee2e5b 100644
+--- a/frontend/app/(frame)/watchlist/page.tsx
++++ b/frontend/app/(frame)/watchlist/page.tsx
+@@ -15,6 +15,7 @@
+ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+ import { Title, Text, Data } from '@/components/primitives';
+ import { TableRow } from '@/components/molecules/TableRow';
++import { NoLiveQuoteTag } from '@/components/atoms/NoLiveQuoteTag';
+ import { StatusBadge } from '@/components/atoms/StatusBadge';
+ import { RankDelta } from '@/components/atoms/RankDelta';
+ import { EventFlag } from '@/components/atoms/EventFlag';
+@@ -525,6 +526,7 @@ function LiveContractRow({ contract: c, yamlGraded }: { contract: OptionContract
+       <div className={styles.scoreCell}>
+         <Data size={13} weight={500}>{c.score}</Data>
+         <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
++                    <NoLiveQuoteTag noLiveQuote={c.noLiveQuote} quoteState={c.quoteState} />
+       </div>
+     </TableRow>
+   );
+diff --git a/frontend/components/organisms/ScanLog/index.tsx b/frontend/components/organisms/ScanLog/index.tsx
+index 39bef24b..2134e946 100644
+--- a/frontend/components/organisms/ScanLog/index.tsx
++++ b/frontend/components/organisms/ScanLog/index.tsx
+@@ -24,7 +24,8 @@ function resolveHorizonKey(h: string | undefined): string {
+ // Category mapping for contract rejection reasons
+ // ---------------------------------------------------------------------------
+ 
+-const REASON_CATEGORY: Record<string, 'DATA' | 'GREEKS' | 'PRICE' | 'SOFT'> = {
++export const REASON_CATEGORY: Record<string, 'DATA' | 'GREEKS' | 'PRICE' | 'SOFT'> = {
++  no_live_quote: 'DATA',
+   no_greeks_data:          'DATA',
+   no_iv_data:              'DATA',
+   open_interest_too_low:   'DATA',
+diff --git a/frontend/components/organisms/SendToBrokerDialog/__tests__/index.test.tsx b/frontend/components/organisms/SendToBrokerDialog/__tests__/index.test.tsx
+index 258ccb48..0dc04d35 100644
+--- a/frontend/components/organisms/SendToBrokerDialog/__tests__/index.test.tsx
++++ b/frontend/components/organisms/SendToBrokerDialog/__tests__/index.test.tsx
+@@ -260,3 +260,11 @@ describe('SendToBrokerDialog — tracks the basket, places no broker order (revi
+     expect(Object.keys(onSubmit.mock.calls[0][0][0]).sort()).toEqual(['card', 'contracts']);
+   });
+ });
++
++
++test('T11 non-active basket item warns without requiring a quote confirmation tick', () => {
++  const card = makeCard({ symbol: 'BBB', noLiveQuote: false });
++  render(<SendToBrokerDialog cards={[card]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ BBB: pick() }} onClose={() => {}} onSubmit={() => {}} />);
++  expect(screen.getByText(/Live quote unavailable � the entry premium is the scan-time mid/)).toBeInTheDocument();
++  expect(screen.queryByLabelText('Confirm sending without a live quote')).not.toBeInTheDocument();
++});
+diff --git a/frontend/components/organisms/SendToBrokerDialog/index.tsx b/frontend/components/organisms/SendToBrokerDialog/index.tsx
+index fdf3835f..f2de3ea7 100644
+--- a/frontend/components/organisms/SendToBrokerDialog/index.tsx
++++ b/frontend/components/organisms/SendToBrokerDialog/index.tsx
+@@ -10,6 +10,8 @@
+  * made phantom positions that looked like fills.
+  */
+ 
++import { contractKeyFor } from '@/lib/tradeCardOverride';
++import { quoteWarning } from '@/lib/quoteWarning';
+ import { useMemo, useState } from 'react';
+ import { Text, Data } from '@/components/primitives';
+ import { useRiskStore } from '@/lib/riskStore';
+@@ -29,6 +31,7 @@ export interface DraftOrder {
+ 
+ interface Props {
+   cards:    TradeCardData[];
++  quoteWarningsByContract?: Record<string, string | null>;
+   /** Feature 7 — the page-level shared per-symbol contracts map (same one fed
+    *  into TradeCard's `contracts` prop and read by the quick-order/auto-trade
+    *  paths), used only to SEED this dialog's row state. Editing the quantity
+@@ -69,7 +72,7 @@ interface RowState {
+   contracts: number;
+ }
+ 
+-export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol, invalidationBySymbol, methodPickBySymbol, onClose, onSubmit }: Props) {
++export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBySymbol, overridesBySymbol, invalidationBySymbol, methodPickBySymbol, onClose, onSubmit }: Props) {
+   const [rows, setRows] = useState<Record<string, RowState>>(() =>
+     Object.fromEntries(cards.map((c) => [c.symbol, { contracts: contractsBySymbol[c.symbol] ?? 1 }])),
+   );
+@@ -237,7 +240,7 @@ export function SendToBrokerDialog({ cards, contractsBySymbol, overridesBySymbol
+             return (
+               <div key={c.symbol} className={styles.row}>
+                 <Data size={13} weight={500}>{c.symbol}</Data>
+-                <Text size={12}>{c.contract}</Text>
++                <div><Text size={12}>{c.contract}</Text><Text size={11} tone="caution">{quoteWarningsByContract?.[contractKeyFor(c) ?? c.contract] ?? (quoteWarningsByContract && (contractKeyFor(c) ?? c.contract) in quoteWarningsByContract ? null : quoteWarning(null))}</Text></div>
+                 <Data size={12} className={styles.right}>${mid.toFixed(2)}</Data>
+                 <input
+                   type="number"
+diff --git a/frontend/lib/api.ts b/frontend/lib/api.ts
+index 49671376..d3da47bd 100644
+--- a/frontend/lib/api.ts
++++ b/frontend/lib/api.ts
+@@ -436,7 +436,7 @@ export const api = {
+   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
+     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
+     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
+-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
++    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
+       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
+       signal,
+     ),
+@@ -452,6 +452,7 @@ export const api = {
+     premium: number;
+     delta: number;
+     spread: number;
++    quote_live?: boolean | null;
+     rr_target_r_multiple?: number;
+     target_stock_price?: number;
+     target_source?: TradeCardData['exit']['targetSource'];
+diff --git a/frontend/lib/tradeCardOverride.ts b/frontend/lib/tradeCardOverride.ts
+index 5785825e..812f5bb8 100644
+--- a/frontend/lib/tradeCardOverride.ts
++++ b/frontend/lib/tradeCardOverride.ts
+@@ -50,10 +50,12 @@ export function scoreEvidenceFor(card: TradeCardData): {
+  *  are recomputed asynchronously (a network round-trip) and merged in
+  *  separately. Returns `card` unchanged when there's no override. */
+ export function applyPickedContract(card: TradeCardData, picked: OptionContract | undefined): OverriddenCard {
+-  if (!picked || picked.id === card.contract) return card;
++  if (!picked) return card;
++  if (picked.id === card.contract) return { ...card, noLiveQuote: picked.noLiveQuote ?? false };
+   return {
+     ...card,
+     contract: picked.id,
++    noLiveQuote: picked.noLiveQuote ?? false,
+     contractScore: picked.score,
+     contractConfidence: picked.contractConfidence,
+     // ROUND 6 finding 8. The breakdown has to move with the contract. Without
+@@ -77,6 +79,7 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract
+       expiry:       picked.expiry,
+       right:        picked.right,
+       mid:          picked.price,
++      spread:       picked.spread,
+       delta:        picked.delta,
+       theta:        picked.theta,
+       // Carry BOTH quantities across the override — `ivRank` is null on any
+diff --git a/frontend/types/domain.ts b/frontend/types/domain.ts
+index bde4ea94..023bdccd 100644
+--- a/frontend/types/domain.ts
++++ b/frontend/types/domain.ts
+@@ -616,6 +616,7 @@ export interface UpcomingEvent {
+ }
+ 
+ export interface TradeCardData {
++  noLiveQuote?: boolean;
+   symbol:        string;
+   company:       string;
+   price:         number;
+@@ -641,6 +642,7 @@ export interface TradeCardData {
+     strike: number;
+     expiry: string;              // YYYY-MM-DD
+     right:  'C' | 'P';
++    spread?: number;
+     mid:    number;              // premium, $
+     delta:  number;
+     theta:  number;              // $/day
+@@ -877,6 +879,8 @@ export interface StockExplanation {
+ export type OptionRight = 'C' | 'P';
+ 
+ export interface OptionContract {
++  noLiveQuote?: boolean;
++  quoteState?: string | null;
+   id:           string;
+   symbol:       string;
+   strike:       number;

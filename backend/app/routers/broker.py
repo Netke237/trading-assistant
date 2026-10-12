@@ -9,9 +9,12 @@ import uuid
 import logging
 from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.data.ibkr_paper import BrokerOrder
+from app.data.order_errors import OrderAdmissionRefusedError
+from app.data.option_symbol import option_right
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.broker_router import build_router_from_credentials
 from app.services.audit import log_event, new_rec_id
 
@@ -24,6 +27,16 @@ def _selected_adapter(router_, broker):
 
 def _dispatch_order(router_, broker, order, hooks, attempt_id):
     """Validate current configuration in the worker immediately before dispatch."""
+    if order.effect == "OPEN":
+        bearish = order.sec_type == "STK" and order.action == "SELL"
+        if order.sec_type == "OPT":
+            try:
+                right = option_right(order.option_symbol)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            bearish = (order.action == "BUY" and right == "P") or (order.action == "SELL" and right == "C")
+        if bearish:
+            raise HTTPException(status_code=422, detail=BEARISH_UNVALIDATED_MESSAGE)
     adapter = _selected_adapter(router_, broker)
     if order.effect == "OPEN":
         from app.services.portfolio_risk import account_value, AccountValueError
@@ -44,6 +57,10 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
             raise HTTPException(status_code=422, detail=f"Daily risk budget refused opening order: {exc}") from exc
     try:
         result = adapter.place_order(order)
+    except OrderAdmissionRefusedError:
+        if order.effect == "OPEN":
+            hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+        raise
     except Exception:
         if order.effect == "OPEN":
             hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")
@@ -213,6 +230,9 @@ def _raise_if_awaiting_confirmation(result, rec_id: str, kind: str, symbol: str)
 
 
 class StockOrderRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: gt=0 alone accepts +inf; the limit must be finite.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     broker: BrokerKey
     symbol: str
     action: Literal["BUY", "SELL"]
@@ -233,6 +253,9 @@ class StockOrderRequest(BaseModel):
 
 
 class OptionOrderRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: gt=0 alone accepts +inf; the limit must be finite.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     broker: BrokerKey
     symbol: str
     option_symbol: str
@@ -300,6 +323,13 @@ async def place_stock_order(req: StockOrderRequest) -> dict:
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
             result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
+        except HTTPException as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
+                "http_status": exc.status_code,
+                "error": "bearish unvalidated" if exc.detail == BEARISH_UNVALIDATED_MESSAGE else str(exc.detail),
+            })
+            raise
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "stock", "broker": req.broker, "symbol": req.symbol,
@@ -370,6 +400,13 @@ async def place_option_order(req: OptionOrderRequest) -> dict:
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
             result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
+        except HTTPException as exc:
+            log_event("broker_order_failed", rec_id, {
+                "kind": "option", "broker": req.broker, "symbol": req.symbol,
+                "http_status": exc.status_code,
+                "error": "bearish unvalidated" if exc.detail == BEARISH_UNVALIDATED_MESSAGE else str(exc.detail),
+            })
+            raise
         except ValueError as exc:
             log_event("broker_order_failed", rec_id, {
                 "kind": "option", "broker": req.broker, "symbol": req.symbol,

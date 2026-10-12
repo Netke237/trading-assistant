@@ -54,7 +54,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
     getContractQuote: jest.fn().mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
@@ -167,7 +167,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
@@ -639,7 +639,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // and the basket path took the scan mid, and with both set to 2.5 the two
     // were trivially equal. 4.0 makes the divergence visible.
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 4.0, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 4.0, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
@@ -713,7 +713,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // Distinct live mids, so a leak is unmistakable.
     (api.getContractQuote as jest.Mock).mockImplementation((sym: string) =>
       Promise.resolve({
-        price: sym === 'BBB' ? 7.77 : 2.22,
+        quoteLive: true, price: sym === 'BBB' ? 7.77 : 2.22,
         delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
       }),
     );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import logging
 import math
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Literal, Optional, get_args
 from app.services.config_health import config_health
 from app.schemas import Direction, Horizon
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 
 if TYPE_CHECKING:
     # For `FiredOrder`'s annotation only: `execute_option_order` imports the
@@ -61,41 +63,16 @@ class ArmPreservedError(RuntimeError):
 
 
 class OrderNotSubmittedError(RuntimeError):
-    """The fire failed BEFORE the broker adapter was called: nothing was sent.
+    """The order provably was not submitted.
 
-    (Or, for the one subclass `OrderAwaitingConfirmationError`, the broker was
-    called and did not take the order. Either way no order is live. See the
-    paragraph on it below.)
+    Local setup failures occur before calling the adapter. An adapter can also
+    prove it sent nothing: OrderAdmissionRefusedError marks refusal before an
+    order POST and execute_option_order converts that explicit signal here.
+    All other adapter errors remain ambiguous and retain the full risk.
 
-    F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
-    in one `except Exception` that wrote `order_failed` — a status whose own
-    comment says the submission MAY HAVE LANDED — and paged "the broker call was
-    made and errored ... Check the broker before re-arming". But three of the
-    four things that call reaches contact nothing at all: building the
-    `BrokerOrder`, building the router out of the credential store, and the two
-    guards in `BrokerRouter.resolve`. The reachable one is mundane and
-    recurring: credentials expire or are rotated,
-    `build_router_from_credentials` omits that adapter without complaint, and
-    `resolve` raises "Unknown broker 'tradier_paper'. Available: []". Measured
-    end to end — the delivered email told Kenneth to go and check a broker that
-    was never opened a socket to, for a position that cannot exist.
-
-    THE BOUNDARY IS `adapter.place_order`, NOT SOMEWHERE MORE CONVENIENT, and it
-    is drawn conservatively. Once that call is entered the auto-trader cannot
-    know whether bytes left the machine, so everything at or past it keeps
-    `order_failed` and keeps saying the order may have landed. This class covers
-    only what is provable from the outside. Both claims are then true statements
-    rather than one blanket guess, which is the whole of the fix: the failure
-    mode being closed is a FALSE alert, so replacing it with the opposite false
-    alert would be no better.
-
-    ONE SUBCLASS IS RAISED PAST THAT BOUNDARY: `OrderAwaitingConfirmationError`,
-    when the broker's own answer says it did not take the order. See it.
-
-    A RuntimeError so `/auto-trade/fire` maps it to a 400 like every refusal
-    but the two config faults (prefixed 500s) — and `fire()` re-raises it as a bare RuntimeError anyway, so
-    the class is a routing signal inside this module, not part of the endpoint's
-    contract.
+    OrderAwaitingConfirmationError additionally covers IBKR's authoritative
+    confirmation reply: the broker was contacted but did not accept an order.
+    That subclass sets broker_contacted on history and changes alert wording.
     """
 
 
@@ -109,13 +86,9 @@ class OrderAwaitingConfirmationError(OrderNotSubmittedError):
     confirms it. Nothing in this codebase sends that reply, so the order never
     reaches the book, and it was booked as a live order at the full premium.
 
-    THE ONE `OrderNotSubmittedError` RAISED AFTER `adapter.place_order`. The
-    class's boundary is drawn at `place_order` because past it the auto-trader
-    cannot know whether bytes left the machine. Here it can: the broker's own
-    answer says the order is not accepted. It is still a SUBCLASS, not the
-    parent, because the not-submitted alert says "the broker was not contacted
-    at all", which is false here. The row records `broker_contacted` and the
-    alert words itself from that.
+    Unlike a pre-POST admission refusal, this signal follows broker contact.
+    The broker's answer proves the order was not accepted. The subclass keeps
+    broker_contacted true so the not-submitted alert describes that contact.
     """
 
 
@@ -133,8 +106,12 @@ class RegimeHeadwindError(RuntimeError):
     """
 
 
+class UnvalidatedDirectionError(RuntimeError):
+    """Bearish auto-fire is refused while its direction remains Unvalidated."""
+
+
 class EventVetoError(RuntimeError):
-    """Fix #3: an earnings date inside the trade's horizon reject window -- or,
+    """An earnings date inside max(YAML reject, hold) -- or,
     for a SINGLE STOCK, an earnings date nobody knows (D4 amended 2026-10-03).
 
     The scan marks the first card REJECT; this refuses a fire for the same reason,
@@ -147,8 +124,8 @@ class EventVetoError(RuntimeError):
     ETFs (`app.data.etfs.is_etf`) have no earnings and are exempt; a symbol not
     in that curated set counts as a stock, which is the safe direction.
 
-    THE WINDOW IS THE HORIZON'S YAML ONE (scoring_rules.yaml
-    `horizons.<horizon>.event.reject_days`), NOT necessarily the scan's. A
+    THE WINDOW IS max(the horizon's YAML reject days, the arm's hold days),
+    with the horizon's own hold preset when the arm has no hold. A
     Step-3 `event_reject_days` override is not carried on the arm, so a scan run
     with a LOWERED override can still be refused here. That is deliberate: it
     errs toward refusing, and carrying the override is a follow-up.
@@ -195,7 +172,9 @@ def _call_source_with_deadline(fn, symbol: str, deadline: float):
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(fn, symbol).result(timeout=deadline)
+        # A copied context carries the caller's Tradier markers (fire path,
+        # prepaid token) into the source's worker (TRADIER-GOVERNOR D3).
+        return ex.submit(contextvars.copy_context().run, fn, symbol).result(timeout=deadline)
     except concurrent.futures.TimeoutError:
         raise _SourceTimeout from None
     finally:
@@ -227,17 +206,32 @@ def _lookup_earnings_date(symbol: str):
     from app.data import market
     # Looked up at call time, so a test patch on either module lands.
     sources = (
-        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S),
-        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S),
+        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S, True),
+        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S, False),
     )
     outcome: dict[str, str] = {}     # name -> "answered" | "timeout" | "error"
     failures: dict[str, str] = {}    # name -> why, for the sources still failed
     for attempt in range(2):
-        for name, fn, deadline in sources:
+        for name, fn, deadline, is_tradier in sources:
             if attempt == 1 and outcome.get(name) != "error":
                 continue
+            # TRADIER-GOVERNOR D3 (R3-G1/R5-G1): off the fire path, the Tradier
+            # source's slot is taken HERE, before its deadline starts, waiting
+            # as long as the queue needs; the copied context then carries the
+            # prepaid token into the source's worker. Skipped on a same-day
+            # cache hit (no request will be made). The fire path never
+            # prepays: its calls book an overdraft. Prepay and call run in one
+            # copied context, so the marker never leaks into the caller.
+            ctx = contextvars.copy_context()
+            if is_tradier and not market._TRADIER_FIRE_PATH.get():
+                cached = market._fundamentals_calendar_cache.get(symbol)
+                if not (cached is not None and cached[1] == date.today().isoformat()):
+                    if not ctx.run(market.tradier_prepay, None):
+                        outcome[name] = "error"
+                        failures[name] = f"{name}: rate limiter refused admission"
+                        continue
             try:
-                found = _call_source_with_deadline(fn, symbol, deadline)
+                found = ctx.run(_call_source_with_deadline, fn, symbol, deadline)
             except _SourceTimeout:
                 outcome[name] = "timeout"
                 failures[name] = f"{name}: no answer within {deadline:g}s"
@@ -294,12 +288,11 @@ def _fetch_earnings_date(symbol: str):
 
 
 def _apply_event_veto(strategy) -> None:
-    """Raise `EventVetoError` when earnings fall inside the horizon's reject
-    window, or when a single stock's earnings date is unknown.
+    """Raise `EventVetoError` inside max(YAML reject, hold), or on an unknown stock date.
 
     Same comparison as the scan's (`routers/scan.py::_earnings_veto`): `0 <=
-    days < reject_days`. The window, though, is the horizon's YAML reject window
-    (`effective_event_window(horizon, None)`), NOT the scan's effective one: a
+    days < veto_days`. The gate covers the arm's hold (or its horizon's preset)
+    and the horizon's YAML reject window. Unlike the scan, a
     Step-3 `event_reject_days` override is not carried on the arm, so a lowered
     override can still be refused here. Deliberate -- it errs toward refusing --
     and a follow-up will carry the override.
@@ -315,13 +308,13 @@ def _apply_event_veto(strategy) -> None:
 
     A trade with no horizon cannot say which window applies, and the regime gate
     abstains there. This one must not abstain: for a KNOWN future date it uses
-    the WIDEST reject window across every configured horizon (the `Horizon`
+    the WIDEST max(reject, hold) across every configured horizon (the `Horizon`
     literal is the source of truth, not a copied list), so a missing horizon can
     only make the veto stricter, never looser. Production cannot
     reach that branch (`ArmRequest.horizon` is required); direct constructors can.
     """
     from typing import get_args
-    from app.scoring.stock_scorer import Horizon, effective_event_window
+    from app.scoring.stock_scorer import DEFAULT_HOLD_MAX, Horizon, effective_event_window
     from app.data.etfs import is_etf
 
     def _unknown(why: str) -> None:
@@ -333,8 +326,11 @@ def _apply_event_veto(strategy) -> None:
             unknown=True,
         )
 
+    from app.data import market
     try:
-        earnings = _fetch_earnings_date(strategy.symbol)
+        # TRADIER-GOVERNOR D3: a fire-path call, admitted by overdraft.
+        with market.tradier_fire_path():
+            earnings = _fetch_earnings_date(strategy.symbol)
     except Exception as exc:  # noqa: BLE001 -- a failed lookup is an unknown date (D4)
         logger.warning("Event veto: earnings lookup failed for %s: %s", strategy.symbol, exc)
         _unknown(f"lookup failed: {exc}")
@@ -346,20 +342,25 @@ def _apply_event_veto(strategy) -> None:
     if days < 0:
         _unknown(f"last date on file {earnings} is past")
         return
+    def _window(horizon):
+        reject, _ = effective_event_window(horizon, None)
+        hold = (strategy.hold_max_days if strategy.hold_max_days is not None
+                else DEFAULT_HOLD_MAX[horizon])
+        return max(reject, hold), reject, hold
+
     if strategy.horizon is not None:
-        reject_days, _ = effective_event_window(strategy.horizon, None)
-        label = f"{strategy.horizon} YAML reject window"
+        veto_days, reject_days, hold_days = _window(strategy.horizon)
     else:
-        reject_days = max(effective_event_window(h, None)[0] for h in get_args(Horizon))
-        label = "widest YAML reject window"
+        veto_days, reject_days, hold_days = max(_window(h) for h in get_args(Horizon))
         logger.warning(
             "Event veto: the armed strategy for %s carries no horizon; "
-            "using the widest configured reject window (%dd)",
-            strategy.symbol, reject_days,
+            "using the widest configured hold window (%dd)",
+            strategy.symbol, veto_days,
         )
-    if days < reject_days:
+    if days < veto_days:
         raise EventVetoError(
-            f"earnings in {days}d is inside the {label} (<{reject_days}d)"
+            f"earnings in {days}d is inside the hold window "
+            f"(<{veto_days}d: max(reject {reject_days}d, hold {hold_days}d))"
         )
 
 
@@ -525,6 +526,8 @@ class ArmedStrategy:
     # construction sites; the cost of defaulting it would be a silent wrong
     # measurement, which is why it is None and not "Swing".
     horizon:                 Optional[Horizon] = None
+    # None preserves arms created before this field and direct constructors.
+    hold_max_days:           Optional[int] = None
     # The Step-3 Regime Gate thresholds AS THE SCAN RESOLVED THEM, snapshotted.
     # None means "the scan used the scoring_rules.yaml value", which is what an
     # untouched Step-3 control means. Frozen at arm for the reason `quantity`,
@@ -657,8 +660,10 @@ def _market_is_open(symbol: str) -> bool:
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
+        from app.data import market
         from app.data.market import fetch_price
-        future = ex.submit(fetch_price, symbol)
+        # TRADIER-GOVERNOR D3: the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, fetch_price, symbol)
         try:
             price = future.result(timeout=3.0)
         except concurrent.futures.TimeoutError:
@@ -669,6 +674,68 @@ def _market_is_open(symbol: str) -> bool:
     except Exception:
         ex.shutdown(wait=False)
         return False
+
+
+def _option_quote_state(option_symbol: str) -> str:
+    """Probe one exact OCC row, outside the state lock, on a bounded deadline."""
+    import concurrent.futures
+    import time
+    import httpx
+    from app.data.option_symbol import to_occ
+    from app.data.governor import get_governor
+    from app.data.market import get_tradier_creds, _headers, intraday_feed_lag_seconds
+    from app.data.quote_liveness import classify_quote
+    from app.scoring.contract_validator import max_quote_age_seconds
+    from app.services.market_session import MARKET_TZ, _market_session_open
+
+    try:
+        occ = to_occ(option_symbol)
+        expiry = datetime.strptime(occ[-15:-9], "%y%m%d").date().isoformat()
+    except (ValueError, TypeError):
+        return "invalid_symbol"
+    if not _market_session_open(datetime.now(MARKET_TZ)):
+        return "session_closed"
+
+    governor = get_governor()
+    def probe() -> str:
+        token, base = get_tradier_creds()
+        if not token or not governor.admit_sync("tradier", admit_timeout=0.0, overdraft=True):
+            return "unavailable"
+        try:
+            response = httpx.get(
+                f"{base.rstrip('/')}/v1/markets/options/chains",
+                params={"symbol": occ[:-15], "expiration": expiry, "greeks": "false"},
+                headers=_headers(token), timeout=2.5,
+            )
+            response.raise_for_status()
+            rows = response.json().get("options", {}).get("option", [])
+            if isinstance(rows, dict):
+                rows = [rows]
+            row = next((r for r in rows if r.get("symbol") == occ), None)
+            governor.record_success("tradier")
+            if row is None:
+                return "unavailable"
+            bid, ask = float(row.get("bid") or 0), float(row.get("ask") or 0)
+            if not math.isfinite(bid) or not math.isfinite(ask):
+                return "unavailable"
+            if ask <= 0:
+                return "one_sided"
+            return classify_quote(
+                bid, ask, row.get("bid_date"), row.get("ask_date"), now_s=time.time(),
+                session_open=True, feed_lag_s=intraday_feed_lag_seconds(),
+                max_age_s=max_quote_age_seconds(),
+            )[0]
+        except Exception:
+            governor.record_failure("tradier")
+            return "unavailable"
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return executor.submit(probe).result(timeout=3.0)
+    except Exception:
+        return "unavailable"
+    finally:
+        executor.shutdown(wait=False)
 
 
 _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -1197,7 +1264,10 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
         _fetch_bars = (_fetch_intraday_regime_bars
                        if rcfg.get("timeframe") == "15min"
                        else _fetch_scan_window_bars)
-        future = ex.submit(_fetch_bars, strategy.symbol)
+        from app.data import market
+        # TRADIER-GOVERNOR D3: both branches' Tradier fetch (A1 / A2) is a
+        # fire-path call; the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, _fetch_bars, strategy.symbol)
         try:
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:
@@ -1770,10 +1840,13 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     §9.1 is "refuse to fire AND alert". The manual trigger needs no help — the
     refusal is the 400 body of POST /auto-trade/fire (a prefixed 500 for the
     two config faults), with a human reading it.
-    The scan trigger has no reader at all: POST /scan calls it through
-    `asyncio.to_thread` and discards the outcome, so without this the refusal
-    is a log line on a box nobody is watching while an armed order silently
-    does not happen.
+    The scan trigger has no reader at all: POST /scan runs
+    `maybe_fire_on_scan` on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker thread
+    and acts only on a returned `FiredOrder`, which it books back on the event
+    loop through `book_fired_order`. A refusal is caught inside
+    `maybe_fire_on_scan` and comes back as None, which POST /scan reports to
+    no one, so without this the refusal is a log line on a box nobody is
+    watching while an armed order silently does not happen.
 
     SHARED BY EVERY REFUSAL KIND SINCE TARGET 2a ROUND 1, which found the
     headwind refusal — the one that is EXPECTED to happen in normal operation,
@@ -1782,17 +1855,26 @@ def _alert_refusal(symbol: str, what: str, reason: str, rec_id: str,
     ValueError)`. `what` and `reason` are the caller's words; everything below
     is the same for all of them.
 
-    WHY asyncio.run IS CORRECT HERE: this runs in the worker thread
-    `asyncio.to_thread` created, which has no event loop of its own, so a
-    fresh loop is the only way to await an async notifier. Keeping it at the
-    scan-trigger boundary rather than inside fire() is what makes that true —
-    fire() is also reachable from the event-loop thread, via the /fire
-    endpoint, where asyncio.run raises.
+    WHY asyncio.run IS CORRECT HERE: this runs in a worker thread with no
+    event loop of its own — `routers/scan._SCAN_FIRE_EXECUTOR`'s worker for
+    the scan trigger's refusals, an `asyncio.to_thread` worker for the booking
+    alerts below — so a fresh loop is the only way to await an async notifier.
+    Booking itself (`book_fired_order`) never moves into such a thread: it
+    stays on the originating request's event loop with that request's session.
+    The thread, not the call site inside or outside fire(), is what makes
+    asyncio.run safe: since P3c item 7 no production caller runs fire() on
+    the event loop either — POST /auto-trade/fire calls it from
+    `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, and the scan trigger
+    reaches it inside `maybe_fire_on_scan` on `_SCAN_FIRE_EXECUTOR`'s. What
+    keeping these alerts at the scan-trigger boundary rather than inside
+    fire() still decides is WHO is alerted: a manual refusal already reaches
+    a human as the /fire response body (above), so only the scan trigger needs
+    a channel; inside fire() every manual refusal would page as well.
 
     THE RUNNING-LOOP GUARD IS UNREACHABLE TODAY and round 1 was right to say
     so: every caller reaches this from a thread with no loop. The refusal
     helpers are called from maybe_fire_on_scan, whose only caller is POST
-    /scan through asyncio.to_thread; the two booking alerts (O4 steps 4+5,
+    /scan on `_SCAN_FIRE_EXECUTOR`'s worker thread; the two booking alerts (O4 steps 4+5,
     `services/auto_trade_booking.py`) run ON the event loop and so call this
     through `await asyncio.to_thread(...)` -- called directly there, this guard
     would drop every one of them. It stays because the cost of being wrong
@@ -2048,13 +2130,26 @@ def _alert_regime_data_refusal(symbol: str, exc: Exception) -> None:
     )
 
 
+def _alert_unvalidated_refusal(symbol: str, exc: Exception) -> None:
+    """Page a consumed bearish refusal, per symbol and as a discrete event."""
+    _alert_refusal(
+        symbol,
+        "unvalidated-direction refusal",
+        (f"Auto-trade REFUSED to fire {symbol}: {exc} "
+         "Nothing was sent and the auto-trader is disarmed."),
+        _per_symbol_rec_id("auto-trade-unvalidated", symbol),
+        "AUTO_TRADE_UNVALIDATED",
+        discrete=True,
+    )
+
+
 def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     """Alert an earnings-veto refusal (fix #3 part 2, EventVetoError).
 
     PER SYMBOL AND DISCRETE, for the headwind alert's reasons: one refusal per
     symbol, an event rather than a standing condition. Its own wording and type:
     nothing is misconfigured and the market did not move -- an earnings print is
-    inside the horizon's reject window, and the remedy is a decision (re-arm
+    inside the hold window, and the remedy is a decision (re-arm
     after the print, or not at all). When `exc.unknown` (D4 amended 2026-10-03:
     a single stock with no known earnings date) the wording says so instead of
     claiming a print is inside the window -- the remedy is to check the calendar.
@@ -2070,7 +2165,7 @@ def _alert_event_veto_refusal(symbol: str, exc: Exception) -> None:
     else:
         reason = (
             f"Auto-trade REFUSED to fire {symbol}: earnings fall inside this "
-            f"trade's horizon reject window (the horizon's configured window; "
+            f"trade's hold window (max of the horizon's configured reject days and hold days; "
             f"a lowered Step-3 override is not carried on the arm). Nothing was sent and the auto-trader is "
             f"disarmed — re-arm after the announcement if you still want the "
             f"trade. {exc}"
@@ -2178,8 +2273,9 @@ _STATUS_STALE_BLOCKED = "stale_blocked"
 _STATUS_RISK_CHECK_FAILED = "risk_check_failed"
 # P3b: the bars to measure the regime could not be had (RegimeDataUnavailableError).
 _STATUS_REGIME_DATA_BLOCKED = "regime_data_blocked"
-# Fix #3 part 2: earnings inside the horizon's reject window (EventVetoError).
+# Earnings inside max(YAML reject, hold) (EventVetoError).
 _STATUS_EVENT_VETO_BLOCKED = "event_veto_blocked"
+_STATUS_UNVALIDATED_BLOCKED = "unvalidated_blocked"
 
 
 def _clear_config_refusal_holds() -> None:
@@ -2238,10 +2334,10 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     statuses are recorded BEFORE `execute_option_order` is reached, which is
     the same guarantee the `order_failed` row's own comment leans on when it
     says these two "provably never reached the broker". `_alert_not_submitted`
-    states it as fact on the same grounds, one phase later — it is reached only
-    from inside `execute_option_order` and only before `adapter.place_order`
-    (except IBKR's confirmation question, which is past it but still took no
-    order; that case is worded separately -- `OrderAwaitingConfirmationError`).
+    states it as fact on explicit proof: local setup failure or the adapter's
+    pre-POST admission refusal. IBKR's confirmation question instead proves
+    no order was accepted despite contact, and is worded separately via
+    `OrderAwaitingConfirmationError`.
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -2301,8 +2397,8 @@ def _alert_not_submitted(symbol: str, exc: Exception, *,
     THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
     pair only works because each states what its own half provably knows.
     `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
-    strictly before `adapter.place_order` (except `OrderAwaitingConfirmationError`,
-    below) — so no position can exist, and
+    on local setup failure or an adapter's explicit pre-POST admission refusal
+    (except `OrderAwaitingConfirmationError`, below) — so no position can exist, and
     hedging with "check the broker" would keep the wild goose chase F2 is about
     while merely sounding more careful.
 
@@ -2349,8 +2445,9 @@ def _alert_stale_arm(symbol: str, age_minutes: float, max_age: int) -> None:
     above the three `d8a8e2c1` fixed. The staleness guard consumes the armed
     order and returns BEFORE `maybe_fire_on_scan`'s try, so none of the routing
     added by round 1 could ever see it: no history row, no alert, one
-    `logger.warning` on a box nobody watches, which POST /scan discards along
-    with the rest of the trigger's outcome. Against `max_arm_age_minutes: 30`
+    `logger.warning` on a box nobody watches, and the trigger's only result for
+    this exit is None, which POST /scan surfaces to no one (it acts only on a
+    returned `FiredOrder`, which it books). Against `max_arm_age_minutes: 30`
     (risk_rules.yaml) and a scan cadence in minutes, this is plausibly THE MOST
     FREQUENT way an armed trade dies — the common case was the unreported one.
 
@@ -2430,14 +2527,10 @@ def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
 def execute_option_order(strategy: ArmedStrategy):
     """Execute the armed option order via the broker router. Importable for mocking.
 
-    TWO PHASES, AND THE SEAM BETWEEN THEM IS LOAD-BEARING — see
-    `OrderNotSubmittedError`. Everything inside the `try` contacts nothing: it
-    builds the order object, reads the credential store, and resolves the
-    adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
-    broker, so only it may raise the error `fire()` records as "may have
-    landed". The one check after it (`OrderAwaitingConfirmationError`) reads the
-    broker's own answer that it took no order. Anything moved across that line changes what Kenneth is told about
-    a possibly-live position, in one direction or the other.
+    Setup failures prove no contact and become OrderNotSubmittedError.
+    At place_order, only the adapter's explicit OrderAdmissionRefusedError
+    proves no POST occurred; all other errors remain potentially submitted.
+    An IBKR confirmation question proves no order was accepted despite contact.
     """
     from app.services.broker_router import build_router_from_credentials
     from app.data.ibkr_paper import BrokerOrder
@@ -2468,7 +2561,13 @@ def execute_option_order(strategy: ArmedStrategy):
         # ValueError would send the rest back to the "may have landed" branch
         # with the same false claim F2 exists to remove.
         raise OrderNotSubmittedError(str(exc)) from exc
-    result = adapter.place_order(order)
+    from app.data.order_errors import OrderAdmissionRefusedError
+    try:
+        result = adapter.place_order(order)
+    except OrderAdmissionRefusedError as exc:
+        # The adapter proves admission failed before any POST. Other adapter
+        # errors remain ambiguous: they may have sent an order.
+        raise OrderNotSubmittedError(str(exc)) from exc
     # A QUESTION IS NOT AN ORDER -- see `OrderAwaitingConfirmationError`.
     # getattr because Tradier's adapter has its own OrderResult without the
     # field; only IBKR's reply shape sets it.
@@ -2563,8 +2662,10 @@ class AutoTradeService:
         Passed by callers that read the armed slot, decided something about
         what they read, and only then called — `maybe_fire_on_scan` checks the
         staleness of the order it read. Without it, a disarm-and-re-arm inside
-        the window (a manual POST /auto-trade/fire on the event loop while the
-        scan runs in a worker thread) had this attempt fire AAPL on the
+        the window (a manual POST /auto-trade/fire, whose fire() runs on
+        `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, while the scan
+        trigger runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s — two executors,
+        so neither serialises the other) had this attempt fire AAPL on the
         strength of MSFT's age check and then alert about MSFT for a row that
         says AAPL — F1's third interleaving. Identity, not equality: a re-arm
         with an equal-valued strategy is still a different decision. Mismatch
@@ -2582,6 +2683,19 @@ class AutoTradeService:
                     "— armed state preserved for the next trigger"
                 )
             _symbol = self._state.strategy.symbol
+            _option_symbol = self._state.strategy.option_symbol
+            _probed_strategy = self._state.strategy
+            # An unsupported arm is consumed even outside market hours. Take it
+            # under the same lock as the identity check; record outside the lock.
+            unvalidated = self._state.strategy.direction == "Bearish"
+            if unvalidated:
+                strategy = self._state.strategy
+                self._state.armed = False
+                self._state.strategy = None
+                self._consumed_attempts.append(attempt_id)
+
+        if unvalidated:
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Halt check outside lock — network call must not hold the lock.
         # Armed state is preserved: we haven't disarmed yet.
@@ -2589,6 +2703,14 @@ class AutoTradeService:
             raise ArmPreservedError(
                 f"Market closed or {_symbol} halted "
                 f"— armed state preserved for retry"
+            )
+
+        _qs = _option_quote_state(_option_symbol)
+        if _qs != "live":
+            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
+            raise ArmPreservedError(
+                f"No live option quote for {_option_symbol} ({_qs}) "
+                "— armed state preserved for retry"
             )
 
         with self._lock:
@@ -2605,12 +2727,19 @@ class AutoTradeService:
                     "AutoTrader re-armed since this attempt read it "
                     "— armed state preserved for the next trigger"
                 )
+            if self._state.strategy is not _probed_strategy or self._state.strategy.option_symbol != _option_symbol:
+                raise ArmPreservedError("AutoTrader re-armed during quote probe — armed state preserved for retry")
             strategy = self._state.strategy
             self._state.armed = False
             self._state.strategy = None
             # OWNERSHIP TAKEN — recorded inside the disarm's own lock
             # acquisition so the two cannot come apart. See the deque.
             self._consumed_attempts.append(attempt_id)
+
+        # Defensive for an arm created before deploy or by a direct constructor.
+        # Refuse before sizing/regime can fetch data or any broker is reached.
+        if strategy.direction == "Bearish":
+            self._refuse_unvalidated(attempt_id, strategy)
 
         # Vol-scaled sizing + the headwind gate, both on ONE measurement of
         # this symbol's own regime (SIZING-4), which therefore DOES make a
@@ -3071,7 +3200,10 @@ class AutoTradeService:
         """Trigger #2: called after each scan completes. Fires if armed and fresh.
 
         Returns the `FiredOrder` on a fire, for POST /scan to book on the event
-        loop (O4 step 5). Every other exit -- not armed, stale, and every
+        loop (O4 step 5). Runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s worker
+        thread; if the request is cancelled before booking starts, the scan
+        router logs this return value instead of booking it
+        (`_log_scan_fire_outcome`). Every other exit -- not armed, stale, and every
         refusal handler below -- returns None, unchanged.
         """
         with self._lock:
@@ -3104,7 +3236,7 @@ class AutoTradeService:
         # `self.disarm()`, a `logger.warning` and a `return` — placed ABOVE the
         # try, so every routing branch below was structurally blind to it. The
         # armed order was consumed and the only trace was a log line inside a
-        # worker thread whose return value POST /scan throws away. It is also
+        # worker thread whose None return POST /scan surfaces to no one. It is also
         # the refusal most likely to actually happen, which is the wrong one to
         # have made invisible.
         max_age = self._max_arm_age_minutes()
@@ -3217,6 +3349,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(strategy.symbol, exc)
         except EventVetoError as exc:
             _alert_event_veto_refusal(strategy.symbol, exc)
+        except UnvalidatedDirectionError as exc:
+            _alert_unvalidated_refusal(strategy.symbol, exc)
         except RegimeGateConfigError as exc:
             _alert_regime_gate_config_refusal(strategy.symbol, exc)
         except SizingConfigError as exc:
@@ -3292,13 +3426,20 @@ class AutoTradeService:
             # state read that computed it.
             self._alert_for_consumed_attempt(attempt_id, strategy.symbol, exc)
 
+    def _refuse_unvalidated(self, attempt_id: str, strategy: "ArmedStrategy") -> None:
+        self._record_refusal(attempt_id, strategy, _STATUS_UNVALIDATED_BLOCKED,
+                             BEARISH_UNVALIDATED_MESSAGE)
+        logger.error("AutoTrader fire REFUSED for %s %s — %s",
+                     strategy.symbol, strategy.direction, BEARISH_UNVALIDATED_MESSAGE)
+        raise UnvalidatedDirectionError(BEARISH_UNVALIDATED_MESSAGE)
+
     def _record_refusal(self, attempt_id: str, strategy: "ArmedStrategy",
                         status: str, error: str) -> None:
         """Append the refusal row `fire()` writes when it declines to send.
 
         The 9-key shape every refusal row has: no order id, zero premium at
         risk, stamped with `attempt_id` so `maybe_fire_on_scan` can correlate it.
-        Used by the earnings-veto blocks only; the older refusal blocks in
+        Used by the earnings-veto and Unvalidated blocks; older refusal blocks in
         `fire()` keep their own inline copies deliberately (audited code).
         """
         with self._lock:
@@ -3402,6 +3543,8 @@ class AutoTradeService:
             _alert_regime_data_refusal(symbol, exc)
         elif status == _STATUS_EVENT_VETO_BLOCKED:
             _alert_event_veto_refusal(symbol, exc)
+        elif status == _STATUS_UNVALIDATED_BLOCKED:
+            _alert_unvalidated_refusal(symbol, exc)
         elif status == "not_submitted":
             # ABOVE `order_failed` for readability only — the two statuses
             # are disjoint, so this is reading order, not precedence.

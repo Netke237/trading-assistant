@@ -497,3 +497,35 @@ describe('parsePipelineDiagnostics — round-2 regressions', () => {
   });
 });
 
+
+describe('parsePipelineDiagnostics — universe exclusions (P0A-C1-F1)', () => {
+  // scan.py records each `scope: scan` symbol from universe_exclusions.yaml as
+  // `Excluded (data): <reason>` and counts it in failed_data (`_is_data`).
+  const ZERO = { scanned: 0, failed_data: 0, failed_pre_screen: 0, no_chain: 0, failed_score: 0, failed_contracts: 0,
+    failed_direction: 0, failed_shortlist: 0, failed_direction_unmeasured: 0, other_rejected: 0, candidates: 0 };
+  const EXCL_REJECTED: RejectedEntry[] = [
+    { symbol: 'CTVA', reason: 'Excluded (data): 2026-10-01 corporate action not adjusted by any provider (77.67 -> 12.57)' },
+    { symbol: 'AVB', reason: 'Excluded (data): price feed ended 2026-08-17; 2.793 split not adjusted' },
+    { symbol: 'XYZ', reason: 'no market data' },
+    { symbol: 'PRE', reason: 'Pre-screen: score 28 rejected', breakdown: PRE_BD({ trend: 20 }) },
+  ];
+  const EXCL_PIPELINE: OptionsPipeline = { ...ZERO, scanned: 5, failed_data: 3, failed_pre_screen: 1, candidates: 1 };
+
+  it('files an excluded symbol under the data stage, like the backend counter', () => {
+    expect(classifyReason(EXCL_REJECTED[0])).toEqual({ stage: 'data-filters', subRules: ['excluded'] });
+  });
+
+  it('reconciles the data stage rows with failed_data and adds no "not attributed" note', () => {
+    const r = parsePipelineDiagnostics(EXCL_PIPELINE, EXCL_REJECTED, ['OK']);
+    const data = stage(r, 'data-filters');
+    expect(data.droppedCount).toBe(3);
+    expect(data.subRules.reduce((n, x) => n + (x.count ?? 0), 0)).toBe(3);
+    expect(sub(r, 'data-filters', 'excluded')?.count).toBe(2);
+    expect(sub(r, 'data-filters', 'excluded')?.label).toBe('Excluded (universe_exclusions.yaml)');
+    expect(data.note).toBeUndefined();
+    expect(r.stages.find((x) => x.id === 'errors')?.droppedCount ?? 0).toBe(0);
+    expect(r.lookupSymbol('CTVA')?.stageName).toBe('Data & Universe Filters');
+    expect(r.lookupSymbol('CTVA')?.primaryReason).toBe('Excluded (universe_exclusions.yaml)');
+    expect(sumDrops(r)).toBe(4);
+  });
+});

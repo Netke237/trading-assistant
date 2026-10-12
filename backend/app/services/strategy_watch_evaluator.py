@@ -2,13 +2,14 @@
 """Runs each enabled strategy-watch on daily bars and emits state-transition events.
 
 The state machine (per watch) is the dedup mechanism: it only returns events on a
-genuine transition (idle→entry, armed→exit_stop/exit_target, armed→reversal), so a
+genuine transition (idle→entry, armed→time_stop/exit_stop/exit_target, armed→reversal), so a
 standing setup never re-alerts. Each watch's direction (Bullish/Bearish) is fixed
 at creation, so a reversal can't be detected by comparing the primary signal
 (always evaluated in the watch's own fixed direction) against the armed state's
 direction -- those can never disagree. Instead, while armed (and neither stop nor
 target has hit), the evaluator also evaluates the signal function for the
-OPPOSITE direction, using that direction's own tuned params (get_active). If the
+OPPOSITE direction, using that direction's own params for the watch's params
+horizon (get_profile; no params_horizon = the direction baseline). If the
 opposite-direction signal fires, that's a genuine reversal and the watch re-arms
 in the new direction.
 """
@@ -26,10 +27,10 @@ from app.services.scheduling_tz import MARKET_TZ
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
     ma_crossover_signal, mean_reversion_rsi_signal,
-    mean_reversion_bb_signal,
+    mean_reversion_bb_signal, SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_watch_store import strategy_watch_store
-from app.services.strategy_param_store import get_active, get_exit
+from app.services.strategy_param_store import get_exit, get_profile
 from app.services.notifications.dispatch import (
     _CHANNELS, notify_channels, read_notification_config, ready_channels,
 )
@@ -69,7 +70,7 @@ class WatchEvent:
     watch_id:     str
     symbol:       str
     strategy_key: str
-    event_type:   str          # entry | exit_stop | exit_target | reversal
+    event_type:   str          # entry | time_stop | exit_stop | exit_target | reversal
     direction:    str | None
     entry:        float | None
     stop:         float | None
@@ -266,6 +267,21 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _days_held(state: dict) -> int | None:
+    """UTC calendar days since the armed watch's entry/reversal (STOCKS-HORIZON-T1
+    H7): ``(today_utc - date_utc(last_event_at)).days``. None when the state has
+    no parseable entry/reversal time."""
+    if state.get("last_event") not in ("entry", "reversal"):
+        return None
+    try:
+        at = datetime.fromisoformat(state["last_event_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    return (_utcnow().date() - at.astimezone(timezone.utc).date()).days
+
+
 def _count(v: object) -> int | None:
     """A stored failure count: a non-negative int (bool excluded), else None."""
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
@@ -384,10 +400,12 @@ async def _eval_strategy_watch(
     close = float(bars[-1]["close"])
     wdir = w.get("direction", "Bullish")
     try:
-        adopted = {**get_exit(key), **get_active(key, wdir)}
+        # STOCKS-HORIZON-T1 H4: the profile for the watch's params horizon
+        # (absent -> the direction baseline, as before).
+        adopted = {**get_exit(key), **get_profile(key, wdir, w.get("params_horizon"))[0]}
         params_override = w.get("params_override") or {}
         adopted.update(params_override)  # params_override wins
-        signal = fn(bars, direction=wdir, **adopted)
+        signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=wdir, **adopted)
     except Exception as exc:
         logger.warning("strategy-watch: %s signal failed for %s — %s", key, symbol, exc)
         return None
@@ -454,7 +472,20 @@ async def _eval_strategy_watch(
         target_hit = (
             (close >= target_price) if sdir == "Bullish" else (close <= target_price)
         ) if target_price is not None else False
-        if stop_hit:
+        # STOCKS-HORIZON-T1 H7: the watch's hold (from its params horizon) is
+        # checked before stop and target. No horizon -> never time-stops.
+        hold = w.get("hold_max_days")
+        held = _days_held(state) if isinstance(hold, int) and not isinstance(hold, bool) else None
+        if held is not None and held >= hold:
+            event = WatchEvent(
+                watch_id=w["id"], symbol=symbol, strategy_key=key,
+                event_type="time_stop", direction=state.get("direction"),
+                entry=state.get("entry_price"), stop=stop_price,
+                target=target_price, rr_ratio=None, close=close,
+                reason=f"{symbol}: {_strategy_label(key)} time stop — held {held}d (hold {hold}d)",
+            )
+            state = {"phase": "idle", "last_event": "time_stop", "last_event_at": _now_iso()}
+        elif stop_hit:
             event = WatchEvent(
                 watch_id=w["id"], symbol=symbol, strategy_key=key,
                 event_type="exit_stop", direction=state.get("direction"),
@@ -481,9 +512,10 @@ async def _eval_strategy_watch(
             # reachable, not adding debounce) -- revisit if this proves noisy.
             opposite_dir = "Bearish" if sdir == "Bullish" else "Bullish"
             try:
-                opp_params = {**get_exit(key), **get_active(key, opposite_dir)}
+                opp_params = {**get_exit(key),
+                              **get_profile(key, opposite_dir, w.get("params_horizon"))[0]}
                 opp_params.update(params_override)
-                opp_signal = fn(bars, direction=opposite_dir, **opp_params)
+                opp_signal = fn(bars[-SIGNAL_WINDOW_BARS:], direction=opposite_dir, **opp_params)
             except Exception as exc:
                 logger.warning("strategy-watch: %s reversal signal failed for %s — %s",
                                 key, symbol, exc)
@@ -581,7 +613,9 @@ async def _eval_composite_watch(
     bars_intraday: list[dict] = []
     if model == "HMM_intraday" or vwap_intraday:
         try:
-            raw = fetch_intraday_candles(
+            # Off the event loop (TRADIER-GOVERNOR T3): a sync Tradier fetch.
+            raw = await asyncio.to_thread(
+                fetch_intraday_candles,
                 symbol, interval=fetch_iv, days=intraday_history_days(fetch_iv),
             )
             # A4c + VWAP-CONFIRMATION-LIKE-REGIME-MODELS: the HMM fit AND the
@@ -770,6 +804,7 @@ async def evaluate_all(sustain_minutes: int = 0, now_ts: float | None = None) ->
 
 _SUBJECT_PREFIX = {
     "entry":       "Buy setup",
+    "time_stop":   "Time stop",
     "exit_stop":   "Stop hit",
     "exit_target": "Target hit",
     "reversal":    "Reversal",

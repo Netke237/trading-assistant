@@ -5,8 +5,8 @@ import { defaultStockOverlay, stockExecutionIdentity, type StockExecutionRecord,
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
-import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
-import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+import type { Direction, OptionContract, TradeCardData, DteWindow, SentimentData } from '@/types/domain';
+import type { StockScanResult, PositionCardData, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { StockScanRequestBody } from './resolveStockScanRequest';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
@@ -121,7 +121,7 @@ export interface ScanResult {
   /** The earnings/dividend window the scan's event rule applied (horizon
    *  default, replaced by any Step-3 override). Absent on results from before
    *  2026-09-29. Step 5 gates on it. */
-  event_window?: { reject_days: number; caution_days: number };
+  event_window?: { reject_days: number; caution_days: number; veto_days?: number | null };
   /** The contract-rule overrides the scan graded contracts with (Step-3
    *  liquidity, spread, delta, IV and min-stock-score rules; `{}` when it
    *  overrode none). Absent, or null from the backend, on results from before
@@ -450,24 +450,18 @@ interface ScanStoreState {
   /** Session-only — not persisted; cleared on page load. */
   regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
-  preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
-  setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
-  fibPullbackResults: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>;
-  setFibPullbackResults: (results: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>) => void;
+  /** Market sentiment built from the regime response Step 1 already fetched.
+   *  Written only by Step 1 (`fetchRegime`: null when a fetch starts, the
+   *  reading when it answers, null when it fails); read by the Stocks Strategy
+   *  page's Market Sentiment strip. Deliberately NOT in `partialize`: a stored
+   *  sentiment would show stale numbers after a reload — the strip then shows
+   *  "loads on Step 1" instead. */
+  regimeSentiment:    SentimentData | null;
+  setRegimeSentiment: (s: SentimentData | null) => void;
+  preBreakoutResults: PreBreakoutResultRow[];
+  setPreBreakoutResults: (results: PreBreakoutResultRow[]) => void;
+  fibPullbackResults: FibPullbackResultRow[];
+  setFibPullbackResults: (results: FibPullbackResultRow[]) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -517,6 +511,8 @@ export const useScanStore = create<ScanStoreState>()(
       setCombinedRegime: (r) => set({ combinedRegime: r }),
       regimeDirection:    null,
       setRegimeDirection: (d) => set({ regimeDirection: d }),
+      regimeSentiment:    null,
+      setRegimeSentiment: (s) => set({ regimeSentiment: s }),
       preBreakoutResults: [],
       setPreBreakoutResults: (results) => set({ preBreakoutResults: results }),
       fibPullbackResults: [],

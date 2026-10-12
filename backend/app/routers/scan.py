@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
+import re
 import concurrent.futures
 from datetime import datetime, timezone
 
@@ -62,9 +64,10 @@ from app.data.market import (
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
-from app.scoring.stock_scorer import score_stock, StockScoreCard, effective_event_window
+from app.scoring.stock_scorer import score_stock, StockScoreCard, Horizon, effective_event_window, effective_veto_days
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
+from app.data.universe_exclusions import ExclusionListError, filter_symbols
 from app.scoring.contract_validator import validate_contract, ContractScoreCard
 from app.scoring.contract_validator import contract_caution_threshold, effective_contract_overrides, effective_dte_limits, is_finite_rule_value
 from app.scoring.contract_validator import dte_holding_multiplier
@@ -83,6 +86,7 @@ from types import SimpleNamespace
 from app.routers.stock_scan import (
     _regime_data_drop, _direction_conviction_drop, _rs_benchmark_candles, _aligned_benchmark,
 )
+from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
 from pydantic import BaseModel
@@ -146,16 +150,25 @@ def _final_status(*statuses: str) -> str:
     return min(statuses, key=lambda s: _ORDER.get(s, 1))
 
 
-def _earnings_veto(card) -> bool:
-    """Fix #3: earnings inside the horizon's reject window is a VETO on the
-    options path, not a score penalty. 37 of 440 measured PASS setups stayed
-    PASS with earnings 3 days out. Dividends stay a penalty (D3)."""
+def _earnings_veto(card, veto_days: int) -> bool:
+    """Earnings inside max(reject, hold) vetoes options; dividends remain a score penalty."""
     r = next((r for r in card.rules if r.name == "event"), None)
     if r is None:
         return False
     days = r.detail.get("earnings_days")
-    reject = r.detail.get("reject_days")
-    return days is not None and reject is not None and days < reject
+    return days is not None and 0 <= days < veto_days
+
+
+def _resolve_earnings_veto_days(horizon, overrides, hold_max_days, reject_days) -> int:
+    """Keep a veto window if request resolution fails, using the event echo first."""
+    try:
+        return effective_veto_days(horizon, overrides, hold_max_days)
+    except Exception as exc:
+        _log.warning("earnings veto window unavailable: %s", exc)
+        if reject_days is not None:
+            return reject_days
+        from typing import get_args
+        return max(effective_veto_days(h, None, None) for h in get_args(Horizon))
 
 
 def _earnings_unknown_caps(card, symbol: str) -> bool:
@@ -202,6 +215,14 @@ _SHORTLIST_STATUS_ORDER: dict[str, int] = {"PASS": 0, "CAUTION": 1}
 # Reason prefix for candidates trimmed by the shortlist cap. The funnel's
 # `_is_shortlist` bucket and the frontend's scanLogTotals both match on it.
 _SHORTLIST_REASON_PREFIX = "Shortlist cap:"
+# NO-LIVE-QUOTE (plan 3f): the per-name reason _process_symbol writes when
+# EVERY contract of the name was rejected for no_live_quote and for nothing
+# else -- the "all contracts rejected" counter below names one reason with its
+# count and no "; best contract score" tail (that tail needs a contract with no
+# reject reason). validate_contract's reject mode short-circuits a non-live row
+# to exactly ["no_live_quote"], so a mixed chain never matches. Counted into
+# ScanResult.noLiveQuoteNames, which the scheduled-scan notice reads.
+_NO_LIVE_QUOTE_ONLY_REASON = re.compile(r"contracts rejected: no_live_quote\(\d+\)")
 
 
 def _compute_deltas(current: ScanResult, previous: ScanResult | None) -> list[ScanDelta]:
@@ -545,6 +566,7 @@ async def _process_symbol(
     dte_bounds: tuple[int, int] | None = None,
     hold_min_days: int | None = None,
     hold_max_days: int | None = None,
+    veto_days: int | None = None,
     # The HOLDING preset key ("Swing", "Annual", "Custom", ...), NOT `horizon`
     # above — that one is the collapsed scoring horizon and cannot express
     # Quarterly/SemiAnnual/Annual/Custom. Only the repricing horizon reads it.
@@ -1211,12 +1233,19 @@ async def _process_symbol(
         _stock_stop, datetime.now(timezone.utc).isoformat(),
     )
 
+    # Production scans pass one precomputed window. Preserve direct callers by
+    # resolving from their own horizon/hold, with the same event-rule fallback.
+    if veto_days is None:
+        veto_days = _resolve_earnings_veto_days(
+            horizon, overrides, hold_max_days, rule_detail.get("event", {}).get("reject_days"),
+        )
+
     trade_card = TradeCardData(
         symbol=symbol,
         company=company,
         price=price,
         direction=direction,
-        status=card.status,
+        status=_final_status(card.status, "CAUTION" if direction == "Bearish" else "PASS"),
         stockScore=card.score,
         stockConfidence=card.status,
         stockExplanation=card.explanation,
@@ -1283,11 +1312,13 @@ async def _process_symbol(
         rrModel=rr.model_used,
         finalStatus=_final_status(
             card.status, contract_card.status, entry.quality_status,
-            "REJECT" if _earnings_veto(card) else "PASS",
+            "REJECT" if _earnings_veto(card, veto_days) else "PASS",
             # D4 amended 2026-10-03: unknown earnings caps a single stock.
             "CAUTION" if _earnings_unknown_caps(card, symbol) else "PASS",
+            "CAUTION" if direction == "Bearish" else "PASS",
         ),
-        earningsVeto=_earnings_veto(card),
+        unvalidatedReason=BEARISH_UNVALIDATED_MESSAGE if direction == "Bearish" else None,
+        earningsVeto=_earnings_veto(card, veto_days),
         earningsUnknown=bool(rule_detail.get("event", {}).get("earnings_unknown", False)),
         isEtf=is_etf(symbol),
         earningsDays=rule_detail.get("event", {}).get("earnings_days"),
@@ -1652,6 +1683,17 @@ async def _execute_scan_core(
     except PresetUnavailableError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # STOCKS-HORIZON-P0A A2: drop `scope: scan` symbols from the FINAL list
+    # (presets expanded, typed tickers included) before any per-symbol work.
+    # Each one is reported in `rejected` below and counted in `scanned` and
+    # `failed_data`. A broken list is a named 500: it must not silently scan
+    # everything.
+    try:
+        symbols, _excluded = filter_symbols(symbols, purpose="scan")
+    except ExclusionListError as e:
+        _log.error("SCAN %s aborted: universe exclusion list unusable: %s", scan_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
     # Validate rr_* overrides ONCE upfront, before dispatching any per-symbol
     # work. Without this, a malformed override (e.g. a negative target %)
     # only surfaced inside _process_symbol -- AFTER that symbol's full
@@ -1731,7 +1773,13 @@ async def _execute_scan_core(
         _atr_target = _atr_stop = None
 
     candidates: list[TradeCardData] = []
-    rejected: list[RejectedCandidate] = []
+    rejected: list[RejectedCandidate] = [
+        RejectedCandidate(symbol=_x.symbol, reason=f"Excluded (data): {_x.reason}")
+        for _x in _excluded
+    ]
+    # Excluded symbols were scanned and dropped, so the funnel's `scanned` (and
+    # the direction banner's "of N") count them: scanned == sum of buckets.
+    _scanned = len(symbols) + len(_excluded)
     has_exception = False
 
     # Pre-fetch all prices in one Tradier batch call (removes N individual HTTP requests)
@@ -1824,6 +1872,13 @@ async def _execute_scan_core(
     except Exception as exc:
         _log.warning("SCAN %s event_window unavailable: %s", scan_id, exc)
 
+    veto_days = _resolve_earnings_veto_days(
+        req.horizon, req.overrides, req.hold_max_days,
+        _event_win.reject_days if _event_win is not None else None,
+    )
+    if _event_win is not None:
+        _event_win.veto_days = veto_days
+
     # The contract rules every symbol below is graded with (before the hold-days
     # DTE widening, which /api/contracts re-derives from the same hold days),
     # echoed on the result so Step 6's table grades with them too. Never
@@ -1887,6 +1942,7 @@ async def _execute_scan_core(
                 dte_bounds=_dte_bounds,
                 hold_min_days=req.hold_min_days,
                 hold_max_days=req.hold_max_days,
+                veto_days=veto_days,
                 horizon_preset=req.horizon_preset,
                 gate=gate,
                 atr_mult_target=_atr_target,
@@ -1991,11 +2047,11 @@ async def _execute_scan_core(
     _direction_banner: str | None = None
     if not candidates and _dir_removed > 0:
         _floor = f" (trend below {_min_trend:g})" if _min_trend is not None else ""
-        _rest = ("" if _dir_removed >= len(symbols)
+        _rest = ("" if _dir_removed >= _scanned
                  else "; the rest were removed by other gates — see the pipeline")
         _direction_banner = (
             f"No {req.direction.lower()} candidates survived. The direction-conviction gate "
-            f"removed {_dir_removed} of {len(symbols)}{_floor}{_rest}."
+            f"removed {_dir_removed} of {_scanned}{_floor}{_rest}."
         )
     elif candidates and all(c.status == "CAUTION" for c in candidates):
         _direction_banner = (
@@ -2064,8 +2120,11 @@ async def _execute_scan_core(
     _data_kw = ("no market data", "price filter", "cap filter")
     # "regime data unavailable:" (P3c item 1) is a data drop, as the stock scan
     # counts it under failed_history (no 15-min regime bars is like no price).
+    # "Excluded (data):" (STOCKS-HORIZON-P0A A2) is a `scope: scan` symbol from
+    # universe_exclusions.yaml, dropped before any per-symbol work.
     def _is_data(r):       return (any(k in r.reason for k in _data_kw)
-                                   or r.reason.startswith("regime data unavailable:"))
+                                   or r.reason.startswith("regime data unavailable:")
+                                   or r.reason.startswith("Excluded (data):"))
     def _is_pre_screen(r): return r.reason.startswith("Pre-screen:")
     def _is_no_chain(r):   return r.reason == "no option chain"
     def _is_score(r):      return r.reason.startswith("Score gate:")
@@ -2075,7 +2134,7 @@ async def _execute_scan_core(
                 _is_score, _is_contracts, _is_direction, _is_shortlist)
 
     _pipeline = OptionsPipeline(
-        scanned=len(symbols),
+        scanned=_scanned,
         failed_data=sum(1 for r in rejected if _is_data(r)),
         failed_pre_screen=sum(1 for r in rejected if _is_pre_screen(r)),
         no_chain=sum(1 for r in rejected if _is_no_chain(r)),
@@ -2087,6 +2146,11 @@ async def _execute_scan_core(
         direction_min_trend=_min_trend,
         failed_shortlist=original_count - len(candidates),
         candidates=len(candidates),
+    )
+    # NO-LIVE-QUOTE (plan 3f): names whose every contract had no live quote.
+    # Not a funnel bucket -- those names stay under failed_contracts.
+    _no_live_quote_names = sum(
+        1 for r in rejected if _NO_LIVE_QUOTE_ONLY_REASON.fullmatch(r.reason)
     )
     _log.info(
         "SCAN %s pipeline: scanned=%d data_fail=%d pre_screen_fail=%d direction_unmeasured=%d no_chain=%d score_fail=%d contract_fail=%d direction_fail=%d shortlist_trim=%d other=%d candidates=%d",
@@ -2152,8 +2216,115 @@ async def _execute_scan_core(
         contract_rules=_contract_rules,
         rr_overrides=_rr_overrides,
         request_context=_request_context,
+        noLiveQuoteNames=_no_live_quote_names,
     )
     return result
+
+
+# AUTOTRADE-FIRE-HYGIENE H1: run_scan's auto-fire runs
+# `auto_trader.maybe_fire_on_scan` here, and keeps the concurrent Future so a
+# cancelled request still records what the worker did (`_log_scan_fire_outcome`).
+# DEDICATED: not /fire's `_FIRE_EXECUTOR` and not the default pool the scan's
+# data fetches use. ONE worker, so a second manual scan's trigger QUEUES behind
+# the first; a queued call cancelled with its request never runs. The
+# AutoTrader lock and `expect`/identity checks stay the guards against /fire or
+# a re-arm racing it — this serialises scan triggers only. Non-daemon, joined at
+# interpreter exit like the default executor's.
+_SCAN_FIRE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=1, thread_name_prefix="scan-auto-fire",
+)
+
+
+def _fired_order_fields(fired) -> str:
+    """The returned order's own identity, for a diagnostic. Selected fields
+    only, never a whole object. May raise: callers format it inside a guard."""
+    order, strategy = fired.result, fired.strategy
+    return (
+        f"symbol={strategy.symbol} option_symbol={strategy.option_symbol} "
+        f"broker={order.broker} order_id={order.order_id!r} "
+        f"status={order.status!r} attempt_id={fired.attempt_id}"
+    )
+
+
+def _log_scan_booking_unconfirmed(scan_id, fired) -> None:
+    """AUTOTRADE-FIRE-HYGIENE H2: POST /scan was cancelled WHILE
+    `book_fired_order` was awaited.
+
+    The writer may already have committed the position (it commits before the
+    audit record, history link and pages that follow), and a cancelled
+    coroutine does not roll that back — so this says neither booked nor NOT
+    booked, and asks for nothing to be added. Runs ONCE, on the loop, in
+    run_scan's handler just before the re-raise; nothing books again. MUST NOT
+    RAISE: it would replace the CancelledError.
+    """
+    head = "scan auto-trade: POST /scan was cancelled"
+    try:
+        _log.error("%s while the fired order was being booked (scan %s); "
+                   "booking confirmation unavailable; check broker and "
+                   "portfolio before acting: %s (status as the broker "
+                   "reported it)", head, scan_id, _fired_order_fields(fired))
+    except Exception as fmt_exc:
+        try:
+            _log.error("%s while the fired order was being booked (scan %s); "
+                       "booking confirmation unavailable; check broker and "
+                       "portfolio before acting (order not describable: %s)",
+                       head, scan_id, type(fmt_exc).__name__)
+        except Exception:
+            pass
+
+
+def _log_scan_fire_outcome(scan_id, cf: concurrent.futures.Future) -> None:
+    """Record the outcome of a `maybe_fire_on_scan` whose POST /scan was cancelled.
+
+    Runs as a `concurrent.futures` done-callback — in the worker thread when
+    the call finishes, or at once if it already has — so it is written even
+    while shutdown is cancelling every task. Writes ONE log line and nothing
+    else: no portfolio, risk or history row. Booking never started on this
+    path; the request's session is gone. MUST NOT RAISE (`add_done_callback`
+    would swallow it and lose the line): `cancelled()` first, `exception()`
+    before `result()`, and every field is formatted inside the guard. Logs
+    selected fields only, never a whole object (an adapter config may ride
+    along on one).
+    """
+    head = "scan auto-trade: POST /scan was cancelled"
+    try:
+        if cf.cancelled():
+            _log.warning("%s before maybe_fire_on_scan ran (scan %s); nothing "
+                         "was dispatched", head, scan_id)
+            return
+        exc = cf.exception()
+        if exc is not None:
+            detail = f"{type(exc).__name__}: {exc}"
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); it raised "
+                       "%s. Whether an order reached the broker is unknown and "
+                       "this scan booked nothing; check the broker and "
+                       "portfolio before acting", head, scan_id, detail)
+            return
+        fired = cf.result()
+        if fired is None:
+            # Not armed, stale or refused: the service's own diagnostics for
+            # that exit are authoritative, so this does not restate them.
+            _log.warning("%s while maybe_fire_on_scan ran (scan %s); it "
+                         "returned no order, so there was nothing to book",
+                         head, scan_id)
+            return
+        # The ORDER THE WORKER RETURNED — never the armed slot, which a re-arm
+        # may have replaced. Status is the broker's word, not interpreted: a
+        # rejected order is logged as rejected, not as a position.
+        fields = _fired_order_fields(fired)
+        _log.error("%s while maybe_fire_on_scan ran (scan %s); the broker "
+                   "returned an order outcome and booking never started, so "
+                   "it was NOT booked: %s (status as the broker reported it). "
+                   "Check the broker and portfolio before acting",
+                   head, scan_id, fields)
+    except Exception as fmt_exc:
+        try:
+            _log.error("%s while maybe_fire_on_scan ran (scan %s); its outcome "
+                       "could not be described (%s) and was NOT booked; check "
+                       "the broker and portfolio before acting",
+                       head, scan_id, type(fmt_exc).__name__)
+        except Exception:
+            pass
 
 
 @router.post('/scan', response_model=ScanResult)
@@ -2195,26 +2366,63 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             await db.rollback()
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks()
-            fired = await asyncio.to_thread(
+            cf = _SCAN_FIRE_EXECUTOR.submit(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() resolves the server account configuration at dispatch
                 daily_risk_hooks=hooks,
             )
-            # O4 step 5: book the fired order, back ON the event loop with this
-            # request's session (it never enters the worker thread). None on
-            # every non-fire. `book_fired_order` never raises, pages its own
-            # refusals and rolls back what it wrote, so `_upsert_session` below
-            # runs on a usable session either way.
-            if fired is not None:
-                from app.services.auto_trade_booking import book_fired_order
-                booking = await book_fired_order(fired, db)
-                if booking.booked:
-                    _log.info("scan auto-trade: fired order booked as %s", booking.rec_id)
-                else:
-                    _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
+            # AUTOTRADE-FIRE-HYGIENE H2: this block owns the fire's outcome
+            # until booking returns, and `phase` says how far it got, so a
+            # cancellation reports only what is known — once:
+            # - "worker_pending" / "booking_not_started": no await separates
+            #   delivery from the booking call, so a cancel at delivery is
+            #   raised by the worker await with `cf` already done. Either way
+            #   the H1 callback below logs the worker's outcome; booking never
+            #   started.
+            # - "booking_started": the writer may have committed; confirmation
+            #   unavailable, and nothing books again.
+            # - "booking_returned": no await follows inside the block; the
+            #   booked / NOT booked line was logged before `_upsert_session`,
+            #   so a cancel there leaves that known status standing.
+            phase = "worker_pending"
+            fired = None
+            try:
+                fired = await asyncio.wrap_future(cf)
+                phase = "booking_not_started"
+                # O4 step 5: book the fired order, back ON the event loop with
+                # this request's session (it never enters the worker thread).
+                # None on every non-fire. `book_fired_order` never raises,
+                # pages its own refusals and rolls back what it wrote, so
+                # `_upsert_session` below runs on a usable session either way.
+                # It lets CancelledError through — handled below.
+                if fired is not None:
+                    from app.services.auto_trade_booking import book_fired_order
+                    phase = "booking_started"
+                    booking = await book_fired_order(fired, db)
+                    phase = "booking_returned"
+                    if booking.booked:
+                        _log.info("scan auto-trade: fired order booked as %s", booking.rec_id)
+                    else:
+                        _log.error("scan auto-trade: fired order NOT booked: %s", booking.error)
+            except asyncio.CancelledError:
+                if phase in ("worker_pending", "booking_not_started"):
+                    # Cancelling the await does not stop a RUNNING worker; the
+                    # broker call can still complete. `cf.cancel()` only stops
+                    # a call still queued behind the one worker. The outcome is
+                    # logged on the THREAD side of `cf` — an asyncio-side
+                    # callback would see only "cancelled" during shutdown — and
+                    # `add_done_callback` runs it at once if `cf` is already
+                    # done. Nothing is booked: the request's session is going
+                    # away.
+                    cf.cancel()
+                    cf.add_done_callback(
+                        functools.partial(_log_scan_fire_outcome, result.scan_id))
+                elif phase == "booking_started":
+                    _log_scan_booking_unconfirmed(result.scan_id, fired)
+                raise
     # `req`, not `_last_request`. The global is read AFTER the auto-trade block
-    # above, whose `await asyncio.to_thread(...)` is a synchronous broker call —
+    # above, whose awaited `_SCAN_FIRE_EXECUTOR` call is a synchronous broker call —
     # a window measured in seconds. A second overlapping manual scan (nothing
     # serializes two of them; see this function's docstring) completing inside
     # it replaces `_last_request` with ITS request, and this line would then

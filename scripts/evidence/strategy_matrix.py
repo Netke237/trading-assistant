@@ -38,7 +38,7 @@ for _p in (REPO / "backend", REPO / "scripts"):
 from app.services.strategy_backtest import _MIN_TRADES, run_strategy_backtest  # noqa: E402
 from app.services.walk_forward import commission_for  # noqa: E402
 from evidence._bars import (  # noqa: E402
-    common_parser, emit, load_bars, loaded_range, report_header, stored_symbols,
+    common_parser, emit, load_bars, loaded_range, report_header, evidence_symbols,
 )
 from evidence.gate_persistence import DAILY_STRATEGIES, DIRECTIONS, cost_model  # noqa: E402
 
@@ -133,11 +133,12 @@ async def _main(args) -> str:
     from app.services.strategy_param_store import get_active, get_costs
 
     costs = get_costs()
-    symbols = args.symbols or await stored_symbols()
+    symbols, excluded = await evidence_symbols(
+        args.symbols, include_excluded=args.include_excluded)
     bars = await load_bars(symbols, args.start, args.end)
     header = report_header(
         "Strategy matrix (M5, M6)", symbols=symbols, start=args.start, end=args.end,
-        cost_model=cost_model(costs), loaded=loaded_range(bars),
+        cost_model=cost_model(costs), loaded=loaded_range(bars), excluded=excluded,
         extra={
             "History": "each symbol's full loaded history, no warm-up exclusion beyond the "
                        "backtest's own 60 bars",

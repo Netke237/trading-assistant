@@ -1,5 +1,21 @@
 .main { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
 .header { display: flex; flex-direction: column; gap: 4px; }
+
+/* STOCK-PRES-P4-STRATEGY: the Options layout — main column (strategy cards,
+ * parameters) + side column (scan actions), two columns at every width the
+ * app allows (MinWidthGate: >= 1280px). */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.stack, .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel {
+  padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: var(--bg-surface); display: flex; flex-direction: column; gap: 12px;
+}
+.cardTitle { margin: 0; }
+
+/* Copied from the Options pages' "How this page works" (step-7-trade-card). */
+.pageExplanation { font-size: 12px; color: var(--text-secondary); }
+.pageExplanation > summary { cursor: pointer; color: var(--accent); }
+.pageExplanation[open] > summary { margin-bottom: var(--space-2); }
 .directionBanner {
   padding: 10px 14px;
   border: 1px solid var(--caution);
@@ -83,6 +99,7 @@
 
 .prefetchRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -110,3 +127,16 @@
   border-color: var(--border-default);
   color: var(--text-primary);
 }
+
+/* STOCKS-HORIZON-T1 H5: drop the multi-signal overrides, follow the profile. */
+.resetProfileBtn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.resetProfileBtn:hover { border-color: var(--border-default); color: var(--text-primary); }

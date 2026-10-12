@@ -9,7 +9,7 @@ row miss; old rows expire naturally.
 """
 from __future__ import annotations
 
-EXPECTED_VERSION = "b2"
+EXPECTED_VERSION = "b3"  # b3: STOCKS-HORIZON-P0A A4 (non-overlapping confidence replay)
 
 # The pre-T2 key format for cache_key("AAPL", "Bullish", "Swing", None, None,
 # scoring_mode="stock"): no version suffix.
@@ -45,7 +45,7 @@ def test_backtest_cache_key_carries_basis_version():
     key = _backtest_key("AAPL", "pullback_ema", "Bullish", bars, {"a": 1},
                         commission=0.001, min_trades=5, min_win_rate=0.45)
     # A whole field, not a substring: the md5 hash fields are hex and could
-    # contain "b2" by chance.
+    # contain the token by chance.
     assert EXPECTED_VERSION in key.split("|")
 
     from app.data.confidence_cache import BARS_BASIS_VERSION

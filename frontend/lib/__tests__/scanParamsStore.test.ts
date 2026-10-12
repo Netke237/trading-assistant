@@ -1,15 +1,13 @@
-import { migrateScanParams, SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
+import { migrateScanParams, SCAN_PARAM_DEFAULTS, OVERRIDE_FIELDS } from '@/lib/scanParamsStore';
 
 describe('scanParamsStore — migrate is cumulative (H7)', () => {
-  it('migrating from v2 includes every field added through v11', () => {
+  it('migrating from v2 includes every field added through v12', () => {
     const result = migrateScanParams({}, 2);
-    expect(result.pullbackMaType).toBe('EMA');
     expect(result.eventFilter).toBe('include');
     expect(result.stockShortlistMax).toBe(10);
-    expect(result.requireChoppyRegime).toBe(false);
-    expect(result.meanReversionVariants).toEqual(['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily']);
-    expect(result.vwapLookback).toBe(20);
-    expect(result.vwapDeviationPct).toBe(0.02);
+    // v12 (STOCKS-HORIZON-T1 H5): every strategy field follows the backend
+    // horizon profile, so the values v4-v11 seeded end as null.
+    for (const f of OVERRIDE_FIELDS) expect(result[f]).toBeNull();
   });
 
   it('migrating from v2 leaves btMinWinRate at the current default (never entered the v7/v8 bug window)', () => {
@@ -33,13 +31,14 @@ describe('scanParamsStore — migrate is cumulative (H7)', () => {
   });
 
   it('preserves an explicit persisted value alongside newly-added fields', () => {
-    const result = migrateScanParams({ rsiOversold: 25 }, 3);
-    expect(result.rsiOversold).toBe(25);
-    expect(result.pullbackMaType).toBe('EMA'); // still added
+    // A non-strategy setting: strategy fields reset to the profile at v12.
+    const result = migrateScanParams({ btMinWinRate: 0.5 }, 3);
+    expect(result.btMinWinRate).toBe(0.5);
+    expect(result.eventFilter).toBe('include'); // still added
   });
 
-  it('migrating from the current version (11) is a no-op passthrough plus defaults merge', () => {
-    const result = migrateScanParams({ rsiPeriod: 21 }, 11);
+  it('migrating from the current version (12) is a no-op passthrough plus defaults merge', () => {
+    const result = migrateScanParams({ rsiPeriod: 21 }, 12);
     expect(result.rsiPeriod).toBe(21);
     expect(result.btMinWinRate).toBe(SCAN_PARAM_DEFAULTS.btMinWinRate);
   });

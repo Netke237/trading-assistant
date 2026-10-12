@@ -1,0 +1,30 @@
+[
+  {
+    "mutation": "M9",
+    "exit_code": 1,
+    "log": ".scratch/no-live-quote/M9-mutation.log",
+    "expected_test_failed": true,
+    "original_sha256": "4f7fbdd765981e09d65b89d6a8c76bc0c99384d5ffc17da7cb4274269ded85cc"
+  },
+  {
+    "mutation": "M12",
+    "exit_code": 1,
+    "log": ".scratch/no-live-quote/M12-mutation.log",
+    "expected_test_failed": true,
+    "original_sha256": "4f7fbdd765981e09d65b89d6a8c76bc0c99384d5ffc17da7cb4274269ded85cc"
+  },
+  {
+    "mutation": "M13",
+    "exit_code": 1,
+    "log": ".scratch/no-live-quote/M13-mutation.log",
+    "expected_test_failed": true,
+    "original_sha256": "4f7fbdd765981e09d65b89d6a8c76bc0c99384d5ffc17da7cb4274269ded85cc"
+  },
+  {
+    "mutation": "M14",
+    "exit_code": 0,
+    "log": ".scratch/no-live-quote/M14-mutation.log",
+    "expected_test_failed": false,
+    "original_sha256": "4f7fbdd765981e09d65b89d6a8c76bc0c99384d5ffc17da7cb4274269ded85cc"
+  }
+]

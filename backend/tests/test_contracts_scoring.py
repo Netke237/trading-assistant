@@ -382,3 +382,83 @@ async def test_recompute_plan_rr_target_r_multiple_override_changes_target():
     override_target = r_override.json()["exit"]["target"]
     assert override_target > default_target
     assert round(override_target, 2) == round(185.0 * (1 + 3 * .03), 2)
+
+
+# ── NO-LIVE-QUOTE (plan 3c, test T7): Step 6 labels, the quote reports ───────
+
+async def _get_contracts(chain):
+    app = _build_test_app()
+    with (
+        patch("app.routers.contracts.fetch_option_chain_async", new_callable=AsyncMock, return_value=chain),
+        patch("app.routers.contracts.fetch_price_async", new_callable=AsyncMock, return_value=190.0),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/contracts?symbol=AAPL&right=C&stock_score=70")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_step6_contracts_label_a_non_live_row_caution_with_no_live_quote():
+    """/api/contracts grades in LABEL mode: the off-hours row comes back listed,
+    capped at CAUTION and flagged, where the scan's reject mode would drop it."""
+    live_row = {**SAMPLE_CHAIN[0], "quoteState": "live", "quoteLive": True, "quoteAgeS": 4.0}
+    [live] = await _get_contracts([live_row])
+    assert live["contractConfidence"] == "PASS"
+    assert live["noLiveQuote"] is False
+    assert live["quoteState"] is None
+
+    closed_row = {**live_row, "quoteState": "session_closed", "quoteLive": False, "quoteAgeS": 61200.0}
+    [closed] = await _get_contracts([closed_row])
+    assert closed["contractConfidence"] == "CAUTION"
+    assert closed["score"] == live["score"]
+    assert closed["noLiveQuote"] is True
+    assert closed["quoteState"] == "session_closed"
+    assert "no_live_quote" in closed["explanation"]["soft_flags"]
+
+
+@pytest.mark.asyncio
+async def test_step6_contracts_pass_quote_mode_label():
+    import app.routers.contracts as contracts_mod
+    seen = []
+    real = contracts_mod.validate_contract
+
+    def _spy(*a, **k):
+        seen.append(k.get("quote_mode"))
+        return real(*a, **k)
+
+    with patch("app.routers.contracts.validate_contract", _spy):
+        await _get_contracts(SAMPLE_CHAIN)
+    assert seen and set(seen) == {"label"}
+
+
+@pytest.mark.asyncio
+async def test_option_quote_returns_quote_live_and_state():
+    app = _build_test_app()
+    expiry = _future_expiry(35)
+    row = {
+        "price": 2.1, "delta": 0.45, "theta": -0.04, "ivRank": None, "iv": 30.0,
+        "spread": 0.2, "volume": 500, "expiry": expiry, "strike": 190,
+        "quoteState": "stale", "quoteLive": False, "quoteAgeS": 5400.0,
+    }
+    with patch("app.routers.contracts.fetch_contract_quote_async", new_callable=AsyncMock, return_value=row):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/api/quote/option?symbol=AAPL&strike=190&expiry={expiry}&right=C")
+    assert r.status_code == 200, r.text
+    assert r.json()["quoteLive"] is False
+    assert r.json()["quoteState"] == "stale"
+
+    with patch("app.routers.contracts.fetch_contract_quote_async", new_callable=AsyncMock,
+               return_value={**row, "quoteState": "live", "quoteLive": True}):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/api/quote/option?symbol=AAPL&strike=190&expiry={expiry}&right=C")
+    assert r.json()["quoteLive"] is True
+    assert r.json()["quoteState"] == "live"
+
+    # A row with no state (only a fixture) reports None, never a guess.
+    bare = {k: v for k, v in row.items() if k not in ("quoteState", "quoteLive", "quoteAgeS")}
+    with patch("app.routers.contracts.fetch_contract_quote_async", new_callable=AsyncMock, return_value=bare):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(f"/api/quote/option?symbol=AAPL&strike=190&expiry={expiry}&right=C")
+    assert r.json()["quoteLive"] is None
+    assert r.json()["quoteState"] is None

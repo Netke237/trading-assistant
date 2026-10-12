@@ -15,7 +15,7 @@ type Bucket = 'history' | 'score' | 'direction' | 'direction-unmeasured' | 'regi
 function classify(reason: string): Bucket {
   if (reason.includes('insufficient history') || reason.includes('insufficient intraday history')
     || reason.includes('no price data') || reason.startsWith('price $')
-    || reason.startsWith('regime data unavailable:')) return 'history';
+    || reason.startsWith('regime data unavailable:') || reason.startsWith('Excluded (data):')) return 'history';
   if (reason.startsWith('REJECT score=')) return 'score';
   if (reason.startsWith('direction_conviction_unmeasured:')) return 'direction-unmeasured';
   if (reason.startsWith('direction_conviction:')) return 'direction';

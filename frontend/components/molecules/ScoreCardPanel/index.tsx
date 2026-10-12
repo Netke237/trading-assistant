@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import type { Status } from '@/lib/status';
 import { TradeCardQualification, type QualificationPresentation } from '@/components/molecules/TradeCardQualification';
+import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
 import styles from './ScoreCardPanel.module.css';
 
 export interface ScoreBarData {
@@ -101,7 +102,15 @@ export function ScoreCardPanel({
       {qualification && (
         total === (qualification.kind === 'stock' ? qualification.card.stockScore : qualification.card.contractScore)
         && confidence === (qualification.kind === 'stock' ? qualification.card.stockConfidence : qualification.card.contractConfidence)
-          ? <TradeCardQualification {...qualification} />
+          ? <CollapsibleSection
+              key={qualification.kind}
+              title={`Captured ${qualification.kind} scoring evidence`}
+              storageKey={`bamendjou:tradecard:${qualification.kind}:scoring-evidence:collapsed`}
+              defaultCollapsed
+              keepMounted
+            >
+              <TradeCardQualification {...qualification} />
+            </CollapsibleSection>
           : <Text size={12} tone="dim">Evidence does not match displayed score</Text>
       )}
     </div>

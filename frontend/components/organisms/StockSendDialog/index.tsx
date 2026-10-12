@@ -10,8 +10,11 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { pickedFieldsFrom } from '@/lib/cardEdits';
 import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
+import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 import { api } from '@/lib/api';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { checkMethodPick, MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE } from '@/lib/risk';
 import type { PositionCardData } from '@/types/stockDomain';
 import type { Direction } from '@/types/domain';
@@ -58,6 +61,15 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   const effective = (c: PositionCardData) => resolveBasketExecution(scan, c);
   const alreadyOwned = (c: PositionCardData) => !!ownerships[c.symbol] || !!(effective(c).record?.adding || effective(c).record?.added || effective(c).record?.queued);
   const hasMissingMethodPick = cards.some(c => !alreadyOwned(c) && !checkMethodPick(effective(c).pick));
+  const hasBearishOpening = broker !== 'recommendation' && cards.some(c =>
+    !alreadyOwned(c) && (rows[c.symbol]?.autoSend ?? true) && isBearishUnvalidated(c.direction));
+  // STOCKS-HORIZON-P0B B7: earnings inside the scan's veto window
+  // max(reject_days, hold), aged by the scan's age. Unknown never blocks; a
+  // research save (auto-send off) is not an order and stays available.
+  const earningsVetoed = (c: PositionCardData) =>
+    stockEarningsGate(c, scan.stockScanResult?.timestamp, scan.stockScanResult?.veto_days).veto;
+  const hasEarningsVeto = broker !== 'recommendation' && cards.some(c =>
+    !alreadyOwned(c) && (rows[c.symbol]?.autoSend ?? true) && earningsVetoed(c));
 
   const ibkrConfigured    = !!ibkrPaper.accountId && !!ibkrPaper.baseUrl;
   const tradierConfigured = !!tradierPaper.token && !!tradierPaper.accountId;
@@ -96,7 +108,7 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
   }, [cards, rows, scan]);
 
   async function submit() {
-    if (submitting) return;
+    if (submitting || hasBearishOpening || hasEarningsVeto) return;
     // Phase G piece 5, build step 4 (§7.2, S4) — belt-and-braces beside the
     // button's own `disabled`, on the same reading `hasMissingMethodPick`
     // was derived from. Same shape as SendToBrokerDialog.submit()'s
@@ -142,13 +154,19 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
           } : undefined),
           { stop: execution.stop, targets: execution.targets, structuralStop: execution.structuralStop }),
         ...pickedFieldsFrom(execution.pick),
+        // STOCKS-HORIZON-T1 H6: the scan's hold; no scan context -> no hold.
+        holdMaxDays: scan.context
+          ? sanitizeHoldDays(scan.context.holdMin, scan.context.holdMax).hold_max_days
+          : null,
       };
       if (r.autoSend && broker !== 'recommendation') {
-        const blocked = stockExecutionBlock();
+        const vetoed = earningsVetoed(c);
+        const blocked = isBearishUnvalidated(c.direction) ? BEARISH_UNVALIDATED_MESSAGE
+          : vetoed ? EARNINGS_VETO_MESSAGE : stockExecutionBlock();
         if (blocked) { errs[c.symbol] = blocked; continue; }
         try {
           const outcome = await sendStockSaveFirst({ pos, broker, orderType: 'LMT', limitPrice: execution.entry,
-            action: c.direction === 'Bullish' ? 'BUY' : 'SELL', addPosition });
+            action: c.direction === 'Bullish' ? 'BUY' : 'SELL', addPosition, earningsVeto: vetoed });
           if (outcome.kind === 'refused' || outcome.kind === 'not-placed') errs[c.symbol] = outcome.message;
           else if (outcome.kind === 'unknown') warn[c.symbol] = outcome.message;
           else if (outcome.resizedFrom != null) warn[c.symbol] = `${outcome.message} Portfolio sized it to ${outcome.qty} shares; the order was sent for ${outcome.qty}.`;
@@ -335,6 +353,9 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
           <Text size={12} tone="reject">{MISSING_METHOD_PICK_MESSAGE}</Text>
         )}
 
+        {hasBearishOpening && <Text size={12} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>}
+        {hasEarningsVeto && <Text size={12} tone="reject">{EARNINGS_VETO_MESSAGE}</Text>}
+
         <footer className={styles.footer}>
           <Text size={12} tone="secondary">
             {autoCount} auto · {manualCount} manual · Est total $
@@ -348,8 +369,8 @@ export function StockSendDialog({ cards, onClose, onSubmit }: Props) {
               type="button"
               className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={submit}
-              disabled={cards.length === 0 || submitting || cards.every(c => alreadyOwned(c)) || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued) || hasMissingMethodPick}
-              title={hasMissingMethodPick ? MISSING_METHOD_PICK_TITLE : undefined}
+              disabled={cards.length === 0 || submitting || cards.every(c => alreadyOwned(c)) || (hasQueued && !hasRetryableErrors) || (hasWarnings && !hasRetryableErrors && !hasQueued) || hasMissingMethodPick || hasBearishOpening || hasEarningsVeto}
+              title={hasBearishOpening ? BEARISH_UNVALIDATED_MESSAGE : hasEarningsVeto ? EARNINGS_VETO_MESSAGE : hasMissingMethodPick ? MISSING_METHOD_PICK_TITLE : undefined}
             >
               <Text size={13}>
                 {submitting

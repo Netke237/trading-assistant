@@ -59,6 +59,7 @@ def test_score_stock_receives_overrides_from_request():
     fake_bt.expectancy = 1.5
     fake_bt.sharpe = 1.2
     fake_bt.summary_text = "ok"
+    fake_bt.n_time_exits = 0     # a real int: BacktestOut reads it (F2)
 
     fake_bars = [{"close": 150.0, "open": 148.0, "high": 152.0, "low": 147.0, "volume": 1000000, "date": "2024-01-01"}] * 130
 

@@ -17,8 +17,11 @@ import { SHORTLIST_REASON_PREFIX } from './shortlistCap';
 //
 // The reason strings matched below are the backend's, in
 // backend/app/routers/scan.py (the `_is_*` bucket predicates around the
-// OptionsPipeline build) and backend/app/scoring/contract_validator.py (the
-// hard-reject codes). Change one there and the matching table here must move
+// OptionsPipeline build: `_is_data` — price/cap filter, "no market data",
+// "regime data unavailable:", "Excluded (data):" — `_is_pre_screen`,
+// `_is_direction_unmeasured`, `_is_no_chain`, `_is_score`, `_is_contracts`,
+// `_is_direction`, `_is_shortlist`) and backend/app/scoring/contract_validator.py
+// (the hard-reject codes). Change one there and the matching table here must move
 // with it — the parser tests are written against those exact strings.
 
 const DIRECTION_PREFIX = 'direction_conviction:';
@@ -176,6 +179,9 @@ interface Classified {
 
 export function classifyReason(entry: RejectedEntry): Classified {
   const reason = entry.reason ?? '';
+  // First: an exclusion's own reason text is free-form YAML and must not be
+  // caught by the substring checks below.
+  if (reason.startsWith('Excluded (data):')) return { stage: 'data-filters', subRules: ['excluded'] };
   if (reason.includes('price filter')) return { stage: 'data-filters', subRules: ['price'] };
   if (reason.includes('cap filter')) return { stage: 'data-filters', subRules: ['cap'] };
   if (reason.includes('no market data') || reason.startsWith('regime data unavailable:')) {
@@ -440,12 +446,14 @@ export function parsePipelineDiagnostics(
     },
     {
       id: 'data-filters', title: 'Data & Universe Filters', count: dataCount, keepEmpty: true,
-      summary: 'Removes symbols outside the Step-2 price and market-cap bounds, and symbols with no market or regime data.',
+      summary: 'Removes symbols outside the Step-2 price and market-cap bounds, symbols with no market or regime data, and symbols excluded in universe_exclusions.yaml.',
       defs: [
         { id: 'price', label: 'Price Out of Range', explanation: 'Spot price outside the Step-2 min/max.' },
         { id: 'cap', label: 'Market Cap Out of Range', explanation: 'Market cap outside the Step-2 min/max.' },
         { id: 'missing-data', label: 'Missing Market / Regime Data',
           explanation: 'No quote or price history, or no regime bars, from the data provider — not a setting.' },
+        { id: 'excluded', label: 'Excluded (universe_exclusions.yaml)',
+          explanation: 'Listed with `scope: scan` in backend/config/universe_exclusions.yaml (bad or unadjusted price data), so dropped before any per-symbol work.' },
       ],
     },
     {
@@ -541,7 +549,7 @@ export function parsePipelineDiagnostics(
         adjustLabel = null;
         break;
       case 'data-filters':
-        suggestedAction = 'Review the price and market-cap bounds in Step 2. Missing-data drops come from the data provider, not a setting.';
+        suggestedAction = 'Review the price and market-cap bounds in Step 2. Missing-data drops come from the data provider, and exclusions from backend/config/universe_exclusions.yaml, not a Step-2 setting.';
         adjustHref = '/screener/step-2-universe';
         adjustLabel = 'Review in Step 2';
         break;

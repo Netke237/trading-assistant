@@ -619,20 +619,30 @@ def _fired_quantity(mocker, *, direction: str, conviction: float,
     return captured.get("quantity")
 
 
-def test_vol_sizing_bearish_cut_to_floor_when_its_regime_strongly_opposes(mocker):
+def _research_sized_quantity(mocker, *, conviction: float, quantity: int = 4) -> int:
+    """Pin Bearish sizing arithmetic independently of P0B's live-fire refusal."""
+    import app.services.auto_trader as at
+    _forbid_spx_cache(mocker)
+    mocker.patch.object(at, "_measure_trade_regime",
+                        return_value=(conviction, "Fragile"))
+    strategy = dataclasses.replace(_make_armed(qty=quantity), direction="Bearish")
+    return at._apply_vol_sizing(strategy).quantity
+
+
+def test_research_vol_sizing_bearish_cut_to_floor_when_its_regime_strongly_opposes(mocker):
     """A long put whose own regime reads -80 in its frame is cut to the floor.
 
     floor(4 * 0.30) = 1.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-80) == 1
+    assert _research_sized_quantity(mocker, conviction=-80) == 1
 
 
-def test_vol_sizing_bearish_floors_at_the_ramp_end(mocker):
+def test_research_vol_sizing_bearish_floors_at_the_ramp_end(mocker):
     """Bearish, own regime -40 (the ramp's lower end): 0.30 floor -> 1."""
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-40) == 1
+    assert _research_sized_quantity(mocker, conviction=-40) == 1
 
 
-def test_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
+def test_research_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
     """Bearish, own regime -20: 0.475 -> 1.9, ROUNDED DOWN to 1.
 
     The two-sided ramp grades the opposed half: this sits between the floor at
@@ -640,32 +650,32 @@ def test_vol_sizing_bearish_is_GRADED_when_the_regime_opposes(mocker):
     P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25 (floor, never sizes up); the
     grading itself is pinned by the 3 at +20 and the 2 at 0.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=-20) == 1
+    assert _research_sized_quantity(mocker, conviction=-20) == 1
 
 
-def test_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
+def test_research_vol_sizing_bearish_scales_up_when_regime_favours(mocker):
     """Bearish, own regime +20: 0.825 -> round(3.3) = 3.
 
     THE ONLY FAVOURING CASE INSIDE THE RAMP, so the one that would notice a
     later change to `full_conviction_pct` (40 today).
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=20) == 3
+    assert _research_sized_quantity(mocker, conviction=20) == 3
 
 
-def test_vol_sizing_bearish_full_size_when_its_regime_strongly_favours(mocker):
+def test_research_vol_sizing_bearish_full_size_when_its_regime_strongly_favours(mocker):
     """Bearish, own regime +40 in its frame -> cap 1.00 -> 4.
 
     THE NO-DOUBLE-MIRROR PIN. The measurement is already in the put's frame,
     so re-applying the old `-conviction` mirror would read -40 and FLOOR this
     at 1 -- the smallest position into the regime that most favours it.
     """
-    assert _fired_quantity(mocker, direction="Bearish", conviction=40) == 4
+    assert _research_sized_quantity(mocker, conviction=40) == 4
 
 
-def test_vol_sizing_bearish_at_neutral_conviction_sits_mid_ramp(mocker):
+def test_research_vol_sizing_bearish_at_neutral_conviction_sits_mid_ramp(mocker):
     """Bearish at 0 -> the ramp's MIDPOINT 0.65 -> 2.6, rounded DOWN to 2
     (was round() = 3 until P3B-CONTRACT-SIZING-ROUNDS-DOWN-2026-09-25)."""
-    assert _fired_quantity(mocker, direction="Bearish", conviction=0) == 2
+    assert _research_sized_quantity(mocker, conviction=0) == 2
 
 
 def test_vol_sizing_bullish_full_size_at_high_conviction_unchanged(mocker):
@@ -1100,7 +1110,7 @@ def _fixture_bars(symbol: str) -> list[dict]:
         return json.load(f)
 
 
-def _gate_fire(mocker, *, symbol="MSFT", direction="Bearish", horizon="Position",
+def _gate_fire(mocker, *, symbol="MSFT", direction="Bullish", horizon="Position",
                quantity=4, bars=None, caution_pct=None, reject_pct=None,
                sizing_on=False):
     """Arm and fire with the gate driven by REAL bars through the REAL compute_omm.
@@ -1146,6 +1156,28 @@ def _gate_fire(mocker, *, symbol="MSFT", direction="Bearish", horizon="Position"
     return captured.get("quantity"), svc, fetch_spy
 
 
+def _research_gate_sizing(mocker, *, direction="Bearish", reject_pct=None, sizing_on=False):
+    """Research-only arithmetic remains available for an Unvalidated direction.
+
+    Exercise the real sizing/regime helpers without arming or firing an order.
+    P0B's live Bearish refusal is pinned in test_auto_trade_unvalidated.py.
+    """
+    import app.services.auto_trader as at
+    if sizing_on:
+        _forbid_spx_cache(mocker)
+    else:
+        _sizing_off(mocker)
+    fetch_spy = mocker.patch("app.data.market.fetch_candles",
+                            return_value=_fixture_bars("MSFT"))
+    strategy = ArmedStrategy(
+        broker="ibkr_paper", symbol="MSFT", option_symbol="MSFT|185|2026-06-20|P",
+        action="BUY", direction=direction, quantity=4, order_type="LMT",
+        limit_price=2.5, conid=None, entry_premium=2.5, horizon="Position",
+        regime_headwind_reject_pct=reject_pct,
+    )
+    return at._apply_vol_sizing(strategy).quantity, fetch_spy
+
+
 def _no_stability_requirement(monkeypatch):
     """Drop `require_stable_for_reject` only, leaving the thresholds real.
 
@@ -1161,20 +1193,14 @@ def _no_stability_requirement(monkeypatch):
                         lambda: {**real, "require_stable_for_reject": False})
 
 
-def test_regime_gate_measures_the_traded_symbol_and_not_the_cached_market(mocker):
-    """The finding, stated as a test: a REJECT-grade cached market number must
-    not refuse a trade whose OWN regime passes.
+def test_research_regime_gate_measures_the_traded_symbol_and_not_the_cached_market(mocker):
+    """MSFT's Bearish +50 research sizing uses its own bars, never SPX.
 
-    Cached conviction +80 with a Bearish trade mirrors to -80 — past
-    headwind_reject_pct (-40). Under the old wiring that refused, whatever MSFT
-    itself was doing. MSFT's own Position regime in the Bearish frame is +50, a
-    PASS, so the trade must fire. The audit reproduced exactly this shape
-    (MSFT +50 against a cached market -100, 150 points apart and on opposite
-    sides of zero).
+    The numeric research pins remain valid while P0B refuses every live
+    Bearish fire before reaching the sizing helper.
     """
-    qty, _, fetch_spy = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
-                                   horizon="Position", sizing_on=True)
-    assert qty is not None, "the symbol's own regime passes, so it must fire"
+    qty, fetch_spy = _research_gate_sizing(mocker, sizing_on=True)
+    assert qty is not None, "the symbol's own regime passes the research helper"
     assert fetch_spy.call_args.args[0] == "MSFT", (
         "the gate must fetch the TRADED symbol's bars, not a market proxy"
     )
@@ -1182,7 +1208,7 @@ def test_regime_gate_measures_the_traded_symbol_and_not_the_cached_market(mocker
     # Bearish frame -> mult 1.00 -> the full 4. Under the old SPX wiring this
     # audit's reproduced case sized 2 (decision
     # AUTOTRADE-SIZING-ON-PER-SYMBOL-CONVICTION-2026-09-20's measured table).
-    # `_gate_fire` forbids the SPX cache, and ONE fetch serves gate and sizer.
+    # The research helper forbids the SPX cache; ONE fetch serves gate and sizer.
     assert qty == 4
     assert fetch_spy.call_count == 1, "gate and sizer share one measurement"
 
@@ -1237,7 +1263,7 @@ def test_regime_gate_uses_the_trades_own_horizon_window(mocker, monkeypatch):
     assert qty == 4, "no measurement at the Swing window -> no gate -> full size"
 
 
-def test_regime_gate_passes_the_horizon_config_and_direction_to_compute_omm(mocker):
+def test_research_regime_gate_passes_the_horizon_config_and_direction_to_compute_omm(mocker):
     """Pins the four numbers, because the outcome alone cannot distinguish them.
 
     A gate that used compute_omm's module defaults (20/500/100) instead of
@@ -1247,7 +1273,7 @@ def test_regime_gate_passes_the_horizon_config_and_direction_to_compute_omm(mock
     """
     import app.services.regime_omm as omm_mod
     spy = mocker.spy(omm_mod, "compute_omm")
-    _gate_fire(mocker, symbol="MSFT", direction="Bearish", horizon="Position")
+    _research_gate_sizing(mocker)
 
     assert spy.call_count == 1
     kwargs = spy.call_args.kwargs
@@ -1276,7 +1302,7 @@ def test_step3_reject_threshold_snapshot_overrides_the_yaml(mocker, monkeypatch)
     assert qty == 4, "the trader's own -80 says fire, so it fires"
 
 
-def test_step3_snapshot_can_also_tighten_the_gate(mocker, monkeypatch):
+def test_step3_snapshot_can_also_tighten_the_research_gate(mocker, monkeypatch):
     """The override is not a loosen-only knob, and a one-sided test would not say so.
 
     MSFT Bearish at Position measures +50 — a PASS under any sane threshold.
@@ -1287,8 +1313,7 @@ def test_step3_snapshot_can_also_tighten_the_gate(mocker, monkeypatch):
     from app.services.auto_trader import RegimeHeadwindError
     _no_stability_requirement(monkeypatch)
     with pytest.raises(RegimeHeadwindError):
-        _gate_fire(mocker, symbol="MSFT", direction="Bearish",
-                   horizon="Position", reject_pct=60)
+        _research_gate_sizing(mocker, reject_pct=60)
 
 
 def test_regime_gate_refusal_is_recorded_and_sends_nothing(mocker, monkeypatch):
@@ -2271,18 +2296,14 @@ def test_the_headwind_alert_is_not_dressed_as_a_config_error(mocker):
 
 
 def test_regime_gate_never_consults_the_market_wide_conviction_cache(mocker, monkeypatch):
-    """The cache is no longer an input to the fire path at all.
+    """Both Bearish research sizing and Bullish fire measure the symbol's bars.
 
-    `_gate_fire` makes any read of `get_last_conviction` fail the test (see
-    `_forbid_spx_cache`), so a pass and a refusal decided by MSFT's own regime,
-    with sizing ON, prove neither the gate nor -- since SIZING-4 -- the sizer
-    consults the market-wide cache.
+    Each path forbids get_last_conviction, with sizing enabled.
     """
     from app.services.auto_trader import RegimeHeadwindError
 
-    qty, _, _ = _gate_fire(mocker, symbol="MSFT", direction="Bearish",
-                           horizon="Position", sizing_on=True)
-    assert qty is not None, "MSFT's own regime passes, so it fires"
+    qty, _ = _research_gate_sizing(mocker, sizing_on=True)
+    assert qty is not None, "MSFT's own regime passes the research helper"
 
     _no_stability_requirement(monkeypatch)
     with pytest.raises(RegimeHeadwindError):

@@ -70,7 +70,9 @@ it('a strategy set elsewhere (search profile load) shows as selected', () => {
   render(<Step4StocksPage />);
   act(() => useScanStore.getState().setActiveStrategy('ma_crossover'));
   expect(screen.getByRole('button', { name: 'Run Stock Scan' })).toBeEnabled();
-  expect(card(/^MA Crossover \d+\/\d+$/).className).toMatch(/cardActive/);
+  // The periods come from the backend horizon profile (STOCKS-HORIZON-T1 H5);
+  // with none fetched here the card reads "MA Crossover".
+  expect(card(/^MA Crossover( \d+\/\d+)?$/).className).toMatch(/cardActive/);
 });
 
 it('the position card gets the strategy the rows were scanned with, not the current selection', () => {

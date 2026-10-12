@@ -2,7 +2,7 @@ import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCa
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
               ContractGrading } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import { validationMessages } from '@/lib/pydanticError';
@@ -10,7 +10,7 @@ import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import type { ScoringHorizon } from '@/lib/horizonPresets';
+import type { ScoringHorizon, TunedHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -181,7 +181,7 @@ export interface StrategyWatchState {
   entry_price: number | null;
   stop_price: number | null;
   target_price: number | null;
-  last_event: 'entry' | 'exit_stop' | 'exit_target' | 'reversal' | null;
+  last_event: 'entry' | 'time_stop' | 'exit_stop' | 'exit_target' | 'reversal' | null;
   last_event_at: string | null;
 }
 
@@ -191,6 +191,10 @@ export interface StrategyWatch {
   strategy_key: string;
   direction: 'Bullish' | 'Bearish';
   params_override: Record<string, unknown>;
+  /** STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
+   *  whose hold time-stops it. Absent/null on a watch without a horizon. */
+  params_horizon?: TunedHorizon | null;
+  hold_max_days?: number | null;
   enabled: boolean;
   created_at: string;
   last_state: StrategyWatchState;
@@ -252,6 +256,8 @@ export interface AnalysisBacktest {
   confidence: number | null;
   passes_gate: boolean;
   summary_text: string;
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
 
 export interface AnalysisSentiment {
@@ -353,6 +359,10 @@ export interface StockAnalysis {
   fundamentals: AnalysisFundamentals | null;
   next_event_days: number | null;
   next_event_label: string | null;
+  /** STOCKS-HORIZON-P0B B6: as on PositionCardData. Optional for a backend
+   *  from before B6. */
+  earnings_days?: number | null;
+  earnings_veto?: boolean;
   rules: RuleContribution[];
   gate_flags: GateFlag[];
   ema_trend: EmaTrend | null;
@@ -432,7 +442,7 @@ export const api = {
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -448,6 +458,7 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
+    quote_live?: boolean | null;
     rr_target_r_multiple?: number;
     target_stock_price?: number;
     target_source?: TradeCardData['exit']['targetSource'];
@@ -694,6 +705,8 @@ export const api = {
      *  the scan context rather than hand-writing a literal; never default it
      *  here, which would typecheck while measuring the wrong window. */
     horizon: ScoringHorizon;
+    /** Actual sanitized scan hold, including Custom ranges. Required at arm. */
+    hold_max_days: number;
     /** The Regime Gate thresholds this card's scan RESOLVED, read off the
      *  card's own `regimeGate` snapshot so neither a Step-3 edit, a reset nor
      *  a reload can change the rule the trade is judged by — the same freeze
@@ -822,10 +835,12 @@ export const api = {
 
   getStrategyWatches: () =>
     get<StrategyWatch[]>('/api/strategy-watch/'),
-  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction }),
-  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction }),
+  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                     params_horizon: TunedHorizon | null = null) =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction, params_horizon }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                           params_horizon: TunedHorizon | null = null) =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction, params_horizon }),
   removeStrategyWatch: (id: string) =>
     del(`/api/strategy-watch/${id}`),
   setStrategyWatchEnabled: (id: string, enabled: boolean) =>
@@ -877,7 +892,7 @@ export const api = {
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
   ) =>
-    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+    post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -889,14 +904,7 @@ export const api = {
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
   ) =>
-    post<Array<{
-      symbol: string;
-      direction: string;
-      fib_level_hit: string;
-      fib_dist_pct: number | null;
-      at_level: boolean;
-      confidence: number;
-    }>>(
+    post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
       { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
     ),
@@ -925,6 +933,10 @@ export const api = {
     get<Record<string, { reject_days: number; caution_days: number }>>(
       '/api/config/event-thresholds'
     ),
+
+  // STOCKS-HORIZON-T1 H4/H5: per-horizon strategy parameter profiles.
+  // Untyped on purpose: lib/strategyProfilesStore.ts parseStrategyProfiles validates it.
+  getStrategyProfiles: () => get<unknown>('/api/config/strategy-profiles'),
 
   // DOCC-5: GET /api/config/health (DOCC-4). Always 200; parsed by lib/configHealth.ts.
   getConfigHealth: (signal?: AbortSignal) => get<unknown>('/api/config/health', signal),

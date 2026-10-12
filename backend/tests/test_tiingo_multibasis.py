@@ -32,50 +32,63 @@ TIINGO_ROW = {
 }
 
 
-def test_returns_raw_close():
+@pytest.mark.asyncio
+async def test_returns_raw_close():
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.return_value = _tiingo_resp([TIINGO_ROW])
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     assert len(bars) == 1
     bar = bars[0]
     assert bar["close"] == 185.0          # raw close, NOT adjClose
 
 
-def test_returns_adj_factor():
+@pytest.mark.asyncio
+async def test_returns_adj_factor():
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.return_value = _tiingo_resp([TIINGO_ROW])
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     bar = bars[0]
     expected_adj_factor = round(194.25 / 185.0, 8)
     assert abs(bar["adj_factor"] - expected_adj_factor) < 1e-6
 
 
-def test_returns_split_factor_and_div_cash():
+@pytest.mark.asyncio
+async def test_returns_split_factor_and_div_cash():
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.return_value = _tiingo_resp([TIINGO_ROW])
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     bar = bars[0]
     assert bar["split_factor"] == 1.0
     assert bar["div_cash"] == 0.25
 
 
-def test_returns_source_tiingo():
+@pytest.mark.asyncio
+async def test_returns_source_tiingo():
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.return_value = _tiingo_resp([TIINGO_ROW])
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     assert bars[0]["source"] == "tiingo"
 
 
-def test_adj_factor_defaults_to_1_when_raw_close_is_zero():
+@pytest.mark.asyncio
+async def test_adj_factor_defaults_to_1_when_raw_close_is_zero():
     zero_row = {**TIINGO_ROW, "close": 0, "adjClose": 194.25}
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.return_value = _tiingo_resp([zero_row])
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     assert bars[0]["adj_factor"] == 1.0
 
 
-def test_returns_empty_on_http_error():
+@pytest.mark.asyncio
+async def test_returns_empty_on_http_error():
     with patch("app.data.tiingo.httpx.get") as mock_get:
         mock_get.side_effect = Exception("network error")
-        bars = fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
+        bars = await fetch_historical_candles("AAPL", date(2024, 1, 1), date(2024, 1, 31))
     assert bars == []
+
+
+@pytest.fixture(autouse=True)
+def fast_tiingo_governor(monkeypatch):
+    from app.data.governor import Governor
+    gov = Governor.for_testing("tiingo", rate=100000, capacity=100000)
+    monkeypatch.setattr("app.data.tiingo.get_governor", lambda: gov)

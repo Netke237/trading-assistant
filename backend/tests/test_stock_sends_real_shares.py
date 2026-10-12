@@ -133,7 +133,7 @@ def test_missing_stock_keys_fall_back_to_the_decided_defaults():
 
 def test_auto_trader_exposure_ignores_stock_rows():
     body = {"broker": "ibkr_paper", "symbol": "MSFT", "option_symbol": OPTION,
-            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "quantity": 2,
+            "action": "BUY", "direction": "Bullish", "horizon": "Swing", "hold_max_days": 15, "quantity": 2,
             "order_type": "LMT", "limit_price": 10.0, "entry_premium": 10.0,
             "stop": 280.0, "conid": None}
     strategy = ArmedStrategy(**ArmRequest(**body).model_dump())

@@ -1,0 +1,85 @@
+...............FFFFFFF....                                               [100%]
+================================== FAILURES ===================================
+_____________ test_refusal_preserves_arm_no_history[unavailable] ______________
+tests\test_no_live_quote_fire_gate.py:96: in test_refusal_preserves_arm_no_history
+    with pytest.raises(at.ArmPreservedError, match=state):
+E   Failed: DID NOT RAISE <class 'app.services.auto_trader.ArmPreservedError'>
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)
+____________ test_refusal_preserves_arm_no_history[invalid_symbol] ____________
+tests\test_no_live_quote_fire_gate.py:96: in test_refusal_preserves_arm_no_history
+    with pytest.raises(at.ArmPreservedError, match=state):
+E   Failed: DID NOT RAISE <class 'app.services.auto_trader.ArmPreservedError'>
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)
+____________ test_refusal_preserves_arm_no_history[session_closed] ____________
+tests\test_no_live_quote_fire_gate.py:96: in test_refusal_preserves_arm_no_history
+    with pytest.raises(at.ArmPreservedError, match=state):
+E   Failed: DID NOT RAISE <class 'app.services.auto_trader.ArmPreservedError'>
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)
+______________ test_refusal_preserves_arm_no_history[one_sided] _______________
+tests\test_no_live_quote_fire_gate.py:96: in test_refusal_preserves_arm_no_history
+    with pytest.raises(at.ArmPreservedError, match=state):
+E   Failed: DID NOT RAISE <class 'app.services.auto_trader.ArmPreservedError'>
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)
+________________ test_refusal_preserves_arm_no_history[stale] _________________
+tests\test_no_live_quote_fire_gate.py:96: in test_refusal_preserves_arm_no_history
+    with pytest.raises(at.ArmPreservedError, match=state):
+E   Failed: DID NOT RAISE <class 'app.services.auto_trader.ArmPreservedError'>
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)
+___________________ test_rearm_during_probe_refuses[False] ____________________
+app\services\auto_trader.py:2548: in execute_option_order
+    adapter = router.resolve(strategy.broker)
+app\services\broker_router.py:44: in resolve
+    raise ValueError(
+E   ValueError: Unknown broker 'ibkr_paper'. Available: []
+
+The above exception was the direct cause of the following exception:
+app\services\auto_trader.py:3006: in fire
+    result = execute_option_order(strategy)
+app\services\auto_trader.py:2557: in execute_option_order
+    raise OrderNotSubmittedError(str(exc)) from exc
+E   app.services.auto_trader.OrderNotSubmittedError: Unknown broker 'ibkr_paper'. Available: []
+
+The above exception was the direct cause of the following exception:
+tests\test_no_live_quote_fire_gate.py:116: in test_rearm_during_probe_refuses
+    svc.fire()
+app\services\auto_trader.py:3046: in fire
+    raise RuntimeError(f"Order not submitted: {exc}") from exc
+E   RuntimeError: Order not submitted: Unknown broker 'ibkr_paper'. Available: []
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)\nWARNING  app.services.credential_store:credential_store.py:92 credential_store: failed to load C:\\Users\\KENNETH\\AppData\\Local\\Temp\\bamendjou-pytest-db-7ds0i94p\\test_local_credentials.yaml ([Errno 2] No such file or directory: 'C:\\\\Users\\\\KENNETH\\\\AppData\\\\Local\\\\Temp\\\\bamendjou-pytest-db-7ds0i94p\\\\test_local_credentials.yaml') \u2014 using defaults\nERROR    app.services.auto_trader:auto_trader.py:3038 AutoTrader order NOT SUBMITTED for AAPL \u2014 nothing reached the broker: Unknown broker 'ibkr_paper'. Available: []
+____________________ test_rearm_during_probe_refuses[True] ____________________
+app\services\auto_trader.py:2548: in execute_option_order
+    adapter = router.resolve(strategy.broker)
+app\services\broker_router.py:44: in resolve
+    raise ValueError(
+E   ValueError: Unknown broker 'ibkr_paper'. Available: []
+
+The above exception was the direct cause of the following exception:
+app\services\auto_trader.py:3006: in fire
+    result = execute_option_order(strategy)
+app\services\auto_trader.py:2557: in execute_option_order
+    raise OrderNotSubmittedError(str(exc)) from exc
+E   app.services.auto_trader.OrderNotSubmittedError: Unknown broker 'ibkr_paper'. Available: []
+
+The above exception was the direct cause of the following exception:
+tests\test_no_live_quote_fire_gate.py:116: in test_rearm_during_probe_refuses
+    svc.fire()
+app\services\auto_trader.py:3046: in fire
+    raise RuntimeError(f"Order not submitted: {exc}") from exc
+E   RuntimeError: Order not submitted: Unknown broker 'ibkr_paper'. Available: []
+------------------------------ Captured log call ------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:1256 regime_gate: AAPL Bullish NOT evaluated \u2014 the armed strategy carries no horizon, so there is no regime window to measure it in\nWARNING  app.services.auto_trader:auto_trader.py:1796 vol_sizing: AAPL Bullish qty 1 \u2192 1 at the min_mult floor (0.30) \u2014 its own regime could not be measured, so it is sized at the smallest size the ramp allows rather than at full\nWARNING  app.services.auto_trader:auto_trader.py:363 Event veto: the armed strategy for AAPL carries no horizon; using the widest configured hold window (45d)\nWARNING  app.services.credential_store:credential_store.py:92 credential_store: failed to load C:\\Users\\KENNETH\\AppData\\Local\\Temp\\bamendjou-pytest-db-7ds0i94p\\test_local_credentials.yaml ([Errno 2] No such file or directory: 'C:\\\\Users\\\\KENNETH\\\\AppData\\\\Local\\\\Temp\\\\bamendjou-pytest-db-7ds0i94p\\\\test_local_credentials.yaml') \u2014 using defaults\nERROR    app.services.auto_trader:auto_trader.py:3038 AutoTrader order NOT SUBMITTED for AAPL \u2014 nothing reached the broker: Unknown broker 'ibkr_paper'. Available: []
+=========================== short test summary info ===========================
+FAILED tests/test_no_live_quote_fire_gate.py::test_refusal_preserves_arm_no_history[unavailable]
+FAILED tests/test_no_live_quote_fire_gate.py::test_refusal_preserves_arm_no_history[invalid_symbol]
+FAILED tests/test_no_live_quote_fire_gate.py::test_refusal_preserves_arm_no_history[session_closed]
+FAILED tests/test_no_live_quote_fire_gate.py::test_refusal_preserves_arm_no_history[one_sided]
+FAILED tests/test_no_live_quote_fire_gate.py::test_refusal_preserves_arm_no_history[stale]
+FAILED tests/test_no_live_quote_fire_gate.py::test_rearm_during_probe_refuses[False]
+FAILED tests/test_no_live_quote_fire_gate.py::test_rearm_during_probe_refuses[True]
+7 failed, 19 passed in 23.28s
