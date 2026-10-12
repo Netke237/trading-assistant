@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "feature/stocks-pipeline-inspector",
-      "claimed_at": "2026-10-12T05:23:05Z",
-      "expires_at": "2026-10-12T08:23:05Z",
-      "note": "Merge audited Stocks inspector and deploy authorized release",
-      "task": "STOCKS-PIPELINE-INSPECTOR"
-    }
-  ]
+  "claims": []
 }
