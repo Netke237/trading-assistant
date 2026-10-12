@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "work",
+      "claimed_at": "2026-10-12T04:20:13Z",
+      "expires_at": "2026-10-12T07:20:13Z",
+      "note": "Bring Stocks Backtest logging and funnel to shared Options inspector",
+      "task": "STOCKS-PIPELINE-INSPECTOR"
+    }
+  ]
 }
