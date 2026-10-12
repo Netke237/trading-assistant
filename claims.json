@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/tradier-governor-933676cd",
-      "claimed_at": "2026-10-12T03:46:38Z",
-      "expires_at": "2026-10-12T07:15:45Z",
-      "note": "Resume authorized #169 takeover after usage interruption; audit round7 incomplete",
-      "task": "TRADIER-GOVERNOR"
-    }
-  ]
+  "claims": []
 }
