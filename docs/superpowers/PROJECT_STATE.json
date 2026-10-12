@@ -2767,8 +2767,8 @@
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
       "status": "built",
-      "audit_rounds": 7,
-      "audit_clean": false,
+      "audit_rounds": 8,
+      "audit_clean": true,
       "depends_on": [],
       "covers": [
         "board item / tracking issue #169",
@@ -2783,7 +2783,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "2026-10-12 R7-G1 fix8d543755 implemented by fresh /root/fix_r7:57focusedpasses, typecheckclean; actualSQLite manual/auto accounting regressions red2fail2pass -> green. Code round8(code2) now reviews only fix and interactions; audit_clean remainsfalse. || 2026-10-12 resumed after usage interruption: T4 0c1e46fa focused1passed; cold101/expiration-warm81/all-cache-warm21 calls over20synthetic all-survivor symbols. Code round7(code1) completed NOT CLEAN,1gateR7-G1; fix underway. Local backend7925passed11skipped5failed1error: four unchanged atomic-YAML Windows semantics failures, missingtime.tzset in unchanged historical test, one new0.5s stock-quote timing assertion(0.61s). Focused317passed5timingfailures; bareHTTPclient construction0.532-1.312s. Frontend4938passed12failed5suites(locale/timing), zero frontenddiff; typecheckpassed. Exact-headCI required. || 2026-10-11 explicit user reassignment to this chat: recovered 537a7baa on board/tradier-governor-933676cd. T3 independent implementer verification and T4 measurement pending; full suites running locally on Python3.11.9. Code audit NOT STARTED; existing counters/stages preserved. || 2026-10-11 resume: T1 1822b9f3/T2 5bb55e82 implemented, T3 68a51420/b5b32671 verification running, T4 #218 measurement underway. Main072ec44b integrated at cc482395 (PROJECT_STATE-only conflicts resolved preserving main and Tradier records). Plan second stage clean at round6; code audit NOT STARTED. Historical plan-stage checker warning retained (approved second stage not modeled); no counters reset. || 2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Kenneth chose to build despite state.py's single-plan-stage false alarm (decision TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11). Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "note": "2026-10-12 CODE STAGE CLEAN at round8(code2): /root/code_audit_2 zero gate findings, scopeverified0c1e46fa..8d543755,87independenttests+8manualprobespassed. R7-G1 closed. Statusbuilt/unmerged; PR/CI next. || 2026-10-12 R7-G1 fix8d543755 implemented by fresh /root/fix_r7:57focusedpasses, typecheckclean; actualSQLite manual/auto accounting regressions red2fail2pass -> green. Code round8(code2) now reviews only fix and interactions; audit_clean remainsfalse. || 2026-10-12 resumed after usage interruption: T4 0c1e46fa focused1passed; cold101/expiration-warm81/all-cache-warm21 calls over20synthetic all-survivor symbols. Code round7(code1) completed NOT CLEAN,1gateR7-G1; fix underway. Local backend7925passed11skipped5failed1error: four unchanged atomic-YAML Windows semantics failures, missingtime.tzset in unchanged historical test, one new0.5s stock-quote timing assertion(0.61s). Focused317passed5timingfailures; bareHTTPclient construction0.532-1.312s. Frontend4938passed12failed5suites(locale/timing), zero frontenddiff; typecheckpassed. Exact-headCI required. || 2026-10-11 explicit user reassignment to this chat: recovered 537a7baa on board/tradier-governor-933676cd. T3 independent implementer verification and T4 measurement pending; full suites running locally on Python3.11.9. Code audit NOT STARTED; existing counters/stages preserved. || 2026-10-11 resume: T1 1822b9f3/T2 5bb55e82 implemented, T3 68a51420/b5b32671 verification running, T4 #218 measurement underway. Main072ec44b integrated at cc482395 (PROJECT_STATE-only conflicts resolved preserving main and Tradier records). Plan second stage clean at round6; code audit NOT STARTED. Historical plan-stage checker warning retained (approved second stage not modeled); no counters reset. || 2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Kenneth chose to build despite state.py's single-plan-stage false alarm (decision TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11). Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
       "audit_history": [
         {
           "round": 1,
@@ -2884,10 +2884,21 @@
           "fixes": [
             "8d543755: shared OrderAdmissionRefusedError proves no POST; manual dispatch releases risk; auto execute converts to existing not-submitted handler with zero premium/contact false; post-POST ambiguity retains risk. Red2failed2passed; focused57passed; typecheckclean."
           ],
-          "outstanding": [
-            "R7-G1 fix implemented; independent code round8(code2) reviewing0c1e46fa..8d543755"
-          ],
+          "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 8,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "/root/code_audit_2 fresh independent adversarial subagent",
+          "scope": "0c1e46fa7aaa793133616e4d2f0d9d8795769d25..8d543755a6ad4885db233d1c755f9a5a82fa86f4; R7-G1 fixes and interactions, five backend files plus state bookkeeping",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "validation": "87 independent pytest passes plus8 manual dispatch probes onPython3.11.9; OPEN/CLOSE stock/options andIBKRconfirmation semantics verified; subsequentHEADchanges state-only"
         }
       ],
       "plan_stage": {
