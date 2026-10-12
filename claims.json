@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/broker-path-residuals-a924c593",
       "claimed_at": "2026-10-12T22:20:43Z",
-      "expires_at": "2026-10-13T01:20:43Z",
+      "expires_at": "2026-10-13T01:20:45Z",
       "note": "Resume abandoned broker error and position race evidence",
       "task": "BROKER-PATH-RESIDUALS"
     }
