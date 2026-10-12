@@ -63,41 +63,16 @@ class ArmPreservedError(RuntimeError):
 
 
 class OrderNotSubmittedError(RuntimeError):
-    """The fire failed BEFORE the broker adapter was called: nothing was sent.
+    """The order provably was not submitted.
 
-    (Or, for the one subclass `OrderAwaitingConfirmationError`, the broker was
-    called and did not take the order. Either way no order is live. See the
-    paragraph on it below.)
+    Local setup failures occur before calling the adapter. An adapter can also
+    prove it sent nothing: OrderAdmissionRefusedError marks refusal before an
+    order POST and execute_option_order converts that explicit signal here.
+    All other adapter errors remain ambiguous and retain the full risk.
 
-    F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
-    in one `except Exception` that wrote `order_failed` — a status whose own
-    comment says the submission MAY HAVE LANDED — and paged "the broker call was
-    made and errored ... Check the broker before re-arming". But three of the
-    four things that call reaches contact nothing at all: building the
-    `BrokerOrder`, building the router out of the credential store, and the two
-    guards in `BrokerRouter.resolve`. The reachable one is mundane and
-    recurring: credentials expire or are rotated,
-    `build_router_from_credentials` omits that adapter without complaint, and
-    `resolve` raises "Unknown broker 'tradier_paper'. Available: []". Measured
-    end to end — the delivered email told Kenneth to go and check a broker that
-    was never opened a socket to, for a position that cannot exist.
-
-    THE BOUNDARY IS `adapter.place_order`, NOT SOMEWHERE MORE CONVENIENT, and it
-    is drawn conservatively. Once that call is entered the auto-trader cannot
-    know whether bytes left the machine, so everything at or past it keeps
-    `order_failed` and keeps saying the order may have landed. This class covers
-    only what is provable from the outside. Both claims are then true statements
-    rather than one blanket guess, which is the whole of the fix: the failure
-    mode being closed is a FALSE alert, so replacing it with the opposite false
-    alert would be no better.
-
-    ONE SUBCLASS IS RAISED PAST THAT BOUNDARY: `OrderAwaitingConfirmationError`,
-    when the broker's own answer says it did not take the order. See it.
-
-    A RuntimeError so `/auto-trade/fire` maps it to a 400 like every refusal
-    but the two config faults (prefixed 500s) — and `fire()` re-raises it as a bare RuntimeError anyway, so
-    the class is a routing signal inside this module, not part of the endpoint's
-    contract.
+    OrderAwaitingConfirmationError additionally covers IBKR's authoritative
+    confirmation reply: the broker was contacted but did not accept an order.
+    That subclass sets broker_contacted on history and changes alert wording.
     """
 
 
@@ -111,13 +86,9 @@ class OrderAwaitingConfirmationError(OrderNotSubmittedError):
     confirms it. Nothing in this codebase sends that reply, so the order never
     reaches the book, and it was booked as a live order at the full premium.
 
-    THE ONE `OrderNotSubmittedError` RAISED AFTER `adapter.place_order`. The
-    class's boundary is drawn at `place_order` because past it the auto-trader
-    cannot know whether bytes left the machine. Here it can: the broker's own
-    answer says the order is not accepted. It is still a SUBCLASS, not the
-    parent, because the not-submitted alert says "the broker was not contacted
-    at all", which is false here. The row records `broker_contacted` and the
-    alert words itself from that.
+    Unlike a pre-POST admission refusal, this signal follows broker contact.
+    The broker's answer proves the order was not accepted. The subclass keeps
+    broker_contacted true so the not-submitted alert describes that contact.
     """
 
 
@@ -2363,10 +2334,10 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     statuses are recorded BEFORE `execute_option_order` is reached, which is
     the same guarantee the `order_failed` row's own comment leans on when it
     says these two "provably never reached the broker". `_alert_not_submitted`
-    states it as fact on the same grounds, one phase later — it is reached only
-    from inside `execute_option_order` and only before `adapter.place_order`
-    (except IBKR's confirmation question, which is past it but still took no
-    order; that case is worded separately -- `OrderAwaitingConfirmationError`).
+    states it as fact on explicit proof: local setup failure or the adapter's
+    pre-POST admission refusal. IBKR's confirmation question instead proves
+    no order was accepted despite contact, and is worded separately via
+    `OrderAwaitingConfirmationError`.
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -2426,8 +2397,8 @@ def _alert_not_submitted(symbol: str, exc: Exception, *,
     THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
     pair only works because each states what its own half provably knows.
     `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
-    strictly before `adapter.place_order` (except `OrderAwaitingConfirmationError`,
-    below) — so no position can exist, and
+    on local setup failure or an adapter's explicit pre-POST admission refusal
+    (except `OrderAwaitingConfirmationError`, below) — so no position can exist, and
     hedging with "check the broker" would keep the wild goose chase F2 is about
     while merely sounding more careful.
 
@@ -2556,14 +2527,10 @@ def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
 def execute_option_order(strategy: ArmedStrategy):
     """Execute the armed option order via the broker router. Importable for mocking.
 
-    TWO PHASES, AND THE SEAM BETWEEN THEM IS LOAD-BEARING — see
-    `OrderNotSubmittedError`. Everything inside the `try` contacts nothing: it
-    builds the order object, reads the credential store, and resolves the
-    adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
-    broker, so only it may raise the error `fire()` records as "may have
-    landed". The one check after it (`OrderAwaitingConfirmationError`) reads the
-    broker's own answer that it took no order. Anything moved across that line changes what Kenneth is told about
-    a possibly-live position, in one direction or the other.
+    Setup failures prove no contact and become OrderNotSubmittedError.
+    At place_order, only the adapter's explicit OrderAdmissionRefusedError
+    proves no POST occurred; all other errors remain potentially submitted.
+    An IBKR confirmation question proves no order was accepted despite contact.
     """
     from app.services.broker_router import build_router_from_credentials
     from app.data.ibkr_paper import BrokerOrder
@@ -2594,7 +2561,13 @@ def execute_option_order(strategy: ArmedStrategy):
         # ValueError would send the rest back to the "may have landed" branch
         # with the same false claim F2 exists to remove.
         raise OrderNotSubmittedError(str(exc)) from exc
-    result = adapter.place_order(order)
+    from app.data.order_errors import OrderAdmissionRefusedError
+    try:
+        result = adapter.place_order(order)
+    except OrderAdmissionRefusedError as exc:
+        # The adapter proves admission failed before any POST. Other adapter
+        # errors remain ambiguous: they may have sent an order.
+        raise OrderNotSubmittedError(str(exc)) from exc
     # A QUESTION IS NOT AN ORDER -- see `OrderAwaitingConfirmationError`.
     # getattr because Tradier's adapter has its own OrderResult without the
     # field; only IBKR's reply shape sets it.
