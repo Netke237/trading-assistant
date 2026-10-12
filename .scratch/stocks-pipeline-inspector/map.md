@@ -12,3 +12,8 @@ Plan audit round 1: independent reviewer Bacon; full proposed model and integrat
 None — all tickets complete.
 
 Code audit: round 1 found 2 numeric defects, both fixed; fresh round 2 zero findings. Validation details: code-round-2.md. Built locally; not merged or deployed.
+
+## Authorized merge and deployment follow-up
+
+- Merge: done, PR #231; integrated verification and final independent review passed.
+- Release synchronization: done; user clarified origin/main merge plus local main synchronization.
