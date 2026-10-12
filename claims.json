@@ -3,15 +3,9 @@
     {
       "agent": "claude",
       "branch": "board/tradier-governor-933676cd",
-      "claimed_at": "2026-10-11T20:43:33Z",
-      "expires_at": "2026-10-11T23:51:21Z",
-      "note": "User explicitly reassigned #169 to this chat; continue T3/T4 and code audit",
-      "previous": [
-        {
-          "branch": "board/tradier-governor-eebde90e",
-          "claimed_at": "2026-10-11T18:07:49Z"
-        }
-      ],
+      "claimed_at": "2026-10-12T03:46:38Z",
+      "expires_at": "2026-10-12T06:46:38Z",
+      "note": "Resume authorized #169 takeover after usage interruption; audit round7 incomplete",
       "task": "TRADIER-GOVERNOR"
     }
   ]
