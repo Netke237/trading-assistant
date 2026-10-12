@@ -5,7 +5,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { ScanFunnel } from '@/components/organisms/ScanFunnel';
+import { PipelineInspector } from '@/components/organisms/PipelineInspector';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -53,6 +53,7 @@ export default function Step6BacktestPage() {
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
   const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const router = useRouter();
@@ -63,6 +64,8 @@ export default function Step6BacktestPage() {
   const candidates = result?.candidates ?? [];
   const filteredCandidates = candidates.filter(c => eventFilter === 'avoid' ? c.next_event_days == null || c.next_event_days > 7 : eventFilter === 'only_pre_event' ? c.next_event_days != null && c.next_event_days <= 21 : true);
   const { rejected: gateRejected, overCap } = splitStockRejected(result?.rejected);
+  const candidateSymbols = candidates.map(c => c.symbol);
+  const notRanked = Math.max(0, (result?.pipeline?.scanned ?? (result?.rejected.length ?? 0) + candidates.length) - candidates.length);
   function onAfterScanToggle(symbol: string, armed: boolean) { useScanStore.getState().setStockAfterScanIntent(symbol, armed); }
   function proceedWith(symbol: string) { setSelectedSymbol(symbol); router.push('/screener/step-7-position-card'); }
   return <div className={styles.main}>
@@ -76,7 +79,7 @@ export default function Step6BacktestPage() {
     {feedback.notice && <Text size={12} tone="caution">{feedback.notice}</Text>}
     <DirectSendNotesPanel />
     {!result && <Text size={13} tone="dim">No stock scan result. Go back to Step 4 (Strategy) and run a scan.</Text>}
-    {result?.pipeline && <details className={styles.logPanel}><summary>Pipeline log</summary><ScanFunnel mode="stock" pipeline={result.pipeline} /></details>}
+    {result && <button type="button" className={styles.inspectBtn} onClick={() => setInspectorOpen(true)}>Filter Breakdown ({notRanked} Not Ranked)</button>}
     {result?.direction_banner && <div className={styles.directionBanner}><Text size={12} tone="caution">{result.direction_banner}</Text></div>}
     {candidates.length > filteredCandidates.length && <Text size={11} tone="caution">{candidates.length - filteredCandidates.length} of {candidates.length} hidden by the event filter.</Text>}
     {result && filteredCandidates.length === 0 && <Text size={13} tone="dim">No candidates to display. Adjust the filter or return to Strategy and run another scan.</Text>}
@@ -191,10 +194,9 @@ export default function Step6BacktestPage() {
               );
             })}
       </div>
-      {overCap.length > 0 && <details className={styles.rejectedSection}><summary>{overCap.length} over cap</summary>{overCap.map(r => <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>)}</details>}
-      {gateRejected.length > 0 && <details className={styles.rejectedSection}><summary>{gateRejected.length} rejected</summary>{gateRejected.map(r => <Text key={r.symbol} size={11} tone="dim">{r.symbol}: {r.reason}</Text>)}</details>}
     </div>}
     {stockBasket.length > 0 && <button type="button" className={styles.actionBtn} onClick={() => setShowSendDialog(true)}>Send basket ({stockBasket.length})</button>}
     {showSendDialog && <StockSendDialog cards={stockBasket} onClose={() => setShowSendDialog(false)} onSubmit={() => setShowSendDialog(false)} />}
+    {result && <PipelineInspector mode="stock" isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} pipeline={result.pipeline} rejected={result.rejected} survivors={candidateSymbols} />}
   </div>;
 }
