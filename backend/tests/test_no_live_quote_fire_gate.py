@@ -56,16 +56,35 @@ def test_timeout(probe):
     probe[1].side_effect = httpx.TimeoutException("timeout")
     assert at._option_quote_state(OCC) == "unavailable"
 
-def test_no_token_and_open_circuit_no_http(probe):
-    gov = probe[2]
+def test_no_token_and_open_circuit_no_http(probe, monkeypatch):
+    """Site F (the NO-LIVE-QUOTE fire gate) is on the fire path: it is
+    admitted by overdraft, so an empty bucket no longer refuses it
+    (TRADIER-GOVERNOR plan, docs/superpowers/plans/2026-10-10-tradier-governor-plan.md
+    §2 D3 "Site F joins the fire path"). A missing Tradier token and an open
+    breaker still return "unavailable" without any HTTP request."""
+    from app.data import market
+    row, get, gov = probe
+    bucket = gov._providers["tradier"].bucket
+    # No bucket token left: F books an overdraft token (balance goes
+    # negative) and makes its one request, classifying the mocked live row.
     for _ in range(15):
         assert gov.try_acquire("tradier")
+    assert at._option_quote_state(OCC) == "live"
+    assert get.call_count == 1
+    assert bucket._tokens < 0
+    # Missing Tradier token: refused before admission, no HTTP, no booking.
+    get.reset_mock()
+    bucket._tokens = 15
+    monkeypatch.setattr(market, "get_tradier_creds", lambda: ("", "https://api.tradier.com"))
     assert at._option_quote_state(OCC) == "unavailable"
-    probe[1].assert_not_called()
-    gov._providers["tradier"].bucket._tokens = 15
+    get.assert_not_called()
+    assert bucket._tokens == pytest.approx(15)
+    monkeypatch.setattr(market, "get_tradier_creds", lambda: ("fake", "https://api.tradier.com"))
+    # Open breaker (forced via record_failure; the fixture's breaker trips at
+    # one failure): refused, no HTTP, even with a full bucket.
     gov.record_failure("tradier")
     assert at._option_quote_state(OCC) == "unavailable"
-    probe[1].assert_not_called()
+    get.assert_not_called()
 
 def test_live_exact_request_and_config_lag(probe, monkeypatch):
     from app.data import market

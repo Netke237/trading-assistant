@@ -613,7 +613,9 @@ async def _eval_composite_watch(
     bars_intraday: list[dict] = []
     if model == "HMM_intraday" or vwap_intraday:
         try:
-            raw = fetch_intraday_candles(
+            # Off the event loop (TRADIER-GOVERNOR T3): a sync Tradier fetch.
+            raw = await asyncio.to_thread(
+                fetch_intraday_candles,
                 symbol, interval=fetch_iv, days=intraday_history_days(fetch_iv),
             )
             # A4c + VWAP-CONFIRMATION-LIKE-REGIME-MODELS: the HMM fit AND the

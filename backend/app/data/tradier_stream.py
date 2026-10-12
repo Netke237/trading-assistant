@@ -10,7 +10,7 @@ import httpx
 logger = logging.getLogger(__name__)
 logging.getLogger("asyncio").setLevel(logging.ERROR)
 
-from app.data.market import get_tradier_creds
+from app.data.market import get_tradier_creds, _tradier_get_async
 
 
 class TradierStreamClient:
@@ -66,10 +66,13 @@ class TradierStreamClient:
         try:
             async with httpx.AsyncClient() as client:
                 _tok, _base = get_tradier_creds()
-                resp = await client.post(
+                # Admitted on the governor's `tradier` bucket (TRADIER-GOVERNOR D4).
+                resp = await _tradier_get_async(
+                    client,
                     f"{_base}/v1/markets/events/session",
                     headers={"Authorization": f"Bearer {_tok}", "Accept": "application/json"},
                     timeout=10,
+                    method="POST",
                 )
                 resp.raise_for_status()
                 return resp.json().get("stream", {}).get("url")

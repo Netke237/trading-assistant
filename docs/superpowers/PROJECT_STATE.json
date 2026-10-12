@@ -1,9 +1,9 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
-  "updated": "2026-10-11",
-  "updated_by": "STOCK-PRES-P2-POSITION merge coordinator",
+  "updated": "2026-10-12",
+  "updated_by": "TRADIER-GOVERNOR recovery coordinator",
   "main": "PR #225 merged STOCK-PRES-P2-POSITION on 2026-10-11 at 28c738bac69a0968ab3316ec0994272d5c338f90; independent audits clean and exact-head backend/frontend/Playwright CI passed. || PREVIOUS: PR #219 merged AGENT-SELF-MERGE on 2026-10-11 at 5bfb7b1107bd045584401198ca8dd23d4955fcae with explicit chat authorization; independent plan/code reviews clean. || PREVIOUS: PR #204 merged seven audited waiting-merge board items with explicit chat approval at b741f6104f68cf252be265af18d32ae5f045215c; all seven frozen source heads verified on main; original PRs merged and board issues closed. Independent integration audit clean in two code rounds, 93 scheduler/cancellation/quote regression tests passed, final combined CI green. || PREVIOUS: STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
-  "working_branch": "main",
+  "working_branch": "board/tradier-governor-933676cd",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
   "phases": [
     {
@@ -2762,6 +2762,160 @@
       },
       "pr": "https://github.com/Netke237/trading-assistant/pull/225",
       "merge_commit": "28c738bac69a0968ab3316ec0994272d5c338f90"
+    },
+    {
+      "id": "TRADIER-GOVERNOR",
+      "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
+      "status": "built",
+      "audit_rounds": 8,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item / tracking issue #169",
+        "NO-LIVE-QUOTE ticket TG-1",
+        "reconciliation ticket 13"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-10-tradier-governor-plan.md",
+      "branch": "board/tradier-governor-933676cd",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/data/governor.py",
+        "pattern": "def admit_sync",
+        "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
+      },
+      "note": "SELF-MERGE PENDING, PR #228, audited head8d543755a6ad4885db233d1c755f9a5a82fa86f4. Phase remainsbuilt and audit_cleantrue; merge only after all exact-headCI checks pass and ownership/mergeability conditions hold. || 2026-10-12 CODE STAGE CLEAN at round8(code2): /root/code_audit_2 zero gate findings, scopeverified0c1e46fa..8d543755,87independenttests+8manualprobespassed. R7-G1 closed. Statusbuilt/unmerged; PR/CI next. || 2026-10-12 R7-G1 fix8d543755 implemented by fresh /root/fix_r7:57focusedpasses, typecheckclean; actualSQLite manual/auto accounting regressions red2fail2pass -> green. Code round8(code2) now reviews only fix and interactions; audit_clean remainsfalse. || 2026-10-12 resumed after usage interruption: T4 0c1e46fa focused1passed; cold101/expiration-warm81/all-cache-warm21 calls over20synthetic all-survivor symbols. Code round7(code1) completed NOT CLEAN,1gateR7-G1; fix underway. Local backend7925passed11skipped5failed1error: four unchanged atomic-YAML Windows semantics failures, missingtime.tzset in unchanged historical test, one new0.5s stock-quote timing assertion(0.61s). Focused317passed5timingfailures; bareHTTPclient construction0.532-1.312s. Frontend4938passed12failed5suites(locale/timing), zero frontenddiff; typecheckpassed. Exact-headCI required. || 2026-10-11 explicit user reassignment to this chat: recovered 537a7baa on board/tradier-governor-933676cd. T3 independent implementer verification and T4 measurement pending; full suites running locally on Python3.11.9. Code audit NOT STARTED; existing counters/stages preserved. || 2026-10-11 resume: T1 1822b9f3/T2 5bb55e82 implemented, T3 68a51420/b5b32671 verification running, T4 #218 measurement underway. Main072ec44b integrated at cc482395 (PROJECT_STATE-only conflicts resolved preserving main and Tradier records). Plan second stage clean at round6; code audit NOT STARTED. Historical plan-stage checker warning retained (approved second stage not modeled); no counters reset. || 2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Kenneth chose to build despite state.py's single-plan-stage false alarm (decision TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11). Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewed": "docs/superpowers/plans/2026-10-10-tradier-governor-plan.md at 41cde651",
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-auditor brief",
+          "gate_findings": 2,
+          "findings": [
+            "G1: sync admission time is added inside deadline-bounded callers (A11 earnings calendar under the 5 s Tradier lookup deadline; fire-path regime fetch_candles under 25 s), so under bulk load Tradier loses to the yfinance fallback -> earnings flag missing / different veto date / different regime bars; and a literal D3 passed A11's httpx.Timeout as the float admission budget (TypeError)",
+            "G2: _tradier_get_async(timeout=None) forwarded to client.get removes every B/C/D timeout (httpx None = no timeout), so a stalled chain call during book_fired_order never returns and a live order has no persisted Portfolio row"
+          ],
+          "fixes": "plan revised: float admit_timeout separate from the HTTP timeout, per-site budgets, TokenBucket reserve=3 with priority admission (A11 always priority; fire-path regime fetch via market.tradier_priority() ContextVar), async helper timeout default httpx.USE_CLIENT_DEFAULT; new T1/T2/T3 tests",
+          "outstanding": "none at the gate; round 2 reviews only these fixes"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewed": "git diff 41cde651..1071fbd5 -- the plan (round-1 fixes) and their interactions",
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-auditor brief",
+          "gate_findings": 1,
+          "findings": [
+            "R2-G1: the tradier_priority() wrap covered only _fetch_scan_window_bars; Intraday fires use _fetch_intraday_regime_bars -> fetch_intraday_candles (A2), which under load falls back to yfinance regular-session bars -> different compute_omm conviction -> different headwind verdict / vol-sized quantity on the broker order"
+          ],
+          "fixes": "plan revised: _measure_trade_regime submits _with_tradier_priority(_fetch_bars, symbol) so both branches run inside tradier_priority() in the worker thread; priority admit_timeout 2.0 (A11 0.5); two-branch T3 test",
+          "outstanding": "none at the gate; round 3 (last plan round under the cap) reviews only this fix"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewed": "git diff 1071fbd5..7819088a -- the plan (R2-G1 fix) and its interactions",
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general, gate-auditor brief",
+          "gate_findings": 1,
+          "findings": [
+            "R3-G1: R2-G1 is closed on mechanism, but the 2.0 s priority admission budget on the fire-path regime fetch can be starved by the stock scan's own priority A11 earnings lookups (up to 5 concurrent, every call priority, bucket drained below the reserve); admission fails -> fetch_candles / fetch_intraday_candles fall back to yfinance -> compute_omm on a different series -> different conviction / vol-sized quantity on the broker order or a flipped headwind verdict"
+          ],
+          "fixes": "NONE APPLIED -- plan stage at its cap (3 rounds); per audit_rule the auditing stops and Kenneth decides",
+          "outstanding": "R3-G1 unresolved. Underlying tension: deadline-bound callers (fire-path regime fetch, earnings lookups) cannot both wait for a limiter slot and stay inside their deadlines when other priority traffic competes. Proposed redesign posted on #169."
+        },
+        {
+          "round": 4,
+          "stage": "plan",
+          "stage_round": 1,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-10",
+          "scope": "plan r4 at a6a959c5 (whole plan, first round of the second plan stage opened by decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10), checked against the named code",
+          "findings": [
+            "R4-G1 (gate): the 10 s bulk sync admission budget turns waiting into the yfinance fallback under scan load (~1-12% of admissions with 5-10 contenders); fetch_candles caches the fallback for the day (market.py:224) so a later fire's regime fetch reads yfinance bars with no Tradier call (R3-G1 through the cache), and scan-card Intraday regimes change"
+          ],
+          "fixes": [
+            "plan r5: bulk sync admission waits without limit; the four on-loop sync callers move to asyncio.to_thread with an overdraft safety net + AST ratchet; D5 corrected; below-gate notes: site F uses the overdraft, D's text and the price-probe cooldown outcome corrected"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 5,
+          "stage": "plan",
+          "stage_round": 2,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-11",
+          "scope": "git diff a6a959c5..ded2e378 -- the plan (r5: R4-G1 fixes) and interactions with the plan and code; simulations with the real TokenBucket",
+          "findings": [
+            "R5-G1 (gate): the earnings prepay's finite 30 s budget still turns waiting into the yfinance date (non-FIFO polling; 2/3009 admissions >30 s with 10 sync waiters), also on a same-day cache hit",
+            "R5-G2 (gate): sync pollers starve async waiters (time.sleep wakes before asyncio.sleep), so the fire path's daily-risk opening price (D) can wait a whole scan and the MKT order is sent minutes after its gates, at a price they never saw"
+          ],
+          "fixes": [
+            "plan r6: prepay admit_timeout=None and skipped on a cache hit; one FIFO ticket queue shared by sync and async waiters; D joins the fire-path overdraft via opening_price's tradier_fire_path() and Governor.call_overdraft; regime_monitor removed from the on-loop list (already in an executor)"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 6,
+          "stage": "plan",
+          "stage_round": 3,
+          "plan_stage_index": 2,
+          "reviewer": "fresh independent general-purpose subagent (gate auditor, bmad-review-adversarial-general), 2026-10-11",
+          "scope": "git diff ded2e378..6562920f -- the plan (r6: R5-G1/R5-G2 fixes) and interactions with the plan and code; range verified by reviewer",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_notes": [
+            "Plan text 'the order is refused' for D during a 429 cooldown holds only for the option branch; the stock branch's fetch_price_async catches RateLimited and takes today's 429 fallback. Not fixed in-branch (below gate); implementers keep each site's existing handling.",
+            "The booking's quote fetch stays a normal admission and can wait behind queued bulk waiters (tens of seconds); the stored value is still the save-time quote as defined."
+          ],
+          "clean": true
+        },
+        {
+          "round": 7,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/code_audit_1 fresh independent adversarial subagent; completed after usage interruption",
+          "scope": "072ec44b02d8165a3222433e99094ffdf30863c5..0c1e46fa7aaa793133616e4d2f0d9d8795769d25; all18changedfiles againstplanr6",
+          "gate_findings": 1,
+          "findings": [
+            "R7-G1: Tradier paper pre-POST limiter admission refusal raises generic RuntimeError; manual dispatch retains daily risk reservation and auto fire records full premium despite provably zero broker contact. Real manual dispatcher/adapter/hooks/SQLite reproduction: production paper bucket/default10s timeout,15queued callers,60-dollar opening under100-dollar allowance ->0POST,6000reserved cents, next60-dollar reservation refused."
+          ],
+          "fixes": [
+            "8d543755: shared OrderAdmissionRefusedError proves no POST; manual dispatch releases risk; auto execute converts to existing not-submitted handler with zero premium/contact false; post-POST ambiguity retains risk. Red2failed2passed; focused57passed; typecheckclean."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 8,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "/root/code_audit_2 fresh independent adversarial subagent",
+          "scope": "0c1e46fa7aaa793133616e4d2f0d9d8795769d25..8d543755a6ad4885db233d1c755f9a5a82fa86f4; R7-G1 fixes and interactions, five backend files plus state bookkeeping",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "validation": "87 independent pytest passes plus8 manual dispatch probes onPython3.11.9; OPEN/CLOSE stock/options andIBKRconfirmation semantics verified; subsequentHEADchanges state-only"
+        }
+      ],
+      "plan_stage": {
+        "rounds": 3,
+        "closed_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10"
+      },
+      "decisions": [
+        "2026-10-10 Kenneth (chat): '#169 merge ... -> merge' -- pre-accepts the projected options-scan slowdown (TG-1). Merge still requires a clean code audit and green CI.",
+        "2026-10-10 Kenneth (chat): 'ok Go ahead' on the round-1 status -- proceed to tickets and build once the plan audit is clean."
+      ],
+      "second_plan_stage": {
+        "rounds": "4-6",
+        "closed_by": "clean at plan round 6",
+        "decision": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10",
+        "note": "scripts/state.py models one plan stage per target (rounds 1..3); this field records the second stage Kenneth opened. Code rounds will be numbered from round 7 (code round 1)."
+      },
+      "pull_request": "https://github.com/Netke237/trading-assistant/pull/228"
     }
   ],
   "already_shipped": [
@@ -4528,6 +4682,18 @@
       "id": "AGENT-SELF-MERGE-2026-10-11",
       "q": "Should agents keep stopping at waiting-merge for Kenneth to approve every audited PR?",
       "a": "Kenneth, 2026-10-11 (in chat): no. Agents merge their own PR without asking when every condition in docs/agents/board.md step 7 holds -- own claimed item, not draft, no needs-kenneth/blocked/hold; clean independent plan + code audit recorded under audit_rule; head unchanged since the clean round except main merges with PROJECT_STATE-only conflicts and bounded documentation-only audit-verdict/pending-merge records; MERGEABLE and every CI check green on the exact head, with one re-run of failed jobs allowed for an infrastructure flake (e.g. next/font Google Fonts download) or an already-logged flaky test; pending attempt recorded as built before merging, never shipped before confirmation; verified merge SHA and shipped status reconciled afterward through a documentation follow-up PR, no direct main pushes; gh pr merge --merge with --match-head-commit for the verified head only (never --auto/--admin/--squash/--rebase, never a push to main). Any failed condition -> waiting-merge/blocked/needs-kenneth as before. Option chosen: 'Strict + flake retry'. Supersedes the 'never merge' limit of BOARD-WORKER-2026-10-10 and ticket-orchestration.md's 'never merge without Kenneth's explicit go'. Current-chat authorization 2026-10-11: take over active AGENT-SELF-MERGE claim, correct PR #219, push and merge it."
+    },
+    {
+      "id": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10",
+      "q": "TRADIER-GOVERNOR's plan stage hit its 3-round cap without a clean round (R3-G1: a deadline-bound fire-path regime fetch can miss its rate-limit slot during a stock scan, fall back to yfinance and size the order differently). Q1 open a new plan stage for the overdraft redesign? Q2 if not, shrink to bulk traffic only? Q3 accept a short burst above the limit while the overdraft is used (at most 15 extra requests, then repaid)?",
+      "a": "Kenneth, 2026-10-10 (chat): 'i agree' to the coordinator's recommendation -- Q1 YES: open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall) for the overdraft redesign: deadline-bound auto-trade fire-path Tradier calls (regime fetch incl. intraday, earnings veto, market-open price check) never wait and never fail on the limiter -- they take a slot if free, otherwise go anyway and book an overdraft (bucket negative, floored at -capacity 15); bulk traffic (scans, prewarm, monitors, probes) waits until it is repaid, so the average stays 120/min; the stock scan's earnings lookup waits for its slot BEFORE its 5 s deadline starts. Q3 YES: a burst of at most 15 extra requests is accepted. Q2 not needed. No counter reset: plan rounds 1-3 stay recorded; the scan-slowdown merge question stays pre-accepted ('ok Go ahead', 2026-10-10). Not a merge approval.",
+      "by": "Kenneth 2026-10-10 (chat)"
+    },
+    {
+      "id": "TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11",
+      "q": "TRADIER-GOVERNOR's second plan stage closed clean at plan round 6, but scripts/state.py models one plan stage per target (1..3 rounds), so it reports the phase past the hard cap and exits non-zero on this branch; board.md says stop when the check flags your own item. Build anyway, fix state.py first, or pause?",
+      "a": "Kenneth, 2026-10-11 (chat, option chosen): 'Build anyway (Recommended)' -- the red check is a tooling false alarm (the stage was opened by decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10 and closed clean); cut tickets T1-T4 and build now, record the limitation on #169, and file a small board item to teach state.py about a second plan stage. The red check stays on this branch until the code audit goes clean or it merges. Code rounds are numbered from round 7 (code round 1), cap 3.",
+      "by": "Kenneth 2026-10-11 (chat)"
     }
   ],
   "pending_kenneth": [
@@ -4613,7 +4779,8 @@
     "LOGGED 2026-10-05 by TRADING-REVIEW-PHASE-C-HYGIENE (implementers + audits), below the gate, NOT FIXED: (a) a non-numeric trigger.setup_window_bars (string/NaN) still raises in int() inside stock_scorer._rule_trigger and config_health does not flag it; (b) scripts/evidence runs mean_reversion_vwap_daily on the signal's own defaults (lookback 20, deviation 0.02), not a user's request settings; (c) refresh-adjustments' symbol-keyed eviction/guard also drops intraday (mean_reversion_vwap) backtests on a daily refresh (recompute only, never a wrong number); (d) test_confidence_gate_stocks.py / test_historical_store.py still swap cc._DB_PATH by hand (harmless now).",
     "LOGGED 2026-10-05, flaky tests/CI, NOT FIXED: (a) backend/tests/test_scan_endpoint.py timing tests (Heston wait_for ceiling, semaphore release, abandoned-task log noise) failed once on CI for PR #68 and passed on re-run; (b) frontend direct-send-save-first.test.tsx failed once under full-suite load, passed alone; (c) CI frontend 'next build' failed once on PR #69 fetching the DM_Sans Google Font (next/font loader TypeError), passed on re-run -- consider self-hosting the font.",
     "LOGGED 2026-10-05 by STOCKS-PARAMS-PER-HORIZON-2026-10-05, NOT SCHEDULED: (a) ingest longer price history (pre-2020-10, incl. delisted names) so tuning is not limited to one mostly-bull, survivorship-biased 6-year sample; (b) tune intraday / mean_reversion_vwap (needs intraday bars; Intraday horizon is out of the per-horizon tuning).",
-    "LOGGED 2026-10-05 by STOCKS-PARAMS-PER-HORIZON-2026-10-05: STOCKS-STEP-MERGE-S2 W1 (shared execution edits / after-scan arms; draft tickets on codex/stocks-step-merge-s2-plan) was blocked pending C4. It now depends on STOCKS-HORIZON-P0 (bearish Unvalidated block) and STOCKS-HORIZON-T2 (bullish Unvalidated labels from tuned verdicts). Its plan must be reconciled with docs/adr/0001-stocks-parameters-per-horizon.md before W1 starts."
+    "LOGGED 2026-10-05 by STOCKS-PARAMS-PER-HORIZON-2026-10-05: STOCKS-STEP-MERGE-S2 W1 (shared execution edits / after-scan arms; draft tickets on codex/stocks-step-merge-s2-plan) was blocked pending C4. It now depends on STOCKS-HORIZON-P0 (bearish Unvalidated block) and STOCKS-HORIZON-T2 (bullish Unvalidated labels from tuned verdicts). Its plan must be reconciled with docs/adr/0001-stocks-parameters-per-horizon.md before W1 starts.",
+    "LOGGED 2026-10-12 TRADIER-GOVERNOR below gate: new0.5s HTTP-wrapper timing tests include Windows TLSclient construction measured0.532-1.312s withoutHTTP. Focused317passed5failed; full newstockopeningtest0.61s. Notfixedinbranch underaudit_rule; exactheadLinuxCI required. Existing unchangedfrontend locale and5s timeout failures and backendatomicYAML/tzset Windows limitations also blocklocalfullgreen."
   ],
   "authoritative_documents": [
     {
@@ -4750,8 +4917,8 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "STOCK-PRES-P2-POSITION",
-  "active_phase_note": "Position PR #225 merged; recording verified completion through documentation follow-up.",
+  "active_phase": "TRADIER-GOVERNOR",
+  "active_phase_note": "Board #169 live claim: T1/T2 implemented, T3 verification running, T4 measurement underway. Plan second stage clean round6; code audit not started.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
