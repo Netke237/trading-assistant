@@ -2244,7 +2244,7 @@ export function TradeCard({
     ? `$${value.toFixed(2)} ${unit}` : 'Unavailable';
 
   return (
-    <div className={styles.wrap}>
+    <div data-presentation="options-v2" className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
       {/* 1. Header */}
       <section className={styles.headerCard} aria-label="Selected stock and contract">

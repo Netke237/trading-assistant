@@ -37,3 +37,7 @@ User explicitly approved transfer from the interrupted saved branch to board/opt
 - #247 675b79c2: chooser follows method evidence; explicit decision snapshot and execution fields, stock/premium distinctions, exact-one-matched-row evidence and fractional race median. Sixteen-suite downstream run passed all unaffected suites; three presentation assertions corrected. Corrected TradeCard/method tests: 205 pass; final method suite 41 pass with eight summary regressions. Typecheck clean.
 
 Remaining #248 and integrated #249 gate are pending; these commits are implementation evidence, not a clean code audit.
+
+- #248 60c4b073: single ladder near top, source/edit provenance and separate full-position/rung dollar outcomes. Saved collapse preference retained. Broker labels fit without fragmented wrapping. 404 tests across nine relevant suites pass (eight new cases), typecheck clean. Original page handlers, context, gates, storage keys and request schemas untouched.
+
+#249 final source inventory is in options-presentation-v2-preservation.md; final integrated checks and independent audit are underway.

@@ -3050,7 +3050,7 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 #246 and #247 resumed and committed. #247 preserves snapshot mappings with unambiguous matched evidence, chooser follows methods. Next #248, then #249 preservation/code audit. Code audit not started; audit_clean false.",
+      "note": "2026-10-13 #240\u2013248 built and preserved on continuation branch. #248 60c4b073: 404 tests pass, typecheck clean. #249 integrated preservation and independent code audit underway. Original two plan rounds retained; audit_clean false until independent code gate.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -3091,6 +3091,11 @@
           "issue": 247,
           "commit": "675b79c2",
           "validation": "Typecheck clean; downstream suites passed; corrected TradeCard/method tests 205 passed; final method suite 41 passed including eight new summary cases"
+        },
+        {
+          "issue": 248,
+          "commit": "60c4b073",
+          "validation": "Typecheck clean; 404 tests across nine ladder/method/dialog/direct/basket/arm/context suites passed; eight new cases"
         }
       ],
       "implementation_interruption": {
