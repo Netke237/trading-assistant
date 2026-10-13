@@ -2921,7 +2921,7 @@
       "id": "BROKER-PATH-RESIDUALS",
       "name": "Truthful durable manual broker outcomes and accurate additional-fill booking",
       "status": "not_started",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2936,8 +2936,8 @@
         "pattern": "class BrokerAttempt",
         "note": "Presence only: durable attempt model; behavior requires independent audit and tests."
       },
-      "note": "PLAN ROUND 1 not clean, 1 gate finding F1; fix now requires exclusive durable prepared-row ownership. No build/code audit started; plan stage 1 of 3. Exact reviewed head 71a23f61; fresh follow-up review of fix and interactions next. User-approved full fill recording/weighted average/breach warning and durable manual uncertainty policy recorded.",
-      "plan_audit_rounds": 1,
+      "note": "PLAN STAGE CLEAN after 2 independent rounds, one F1 numeric finding fixed by exclusive durable prepared-row ownership. Reviewed fix head697647a2, /root/plan_audit_2 zero gate findings. Eight build tickets next; implementation/code audit not started. Overall audit_clean false. Disposable local PostgreSQL16.15 verified for database concurrency/migrations in addition to SQLite. User decisions recorded in BROKER-PATH-RESIDUALS-POLICY-2026-10-13.",
+      "plan_audit_rounds": 2,
       "audit_records": [
         {
           "round": 1,
@@ -2950,12 +2950,22 @@
           "fixes": [
             "Require server-prepared row and exclusive durable attempt ownership; count other orders additively"
           ],
-          "outstanding": [
-            "F1 fix pending fresh independent review"
-          ],
+          "outstanding": [],
           "record": "docs/superpowers/audits/broker-path-residuals/plan-round-1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/plan_audit_2",
+          "scope": "71a23f610cb20f9f48b568233c02ddf9751a7e93..697647a271aec6e704d8a9d6f5aaa0dc1731fc34",
+          "reviewed_head": "697647a271aec6e704d8a9d6f5aaa0dc1731fc34",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "record": "docs/superpowers/audits/broker-path-residuals/plan-round-2.md"
         }
-      ]
+      ],
+      "plan_audit_clean": true
     }
   ],
   "already_shipped": [
