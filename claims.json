@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/stocks-presentation-v2-merge-record-590cc09e",
       "claimed_at": "2026-10-13T20:44:39Z",
-      "expires_at": "2026-10-13T23:44:39Z",
+      "expires_at": "2026-10-13T23:45:42Z",
       "note": "Verified Stocks merge shipped-state reconciliation",
       "task": "STOCKS-PRESENTATION-V2"
     }
