@@ -2969,7 +2969,7 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 #244 implemented at 3bf27106: typecheck clean; 213 focused tests across 4 suites plus final 8-case Arithmetic regressions passed; actual custom rows, matched premium basis, unavailable states, request/selection/sizing behavior preserved. Next #245. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
+      "note": "2026-10-13 #245 implemented at 7aa2183b: typecheck clean; 355 of 357 relevant tests initially passed, two failures cleared by unchanged methodPick32 and final MonteCarlo/P2 28 reruns; 15 new MC regressions pass; handlers, request/persistence shapes and freshness guards unchanged. Next #246. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -2995,6 +2995,11 @@
           "issue": 244,
           "commit": "3bf271063ec96b209152871af979f655c6f869a7",
           "validation": "typecheck clean; 213 focused tests across 4 suites plus final 8-case Arithmetic regressions passed; actual custom rows, matched premium basis, unavailable states, request/selection/sizing behavior preserved"
+        },
+        {
+          "issue": 245,
+          "commit": "7aa2183b70168ee49a9fb28bec4f18c373c5c72c",
+          "validation": "typecheck clean; 355 of 357 relevant tests initially passed, two failures cleared by unchanged methodPick32 and final MonteCarlo/P2 28 reruns; 15 new MC regressions pass; handlers, request/persistence shapes and freshness guards unchanged"
         }
       ],
       "implementation_interruption": {
@@ -3005,7 +3010,19 @@
         "validation": "Final typecheck clean; state.py --quiet exit0; prior baseline and scoped tests recorded in validation document",
         "resumed_branch": "board/options-presentation-v2-45bd8065",
         "resolved": "Account permits ordinary usage; fresh #242 implementer started"
-      }
+      },
+      "validation_limitations": [
+        {
+          "kind": "existing_clock_sensitive_test",
+          "path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx:501",
+          "scenario": "Unchanged regex /6.24|40%|computed via: Monte Carlo/ also matches Barrier Race timestamp 06:24 or 16:24. Observed during #241 and #245; unchanged suite reruns passed at another minute. No method-pick behavior changed."
+        },
+        {
+          "kind": "existing_windows_locale_tests",
+          "record": "docs/superpowers/plans/2026-10-13-options-presentation-v2-validation.md",
+          "scenario": "Original full frontend baseline has two locale grouping failures, StockSendDialog.session and BarrierRaceCard. No production formatting or unrelated tests changed to hide them."
+        }
+      ]
     }
   ],
   "already_shipped": [
