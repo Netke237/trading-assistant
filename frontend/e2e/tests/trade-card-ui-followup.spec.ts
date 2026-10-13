@@ -30,6 +30,9 @@ for (const width of [1200, 1920]) {
     } })), candidate);
     await page.goto('/screener/step-7-trade-card');
     const scores = page.getByRole('button', { name: /Stock & contract scores/ });
+    await expect(scores).toHaveAttribute('aria-expanded', 'false');
+    await scores.focus();
+    await page.keyboard.press('Enter');
     await expect(scores).toHaveAttribute('aria-expanded', 'true');
     const health = page.getByText('Fundamental Health — no data');
     expect((await scores.boundingBox())!.y).toBeLessThan((await health.boundingBox())!.y);

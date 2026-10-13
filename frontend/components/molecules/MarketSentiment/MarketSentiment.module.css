@@ -62,3 +62,10 @@
 .compact > span {
   flex: 1 1 240px;
 }
+
+.alignment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}

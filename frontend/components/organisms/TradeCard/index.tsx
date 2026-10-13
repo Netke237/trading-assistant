@@ -2343,6 +2343,7 @@ export function TradeCard({
       <CollapsibleSection
         title="Stock & contract scores"
         storageKey="bamendjou:tradecard-scores-collapsed"
+        defaultCollapsed
         keepMounted
       >
         <div className={styles.scorePanelsGrid}>

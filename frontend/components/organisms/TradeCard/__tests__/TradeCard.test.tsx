@@ -208,11 +208,12 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
-  it('places the expanded score group directly between identity and Fundamental Health', () => {
+  it('places the folded score group directly between identity and Fundamental Health', () => {
     render(<TradeCard data={mockTradeCard} />);
     const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
     const group = toggle.closest('section')!;
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
     expect(group.previousElementSibling).toContainElement(screen.getByTestId('symbol-header'));
     expect(group.nextElementSibling).toHaveTextContent('Fundamental Health');
     expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
@@ -249,6 +250,8 @@ describe('TradeCard', () => {
       await act(async () => { await Promise.resolve(); });
       const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
       const group = outer.closest('section')!;
+      expect(outer).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(outer);
       const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
       const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
       expect(outer).toHaveAttribute('aria-expanded', 'true');
