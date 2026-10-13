@@ -15,6 +15,14 @@
       "expires_at": "2026-10-13T08:29:10Z",
       "note": "Resume approved Options UI tickets #242-249",
       "task": "OPTIONS-PRESENTATION-V2"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/scan-report-isolation-b6c806b9",
+      "claimed_at": "2026-10-13T05:29:39Z",
+      "expires_at": "2026-10-13T08:29:39Z",
+      "note": "Resume interrupted lifecycle review and scan report integration #236",
+      "task": "SCAN-REPORT-ISOLATION"
     }
   ]
 }
