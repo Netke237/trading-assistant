@@ -10,3 +10,5 @@ Baseline: main `3b144eed7503ef655da36c5bae3cb538fb78abec`. Implementation is not
 - Frozen source plan round 1 and separate revised-layout round 1 evidence preserved in phase registration. Current-source/diagnostics/live-context independent plan round2 /root/pb_plan_r2 clean on exact head753065bf; second pass and scope verified.
 
 Ticket RED/GREEN evidence, integrated preservation/browser/build checks and independent code-audit scope will be appended as work completes.
+
+- #259 `a35da6c7`: initial RED3 expected shell/invalidation/7.25% formatting failures; focused3 suites12 tests and full243 suites5169 tests passed, typecheck clean. Added further regressions after initial implementation recorded candidly. WeakMap snapshot follows actual stored array identity, remounts, unknown replacement arrays, applied integer truncation/Fib1.55%, scope races and prior rows on error. Durable API report generation untouched; ephemeral table ID assigned only with accepted current response.

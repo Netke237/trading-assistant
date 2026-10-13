@@ -3346,7 +3346,19 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "Plan stage2 clean (original1 plus current-source reconciliation2); separate layout revision1 unchanged. #258 complete atc6b140ff; #259 implementation starting. Code stage0; audit_clean false until integrated code audit. #150/PR224 remain open/untouched; old backlog/counters preserved."
+      "note": "Plan2 clean; original plan1 and separate layout revision1 preserved. #258/#259 complete, #260 next; code stage0 and audit_clean false. #150/PR224 open/untouched. Additive provider news URL source gap documented for approved original-link requirement; no numerical/trading plan change.",
+      "implementation_tickets": [
+        {
+          "issue": 258,
+          "commit": "c6b140ff",
+          "validation": "Coordinator-reviewed source crosswalk; typecheck and initial241/5158 baseline pass"
+        },
+        {
+          "issue": 259,
+          "commit": "a35da6c7",
+          "validation": "3 expected RED cases before implementation; focused3 suites12 tests; full243 suites5169 tests/typecheck pass; snapshot identity/request invalidation/report linkage guards"
+        }
+      ]
     }
   ],
   "already_shipped": [
