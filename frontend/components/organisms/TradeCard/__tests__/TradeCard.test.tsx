@@ -119,6 +119,63 @@ describe('TradeCard', () => {
     localStorage.clear();
   });
 
+  it('shows one initial ladder ahead of order inputs and preserves restored collapse preference', () => {
+    const { unmount } = render(<TradeCard data={mockTradeCard} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    const order = screen.getByRole('region', { name: 'Order inputs & risk budget' });
+    expect(ladder.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Edit target stock price for TP1' })).toHaveLength(1);
+    expect(within(ladder).getByText(/Scan-plan targets and stored option estimates/)).toBeInTheDocument();
+    unmount();
+    localStorage.setItem('bamendjou:tradecard-ladder-collapsed', '1');
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.queryByRole('region', { name: 'Fixed ladder targets' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it.each([
+    [5.0049, '$750.00', '$250.00'],
+    [1, '$-450.00', '$-150.00'],
+    [2.5, '$0.00', '$0.00'],
+    [0, '$-750.00', '$-250.00'],
+    [undefined, 'Unavailable', 'Unavailable'],
+  ])('keeps full-position and rung outcomes separate for option premium %s', (premium, full, rung) => {
+    const data = { ...mockTradeCard, exit: { ...mockTradeCard.exit, targets: [{
+      ...mockTradeCard.exit.targets[0], estimatedOptionPrice: premium, contractsToSell: 1,
+    }] } };
+    render(<TradeCard data={data} contracts={3} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent(full);
+    expect(within(ladder).getByText('Rung outcome (1 contracts × 100 shares)').parentElement).toHaveTextContent(rung);
+    expect(within(ladder).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
+    expect(within(ladder).getByText(/do not add alternative outcomes/)).toBeInTheDocument();
+  });
+
+  it('does not assume a rung allocation when the restored plan has none', () => {
+    const data = { ...mockTradeCard, exit: { ...mockTradeCard.exit, targets: [{
+      ...mockTradeCard.exit.targets[0], contractsToSell: undefined,
+    }] } };
+    render(<TradeCard data={data} contracts={3} />);
+    expect(screen.getByText('Rung outcome (allocation unavailable)').parentElement).toHaveTextContent('Unavailable');
+  });
+
+  it('keeps the same editable ladder state and local pricing approximation without running a model', () => {
+    const onEditsChange = jest.fn();
+    jest.clearAllMocks();
+    render(<TradeCard data={mockTradeCard} contracts={3} onEditsChange={onEditsChange} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    fireEvent.click(within(ladder).getByRole('button', { name: 'Edit target stock price for TP1' }));
+    const input = within(ladder).getByRole('spinbutton', { name: 'Edit target stock price for TP1' });
+    fireEvent.change(input, { target: { value: '201' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(within(ladder).getByText('edited')).toBeInTheDocument();
+    expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ targets: [201] }), expect.anything());
+    // Existing local formula: 2.5 + 0.5 * abs(201 - 185.2) = 10.40.
+    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent('$2370.00');
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+    expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
+  });
+
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
@@ -315,7 +372,7 @@ describe('TradeCard', () => {
       expect(screen.getAllByLabelText(label)).toHaveLength(1);
     }
     expect(screen.getByText(/No method explicitly run/)).toBeVisible();
-    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    expect(screen.getByText('Sell-to-Close Plan')).toBeVisible();
     expect(within(exit).getByText('Time exit')).toBeVisible();
   });
 
@@ -888,10 +945,10 @@ describe('TradeCard', () => {
       .toBe(0.5);
   });
 
-  it('renders the exit plan section ALWAYS VISIBLE, above the collapsed ladder group (P2-21)', () => {
+  it('keeps the exit plan ALWAYS VISIBLE beside the expanded initial ladder', () => {
     render(<TradeCard data={mockTradeCard} />);
-    // No expandLadder(): the ladder stays collapsed and the Exit Plan is on screen.
-    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    // Both initial ladder and execution exit controls are visible without expanding.
+    expect(screen.getByText('Sell-to-Close Plan')).toBeVisible();
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
@@ -2629,7 +2686,7 @@ describe('TradeCard', () => {
       render(<TradeCard data={mockTradeCard} />);
       expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
       // mockTradeCard's single target: stockPrice/targetPrice 200.02.
-      expect(screen.getByText('$200.02')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Final Recommendation' })).getByText('$200.02')).toBeInTheDocument();
       // The targets, and ONLY the targets. This branch used to carry the
       // Ladder's "Projected R/R (+8% stock move)" as well — the copy that
       // survived the readout's removal from the Ladder section itself, and the

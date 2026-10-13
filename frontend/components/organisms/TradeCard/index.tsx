@@ -2417,6 +2417,64 @@ export function TradeCard({
 
       <div className={styles.grid}>
 
+        <CollapsibleSection
+          title="Fixed % Ladder Plan"
+          storageKey="bamendjou:tradecard-ladder-collapsed"
+          className={styles.fullWidth}
+        >
+          <section aria-label="Fixed ladder targets" className={`${styles.planCard} ${styles.targetsCard}`}>
+            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+            <Text size={10} tone="dim">Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices and calculation results are shown separately below.</Text>
+            <Text size={10} tone="dim">Dollar outcomes compare each alternative exit with the editable entry limit, using displayed premiums rounded to cents. Full-position exits and rung allocations are separate; do not add alternative outcomes.</Text>
+            <Text size={10} tone="dim">R/R risk: full premium (no protective stop order).</Text>
+            {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
+            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <div className={styles.targetsTable}>
+              {data.exit.targets.map((t, i) => (
+                <EditableTargetRow
+                  key={t.id ?? i}
+                  target={t}
+                  index={i}
+                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
+                  entryLimit={overlay.entryLimit}
+                  // The R:R risk leg: overlay.entryLimit, the full premium
+                  // (Phase C RR, D5). Both legs stay on the SCAN basis -- its
+                  // reward leg is estimatedOptionPrice - entryLimit -- so a
+                  // live mid is never divided into a scan-mid reward.
+                  premiumStop={ladderRisk}
+                  // The backend's ratio only when it was computed on the same
+                  // basis at the same entry. A saved pre-RR candidate
+                  // ('premium_stop' / 'stock_stop' / absent) is recomputed,
+                  // which is exact: estimatedOptionPrice does not depend on
+                  // the risk basis.
+                  authoritativeRr={data.exit.rrRiskBasis === 'full_premium' && overlay.entryLimit === data.entry.limit ? t.rrContribution : undefined}
+                  data={data}
+                  onStockPriceChange={(v) => {
+                    const next = [...overlay.targets];
+                    next[i] = v;
+                    patch({ targets: next });
+                  }}
+                  totalContracts={overlay.contracts}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* The "Risk / Reward" readout that stood here is gone: its risk leg
+               was premium x a fixed percentage, so premium cancelled and the
+               ratio reduced to the typed target % over the typed stop % — the
+               same number on every contract. The Barrier Race card's
+               stock-stop R:R replaces it with one that actually discriminates.
+               overlay.premiumStop itself is UNTOUCHED: it is the premium-stop
+               alert level and the race's third barrier. It is no longer the
+               rrContribution risk denominator — that is the full premium
+               (Phase C RR, D5). (computeEditedRR and isDirty were named
+               here too until the Ladder-default copy of the "Projected R/R"
+               readout went as well — that readout was their only caller, so
+               both are gone. The field's remaining reasons stand on their
+               own.) */}
+        </CollapsibleSection>
+
         <section className={styles.handling} aria-label="Order inputs &amp; risk budget">
           <Text size={16} weight={600}>Order inputs &amp; risk budget</Text>
           <Text size={11} tone="secondary">
@@ -3085,62 +3143,7 @@ export function TradeCard({
           selectedTargetPct={selectedRaceTarget}
         />
 
-        <CollapsibleSection
-          title="Fixed % Ladder Plan"
-          storageKey="bamendjou:tradecard-ladder-collapsed"
-          defaultCollapsed
-          className={styles.fullWidth}
-        >
-          <section className={`${styles.planCard} ${styles.targetsCard}`}>
-            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
-            <Text size={10} tone="dim">R/R risk: full premium (no protective stop order).</Text>
-            {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
-            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
-            <div className={styles.targetsTable}>
-              {data.exit.targets.map((t, i) => (
-                <EditableTargetRow
-                  key={t.id ?? i}
-                  target={t}
-                  index={i}
-                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
-                  entryLimit={overlay.entryLimit}
-                  // The R:R risk leg: overlay.entryLimit, the full premium
-                  // (Phase C RR, D5). Both legs stay on the SCAN basis -- its
-                  // reward leg is estimatedOptionPrice - entryLimit -- so a
-                  // live mid is never divided into a scan-mid reward.
-                  premiumStop={ladderRisk}
-                  // The backend's ratio only when it was computed on the same
-                  // basis at the same entry. A saved pre-RR candidate
-                  // ('premium_stop' / 'stock_stop' / absent) is recomputed,
-                  // which is exact: estimatedOptionPrice does not depend on
-                  // the risk basis.
-                  authoritativeRr={data.exit.rrRiskBasis === 'full_premium' && overlay.entryLimit === data.entry.limit ? t.rrContribution : undefined}
-                  data={data}
-                  onStockPriceChange={(v) => {
-                    const next = [...overlay.targets];
-                    next[i] = v;
-                    patch({ targets: next });
-                  }}
-                  totalContracts={overlay.contracts}
-                />
-              ))}
-            </div>
-          </section>
 
-          {/* The "Risk / Reward" readout that stood here is gone: its risk leg
-               was premium x a fixed percentage, so premium cancelled and the
-               ratio reduced to the typed target % over the typed stop % — the
-               same number on every contract. The Barrier Race card's
-               stock-stop R:R replaces it with one that actually discriminates.
-               overlay.premiumStop itself is UNTOUCHED: it is the premium-stop
-               alert level and the race's third barrier. It is no longer the
-               rrContribution risk denominator — that is the full premium
-               (Phase C RR, D5). (computeEditedRR and isDirty were named
-               here too until the Ladder-default copy of the "Projected R/R"
-               readout went as well — that readout was their only caller, so
-               both are gone. The field's remaining reasons stand on their
-               own.) */}
-        </CollapsibleSection>
 
 
         {/* Selected method's own results, with latest-run fallback before a choice. */}
@@ -3425,6 +3428,16 @@ function EditableTargetRow({
     ? recomputeTargetEstOption(editedStockPrice, entryLimit, data)
     : (target.estimatedOptionPrice ?? 0);
 
+  // Use the same cents shown in this row, including local-edit estimates.
+  const premiumAvailable = Number.isFinite(estOptionPrice) && estOptionPrice >= 0
+    && (isTargetEdited ? data.contractDetails != null : target.estimatedOptionPrice != null);
+  const entryAvailable = Number.isFinite(entryLimit) && entryLimit > 0;
+  const rewardCents = premiumAvailable && entryAvailable
+    ? Math.round(Number(estOptionPrice.toFixed(2)) * 100) - Math.round(Number(entryLimit.toFixed(2)) * 100)
+    : null;
+  const dollarOutcome = (quantity: number) => rewardCents != null && Number.isInteger(quantity) && quantity >= 0
+    ? `$${(rewardCents * quantity).toFixed(2)}` : 'Unavailable';
+
   const rr = !isTargetEdited && authoritativeRr !== undefined ? authoritativeRr : rrContribution(estOptionPrice, entryLimit, premiumStop);
 
   const statusVal = target.status;
@@ -3484,6 +3497,8 @@ function EditableTargetRow({
           {estOptionPrice > 0 && entryLimit > 0 && premiumStop > 0 && (
             <KV label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
           )}
+          <KV label={`Full-position outcome (${totalContracts} contracts × 100 shares)`} value={dollarOutcome(totalContracts)} mono tone={rowTone} />
+          <KV label={target.contractsToSell !== undefined ? `Rung outcome (${target.contractsToSell} contracts × 100 shares)` : 'Rung outcome (allocation unavailable)'} value={target.contractsToSell !== undefined ? dollarOutcome(target.contractsToSell) : 'Unavailable'} mono tone={rowTone} />
           {target.contractsToSell !== undefined && (
             <KV label="Contracts" value={`${target.contractsToSell}`} mono />
           )}
@@ -3494,6 +3509,7 @@ function EditableTargetRow({
           </Text>
         )}
       </div>
+      <Text size={10} tone="dim">{isTargetEdited ? 'Edited target: local stock-move approximation' : 'Scan/restored plan target and stored option estimate'}</Text>
       {target.pricingMethod && (
         <span className={styles.pricingBadge}>
           <Text size={10} tone="dim">{target.pricingMethod}</Text>

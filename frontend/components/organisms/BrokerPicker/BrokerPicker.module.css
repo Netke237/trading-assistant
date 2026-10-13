@@ -1,7 +1,8 @@
 .wrap { display: flex; flex-direction: column; gap: var(--space-2); }
-.row  { display: flex; gap: var(--space-2); }
+.row  { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .btn  {
-  display: flex; align-items: center; gap: var(--space-2);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  white-space: nowrap;
   padding: 6px 14px; border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm); background: var(--bg-surface); cursor: pointer;
 }
