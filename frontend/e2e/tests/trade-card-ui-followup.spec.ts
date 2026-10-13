@@ -79,6 +79,10 @@ for (const theme of ['dark', 'light']) {
     await expect(page.getByText('Alt 2', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
     await page.screenshot({ path: test.info().outputPath(`trade-card-ui-${width}-${theme}.png`), fullPage: true });
+    await order.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath(`trade-card-order-${width}-${theme}.png`) });
+    await final.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath(`trade-card-decision-${width}-${theme}.png`) });
   });
 }
 

@@ -3002,8 +3002,8 @@
       "id": "OPTIONS-PRESENTATION-V2",
       "name": "Approved Options trade-card layout; information, numbers and execution preserved",
       "status": "built",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "depends_on": [],
       "covers": [
         "board/tracking #233",
@@ -3048,9 +3048,21 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/options_code_audit_r1",
+          "reviewed": "82d565cff9ecb928cfe2f2d4b70adba6806b9b90..6ad35664689cf46a3ca733dea8608dbdf375223e; entire integrated Options phase, all 18 changed files; production identical to 8605953b",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
-      "note": "2026-10-13 #240\u2013248 built and preserved on continuation branch. #248 60c4b073: 404 tests pass, typecheck clean. #249 integrated preservation and independent code audit underway. Original two plan rounds retained; audit_clean false until independent code gate.",
+      "note": "2026-10-13 Options #240\u2013249 built; two plan rounds retained plus one independent clean integrated code round. 40 inventory rows reconciled; frontend/typecheck/browser validated. Built and audited, not merged; exact-head CI pending.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -3096,6 +3108,10 @@
           "issue": 248,
           "commit": "60c4b073",
           "validation": "Typecheck clean; 404 tests across nine ladder/method/dialog/direct/basket/arm/context suites passed; eight new cases"
+        },
+        {
+          "issue": 249,
+          "validation": "40-row preservation crosswalk; independent phase code round1 clean; full frontend 5090/5091 initially pass, legacy ladder-collapse assertion corrected and all13 p2 tests pass; typecheck clean; four width/theme keyboard browser cases pass"
         }
       ],
       "implementation_interruption": {
@@ -3118,7 +3134,12 @@
           "record": "docs/superpowers/plans/2026-10-13-options-presentation-v2-validation.md",
           "scenario": "Original full frontend baseline has two locale grouping failures, StockSendDialog.session and BarrierRaceCard. No production formatting or unrelated tests changed to hide them."
         }
-      ]
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "Independent integrated code audit round 3 (code round 1), zero gate findings; options-presentation-v2-code-audit.md"
+      }
     }
   ],
   "already_shipped": [

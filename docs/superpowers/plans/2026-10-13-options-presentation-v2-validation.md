@@ -41,3 +41,13 @@ Remaining #248 and integrated #249 gate are pending; these commits are implement
 - #248 60c4b073: single ladder near top, source/edit provenance and separate full-position/rung dollar outcomes. Saved collapse preference retained. Broker labels fit without fragmented wrapping. 404 tests across nine relevant suites pass (eight new cases), typecheck clean. Original page handlers, context, gates, storage keys and request schemas untouched.
 
 #249 final source inventory is in options-presentation-v2-preservation.md; final integrated checks and independent audit are underway.
+
+## Final integration verification
+
+- Typecheck clean; project state check clean after built status matches the presentation marker (pre-existing STATE-PROBE unaudited warnings remain).
+- Full frontend suite: 241 suites, 240 pass; 5,090 of 5,091 tests pass. Only failure was TradeCard.p2 C1-1 clicking the freshly expanded ladder closed before checking 0.5x. The test now opens only when collapsed, retaining all original R:R numeric assertions; its complete 13-test suite passes. No production numeric fix was needed.
+- Final browser run: all four 1200px/1920px × dark/light scenarios pass. Keyboard disclosure/method/row selection, saved evidence DOM state, field alignment and no page overflow verified. Order/decision screenshots inspected in both themes. Browser responses are mocked; no broker orders.
+- Initial light-theme test seed incorrectly used a raw string; corrected to existing Zustand version0/state.theme persistence object, with no production theme change.
+- Independent integrated code audit: one code round, zero gate findings, original two plan rounds preserved. Exact source range and reviewer are recorded in options-presentation-v2-code-audit.md. Later local deltas change only conditional test opening and screenshot capture; production source remains the independently reviewed version.
+
+All implementation/verification tickets are complete, pending exact-head GitHub CI and merge. This is built/audited code, not a shipped phase.
