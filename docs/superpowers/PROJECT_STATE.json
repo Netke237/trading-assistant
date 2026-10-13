@@ -3002,7 +3002,7 @@
       "id": "OPTIONS-PRESENTATION-V2",
       "name": "Approved Options trade-card layout; information, numbers and execution preserved",
       "status": "built",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": true,
       "depends_on": [],
       "covers": [
@@ -3060,9 +3060,22 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "/root/options_buildfix_audit_r2",
+          "reviewed": "6ad35664..439cf801 plus sole JSX apostrophe escape at TradeCard:2659; corrected source SHA256 f5815e6e3fb97c39d4e5a58fb457ee93ee2cf2b2c1c5139aaabef26cfe911c5c",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "reason": "Required CI passed all5091 frontend tests but build found one unescaped JSX apostrophe from recovered #242; required build correction independently rechecked"
         }
       ],
-      "note": "2026-10-13 Options #240\u2013249 built; two plan rounds retained plus one independent clean integrated code round. 40 inventory rows reconciled; frontend/typecheck/browser validated. Built and audited, not merged; exact-head CI pending.",
+      "note": "2026-10-13 #240\u2013249 built/audited. Original plan2 retained; full code1 clean and syntax-only required CI build correction independently clean code2. GitHub all5091 frontend tests passed before build correction; corrected local production build/typecheck pass. Final exact-head CI required before merge; not shipped.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -3136,9 +3149,9 @@
         }
       ],
       "code_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
-        "closed_by": "Independent integrated code audit round 3 (code round 1), zero gate findings; options-presentation-v2-code-audit.md"
+        "closed_by": "Independent follow-up round4 (code2) verified required JSX build correction; zero gate findings, original full code round1 remains clean"
       }
     }
   ],

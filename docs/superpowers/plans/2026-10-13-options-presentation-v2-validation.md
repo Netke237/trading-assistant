@@ -51,3 +51,7 @@ Remaining #248 and integrated #249 gate are pending; these commits are implement
 - Independent integrated code audit: one code round, zero gate findings, original two plan rounds preserved. Exact source range and reviewer are recorded in options-presentation-v2-code-audit.md. Later local deltas change only conditional test opening and screenshot capture; production source remains the independently reviewed version.
 
 All implementation/verification tickets are complete, pending exact-head GitHub CI and merge. This is built/audited code, not a shipped phase.
+
+## GitHub CI build correction
+
+At PR head439cf801, GitHub frontend passed all241 suites /5,091 tests. Next build then rejected one unescaped apostrophe in a recovered #242 JSX label. Replaced it with &apos;, leaving rendered text and numbers identical. Local production build and typecheck pass. Fresh independent follow-up code round2 reviewed only the post-review deltas and this syntax correction, zero gate findings. Final CI reruns on the corrected source.
