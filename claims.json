@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/options-presentation-v2-892b8ac5",
-      "claimed_at": "2026-10-13T04:06:03Z",
-      "expires_at": "2026-10-13T08:11:26Z",
-      "note": "Implement approved Options UI tickets #240-249",
-      "task": "OPTIONS-PRESENTATION-V2"
-    },
-    {
-      "agent": "claude",
       "branch": "board/broker-path-residuals-4e66cb72",
       "claimed_at": "2026-10-13T04:14:38Z",
       "expires_at": "2026-10-13T08:01:17Z",
