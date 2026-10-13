@@ -28,3 +28,12 @@ Pending integration cross-reference: #243 relocates the stop-cost readout into S
 Two existing mocked desktop regressions passed at 1200px and 1920px against the isolated checkout on port 3002. Covered fresh collapsed scores, keyboard opening, preserved evidence DOM state, readable order/exit values, budget action, alternatives and no page horizontal overflow. Screenshots were inspected at the tested internal scroll position; final whole-page method/results and both-theme inspection remains pending after remaining tickets.
 
 The default Playwright headless-shell executable was absent; the same tests passed using installed Chrome via a temporary external configuration. No production config or application behavior changed, and no broker orders were placed. This checkpoint covers application source through `eec49c3c`; it is not final integration validation or an independent code audit.
+
+## Resumed implementation, 13 October 2026
+
+User explicitly approved transfer from the interrupted saved branch to board/options-presentation-resume-20261013. Recovered source tip b7764d16 matches the screenshot through #245. Originating chat and unpushed remote-machine edits were unavailable. Current main's durable saved reports merged at 6f67921f; only project-state bookkeeping conflicted and both phase records were preserved.
+
+- #246 a481515a: returned race reward × entered quantity × 100, signed/zero/unavailable and formatter basis preserved; Structure & Stops cross-reference corrected. 140 focused tests pass; typecheck clean.
+- #247 675b79c2: chooser follows method evidence; explicit decision snapshot and execution fields, stock/premium distinctions, exact-one-matched-row evidence and fractional race median. Sixteen-suite downstream run passed all unaffected suites; three presentation assertions corrected. Corrected TradeCard/method tests: 205 pass; final method suite 41 pass with eight summary regressions. Typecheck clean.
+
+Remaining #248 and integrated #249 gate are pending; these commits are implementation evidence, not a clean code audit.

@@ -3050,7 +3050,7 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 resumed with explicit takeover approval; #246 committed a481515a, 140 focused tests and typecheck pass. Next #247. Main saved-report phase merged without source conflicts. Independent Options code audit pending.",
+      "note": "2026-10-13 #246 and #247 resumed and committed. #247 preserves snapshot mappings with unambiguous matched evidence, chooser follows methods. Next #248, then #249 preservation/code audit. Code audit not started; audit_clean false.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -3086,6 +3086,11 @@
           "issue": 246,
           "commit": "a481515a",
           "validation": "140 focused tests passed; typecheck clean; returned reward quantity outcomes and existing guards preserved"
+        },
+        {
+          "issue": 247,
+          "commit": "675b79c2",
+          "validation": "Typecheck clean; downstream suites passed; corrected TradeCard/method tests 205 passed; final method suite 41 passed including eight new summary cases"
         }
       ],
       "implementation_interruption": {
