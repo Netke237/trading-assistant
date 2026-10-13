@@ -2,11 +2,18 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { InitialStrategyTargets } from '@/components/organisms/StockPositionCard/InitialStrategyTargets';
 import { useScanStore } from '@/lib/scanStore';
-import { stockExecutionIdentity, STOCK_VALIDATION_UNAVAILABLE, useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
+import { defaultStockOverlay, stockExecutionIdentity, STOCK_VALIDATION_UNAVAILABLE, useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
 import type { StockExitPlan, PositionCardData, StockScanResult } from '@/types/stockDomain';
+
+// CSS modules are empty in Jest; retain the real primitive and expose its tone for assertions.
+jest.mock('@/components/primitives/Data', () => {
+  const actual = jest.requireActual('@/components/primitives/Data');
+  const React = jest.requireActual('react');
+  return { ...actual, Data: (props: { tone?: string }) => React.cloneElement(actual.Data(props), { 'data-tone': props.tone }) };
+});
 
 jest.mock('@/lib/api', () => ({ api: {
   getBrokerStatus: jest.fn().mockResolvedValue({}), getStockQuote: jest.fn(),
@@ -261,4 +268,155 @@ it('keeps direction-aware negative outcomes and source observations without inve
   fireEvent.click(within(initial).getByText('Strategy observations'));
   expect(within(initial).getByText('observations: 0')).toBeInTheDocument();
   expect(within(initial).getByText('measured: false')).toBeInTheDocument();
+});
+
+
+it.each(['Bullish', 'Bearish'] as const)('uses current %s execution inputs for reactive value and risk', async direction => {
+  const c = card('AAPL', direction);
+  if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, targets: [140, 135, 130] };
+  c.dollar_risk = 999; c.dollar_size = 99999;
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$4500.00');
+  expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$150.00');
+  await edit('ENTRY', '151.234');
+  await edit('STOP', direction === 'Bullish' ? '146.23' : '156.23');
+  await edit('SHARES', '12.6');
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$1965.99');
+  expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$65.00');
+  expect(risk).toHaveTextContent('Entered 13 shares');
+  expect(screen.getByText('Edit T1 / T2 / T3 and share allocations')).toBeInTheDocument();
+  await edit('T1 TARGET', direction === 'Bullish' ? '163' : '138');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$65.00');
+});
+
+it.each([
+  ['Bullish', '151'], ['Bullish', '150'], ['Bearish', '149'], ['Bearish', '150'],
+] as const)('marks %s stop %s invalid instead of displaying absolute-distance risk', async (direction, stop) => {
+  const c = card('AAPL', direction);
+  if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155 };
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  await edit('STOP', stop);
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getAllByText('Unavailable')).toHaveLength(2);
+  expect(risk).toHaveTextContent('Execution stop invalid');
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$4500.00');
+  expect(screen.getByRole('button', { name: 'Add to Portfolio' })).toBeDisabled();
+});
+
+it('preserves zero entered quantity and missing stop rather than borrowing scan risk', () => {
+  const c = { ...card(), shares: 0, strategy: { ...card().strategy, stop_price: 0 } };
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$0.00');
+  expect(within(risk).getAllByText('Unavailable')).toHaveLength(2);
+  expect(risk).toHaveTextContent('Execution stop invalid');
+});
+
+it.each(['Bullish', 'Bearish'] as const)('keeps the %s execution R:R tone consistent with a losing target', async direction => {
+  const c = card('AAPL', direction);
+  if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, targets: [140, 135, 130] };
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  await edit('T1 TARGET', direction === 'Bullish' ? '140' : '160');
+  const row = screen.getByText('T1 TARGET').closest('div')!.parentElement!;
+  expect(within(row).getByText('-2.0×')).toHaveAttribute('data-tone', 'reject');
+});
+
+it('shows unavailable R:R when cent-rounded stop has no positive risk distance', () => {
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  act(() => {
+    const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
+    useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, stop: 149.999 } });
+  });
+  const row = screen.getByText('T1 TARGET').closest('div')!.parentElement!;
+  expect(within(row).getByText('Unavailable')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Execution risk' })).getAllByText('Unavailable')).toHaveLength(2);
+});
+
+it.each([NaN, Infinity, -1])('does not display nonfinite or negative entered quantity %s as money', quantity => {
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  act(() => {
+    const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
+    useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, shares: quantity } });
+  });
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('Unavailable');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('Unavailable');
+  expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
+});
+
+it('keeps quantity/allocation edits independent and clears only matching calculation dependencies', async () => {
+  (api.getStockExitPlan as jest.Mock).mockResolvedValue(makePlan());
+  (api.getStructuralStop as jest.Mock).mockResolvedValue({ available: true, price: 146, source: 'swing_low' });
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(screen.getByRole('button', { name: 'Check structure' }));
+  await screen.findByText('swing_low');
+  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  const record = () => useScanStore.getState().stockExecution[identity];
+  const initial = { estimate: record().estimate, plan: record().plan, structural: record().structural };
+  expect(initial.estimate).toBeTruthy(); expect(initial.plan).toBeTruthy(); expect(initial.structural).toBeTruthy();
+  await edit('SHARES', '60');
+  await edit('T1 SHARES', '10');
+  expect(record()).toMatchObject(initial);
+  expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeChecked();
+  expect(within(screen.getByRole('region', { name: 'Execution risk' })).getByText('Execution risk / position').parentElement).toHaveTextContent('$300.00');
+  await edit('T1 TARGET', '161');
+  expect(record().estimate).toBeNull();
+  expect(record().plan).toEqual(initial.plan); expect(record().structural).toEqual(initial.structural);
+  expect(screen.getByRole('radio', { name: 'Monte Carlo' })).not.toBeChecked();
+  await edit('STOP', '143');
+  expect(record().plan).toEqual(initial.plan); expect(record().structural).toEqual(initial.structural);
+  await edit('ENTRY', '151');
+  expect(record().plan).toBeNull(); expect(record().structural).toBeNull();
+});
+
+it.each(['symbol', 'run'] as const)('rejects pending calculation after %s identity changes in position presentation', async change => {
+  const pending = deferred<typeof estimate>();
+  (api.getStockFirstPassage as jest.Mock).mockReturnValue(pending.promise);
+  useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')]));
+  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  if (change === 'symbol') view.rerender(<StockPositionCard card={card('MSFT')} strategyKey="pullback_ema" presentation="position" />);
+  else act(() => useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')])));
+  await act(async () => pending.resolve(estimate));
+  expect(screen.queryByText('Latest: Monte Carlo')).not.toBeInTheDocument();
+  expect(screen.queryByText('T1 160.00 · 62% · ~4d')).not.toBeInTheDocument();
+  expect(screen.getByText('Calculation chronology unavailable')).toBeInTheDocument();
+});
+
+
+it.each([
+  ['entry', NaN], ['entry', Infinity], ['entry', 0], ['entry', -1],
+  ['stop', NaN], ['stop', Infinity], ['stop', 0], ['stop', -1],
+] as const)('shows unavailable execution risk for invalid %s %s', (field, value) => {
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  act(() => {
+    const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
+    useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, [field]: value } });
+  });
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('Unavailable');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('Unavailable');
+  expect(risk).toHaveTextContent('Execution stop invalid');
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent(field === 'entry' ? 'Unavailable' : '$4500.00');
+  const row = screen.getByText('T1 TARGET').closest('div')!.parentElement!;
+  expect(within(row).getAllByText('Unavailable').length).toBeGreaterThan(0);
+});
+
+it('shows zero position risk for zero entered shares with a valid stop', () => {
+  render(<StockPositionCard card={{ ...card(), shares: 0 }} strategyKey="pullback_ema" presentation="position" />);
+  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$0.00');
+  expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
+  expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$0.00');
 });

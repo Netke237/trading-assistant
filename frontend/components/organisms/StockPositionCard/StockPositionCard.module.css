@@ -157,3 +157,8 @@
 .raceNeither::-moz-meter-bar { background: var(--text-dim); }
 .workspace .planRace .planRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .workspace .planRace .planRow > :first-child { grid-column: 1 / -1; }
+
+.executionRisk { display: flex; flex-direction: column; gap: var(--space-2); }
+.riskGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.riskGrid > div { display: flex; flex-direction: column; gap: var(--space-2); }
+.exitEditors summary { font-size: 12px; cursor: pointer; margin-bottom: var(--space-3); }

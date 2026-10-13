@@ -10,7 +10,7 @@ import type { MethodPick, PickedMethod } from '@/types/domain';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs, stockPositionLevels } from '@/lib/paperTrade';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
@@ -41,7 +41,7 @@ function PositionDisclosure({ active, children }: { active: boolean; children: R
   return active ? <details className={styles.autoTrade}><summary>Auto-trade execution</summary>{children}</details> : <>{children}</>;
 }
 
-function PositionGroup({ active, tag = 'div', children, ...props }: { active: boolean; tag?: 'div' | 'section' | 'aside'; children: ReactNode; className?: string; id?: string }) {
+function PositionGroup({ active, tag = 'div', children, ...props }: { active: boolean; tag?: 'div' | 'section' | 'aside' | 'details'; children: ReactNode; className?: string; id?: string }) {
   if (!active) return <>{children}</>;
   const Tag = tag;
   return <Tag {...props}>{children}</Tag>;
@@ -264,6 +264,23 @@ export function StockPositionCard({
   const sizeDollars  = overlay.shares * overlay.entry;
   const rrAt = (t: number) =>
     riskPerShare > 0 ? Math.abs(t - overlay.entry) / riskPerShare : 0;
+
+  // Match the stop basis accepted by the existing position builder, including
+  // its direction check and cent rounding. Invalid stops have no valid displayed
+  // risk basis; a trade with an invalid stop must not be described as riskless.
+  const roundedExecutionStop = stockPositionLevels(overlay.entry, card.direction as Direction, overlay.stop).stop;
+  const stopDistance = roundedExecutionStop == null ? null : (card.direction === 'Bullish'
+    ? overlay.entry - roundedExecutionStop : roundedExecutionStop - overlay.entry);
+  const executionStop = roundedExecutionStop != null && roundedExecutionStop > 0
+    && stopDistance != null && Number.isFinite(stopDistance) && stopDistance > 0 ? roundedExecutionStop : null;
+  const executionRiskPerShare = executionStop == null ? null : stopDistance;
+  const enteredSharesValid = Number.isFinite(overlay.shares) && overlay.shares >= 0;
+  const positionValue = Number.isFinite(overlay.entry) && overlay.entry > 0 && enteredSharesValid
+    ? overlay.entry * overlay.shares : null;
+  const executionRiskDollars = executionRiskPerShare != null && enteredSharesValid
+    ? executionRiskPerShare * overlay.shares : null;
+  const executionMoney = (value: number | null) => value != null && Number.isFinite(value)
+    ? `$${value.toFixed(2)}` : 'Unavailable';
 
   // Store selectors
   // Display label like "Swing (5–15d)"; _horizonEnum maps it to the backend enum.
@@ -868,15 +885,29 @@ export function StockPositionCard({
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
         <EditableField label="STOP"     value={overlay.stop}  onChange={(v) => patch({ stop: v })}  tone="reject" />
-        <EditableField label="T1 TARGET" value={overlay.t1}  onChange={(v) => patch({ t1: v })}    tone="pass" />
+        {position ? <EditableField label="SHARES" value={overlay.shares}
+          onChange={(v) => patch({ shares: Math.max(1, Math.round(v)) })} integer />
+          : <EditableField label="T1 TARGET" value={overlay.t1} onChange={(v) => patch({ t1: v })} tone="pass" />}
         <div className={styles.editCell}>
-          <Text size={10} tone="dim">R:R AT T1</Text>
-          <Data size={14} weight={500}>{rrT1.toFixed(1)}×</Data>
+          {position ? <><Text size={10} tone="dim">WIN %</Text>
+            <Data size={14} weight={500} tone={winTone} title={winRateTooltip(card.backtest.win_rate, 0.5)}>
+              {(card.backtest.win_rate * 100).toFixed(0)}%
+            </Data></> : <><Text size={10} tone="dim">R:R AT T1</Text>
+            <Data size={14} weight={500}>{rrT1.toFixed(1)}×</Data></>}
         </div>
       </div>
 
-      {/* Section 1 — Sizing grid, Row 2 */}
-      <div className={styles.grid4}>
+      {position && <section aria-label="Execution risk" className={styles.executionRisk}>
+        <div className={styles.riskGrid}>
+          <div><Text size={11} tone="dim">Position value</Text><Data size={14}>{executionMoney(positionValue)}</Data></div>
+          <div><Text size={11} tone="dim">Execution risk / share</Text><Data size={14} tone="reject">{executionMoney(executionRiskPerShare)}</Data></div>
+          <div><Text size={11} tone="dim">Execution risk / position</Text><Data size={14} tone="reject">{executionMoney(executionRiskDollars)}</Data></div>
+        </div>
+        <Text size={11} tone="secondary">Entered {overlay.shares} shares · current {card.direction.toLowerCase()} entry and execution stop · before costs</Text>
+        {executionStop == null && <Text size={12} tone="reject">Execution stop invalid — use a positive stop {card.direction === 'Bullish' ? 'below' : 'above'} the entered entry.</Text>}
+      </section>}
+      {/* Section 1 — Sizing grid, Row 2 (embedded presentation) */}
+      {!position && <div className={styles.grid4}>
         <EditableField
           label="SHARES"
           value={overlay.shares}
@@ -897,9 +928,11 @@ export function StockPositionCard({
             {(card.backtest.win_rate * 100).toFixed(0)}%
           </Data>
         </div>
-      </div>
+      </div>}
 
       {/* Section 2 — Sell-to-Close plan (T1 / T2 / T3) */}
+      <PositionGroup active={position} tag="details" className={styles.exitEditors}>
+      {position && <summary>Edit T1 / T2 / T3 and share allocations</summary>}
       <div className={styles.targetsSection}>
         <div className={styles.targetsHeading}>
           <Text size={11} tone="dim">SELL-TO-CLOSE PLAN</Text>
@@ -936,6 +969,12 @@ export function StockPositionCard({
                 ? (price - overlay.entry) / overlay.entry
                 : (overlay.entry - price) / overlay.entry) * 100
             : 0;
+          const targetInputValid = Number.isFinite(price) && price > 0
+            && Number.isFinite(overlay.entry) && overlay.entry > 0;
+          const executionRR = executionRiskPerShare != null && targetInputValid
+            ? (card.direction === 'Bullish' ? price - overlay.entry : overlay.entry - price) / executionRiskPerShare : null;
+          const displayedRR = position ? executionRR : rr;
+          const rrAvailable = !position || (displayedRR != null && Number.isFinite(displayedRR));
           const retPct = profitPct.toFixed(1);
           return (
             <div key={id} className={styles.targetRow}>
@@ -943,15 +982,15 @@ export function StockPositionCard({
                 <Text size={12} weight={500}>{id}</Text>
               </div>
               <div className={styles.targetValues}>
-                <EditableField label="" value={price} onChange={onPrice} />
-                <Data size={12} tone={rr >= 1.5 ? 'pass' : rr >= 1 ? 'caution' : 'reject'}>
-                  {rr.toFixed(1)}×
+                <EditableField label={position ? `${id} TARGET` : ''} value={price} onChange={onPrice} />
+                <Data size={12} tone={!rrAvailable ? 'dim' : displayedRR! >= 1.5 ? 'pass' : displayedRR! >= 1 ? 'caution' : 'reject'}>
+                  {rrAvailable ? `${displayedRR!.toFixed(1)}×` : 'Unavailable'}
                 </Data>
-                <Data size={12} tone={profitPct > 0 ? 'pass' : 'reject'}>
-                  {retPct}%
+                <Data size={12} tone={position && !targetInputValid ? 'dim' : profitPct > 0 ? 'pass' : 'reject'}>
+                  {position && !targetInputValid ? 'Unavailable' : `${retPct}%`}
                 </Data>
                 <EditableField
-                  label=""
+                  label={position ? `${id} SHARES` : ''}
                   value={sh}
                   onChange={(v) => onShares(Math.max(0, Math.round(v)))}
                   integer
@@ -962,6 +1001,7 @@ export function StockPositionCard({
         })}
       </div>
 
+      </PositionGroup>
       {position && err?.includes('wrong side of entry') && <Text size={12} tone="reject">{err}</Text>}
       {position && <div className={styles.targetsSection}><h3>Structural stop</h3>          <button
             type="button"
