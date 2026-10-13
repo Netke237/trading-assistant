@@ -483,7 +483,7 @@
 
 .handlingGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: var(--space-4);
 }
 
@@ -658,4 +658,23 @@
 .headerCard .detailsCell {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* Budget and quantity stay beside the existing execution fields. */
+.budgetSummary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.handlingGrid .targetPctRow {
+  flex-wrap: wrap;
+}
+
+.handlingGrid .targetPctRow .editInput {
+  flex: 1 1 100px;
+  width: auto;
+  min-width: 0;
 }

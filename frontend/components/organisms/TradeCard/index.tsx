@@ -2374,8 +2374,8 @@ export function TradeCard({
 
       <div className={styles.grid}>
 
-        <div className={styles.handling}>
-          <Text size={16} weight={600}>Order &amp; exit settings</Text>
+        <section className={styles.handling} aria-label="Order inputs &amp; risk budget">
+          <Text size={16} weight={600}>Order inputs &amp; risk budget</Text>
           <Text size={11} tone="secondary">
             Execution fields are separate from calculated and simulated results.
             Premium stop is a loss amount per share; a simulated option stop is an exit-price threshold.
@@ -2515,8 +2515,85 @@ export function TradeCard({
               </Text>
             </section>
 
+            <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Max loss budget">
+              {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
+                   (and therefore Risk-derived size / Apply below) immediately.
+                   `key` is tied to the candidate identity so the editor fully
+                   remounts (clearing its own local editing/draftMode/draftValue
+                   state) on every candidate switch — TradeCard itself is never
+                   remounted on Prev/Next (no key at ITS call site), and the
+                   existing contract-switch effect only resets the RESOLVED
+                   `maxLossOverride` value, not this child's in-progress draft.
+                   Without this, opening the editor on symbol A, typing a value,
+                   and hitting Next before clicking Apply would leave that draft
+                   sitting in the (still-mounted) editor instance; if the user
+                   then clicked Apply while looking at symbol B, A's typed value
+                   would silently become B's override. Remounting via key is
+                   simpler and more robust here than lifting the draft state up
+                   (nothing else needs it) or wiring a reset callback/ref through
+                   TradeCard's own contract-switch effect. */}
+              <Text size={14} weight={600}>Trade loss budget &amp; sizing</Text>
+              <MaxLossOverrideEditor
+                key={`${data.symbol}|${data.contract}`}
+                override={maxLossOverride}
+                limitDollar={maxLossLimitDollar}
+                onApply={applyMaxLossOverride}
+              />
+              <div className={styles.budgetSummary}>
+                <KV label="Entered quantity" value={`${overlay.contracts} contract${overlay.contracts === 1 ? '' : 's'}`} mono />
+                <KV
+                  label={data.spreadType && data.spreadType !== 'single' ? 'Selected-contract premium exposure' : 'Full-premium exposure'}
+                  value={data.contractDetails && Number.isFinite(data.contractDetails.mid) ? `$${car.toFixed(0)}` : '—'}
+                  mono
+                />
+                <Text size={10} tone="dim">Scan mid × entered contracts × 100; this snapshot exposure does not use the editable limit or live quote.</Text>
+                {data.spreadType && data.spreadType !== 'single' ? (
+                  <>
+                    <Text size={10} tone="dim">Whole-spread debit/credit and max loss remain in Spread details above. Recommended size retains the selected-contract Arithmetic basis; it is not whole-spread sizing.</Text>
+                    <Text size={10} tone="dim">Arithmetic stop-loss estimate unavailable for spreads; the selected-contract estimate is not whole-spread risk.</Text>
+                  </>
+                ) : exitPlan && data.contractDetails && Number.isFinite(data.contractDetails.mid) && Number.isFinite(exitPlan.stop.contractPrice) ? (
+                  <>
+                    <KV label="Arithmetic stop-loss estimate" value={`$${maxLossAtStop(data.contractDetails.mid, exitPlan.stop.contractPrice, overlay.contracts).toFixed(2)}`} mono />
+                    <Text size={10} tone="dim">For entered quantity, using scan mid and the returned Arithmetic contract value at its calculation stop. Same basis as recommended size; separate from execution stops, today's stop-cost check and race median-day loss.</Text>
+                  </>
+                ) : (
+                  <Text size={10} tone="dim">Arithmetic stop-loss estimate unavailable — compute an Arithmetic plan with a selected contract.</Text>
+                )}
+                <Text size={10} tone="dim">The loss budget affects recommended size, not target probability. Apply size explicitly; estimated stop loss does not bound full-premium risk.</Text>
+              </div>
+              {recommendedSize && (
+                <div className={styles.structuralStop}>
+                  <Text size={10} tone="dim">
+                    Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
+                    ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
+                  </Text>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    // recommendedContractSize() only returns null when riskBudget<=0 —
+                    // whenever 0 < riskBudget/riskPerContract < 1 (a modest override, or
+                    // just a portfolio-default budget smaller than one contract's risk on
+                    // an expensive/wide-stop name), `recommended` is legitimately 0. The
+                    // shared per-symbol Contracts map (Feature 7) is read with `?? 1` at
+                    // its two order-placement sites, which does NOT catch 0 (only null/
+                    // undefined) — writing 0 here would silently corrupt the shared field
+                    // and the backend would then reject quantity:0 with an opaque 422 that
+                    // gives the user no clue Apply is what broke it. Clamped at the write
+                    // site AND disabled below for defense in depth: disabling communicates
+                    // the actual budget constraint instead of silently flooring to 1, which
+                    // could otherwise mislead the user about position size.
+                    onClick={() => patch({ contracts: Math.max(1, recommendedSize.recommended) })}
+                    disabled={recommendedSize.recommended < 1}
+                    aria-label="Apply recommended contract size"
+                  >
+                    <Text size={12} weight={500}>Apply</Text>
+                  </button>
+                </div>
+              )}
+            </section>
           </div>
-        </div>
+        </section>
         {/* Selected method's own results, with latest-run fallback before a choice. */}
         <section aria-label="Final Recommendation" className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
           <div className={styles.scoreCardHeader}>
@@ -2670,32 +2747,6 @@ export function TradeCard({
               </>
             )}
           </div>
-        </section>
-
-        <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Max loss budget">
-          {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
-               (and therefore Risk-derived size / Apply below) immediately.
-               `key` is tied to the candidate identity so the editor fully
-               remounts (clearing its own local editing/draftMode/draftValue
-               state) on every candidate switch — TradeCard itself is never
-               remounted on Prev/Next (no key at ITS call site), and the
-               existing contract-switch effect only resets the RESOLVED
-               `maxLossOverride` value, not this child's in-progress draft.
-               Without this, opening the editor on symbol A, typing a value,
-               and hitting Next before clicking Apply would leave that draft
-               sitting in the (still-mounted) editor instance; if the user
-               then clicked Apply while looking at symbol B, A's typed value
-               would silently become B's override. Remounting via key is
-               simpler and more robust here than lifting the draft state up
-               (nothing else needs it) or wiring a reset callback/ref through
-               TradeCard's own contract-switch effect. */}
-          <MaxLossOverrideEditor
-            key={`${data.symbol}|${data.contract}`}
-            override={maxLossOverride}
-            limitDollar={maxLossLimitDollar}
-            onApply={applyMaxLossOverride}
-          />
-
         </section>
 
         <div className={styles.methodGrid}>
@@ -2927,35 +2978,7 @@ export function TradeCard({
                       />
                     </div>
                     <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
-                    {recommendedSize && (
-                      <div className={styles.structuralStop}>
-                        <Text size={10} tone="dim">
-                          Risk-derived size: {recommendedSize.recommended} contract{recommendedSize.recommended === 1 ? '' : 's'}{' '}
-                          ({formatRecommendedContractSizeRaw(recommendedSize)} exact)
-                        </Text>
-                        <button
-                          type="button"
-                          className={styles.btn}
-                          // recommendedContractSize() only returns null when riskBudget<=0 —
-                          // whenever 0 < riskBudget/riskPerContract < 1 (a modest override, or
-                          // just a portfolio-default budget smaller than one contract's risk on
-                          // an expensive/wide-stop name), `recommended` is legitimately 0. The
-                          // shared per-symbol Contracts map (Feature 7) is read with `?? 1` at
-                          // its two order-placement sites, which does NOT catch 0 (only null/
-                          // undefined) — writing 0 here would silently corrupt the shared field
-                          // and the backend would then reject quantity:0 with an opaque 422 that
-                          // gives the user no clue Apply is what broke it. Clamped at the write
-                          // site AND disabled below for defense in depth: disabling communicates
-                          // the actual budget constraint instead of silently flooring to 1, which
-                          // could otherwise mislead the user about position size.
-                          onClick={() => patch({ contracts: Math.max(1, recommendedSize.recommended) })}
-                          disabled={recommendedSize.recommended < 1}
-                          aria-label="Apply recommended contract size"
-                        >
-                          <Text size={12} weight={500}>Apply</Text>
-                        </button>
-                      </div>
-                    )}
+
                   </div>
                 </div>
                 {exitPlan.targets.map((t) => {
@@ -3858,7 +3881,7 @@ function DetailCell({ label, value, mono }: { label: string; value: string; mono
   );
 }
 
-/** Feature 5 — pre-trade max-loss override editor on the Arithmetic card.
+/** Feature 5 — pre-trade max-loss override editor in the order inputs.
  *  Mirrors the shape of the Portfolio EditDrawer's post-trade MaxLossBanner
  *  override UI (mode toggle + input + Apply), but usable before a position
  *  exists — and deliberately without a free-text "Reason" field (explicitly
