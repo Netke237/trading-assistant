@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
+import { BrokerAttemptPanel } from '@/components/organisms/BrokerAttemptPanel';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -179,6 +180,8 @@ export default function PortfolioPage() {
         <Title as="h1" size={24}>Portfolio</Title>
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
+
+      <BrokerAttemptPanel />
 
       {lastSyncError && (
         <div role="alert" className={styles.syncErrorBanner}>

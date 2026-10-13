@@ -61,6 +61,10 @@ class BrokerAttemptStorageError(BrokerAttemptError):
     """Missing or uncommitted storage. No dispatch authorization."""
 
 
+class BrokerAttemptNotFound(BrokerAttemptError):
+    status_code = 404
+
+
 @dataclass(frozen=True)
 class ClaimResult:
     attempt_id: str
@@ -198,6 +202,88 @@ def _check_saved_rec_id(saved_rec_id):
     if not isinstance(saved_rec_id, str) or not saved_rec_id or saved_rec_id.strip() != saved_rec_id or len(saved_rec_id) > 128:
         raise BrokerAttemptRejected("saved row reference is inconsistent")
     return saved_rec_id
+
+
+_ACCEPTED_STATUS = frozenset({
+    "accepted", "presubmitted", "submitted", "pending", "pendingsubmit", "pendingnew", "new",
+})
+_VERIFY_STATE = {
+    "definitely-not-submitted": "proven-not-submitted",
+    "submitted": "submitted",
+    "filled": "filled",
+    "canceled-after-submission": "submitted",
+    "partial": "submitted",
+}
+DEFERRED_COVERAGE_NOTE = (
+    "Precise quantity release is deferred. This order keeps its exposure coverage."
+)
+
+
+def _status_token(value) -> str:
+    return str(value or "").strip().lower().replace("orderstatus.", "").replace(" ", "").replace("_", "")
+
+
+def outcome_label(state: str, broker_status, verification_outcome: str | None = None) -> str:
+    """Accepted broker evidence is submitted. It is never displayed as filled."""
+    status = _status_token(broker_status)
+    if status in _ACCEPTED_STATUS:
+        return "submitted"
+    if verification_outcome == "partial":
+        return "partial"
+    if verification_outcome == "canceled-after-submission":
+        return "canceled after submission"
+    if verification_outcome == "definitely-not-submitted" or state == "proven-not-submitted":
+        return "not submitted"
+    if verification_outcome == "filled" or state == "filled" or status in {"filled", "fill"}:
+        return "filled"
+    if verification_outcome == "submitted" or state == "submitted":
+        return "submitted"
+    if state == "outcome-unknown":
+        return "outcome unknown"
+    if state in {"preparing", "dispatching"}:
+        return "unverified"
+    return state or "unverified"
+
+
+def coverage_note(verification_outcome: str | None) -> str | None:
+    if verification_outcome in {"partial", "canceled-after-submission"}:
+        return DEFERRED_COVERAGE_NOTE
+    return None
+
+
+@dataclass(frozen=True)
+class AttemptView:
+    attempt_id: str
+    state: str
+    payload_canonical: str
+    fingerprint: str
+    verification_version: int
+    broker_order_id: str | None
+    broker_status: str | None
+    broker_response: str | None
+    saved_rec_id: str | None
+    verification_outcome: str | None
+    verification_note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def _view(row: BrokerAttempt) -> AttemptView:
+    return AttemptView(
+        attempt_id=row.id,
+        state=row.state,
+        payload_canonical=row.payload_canonical,
+        fingerprint=row.payload_fingerprint,
+        verification_version=row.verification_version,
+        broker_order_id=row.broker_order_id,
+        broker_status=row.broker_status,
+        broker_response=row.broker_response,
+        saved_rec_id=row.saved_rec_id,
+        verification_outcome=row.verification_outcome,
+        verification_note=row.verification_note,
+        created_at=_as_utc(row.created_at),
+        updated_at=_as_utc(row.updated_at),
+    )
 
 
 def _from_row(row: BrokerAttempt, *, leader: bool, authorized: bool) -> ClaimResult:
@@ -433,6 +519,90 @@ class BrokerAttemptService:
                         raise BrokerAttemptStorageError("attempt is not stored")
                     return _from_row(current, leader=False, authorized=False)
         except (BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
+            raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def list_unresolved(self) -> list[AttemptView]:
+        try:
+            async with self.sessions() as db:
+                async with db.begin():
+                    await self._lock(db)
+                    rows = (await db.execute(
+                        select(BrokerAttempt)
+                        .where(BrokerAttempt.state.in_(tuple(UNRESOLVED_STATES)))
+                        .order_by(BrokerAttempt.created_at, BrokerAttempt.id)
+                    )).scalars().all()
+                    return [_view(row) for row in rows]
+        except (BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
+            raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def get_attempt(self, attempt_id: str) -> AttemptView:
+        attempt_id = _check_attempt_id(attempt_id)
+        try:
+            async with self.sessions() as db:
+                async with db.begin():
+                    await self._lock(db)
+                    current = await db.get(BrokerAttempt, attempt_id)
+                    if current is None:
+                        raise BrokerAttemptNotFound("attempt is not stored")
+                    return _view(current)
+        except (BrokerAttemptNotFound, BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
+            raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def verify(self, attempt_id: str, outcome: str, note: str, expected_version: int) -> AttemptView:
+        """Record a user assertion. Does not call a broker or mint another id."""
+        attempt_id = _check_attempt_id(attempt_id)
+        if outcome not in _VERIFY_STATE:
+            raise BrokerAttemptRejected("verification outcome is not an explicit broker assertion")
+        if not isinstance(note, str):
+            raise BrokerAttemptRejected("broker evidence note is required")
+        note = note.strip()
+        if not note or len(note) > 4000:
+            raise BrokerAttemptRejected("broker evidence note is required")
+        if isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 0:
+            raise BrokerAttemptRejected("attempt version is inconsistent")
+        new_state = _VERIFY_STATE[outcome]
+        try:
+            async with self.sessions() as db:
+                async with db.begin():
+                    await self._lock(db)
+                    current = await db.get(BrokerAttempt, attempt_id)
+                    if current is None:
+                        raise BrokerAttemptNotFound("attempt is not stored")
+                    if current.state not in UNRESOLVED_STATES or current.verification_version != expected_version:
+                        raise BrokerAttemptConflict("attempt is no longer unverified or the version is stale")
+                    now = self._now()
+                    changed = await db.execute(
+                        update(BrokerAttempt)
+                        .where(
+                            BrokerAttempt.id == attempt_id,
+                            BrokerAttempt.state == current.state,
+                            BrokerAttempt.verification_version == expected_version,
+                        )
+                        .values(
+                            state=new_state,
+                            verification_outcome=outcome,
+                            verification_note=note,
+                            verification_version=expected_version + 1,
+                            updated_at=now,
+                        )
+                    )
+                    if changed.rowcount != 1:
+                        raise BrokerAttemptConflict("attempt is no longer unverified or the version is stale")
+                    if new_state == "proven-not-submitted":
+                        await db.execute(
+                            update(PortfolioPositionModel)
+                            .where(PortfolioPositionModel.order_attempt_id == attempt_id)
+                            .values(order_attempt_id=None)
+                        )
+                    await db.refresh(current)
+                    return _view(current)
+        except (BrokerAttemptNotFound, BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
             raise
         except Exception as exc:
             raise BrokerAttemptStorageError("attempt storage failed closed") from exc

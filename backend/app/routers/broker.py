@@ -25,9 +25,12 @@ from app.database import get_db
 from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.broker_attempts import (
     BrokerAttemptConflict,
+    BrokerAttemptNotFound,
     BrokerAttemptRejected,
     BrokerAttemptService,
     BrokerAttemptStorageError,
+    coverage_note,
+    outcome_label,
 )
 from app.services.broker_router import build_router_from_credentials
 from app.services.audit import log_event, new_rec_id
@@ -653,6 +656,99 @@ async def place_option_order(
     )
     return await _submit("option", req, order, db)
 
+
+class VerifyAttemptRequest(BaseModel):
+    """A user assertion about an order already at the broker. Not a new send."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal[
+        "submitted",
+        "filled",
+        "definitely-not-submitted",
+        "canceled-after-submission",
+        "partial",
+    ]
+    note: str = Field(..., min_length=1, max_length=4000)
+    expected_version: int = Field(..., ge=0)
+
+
+def _public_attempt(view) -> dict:
+    return {
+        "attempt_id": view.attempt_id,
+        "state": view.state,
+        "fingerprint": view.fingerprint,
+        "verification_version": view.verification_version,
+        "saved_rec_id": view.saved_rec_id,
+        "broker_order_id": view.broker_order_id,
+        "broker_status": view.broker_status,
+        "broker_response": view.broker_response,
+        "payload": json.loads(view.payload_canonical),
+        "verification_outcome": view.verification_outcome,
+        "verification_note": view.verification_note,
+        "outcome_label": outcome_label(view.state, view.broker_status, view.verification_outcome),
+        "coverage_note": coverage_note(view.verification_outcome),
+        "created_at": view.created_at.isoformat(),
+        "updated_at": view.updated_at.isoformat(),
+    }
+
+
+def _attempt_http_error(exc: Exception) -> JSONResponse:
+    if isinstance(exc, BrokerAttemptNotFound):
+        status = 404
+    elif isinstance(exc, BrokerAttemptConflict):
+        status = 409
+    elif isinstance(exc, BrokerAttemptRejected):
+        status = 422
+    else:
+        status = 503
+    return JSONResponse(status_code=status, content={"detail": str(exc)})
+
+
+@router.get("/attempts")
+async def list_broker_attempts(db: AsyncSession = Depends(get_db)):
+    """Unresolved attempts, including close and unlinked orders. No broker call."""
+    service = _attempt_service(db)
+    try:
+        rows = await service.list_unresolved()
+    except (BrokerAttemptNotFound, BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError) as exc:
+        return _attempt_http_error(exc)
+    return {"attempts": [_public_attempt(row) for row in rows]}
+
+
+@router.get("/attempts/{attempt_id}")
+async def get_broker_attempt(attempt_id: str, db: AsyncSession = Depends(get_db)):
+    service = _attempt_service(db)
+    try:
+        view = await service.get_attempt(attempt_id)
+    except (BrokerAttemptNotFound, BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError) as exc:
+        return _attempt_http_error(exc)
+    return _public_attempt(view)
+
+
+@router.post("/attempts/{attempt_id}/verify")
+async def verify_broker_attempt(
+    attempt_id: str, req: VerifyAttemptRequest, db: AsyncSession = Depends(get_db),
+):
+    """Compare-and-set a manual verification. Never calls an adapter or mints an id."""
+    service = _attempt_service(db)
+    try:
+        view = await service.verify(attempt_id, req.outcome, req.note, req.expected_version)
+    except (BrokerAttemptNotFound, BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError) as exc:
+        return _attempt_http_error(exc)
+    if req.outcome == "definitely-not-submitted":
+        from app.services import daily_risk
+        from app.services.daily_risk import DailyRiskError
+        try:
+            await daily_risk.resolve(
+                view.attempt_id, definitely_not_submitted=True, outcome="verified-not-submitted",
+            )
+        except DailyRiskError as exc:
+            if "not reserved" not in str(exc):
+                logging.getLogger(__name__).exception(
+                    "daily risk release failed for %s", view.attempt_id,
+                )
+    return _public_attempt(view)
 
 
 @router.get("/status")

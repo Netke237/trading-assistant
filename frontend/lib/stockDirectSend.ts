@@ -157,7 +157,7 @@ async function performStockSaveFirst(args: StockSendArgs, identity: string | nul
     };
   }
 
-  const saved = await persistPosition(pos);
+  const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
   // Unconfirmed: offline; a bare gateway 5xx (the create may still be running);
   // or a 2xx whose body did not parse. No order is sent.
   const bare5xx = !saved.ok && !saved.offline && /^HTTP 5\d\d$/.test(saved.detail ?? '');
@@ -215,16 +215,19 @@ async function performStockSaveFirst(args: StockSendArgs, identity: string | nul
         catch { addNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null }); }
         return { kind: 'not-placed', message: validationBlock };
       }
-      const res = await api.postStockOrder({
+      const orderRequest = {
         broker,
         symbol: pos.symbol,
         action,
-        effect: 'OPEN',
+        effect: 'OPEN' as const,
         quantity: orderQty,
         order_type: orderType,
         limit_price: limitPrice,
-        tif: 'DAY',
-      });
+        tif: 'DAY' as const,
+        attempt_id: `stk-${recId}`,
+        savedRecId: recId,
+      };
+      const res = await api.postStockOrder(orderRequest);
       outcome = classifyDirectFailure({ response: res });
     } catch (e) {
       outcome = classifyDirectFailure({ thrown: e });
