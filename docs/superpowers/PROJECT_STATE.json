@@ -2921,7 +2921,7 @@
       "id": "SCAN-REPORT-ISOLATION",
       "name": "Durable isolated latest-run reports for five scan categories (#236)",
       "status": "in_progress",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2930,14 +2930,14 @@
         "#239 LOG-03"
       ],
       "plan": "docs/superpowers/specs/2026-10-13-approved-screener-designs/scan-log-isolation-tickets.md",
-      "branch": "board/scan-report-isolation-b19c62b6",
+      "branch": "board/scan-report-isolation-b6c806b9",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/scan_reports.py",
         "pattern": "async def run_with_report",
         "note": "Lifecycle integration presence only; entire target remains unfinished until code audit and frontend prerequisites."
       },
-      "note": "2026-10-13 PAUSED: independent plan round3 agent hit usage limit before review; no qualifying round3 occurred, audit_rounds stays2. Plan round2 G1 fixed in f302f0df; revised lifecycle SHA256973811c4d045b267d607b1961b235bc36b739cc0d6160e378a181cea495390a2 awaits independent final review. LOG01 committed759bd364 and pushed; #237 closed as build completion only. Focused12PASS, frontend typecheckPASS; full backend/frontend tests started but final outcomes unavailable due reviewer/implementer usage limit. LOG02/LOG03 unimplemented; no code audit, phase unfinished/not merge-ready. Options#233 remains owned by board/options-presentation-v2-892b8ac5.",
+      "note": "Resumed explicitly2026-10-13. PLAN CLEAN at round3: fresh independent reviewer verifies G1 fix and interactions zero findings. Failed usage-limit invocation did not count as a round. LOG01 built759bd364; focused11 passed again, prior single-head migration test was additional12th. LOG02 implementation starting; LOG03 and integrated code audit remain. No code audit/merge readiness.",
       "audit_history": [
         {
           "round": 1,
@@ -2965,6 +2965,17 @@
             "G1 pending plan round3 independent review"
           ],
           "clean": false
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewer": "/root/resume_plan_round3",
+          "reviewed": "Lifecycle G1 fixes and interactions, SHA256973811c4d045b267d607b1961b235bc36b739cc0d6160e378a181cea495390a2 at f302f0df",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ]
     }
