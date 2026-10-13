@@ -3294,8 +3294,8 @@
       "verify": {
         "kind": "present",
         "path": "scripts/meas/isolated_day.py",
-        "pattern": "def check_live_db_refused",
-        "note": "PRESENCE ONLY: the G2 probe function of the isolated MEAS orchestrator. Absent until T2 lands."
+        "pattern": "def run_isolated_day",
+        "note": "PRESENCE ONLY: the run entry point of the isolated MEAS orchestrator (T3 #283). Absent until the run sequence lands; T1/T2 guards are pinned by backend/tests/test_meas_isolated_day_*.py, not by this probe."
       },
       "plan_stage": {
         "rounds": 3,
