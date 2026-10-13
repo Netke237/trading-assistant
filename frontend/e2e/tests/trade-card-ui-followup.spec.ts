@@ -29,7 +29,7 @@ for (const theme of ['dark', 'light']) {
       scanResult: { scan_id: 'ui-followup', timestamp: new Date().toISOString(), candidates: [c], rejected: [] },
       context: { direction: 'Bullish', horizon: 'Swing (5-15d)' }, screenerMode: 'options', scanState: 'COMPLETED',
     } })), candidate);
-    await page.addInitScript(t => localStorage.setItem('bamendjou:theme', t), theme);
+    await page.addInitScript(t => localStorage.setItem('bamendjou:theme', JSON.stringify({ version: 0, state: { theme: t } })), theme);
     await page.goto('/screener/step-7-trade-card');
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const scores = page.getByRole('button', { name: /Stock & contract scores/ });
