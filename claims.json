@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/options-presentation-v2-892b8ac5",
       "claimed_at": "2026-10-13T04:06:03Z",
-      "expires_at": "2026-10-13T07:07:40Z",
+      "expires_at": "2026-10-13T07:17:24Z",
       "note": "Implement approved Options UI tickets #240-249",
       "task": "OPTIONS-PRESENTATION-V2"
     },
