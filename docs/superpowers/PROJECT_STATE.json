@@ -2969,7 +2969,7 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 #242 implemented at 8e4769f9: typecheck clean; 8 new order/budget regressions and 569 existing tests across 20 suites passed; handlers, numeric helpers and persistence unchanged. Next #243. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
+      "note": "2026-10-13 #243 implemented at eec49c3c: typecheck clean; 328 focused tests across 8 suites and final 165-test TradeCard suite passed; four matched stop-cost figures, quantity scaling, separate scan/calculation/execution sources preserved. Next #244. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -2985,6 +2985,11 @@
           "issue": 242,
           "commit": "8e4769f948c2a6d6e8de23433ef367a02e4f890f",
           "validation": "typecheck clean; 8 new order/budget regressions and 569 existing tests across 20 suites passed; handlers, numeric helpers and persistence unchanged"
+        },
+        {
+          "issue": 243,
+          "commit": "eec49c3c9c8c386b10844ed11a6b9c8356193617",
+          "validation": "typecheck clean; 328 focused tests across 8 suites and final 165-test TradeCard suite passed; four matched stop-cost figures, quantity scaling, separate scan/calculation/execution sources preserved"
         }
       ],
       "implementation_interruption": {

@@ -12,3 +12,13 @@ Exact failures, observed before this implementation:
 No production formatter or unrelated test changed to hide these differences. React act warnings were also observed in existing tests. Changing process LC_ALL/LANG to en_US did not change Windows ICU's en-DE default.
 
 Subsequent focused tests and final integrated validation must distinguish these two baseline failures from new failures. Passing focused tests/typecheck are not independent code audit; exact-head CI still governs the repository's merge gate.
+
+## Implementation checkpoints (code audit pending)
+
+- #240, `1ad8592a`: selected-contract context relocation; typecheck and 207 tests across three suites passed.
+- #241, `d4d2ea66`: fresh scores collapsed; saved open/closed preferences and mounted evidence preserved; Alignment label added without changing sentiment semantics. Typecheck and 248 focused tests across ten suites passed. An existing method-pick regex matched its own clock timestamp; unchanged rerun passed.
+- #242, `8e4769f9`: order/exit inputs, budget editor and original size Apply control grouped. Eight new placement/behavior tests and 569 existing tests across twenty suites passed; typecheck clean. New amount readouts distinguish scan-mid sizing from today's matched stop-cost and race pricing, with spread/unavailable labels. A mistaken plural Jest filter started a broad sweep, stopped and superseded by the intended passing scoped run.
+
+Account usage interrupted the first #242 implementer before any edits. Saved code resumed on `board/options-presentation-v2-45bd8065`; historical commits and two original plan audit rounds retained. These checkpoints are implementation evidence, not a clean independent code audit.
+
+Pending integration cross-reference: #243 relocates the stop-cost readout into Structure & Stops; #246 must update BarrierRaceCard's existing reference to its former Arithmetic card location. This is a presentation reference update, not a stop-pricing change.
