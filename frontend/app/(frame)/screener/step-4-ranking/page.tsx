@@ -26,7 +26,7 @@ import { api } from '@/lib/api';
 import { exportToXlsx } from '@/lib/export';
 import { useScanStore } from '@/lib/scanStore';
 import { cardToRow } from './cardToRow';
-import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { trendDetailText, pullbackDetailText, triggerDetailText, eventDetailText, volDetailText } from '@/components/organisms/TradeCard';
 import { Tooltip } from '@/components/atoms/Tooltip';
 import { rankingStopCost } from '@/lib/risk';
@@ -156,6 +156,7 @@ export default function Step4Page() {
   const [currentPage, setCurrentPage] = useState(1);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
+  const tableRunId = useScanStore((s) => s.scanResult?.report_run_id);
   const candidates = useScanStore((s) => s.scanResult?.candidates);
   const pipeline = useScanStore((s) => s.scanResult?.pipeline);
   const rejected = useScanStore((s) => s.scanResult?.rejected);
@@ -245,26 +246,17 @@ export default function Step4Page() {
           <Text size={13} tone="dim">
             {hasRun ? 'No candidates matched the current scan criteria.' : 'Run a scan to see ranked candidates.'}
           </Text>
-          {hasRun && (
+          {(
             <button
               type="button"
               className={styles.inspectBtn}
               onClick={() => setInspectorOpen(true)}
             >
-              Filter Breakdown ({filteredCount} Not Ranked)
+              Filter Breakdown{hasRun ? ` (${filteredCount} Not Ranked)` : ' · saved report'}
             </button>
           )}
         </div>
-        <PipelineInspector
-          isDrawer
-          isOpen={inspectorOpen}
-          onClose={() => setInspectorOpen(false)}
-          pipeline={pipeline}
-          rejected={rejected}
-          survivors={candidateSymbols}
-          contractRules={contractRules}
-          dteWindow={dteWindow}
-        />
+        <SavedScanReportInspector category="options" tableRunId={tableRunId} isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} />
       </div>
     );
   }
@@ -498,16 +490,7 @@ export default function Step4Page() {
         ))}
       </div>
 
-      <PipelineInspector
-        isDrawer
-        isOpen={inspectorOpen}
-        onClose={() => setInspectorOpen(false)}
-        pipeline={pipeline}
-        rejected={rejected}
-        survivors={candidateSymbols}
-        contractRules={contractRules}
-        dteWindow={dteWindow}
-      />
+      <SavedScanReportInspector category="options" tableRunId={tableRunId} isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} />
     </div>
   );
 }

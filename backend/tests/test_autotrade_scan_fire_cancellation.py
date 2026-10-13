@@ -86,9 +86,21 @@ def _scan_fire_worker_idle_after_each_test():
     scan_module._SCAN_FIRE_EXECUTOR.submit(lambda: None).result(timeout=5)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_broker_callback_boundary(monkeypatch):
+    # These worker/booking unit tests deliberately use non-schema request and
+    # result doubles. Durable integration with actual schemas is tested separately.
+    async def reported_callback(request, *, callback, **kwargs):
+        return await callback()
+    monkeypatch.setattr(scan_module, "run_reported_scan", reported_callback)
+
+
 @pytest.fixture
 def scan_env(monkeypatch):
     """A PASS scan result, no persistence, a counted booking mock."""
+    async def reported_callback(request, *, callback, **kwargs):
+        return await callback()
+    monkeypatch.setattr(scan_module, "run_reported_scan", reported_callback)
     result = SimpleNamespace(scan_id="REC-H1",
                              candidates=[SimpleNamespace(finalStatus="PASS")],
                              rejected=[], noLiveQuoteNames=0)
@@ -762,6 +774,10 @@ def scheduled(monkeypatch):
     import app.database as dbmod
 
     monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+    async def reported_callback(request, *, callback, **kwargs):
+        return await callback()
+    monkeypatch.setattr(sss, "run_reported_scan", reported_callback)
+    monkeypatch.setattr(sss, "persisted_result", lambda result: {})
     monkeypatch.setattr(sss, "get_latest_successful_run", AsyncMock(return_value=None))
     record = AsyncMock()
     monkeypatch.setattr(sss, "record_scheduled_scan_run", record)
