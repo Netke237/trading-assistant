@@ -120,6 +120,7 @@ export function SavedScanReportInspector({ category, currentInputs, isOpen = tru
   <button type="button" onClick={() => setRefresh(v => v + 1)}>Refresh report</button>
   {loading && <p role="status">Loading saved report…</p>}
   {error && <p role="alert">Saved report storage unavailable.</p>}
+  {selected === category && !comparedInputs && <p role="status">Current controls comparison unavailable; saved reports retain their frozen inputs.</p>}
   {unsaved && <div role="alert"><p>Current run {update.run_id}: report unsaved — persistence unavailable. Durable evidence below belongs to its own saved run.</p><details><summary>Unsaved current survivors and recorded counts</summary><pre>{json(update)}</pre></details></div>}
   {data?.category === selected && data.previous_report && <div className={styles.actions}><button type="button" aria-pressed={!previous} onClick={() => setPrevious(false)}>Latest attempt</button><button type="button" aria-pressed={previous} onClick={() => setPrevious(true)}>Previous saved report</button></div>}
   {!loading && !error && selected !== 'legacy' && !report && <p>No saved report available.</p>}

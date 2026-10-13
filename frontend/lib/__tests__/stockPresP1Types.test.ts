@@ -9,7 +9,8 @@ import type { StockExplanation } from '@/types/domain';
 
 // STOCK-PRES-P1 Task 3. Types only: the new fields are OPTIONAL, so results
 // persisted before P1 must still load unchanged, and the store must keep the
-// new fields when a fresh scan carries them. No store version bump.
+// new fields when a fresh scan carries them. LOG03 later adds nullable report
+// identity through the preserving v19 migration; all original evidence stays exact.
 //
 // Reach the real persist callbacks the same way scanStoreMergeHydration.test.ts
 // (merge) and scanStoreHorizonMigration.test.ts (migrate) do.
@@ -65,21 +66,23 @@ function oldBlob(): Record<string, unknown> {
 
 const current = { scanState: 'IDLE', screenerMode: 'options', stockExecutionGeneration: 0, stockManualRunToken: 0 };
 
-describe('STOCK-PRES-P1: old persisted results still load (no version bump)', () => {
-  it('the store is still at persist version 18', () => {
-    expect(options.version).toBe(18);
+describe('STOCK-PRES-P1: old persisted results still load through preserving report migration', () => {
+  it('the store reaches the preserving v19 report migration', () => {
+    expect(options.version).toBeGreaterThanOrEqual(19);
   });
 
-  it('migrate at version 18 returns the old-shape blob deep-equal', () => {
+  it('migration preserves original evidence exactly and marks report identity unavailable', () => {
     const blob = oldBlob();
     const migrated = options.migrate(oldBlob(), 18) as Record<string, unknown>;
-    expect(migrated).toEqual(blob);
+    expect(migrated).toEqual({...blob,scanResult:undefined,previousRun:undefined,stockScanResult:{...(blob.stockScanResult as Record<string,unknown>),report_run_id:null,report_generation:null,report_persistence:null}});
+    expect((migrated.stockScanResult as Record<string,unknown>).category).toBeUndefined();
   });
 
-  it('merge hydrates old-shape stock, Pre-Breakout and Fib rows deep-equal (nothing dropped, nothing added)', () => {
+  it('merge hydrates all original stock, Pre-Breakout and Fib evidence with unavailable report identity', () => {
     const blob = oldBlob();
     const out = options.merge(options.migrate(oldBlob(), 18), current);
-    expect(out.stockScanResult).toEqual(blob.stockScanResult);
+    expect(out.stockScanResult).toEqual({...(blob.stockScanResult as Record<string,unknown>),report_run_id:null,report_generation:null,report_persistence:null});
+    expect((out.stockScanResult as Record<string,unknown>).category).toBeUndefined();
     expect(out.previousStockScanResult).toBeNull();
     expect(out.preBreakoutResults).toEqual(blob.preBreakoutResults);
     expect(out.fibPullbackResults).toEqual(blob.fibPullbackResults);

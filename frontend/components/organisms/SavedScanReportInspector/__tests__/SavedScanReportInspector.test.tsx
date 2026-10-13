@@ -87,3 +87,15 @@ test('drawer contains keyboard focus and restores opener when closed',async()=>{
  expect(first).toHaveFocus();fireEvent.keyDown(window,{key:'Tab',shiftKey:true});expect(last).toHaveFocus();fireEvent.keyDown(window,{key:'Tab'});expect(first).toHaveFocus();fireEvent.keyDown(window,{key:'Escape'});expect(close).toHaveBeenCalledTimes(1);
  r.rerender(<><button>Open report</button><SavedScanReportInspector category="fib" isDrawer isOpen={false} onClose={close}/></>);expect(opener).toHaveFocus();
 });
+test.each([['stocks',null],['stocks',{enabled:true}],['options',null],['options',{enabled:true}]] as const)('invalid %s settings make controls comparison unavailable while saved evidence stays readable',async(category,gate)=>{
+ const { useSettingsStore } = await import('@/lib/settingsStore');
+ const original=useSettingsStore.getState().confidenceGate;
+ useSettingsStore.setState({confidenceGate:gate as never});
+ try {
+  const r=render(<SavedScanReportInspector category={category} />);
+  await screen.findByText('Run '+category+'-A');
+  expect(screen.getByText(/Current controls comparison unavailable/)).toBeInTheDocument();
+  expect(JSON.parse(screen.getByText(/"diagnostics":/).textContent!)).toEqual({diagnostics:report(category,category+'-A').diagnostics,result:report(category,category+'-A').result});
+  expect(useSettingsStore.getState().confidenceGate).toBe(gate);r.unmount();
+ } finally { act(()=>useSettingsStore.setState({confidenceGate:original})); }
+});
