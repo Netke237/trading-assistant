@@ -1,20 +1,6 @@
 {
   "claims": [
     {
-      "agent": "claude",
-      "branch": "board/options-presentation-resume-20261013",
-      "claimed_at": "2026-10-13T14:58:27Z",
-      "expires_at": "2026-10-13T17:58:27Z",
-      "note": "Explicit user approved takeover of interrupted Options session",
-      "previous": [
-        {
-          "branch": "board/options-presentation-v2-45bd8065",
-          "claimed_at": "2026-10-13T14:01:52Z"
-        }
-      ],
-      "task": "OPTIONS-PRESENTATION-V2"
-    },
-    {
       "agent": "grok",
       "branch": "board/broker-path-residuals-d325c381",
       "claimed_at": "2026-10-13T15:18:38Z",
