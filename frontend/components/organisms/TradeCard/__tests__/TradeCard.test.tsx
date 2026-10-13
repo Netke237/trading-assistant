@@ -2365,13 +2365,12 @@ describe('TradeCard', () => {
   });
 
   describe('Arithmetic Profit Target (Feature 3) — additional coverage', () => {
-    it('renders placeholder rows for both target rows before either button is clicked', () => {
+    it('reports uncomputed targets without assuming the configured ratio sequence', () => {
       // The TARGETS still need a plan -- they are arithmetic multiples of the
       // stop distance repriced against a contract. The stop row no longer
       // does; see the piece 3 block below.
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getByText('2:1 target — not yet computed —')).toBeInTheDocument();
-      expect(screen.getByText('3:1 target — not yet computed —')).toBeInTheDocument();
+      expect(screen.getByText('Target estimates — not yet computed —')).toBeInTheDocument();
     });
 
     describe('the scan\'s own final stop (piece 3)', () => {

@@ -2200,6 +2200,14 @@ export function TradeCard({
     />
   );
 
+  // contracts.exit_plan prices both targets and StopCost with req.premium.
+  // Use that echoed, cent-rounded calculation basis only; current quotes and
+  // order edits are different vintages. A legacy/mismatched cost cannot supply it.
+  const arithmeticCost = stopPremiumRisk(exitPlan?.stop.stopCost ?? null);
+  const arithmeticPremium = arithmeticCost?.basis === 'bs_today'
+    && arithmeticCost.stopPrice === exitPlan?.stop.price
+    ? arithmeticCost.premium : null;
+
   return (
     <div className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
@@ -2958,116 +2966,65 @@ export function TradeCard({
         <div className={styles.methodGrid}>
         {/* Arithmetic Profit Target (Feature 3) — the primary method, expanded
              by default, alongside Monte Carlo when the card has enough width. */}
-        <section className={styles.planCard}>
+        <section className={`${styles.planCard} ${styles.arithmeticSection}`} aria-label="Arithmetic Profit Target">
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Arithmetic Profit Target</Text>
             <Text size={11} tone="secondary">{data.direction}</Text>
           </div>
-          <div className={styles.kvRow}>
-            <Text size={12} tone="secondary">Stock entry price</Text>
-            {/* Adversarial-audit finding 2 — shows the SAME live-refreshed
-                 quote the Check Structure / Compute Arithmetic Plan buttons
-                 below use, once either has actually run this mount; falls
-                 back to the scan-time data.price snapshot until then, same
-                 as those buttons' own stockQuote?.price ?? data.price. */}
-            <Data size={13} weight={500}>${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}</Data>
+          <div className={styles.arithmeticBasis}>
+            <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
+            <KV label={arithmeticLiveStockPrice != null ? 'Latest calculation-input stock reference' : 'Scan stock reference'} value={`$${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}`} mono />
+            <KV label="Calculation premium used" value={arithmeticPremium != null ? `$${arithmeticPremium.toFixed(2)}/share` : 'Unavailable — calculation premium basis missing'} mono />
+            <KV label="Shared computed stock stop" value={exitPlan ? `$${exitPlan.stop.price.toFixed(2)} · ${exitPlan.stop.source}` : 'Not yet computed'} mono />
           </div>
-          <Text size={10} tone="dim">Independent of the other profit-target methods on this page; they can disagree.</Text>
-
-          {/* Compute Arithmetic Plan — renamed from "Compute Exit Plan". Runs
-               the full pipeline: stop + both target rows. */}
+          <Text size={10} tone="dim">Stored calculation stock entry: unavailable in the returned plan. The reference above is the scan or latest calculation input; Check structure can also refresh it.</Text>
+          <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − calculation's echoed premium) × quantity × 100, from displayed cent-rounded prices, before commissions; not a fill or guaranteed profit.`}</Text>
+          {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
+          <Text size={10} tone="dim">Risk reference: selected-contract full premium; stop-loss sizing remains separately shown with its scan-mid basis in Order inputs & risk budget. Ratios describe stock geometry, not guaranteed option R:R. Independent of the other profit-target methods on this page; they can disagree. The computed stock stop is shared by every returned target and does not replace execution invalidation.</Text>
           <div className={styles.structuralStop}>
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={computeExitPlan}
-              disabled={exitPlanLoading || !data.contractDetails}
-            >
-              <Text size={12} weight={500}>
-                {exitPlanLoading ? 'Computing arithmetic plan…' : 'Compute Arithmetic Plan'}
-              </Text>
+            <button type="button" className={styles.btn} onClick={computeExitPlan} disabled={exitPlanLoading || !data.contractDetails}>
+              <Text size={12} weight={500}>{exitPlanLoading ? 'Computing arithmetic plan…' : 'Compute Arithmetic Plan'}</Text>
             </button>
-            {exitPlanError && (
-              <Text size={11} tone="reject">Couldn&apos;t compute an arithmetic plan — try again.</Text>
-            )}
-            {!exitPlan && (
-              <div className={styles.targetsTable}>
-                {/* PIECE 3. The stop is resolved AT SCAN TIME now, so this row
-                    has something true to say before the user has pressed
-                    anything — which is the whole point: on a card where the
-                    Arithmetic Plan button is never pressed (the default), the
-                    stop used to be a flat percentage and this row read "not
-                    yet computed".
-
-                    The CONTRACT-PRICED sub-cells are absent here, and stay
-                    absent: what the stop costs needs a contract repriced AT
-                    it, and the scan's auto-pick does not settle that (a Step 6
-                    override replaces the contract without moving the stop).
-                    Same for the risk-derived size below, which sizes off
-                    `exitPlan.stop.contractPrice` and returns null without a
-                    plan. Compute Arithmetic Plan is what fills them in. */}
-                <div className={styles.targetRow}>
-                  <div className={styles.targetMain}>
-                    <Text size={12} tone="dim">2:1 target — not yet computed —</Text>
-                  </div>
-                </div>
-                <div className={styles.targetRow}>
-                  <div className={styles.targetMain}>
-                    <Text size={12} tone="dim">3:1 target — not yet computed —</Text>
-                  </div>
-                </div>
-              </div>
-            )}
-            {exitPlan && (
-              <div className={styles.targetsTable}>
-                {exitPlan.targets.map((t) => {
-                  const compareState = targetCompareState(t);
-                  return (
-                    <div className={styles.targetRow} key={t.rrRatio}>
-                      <div className={styles.targetMain}>
-                        <div className={styles.targetId}>
-                          <Text size={12} weight={600}>
-                            {t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}
-                          </Text>
-                        </div>
-                        <div className={styles.resultColumns}>
-                        <div className={styles.targetValues}>
-                          <KV label="Arithmetic price" value={`$${t.arithmeticPrice.toFixed(2)}`} mono />
-                          <KV label="Contract price" value={`$${t.contractPrice.toFixed(2)}`} mono />
-                          <KV label="Pricing" value={t.rrModel} mono />
-                        </div>
-                        <div className={styles.probabilityColumn}>
-                          <KV label="Probability before expiry" value={`${(t.probability * 100).toFixed(0)}%`} mono />
-                          <KV
-                            label="Expected time"
-                            value={t.expectedDays != null ? `~${Math.round(t.expectedDays)}d` : 'unlikely'}
-                            mono
-                          />
-                        </div>
-                        </div>
-                        <details className={styles.methodDetails}>
-                          <summary>Target geometry</summary>
-                          <div className={styles.targetValues}>
-                          <KV
-                            label="Nearest structural level"
-                            value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'}
-                            mono
-                          />
-                          <KV
-                            label="Distance"
-                            value={t.distanceDollar != null ? `$${t.distanceDollar.toFixed(2)}` : '—'}
-                            mono
-                          />
-                          <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
-                          </div>
-                        </details>
+            {exitPlanError && <Text size={11} tone="reject">Couldn&apos;t compute an arithmetic plan — try again.</Text>}
+            {!exitPlan && <Text size={12} tone="dim">Target estimates — not yet computed —</Text>}
+            {exitPlan && exitPlan.targets.length === 0 && <Text size={12} tone="dim">No target estimates returned.</Text>}
+            {exitPlan && exitPlan.targets.length > 0 && (
+              <div className={styles.arithmeticTableScroll}>
+                <table className={styles.arithmeticTable} aria-label="Arithmetic target comparison">
+                  <thead><tr>
+                    {['Stock ratio / geometry', 'Arithmetic stock target', 'Effective stock target', 'Option premium', 'Estimated dollar outcome', 'Probability before expiry', 'Conditional median time', 'Pricing model'].map((label) => <th key={label} scope="col"><Text size={10} tone="secondary" weight={400}>{label}</Text></th>)}
+                  </tr></thead>
+                  <tbody>{exitPlan.targets.map((t, i) => {
+                    const compareState = targetCompareState(t);
+                    const priceAvailable = Number.isFinite(t.contractPrice) && t.contractPrice >= 0;
+                    const outcome = arithmeticPremium != null && priceAvailable && Number.isFinite(overlay.contracts) && overlay.contracts >= 0
+                      ? (t.contractPrice - arithmeticPremium) * overlay.contracts * 100 : null;
+                    return <tr key={`${t.rrRatio}-${i}`}>
+                      <th scope="row">
+                        <Text size={12} weight={500}>{t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}</Text>
                         <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
                           {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}{targetCompareLabel(compareState)}
                         </Text>
-                      </div>
-                    </div>
-                  );
-                })}
+                        <details className={styles.methodDetails}>
+                          <summary>Target geometry</summary>
+                          <KV label="Target source" value={t.tpSource} />
+                          <KV label="Quality" value={t.qualityGood ? 'Good' : 'Caution'} />
+                          <Text size={10} tone="dim">{t.qualityReasons.length ? t.qualityReasons.join(' · ') : 'No quality warnings'}</Text>
+                          <KV label="Nearest structural level" value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'} mono />
+                          <KV label="Distance" value={t.distanceDollar != null ? `$${t.distanceDollar.toFixed(2)}` : '—'} mono />
+                          <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
+                        </details>
+                      </th>
+                      <td><Data size={12}>{Number.isFinite(t.arithmeticPrice) ? `$${t.arithmeticPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
+                      <td><Data size={12}>{Number.isFinite(t.price) ? `$${t.price.toFixed(2)}` : 'Unavailable'}</Data><Text size={10} tone="dim">{t.tpSource}</Text></td>
+                      <td><Data size={12}>{priceAvailable ? `$${t.contractPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
+                      <td><Data size={12}>{outcome != null ? `$${outcome.toFixed(2)}` : arithmeticPremium == null ? 'Unavailable — calculation premium basis missing' : 'Unavailable'}</Data></td>
+                      <td><Data size={12}>{Number.isFinite(t.probability) && t.probability >= 0 && t.probability <= 1 ? `${(t.probability * 100).toFixed(0)}%` : 'Unavailable'}</Data></td>
+                      <td><Data size={12}>{t.expectedDays != null && Number.isFinite(t.expectedDays) && t.expectedDays >= 0 ? `~${Math.round(t.expectedDays)} calendar days` : 'Unavailable — no conditional median'}</Data></td>
+                      <td><Text size={11}>{t.rrModel || 'Unavailable'}</Text></td>
+                    </tr>;
+                  })}</tbody>
+                </table>
               </div>
             )}
           </div>
