@@ -35,6 +35,7 @@ import styles from './StockPositionCard.module.css';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { PositionEvidence } from './PositionEvidence';
+import { InitialStrategyTargets } from './InitialStrategyTargets';
 
 function PositionDisclosure({ active, children }: { active: boolean; children: ReactNode }) {
   return active ? <details className={styles.autoTrade}><summary>Auto-trade execution</summary>{children}</details> : <>{children}</>;
@@ -267,6 +268,7 @@ export function StockPositionCard({
   // Store selectors
   // Display label like "Swing (5–15d)"; _horizonEnum maps it to the backend enum.
   const scanHorizonLabel = useScanStore((s) => s.context?.horizon ?? null);
+  const recordedRequest = useScanStore((s) => s.stockScanRequest);
   // STOCKS-HORIZON-P0B B7: earnings inside the scan's veto window
   // max(reject_days, hold), aged by the scan's age. Unknown never blocks.
   const scanTimestamp = useScanStore((s) => s.stockScanResult?.timestamp);
@@ -808,11 +810,15 @@ export function StockPositionCard({
   return (
     <div className={position ? styles.workspace : styles.wrap} key={executionIdentity ?? card.symbol}>
       {position && <>
-        <section id="market-sentiment"><MarketSentiment s={card.sentiment} compact /></section>
-        <header className={styles.identity}>
+        <header className={styles.identity} aria-label="Stock context">
           <div><Data size={24}>{card.symbol}</Data><Text size={14} weight={600}>{card.company}</Text><Text size={11} tone="secondary">{card.direction} · {card.strategy.strategy.replace(/_/g, ' ')}</Text></div>
           <div className={styles.identityBadges}><ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} /><StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} /></div>
           <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
+          <Text size={12} tone="secondary">Scan price: {Number.isFinite(card.price) ? `$${card.price.toFixed(2)}` : 'Unavailable'}</Text>
+          <Text size={12} tone="secondary">Stock score: {Number.isFinite(card.stock_score) ? `${card.stock_score} / 100` : 'Unavailable'}</Text>
+          <Text size={12} tone="secondary">{recordedRequest?.horizon
+            ? `Recorded horizon: ${recordedRequest.horizon}${recordedRequest.hold_max_days != null ? ` · hold ${recordedRequest.hold_max_days} days` : ''}`
+            : 'Recorded horizon unavailable'}</Text>
           <div className={styles.actionRow}>        <a
           href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
           target="_blank"
@@ -830,8 +836,9 @@ export function StockPositionCard({
         </button>
 </div>
         </header>
+        <section id="market-sentiment"><MarketSentiment s={card.sentiment} compact /></section>
         <nav aria-label="Position sections" className={styles.sectionLinks}>
-          <a href="#order-exits">Order &amp; exits</a><a href="#calculations">Calculations</a><a href="#qualification">Qualification</a><a href="#decision">Your decision</a><a href="#race">Which comes first</a><a href="#market-sentiment">Market sentiment</a><a href="#fundamentals">Fundamentals</a>
+          <a href="#initial-targets">Initial strategy targets</a><a href="#order-exits">Order &amp; exits</a><a href="#calculations">Calculations</a><a href="#qualification">Qualification</a><a href="#decision">Your decision</a><a href="#race">Which comes first</a><a href="#market-sentiment">Market sentiment</a><a href="#fundamentals">Fundamentals</a>
         </nav>
         <details className={styles.help}><summary>How this page works</summary><Text size={12}>Review the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.</Text></details>
       </>}
@@ -843,6 +850,7 @@ export function StockPositionCard({
       {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
       </PositionGroup>
       {position && <section id="fundamentals"><FundamentalHealthCard f={card.fundamentals} compact /></section>}
+      {position && <InitialStrategyTargets card={card} shares={overlay.shares} />}
       {position && <section className={styles.latest} aria-label="Latest calculation">
         <Text size={11} tone="dim">Latest calculation</Text>
         {!latest || latest.identity !== executionIdentity ? <Text size={12}>Calculation chronology unavailable</Text>

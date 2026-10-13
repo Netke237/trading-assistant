@@ -137,6 +137,11 @@
 .factorDetails { grid-column: 1 / -1; font-size: 11px; overflow-wrap: anywhere; }
 .factorDetails summary { cursor: pointer; }
 .factorDetails > span { display: block; }
+.initialTableWrap { overflow-x: auto; }
+.initialTable { width: 100%; border-collapse: collapse; text-align: left; }
+.initialTable th { font-weight: 400; }
+.initialTable th, .initialTable td { padding: var(--space-2); white-space: nowrap; }
+.initialTable tbody tr { border-top: 1px solid var(--border-subtle); }
 
 .workspace .planRow { gap: 8px; grid-template-columns: 65px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr); }
 .workspace .estimateRow { grid-template-columns: 55px repeat(3, minmax(0, 1fr)); gap: 8px; }

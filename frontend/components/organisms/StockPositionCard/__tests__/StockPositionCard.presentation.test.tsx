@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
+import { InitialStrategyTargets } from '@/components/organisms/StockPositionCard/InitialStrategyTargets';
 import { useScanStore } from '@/lib/scanStore';
 import { stockExecutionIdentity, STOCK_VALIDATION_UNAVAILABLE, useStockOrderOwnershipStore } from '@/lib/stockExecutionSession';
 import { useSettingsStore } from '@/lib/settingsStore';
@@ -190,4 +191,74 @@ it('latest follows successful completion across concurrently running methods in 
   await act(async () => arithmetic.resolve(makePlan()));
   expect(screen.getByText('Latest: Arithmetic')).toBeInTheDocument();
   expect(within(screen.getByRole('region', { name: 'Latest calculation' })).getByText('Stop 144.00 · risk/share 6.00 · 10 trading days')).toBeInTheDocument();
+});
+
+it.each(['Bullish', 'Bearish'] as const)('separates the %s initial strategy ladder from execution edits and uses entered shares', async direction => {
+  const c = card('AAPL', direction);
+  if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, target_price: 140, targets: [140, 135, 130] };
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const first = within(initial).getByRole('row', { name: /T1/ });
+  expect(within(first).getByText(direction === 'Bullish' ? '$160.00' : '$140.00')).toBeInTheDocument();
+  expect(within(first).getByText('$10.00')).toBeInTheDocument();
+  expect(within(first).getByText('6.67%')).toBeInTheDocument();
+  expect(within(first).getByText('2.00×')).toBeInTheDocument();
+  expect(within(first).getByText('$300.00')).toBeInTheDocument();
+  expect(within(initial).getByText('Original target allocations unavailable')).toBeInTheDocument();
+  expect(within(initial).queryByText(/probability|trading days/i)).not.toBeInTheDocument();
+  await edit('ENTRY', '151');
+  await edit('T1 TARGET', direction === 'Bullish' ? '162' : '138');
+  await edit('SHARES', '12');
+  expect(within(first).getByText('$10.00')).toBeInTheDocument();
+  expect(within(first).getByText('$120.00')).toBeInTheDocument();
+  expect(initial.compareDocumentPosition(screen.getByRole('heading', { name: 'Order & exits' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it.each([undefined, []])('restores a legacy initial target without inventing extra rungs (%s)', targets => {
+  const c = { ...card(), strategy: { ...card().strategy, targets } };
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  expect(within(initial).getAllByRole('row')).toHaveLength(2);
+  expect(within(initial).getByText('$160.00')).toBeInTheDocument();
+  expect(within(initial).queryByText('T2')).not.toBeInTheDocument();
+});
+
+it('preserves zero outcomes and distinguishes absent original geometry', () => {
+  const c = { ...card(), shares: 0, strategy: { ...card().strategy, target_price: 150, targets: [150] } };
+  const view = render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  expect(within(initial).getAllByText('$0.00')).toHaveLength(2);
+  expect(within(initial).getByText('0.00%')).toBeInTheDocument();
+  expect(within(initial).getByText('0.00×')).toBeInTheDocument();
+  view.unmount();
+  render(<InitialStrategyTargets card={{ ...c, strategy: { ...c.strategy, entry_price: undefined as never } }} shares={0} />);
+  const missing = screen.getByRole('region', { name: 'Initial strategy targets' });
+  expect(within(missing).getAllByText('Unavailable').length).toBeGreaterThanOrEqual(4);
+  expect(missing).not.toHaveTextContent('NaN');
+});
+
+it('shows source-labelled context with recorded horizon and unavailable legacy horizon', () => {
+  useScanStore.setState({ stockScanRequest: { horizon: 'Swing', hold_max_days: 0 } as never, context: { horizon: 'Position' } as never });
+  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  const context = screen.getByLabelText('Stock context');
+  expect(within(context).getByText('Scan price: $150.00')).toBeInTheDocument();
+  expect(within(context).getByText('Recorded horizon: Swing · hold 0 days')).toBeInTheDocument();
+  expect(within(context).getByText('Stock score: 80 / 100')).toBeInTheDocument();
+  act(() => useScanStore.setState({ stockScanRequest: null }));
+  expect(within(context).getByText('Recorded horizon unavailable')).toBeInTheDocument();
+  view.rerender(<StockPositionCard card={card()} strategyKey="pullback_ema" />);
+  expect(screen.queryByRole('region', { name: 'Initial strategy targets' })).not.toBeInTheDocument();
+});
+
+it('keeps direction-aware negative outcomes and source observations without inventing risk ratios', () => {
+  const c = { ...card(), strategy: { ...card().strategy, stop_price: 150, targets: [145], detail: { source: 'swing low', observations: 0, measured: false } } };
+  render(<InitialStrategyTargets card={c} shares={12} />);
+  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  expect(within(initial).getByText('$-5.00')).toBeInTheDocument();
+  expect(within(initial).getByText('$-60.00')).toBeInTheDocument();
+  expect(within(initial).getByText('-3.33%')).toBeInTheDocument();
+  expect(within(initial).getByText('Unavailable')).toBeInTheDocument();
+  fireEvent.click(within(initial).getByText('Strategy observations'));
+  expect(within(initial).getByText('observations: 0')).toBeInTheDocument();
+  expect(within(initial).getByText('measured: false')).toBeInTheDocument();
 });
