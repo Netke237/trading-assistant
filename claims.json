@@ -18,7 +18,7 @@
       "agent": "grok",
       "branch": "board/broker-path-residuals-d325c381",
       "claimed_at": "2026-10-13T15:18:38Z",
-      "expires_at": "2026-10-13T18:18:55Z",
+      "expires_at": "2026-10-13T18:21:07Z",
       "note": "Resume abandoned broker-path item; plan clean, build tickets open",
       "task": "BROKER-PATH-RESIDUALS"
     }
