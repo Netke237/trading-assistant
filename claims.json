@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/scan-report-isolation-b6c806b9",
       "claimed_at": "2026-10-13T05:29:39Z",
-      "expires_at": "2026-10-13T10:00:12Z",
+      "expires_at": "2026-10-13T10:03:00Z",
       "note": "Resume interrupted lifecycle review and scan report integration #236",
       "task": "SCAN-REPORT-ISOLATION"
     }
