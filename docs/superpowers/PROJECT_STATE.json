@@ -3187,7 +3187,8 @@
       "plan_stage": {
         "rounds": 1,
         "clean": true,
-        "closed_by": "Frozen Stocks plan independent round 1, exact SHA256 575e14696ab758e003036dbee51513c20c5829e93a03853bea1d6553a01963eb"
+        "closed_by": "clean",
+        "closure_evidence": "Frozen Stocks plan independent round 1, exact SHA256 575e14696ab758e003036dbee51513c20c5829e93a03853bea1d6553a01963eb"
       },
       "audit_history": [
         {
@@ -3258,7 +3259,8 @@
       "code_stage": {
         "rounds": 1,
         "clean": true,
-        "closed_by": "Independent /root/stocks_code_audit_r1, 5b4582f17d259a963f6a748ed8f78e41675349a7..e9c88d85bad41adc62cc409b0a795a534cdcb11f, zero gate findings"
+        "closed_by": "clean",
+        "closure_evidence": "Independent /root/stocks_code_audit_r1, 5b4582f17d259a963f6a748ed8f78e41675349a7..e9c88d85bad41adc62cc409b0a795a534cdcb11f, zero gate findings"
       },
       "merge_record": {
         "state": "SELF-MERGE PENDING",
