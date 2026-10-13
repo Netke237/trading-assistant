@@ -1,6 +1,6 @@
 # MEAS-LIVE-DB-ISOLATION — implementation plan (board item #230)
 
-Status: DRAFT v2 (round-1 findings F1-F5 fixed; changes marked [v2]), for plan-audit round 2. Branch `board/meas-live-db-isolation-c461488d`.
+Status: DRAFT v3 (round-1 F1-F5 fixed [v2]; round-2 R2-1, R2-2 fixed [v3]), for plan-audit round 3 (last). Branch `board/meas-live-db-isolation-c461488d`.
 
 ## 0. Problem (evidence, verified 2026-10-13)
 
@@ -76,7 +76,11 @@ meas `DATABASE_URL` the orchestrator is about to give the child. Refuse if: same
 `bamendjou_meas`; meas user != `meas_runner`; meas user == live user; meas port/base == `8000`; the meas checkout
 path is inside the repo root (resolved, case-insensitive); any `.env` exists in the meas checkout's ancestor
 directories above the checkout root (`find_dotenv` would stop at the checkout's own `.env` first, but this catches
-a missing/mis-written own `.env`).
+a missing/mis-written own `.env`). [v3 R2-2] **IBKR-port rule:** refuse if any TCP socket is in LISTEN state on
+local port 5000 or 7499 on **any** address (`0.0.0.0`, `::`, `127.0.0.1`, `::1`, or any other; filter only on
+the local port, never on the local address), **and** refuse if a TCP connect to `127.0.0.1` or `[::1]` on either
+port succeeds (the tag calls `https://localhost:5000` / `:7499`, and Windows resolves `localhost` to `::1` first;
+tag `backend/app/data/ibkr.py:23`, `ibkr_paper.py:17`, `ibkr_keepalive_scheduler.py` `_tick`).
 
 G2 **Database guard (Postgres, independent of the code).** One-time `setup`, run by the superuser through
 `docker exec … psql`: create role `meas_runner`, create DB `bamendjou_meas` owned by it, and
@@ -95,8 +99,8 @@ one (the frozen backend really uses the copy). [v2 F3] Process identity: the PID
 be the launched PID **or a descendant of it** (walk `Win32_Process.ParentProcessId` from the health PID up to the
 launched PID; the venv `python.exe` is a launcher whose child is the real interpreter), and that PID must own the
 127.0.0.1:8100 listener. The live backend on :8000 still answers `/api/config/health` with its pre-run PID.
-[v2 F2] No listener on 127.0.0.1:5000 or 127.0.0.1:7499 (IBKR gateways). Any mismatch → stop the frozen backend
-(§2.6 step 7 rule) and refuse.
+[v3 R2-2] The IBKR-port rule of G1 holds again. Any mismatch → stop the frozen backend (§2.6 step 7 rule) and
+refuse.
 
 ### 2.4 The meas checkout
 
@@ -117,16 +121,22 @@ launched PID; the venv `python.exe` is a launcher whose child is the real interp
     the IV source the runner requires). Broker order paths stay reachable only through explicit order endpoints
     (the runner calls none) and armed auto-trade (tag auto-trader armed state is in memory and starts disarmed;
     the runner also refuses unless disarmed before every options scan).
-  - [v2 F1] `<meas>\backend\data\confidence_cache.db`: copy of the live checkout's
-    `backend\data\confidence_cache.db`, taken right before start with the SQLite online-backup API (source opened
-    read-only), so a concurrent live write cannot tear it. Reason: on days 1-2 the frozen backend ran in the main
-    checkout and warm-loaded that live cache (tag `backend/app/data/confidence_cache.py:14,17,152`). Missing live
-    file → start cold and record `cold`. `isolation.json` records the cache source (`copied`/`cold`), sha256 of the
-    copy, row count and oldest/newest `expires_at`.
+  - [v3 R2-1, replaces v2 F1] `<meas>\backend\data\confidence_cache.db` **persists between isolated runs** and is
+    never re-copied from live. Reason: since 8ee11537 main writes keys with a `|b3` suffix that the tag never reads
+    (tag `backend/app/data/confidence_cache.py:43` vs main `:83-84`), so the only rows the tag can hit are rows the
+    tag itself wrote. Under the old process those tag rows lived in the shared live file for their 7-day TTL; keeping
+    the meas file between runs reproduces exactly that. Seeding: if the meas file does not exist yet (first isolated
+    run), copy the live checkout's `backend\data\confidence_cache.db` once with the SQLite online-backup API (source
+    opened read-only), which carries over the 3 tag-format rows day 2 wrote (they expire by 2026-10-16). Missing live
+    file → start cold. `isolation.json` records per run: cache origin (`seeded-from-live` / `carried-over` / `cold`),
+    sha256 at start, total rows, and the **tag-hittable rows** = keys with exactly 5 `|`-separated fields and
+    `expires_at` later than the run start, with their oldest/newest `expires_at`. `cleanup` never deletes this file
+    (only `cleanup --reset-cache`, logged).
   - [v2 F2] Broker/IBKR: `settings.yaml` → `ibkr` is **not** read by the tag, so the plan does not rely on it. The
     tag starts `ibkr_keepalive_scheduler` unconditionally and probes gateways on :5000 and :7499 from scans and
-    `/api/data-sources`. Rule: **refuse** (G1 at start; G3 before the first scan and at the end) if anything listens
-    on 127.0.0.1:5000 or 127.0.0.1:7499; those calls then hit a closed local port and reach no broker. Accepted,
+    `/api/data-sources`. Rule: the G1 **IBKR-port rule** (§2.3; any address, plus `127.0.0.1`/`::1` connect probes),
+    checked at start and again in G3 before the first scan and at the end; those calls then hit a closed local port
+    and reach no broker. Accepted,
     documented exceptions (read-only market-data traffic identical to days 1-2): tastytrade IV metrics, Tradier
     quotes/chains, Alpaca/Tiingo/yfinance bars, and the status probes behind `/api/data-sources`. `isolation.json`
     records the :5000/:7499 check results.
@@ -176,13 +186,15 @@ copy. **The orchestrator never issues a write to the live DB**; its live-DB stat
 
 Unchanged: tag code, tag runner, gated config, `strategy_params.yaml` and `sp500.csv` (tag versions in the meas
 checkout, as days 1–2 had after `git switch`; round 1 confirmed the tag's CRLF hashes equal both day manifests),
-scan bodies, timing, venv, and [v2 F1] the confidence cache (copied from live, as days 1-2 read it). Changed and
-recorded: the DB is a copy
+scan bodies, timing, venv. Changed and recorded: the DB is a copy
 taken minutes before the run instead of the live DB (same content at copy time); `settings.yaml` is the
 sanitized copy (its sha256 changes; it is not in `GATED_CONFIG` or `RUN_INVARIANT_CONFIG`, so pooling rules are
 unaffected — confirmed in round 1: MEAS plan §5 pools S-scans only on the `strategy_params.yaml` sha256, and the
 `settings.yaml` hash already differed between day 1 and day 2); notification channels off; IBKR gateways must be
-closed (the runner already stops if IBKR is authenticated).
+closed (the runner already stops if IBKR is authenticated); [v3 R2-1] the confidence cache: tag-hittable rows
+are carried between isolated days exactly as the shared file carried them, but day 1's warm state (tag-format
+rows main wrote before 8ee11537) cannot be reproduced; each day records its tag-hittable row count so the
+analysis can see a cold start.
 
 ### 2.8 Documentation
 
@@ -211,11 +223,13 @@ Output saved under `docs/superpowers/measurements/isolation-verification-<date>.
 ## 4. Tickets (build units; the phase is the audit target)
 
 - **T1** `scripts/meas/isolated_day.py` config + guards: live/meas URL parsing, G1 rules, child-env builder,
-  settings sanitizer, `.env` writer, secret-file reader/writer with ACL [v2 F5], IBKR-port check [v2 F2],
-  confidence-cache copy + stats [v2 F1]; pytest `scripts/meas/tests/test_isolated_day_guards.py` (every G1 refusal,
+  settings sanitizer, `.env` writer, secret-file reader/writer with ACL [v2 F5], IBKR-port check on any address
+  + `127.0.0.1`/`::1` connect probes [v3 R2-2], confidence-cache seed/carry-over + tag-hittable stats [v3 R2-1];
+  pytest `scripts/meas/tests/test_isolated_day_guards.py` (every G1 refusal,
   env stripping incl. Windows case-insensitive keys, sanitizer leaves non-notification keys equal, the meas
   password never appears in logs, command lines or `isolation.json`, cache copy is consistent under a
-  concurrent writer).
+  concurrent writer, IBKR listeners on `0.0.0.0`/`::`/`::1` all refuse, tag-hittable count ignores `|b3` keys and
+  expired rows, an existing meas cache is never overwritten by the live one).
 - **T2** DB layer: `setup` (role + password from the secret file + REVOKE), copy (`pg_dump --no-acl | pg_restore
   --no-acl --exit-on-error` via `docker exec`, exit codes enforced), all-table verification, G2 probe, G3 DB probe;
   tests with a fake `docker` runner (command lines asserted: live DB only appears in `pg_dump`/`SELECT`/the one
