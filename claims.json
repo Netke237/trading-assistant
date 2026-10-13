@@ -7,6 +7,14 @@
       "expires_at": "2026-10-13T18:25:28Z",
       "note": "Resume abandoned broker-path item; plan clean, build tickets open",
       "task": "BROKER-PATH-RESIDUALS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/options-presentation-v2-merge-record-5ddfaa57",
+      "claimed_at": "2026-10-13T17:59:16Z",
+      "expires_at": "2026-10-13T20:59:16Z",
+      "note": "Record verified user-authorized Options merge before Stocks",
+      "task": "OPTIONS-PRESENTATION-V2"
     }
   ]
 }
