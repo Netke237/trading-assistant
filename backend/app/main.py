@@ -53,6 +53,7 @@ from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
 from app.routers.journal         import router as journal_router
+from app.routers.scan_reports    import router as scan_reports_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -138,6 +139,13 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task
+    # SQLite development bootstraps new additive tables; PostgreSQL uses Alembic.
+    # A bootstrap failure aborts startup visibly, never advertises a working log.
+    from app.database import engine
+    if engine.dialect.name == 'sqlite':
+        from app.models.scan_report import ScanReportBase
+        async with engine.begin() as conn:
+            await conn.run_sync(ScanReportBase.metadata.create_all)
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -430,6 +438,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(scan_schedule_router)
     app.include_router(journal_router)
+    app.include_router(scan_reports_router)
 
     return app
 
