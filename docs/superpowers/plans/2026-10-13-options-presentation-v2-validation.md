@@ -22,3 +22,9 @@ Subsequent focused tests and final integrated validation must distinguish these 
 Account usage interrupted the first #242 implementer before any edits. Saved code resumed on `board/options-presentation-v2-45bd8065`; historical commits and two original plan audit rounds retained. These checkpoints are implementation evidence, not a clean independent code audit.
 
 Pending integration cross-reference: #243 relocates the stop-cost readout into Structure & Stops; #246 must update BarrierRaceCard's existing reference to its former Arithmetic card location. This is a presentation reference update, not a stop-pricing change.
+
+## Browser checkpoint after #243
+
+Two existing mocked desktop regressions passed at 1200px and 1920px against the isolated checkout on port 3002. Covered fresh collapsed scores, keyboard opening, preserved evidence DOM state, readable order/exit values, budget action, alternatives and no page horizontal overflow. Screenshots were inspected at the tested internal scroll position; final whole-page method/results and both-theme inspection remains pending after remaining tickets.
+
+The default Playwright headless-shell executable was absent; the same tests passed using installed Chrome via a temporary external configuration. No production config or application behavior changed, and no broker orders were placed. This checkpoint covers application source through `eec49c3c`; it is not final integration validation or an independent code audit.

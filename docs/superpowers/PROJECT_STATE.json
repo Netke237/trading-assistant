@@ -2929,7 +2929,7 @@
         "OPT-PRES-01–10 #240–249"
       ],
       "plan": "docs/superpowers/specs/2026-10-13-approved-screener-designs/options-presentation-tickets.md",
-      "branch": "board/options-presentation-v2-892b8ac5",
+      "branch": "board/options-presentation-v2-45bd8065",
       "verify": {
         "kind": "present",
         "path": "frontend/components/organisms/TradeCard/index.tsx",
@@ -2969,7 +2969,7 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 #243 implemented at eec49c3c: typecheck clean; 328 focused tests across 8 suites and final 165-test TradeCard suite passed; four matched stop-cost figures, quantity scaling, separate scan/calculation/execution sources preserved. Next #244. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
+      "note": "2026-10-13 #244 implemented at 3bf27106: typecheck clean; 213 focused tests across 4 suites plus final 8-case Arithmetic regressions passed; actual custom rows, matched premium basis, unavailable states, request/selection/sizing behavior preserved. Next #245. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
       "implementation_tickets": [
         {
           "issue": 240,
@@ -2990,6 +2990,11 @@
           "issue": 243,
           "commit": "eec49c3c9c8c386b10844ed11a6b9c8356193617",
           "validation": "typecheck clean; 328 focused tests across 8 suites and final 165-test TradeCard suite passed; four matched stop-cost figures, quantity scaling, separate scan/calculation/execution sources preserved"
+        },
+        {
+          "issue": 244,
+          "commit": "3bf271063ec96b209152871af979f655c6f869a7",
+          "validation": "typecheck clean; 213 focused tests across 4 suites plus final 8-case Arithmetic regressions passed; actual custom rows, matched premium basis, unavailable states, request/selection/sizing behavior preserved"
         }
       ],
       "implementation_interruption": {
