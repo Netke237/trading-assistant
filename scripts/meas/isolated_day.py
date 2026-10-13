@@ -6,7 +6,9 @@ orchestrator writes into the meas checkout, the child environment, the secret
 file and the confidence-cache seed/carry-over (§2.4 [v3 R2-1], §2.7). Ticket T2
 (#282) adds the DB layer at the end of the file: one-time ``setup`` (§2.3 G2),
 the per-run copy and its verification (§2.5), the G2 probe and the G3 DB probe.
-The run sequence (run / check / cleanup, T3) is added on top of it.
+Ticket T3 (#283) adds the run sequence on top of it (§2.6, G3 process identity,
+the evidence copy and ``isolation.json``) and the CLI: ``setup`` / ``check`` /
+``run`` / ``cleanup``.
 
 Rules for everything in here:
 - stdlib + PyYAML only; never import ``app.*`` (the frozen code must not be
@@ -21,7 +23,9 @@ Rules for everything in here:
 """
 from __future__ import annotations
 
+import argparse
 import copy
+import datetime as dt
 import getpass
 import hashlib
 import json
@@ -29,10 +33,14 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import socket
 import sqlite3
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
@@ -1142,3 +1150,968 @@ def meas_connections_ok(*, pg: PgDocker | None = None) -> GuardResult:
     if others:
         return GuardResult(rule, False, f"{MEAS_USER} connected to other database(s) {others}: {counts}")
     return GuardResult(rule, True, f"{MEAS_USER} connections by database: {counts}")
+
+
+# ── run sequence (T3, #283): §2.6, G3 process identity, evidence ─────────────
+#
+# Rules for the run sequence:
+# - Every side effect is a ``RunDeps`` seam (clock and sleep, docker/Postgres
+#   through T2's ``PgDocker``, process launch, health GETs, listener/PID-owner
+#   enumeration, parent-PID lookup, the forced tree kill, git, the tag runner),
+#   so tests never start, stop or connect to anything real.
+# - The frozen backend is stopped only by the PID this orchestrator launched,
+#   with ``taskkill /F /T /PID`` (forced tree kill): never by port, never by
+#   name, and the live backend on :8000 is only ever read (its health PID).
+# - Every refusal after the start goes through the same stop (try/finally).
+# - ``isolation.json`` is redacted, checked with ``assert_no_secret`` and holds
+#   no absolute path (paths relative to the job folder or the repo).
+
+EXIT_OK = 0
+EXIT_FAILED = 1     # the measurement ran, but something after the start failed
+EXIT_REFUSED = 2    # a guard refused; the runner never started
+
+MEAS_HOST = "127.0.0.1"
+MEAS_BASE = f"http://{MEAS_HOST}:{MEAS_PORT}"
+LIVE_BASE = f"http://127.0.0.1:{LIVE_PORT}"
+HEALTH_PATH = "/api/config/health"
+RUN_AT_ET = dt.time(13, 0, 30)
+MAX_PARENT_DEPTH = 16
+
+DOTENV_REL = Path(".env")
+LOCAL_CREDENTIALS_REL = Path("backend") / "config" / "local_credentials.yaml"
+RUNNER_REL = Path("docs") / "superpowers" / "measurements" / "run_measurement_day.py"
+SCANS_REL = Path("docs") / "superpowers" / "measurements" / "scans"
+# Written into the meas checkout each run; each must be gitignored there.
+# scan_schedule.yaml is deliberately NOT copied (the tag's scheduler stays empty).
+RUNTIME_FILES: tuple[Path, ...] = (DOTENV_REL, SETTINGS_REL, LOCAL_CREDENTIALS_REL, CONFIDENCE_CACHE_REL)
+DOCKER_DESKTOP_EXE = r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
+_SECRET_ENV_KEY_RE = re.compile(r"TOKEN|PASSWORD|PASS|SECRET|KEY|DATABASE_URL|TELEGRAM|GMAIL|CHAT", re.I)
+
+SETUP_WARNING = (
+    "setup changes privileges on the LIVE database: it runs REVOKE CONNECT ON DATABASE <live> FROM PUBLIC "
+    f"and creates the role {MEAS_USER} and the database {MEAS_DBNAME}. It runs only after Kenneth's "
+    "explicit yes in chat: re-run with --i-have-kenneths-approval. It is reversible "
+    "(GRANT CONNECT ON DATABASE <live> TO PUBLIC)."
+)
+
+
+def venv_python(repo_root: Path | str) -> Path:
+    """The repo venv interpreter (same venv as days 1-2)."""
+    root = Path(repo_root) / "backend" / ".venv"
+    return root / "Scripts" / "python.exe" if sys.platform == "win32" else root / "bin" / "python"
+
+
+def _nth_sunday(year: int, month: int, n: int) -> dt.date:
+    d = dt.date(year, month, 1)
+    d += dt.timedelta(days=(6 - d.weekday()) % 7)
+    return d + dt.timedelta(weeks=n - 1)
+
+
+def to_et(t_utc: dt.datetime) -> dt.datetime:
+    """UTC-aware datetime -> naive US Eastern wall time (the tag runner's own rule)."""
+    y = t_utc.year
+    dst_start = dt.datetime.combine(_nth_sunday(y, 3, 2), dt.time(7, 0))
+    dst_end = dt.datetime.combine(_nth_sunday(y, 11, 1), dt.time(6, 0))
+    naive = t_utc.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    offset = -4 if dst_start <= naive < dst_end else -5
+    return naive + dt.timedelta(hours=offset)
+
+
+def _utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _iso(t: dt.datetime | None) -> str | None:
+    return t.astimezone(dt.timezone.utc).isoformat() if t is not None else None
+
+
+# ── real seams: PowerShell JSON, processes, listeners with owners ────────────
+
+def _powershell(command: str, runner: Callable[..., CmdResult]) -> CmdResult:
+    return runner(["powershell", "-NoProfile", "-NonInteractive", "-Command", command], timeout=60)
+
+
+_PS_LISTENER_OWNERS = (
+    "Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess "
+    "| ConvertTo-Json -Compress"
+)
+
+
+def parse_listener_owners_json(text: str) -> list[tuple[str, int, int]]:
+    """``Get-NetTCPConnection | Select LocalAddress,LocalPort,OwningProcess | ConvertTo-Json``."""
+    if not text or not text.strip():
+        raise ValueError("empty listener output")
+    data = json.loads(text)
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list):
+        raise ValueError("unexpected listener output")
+    out: list[tuple[str, int, int]] = []
+    for item in data:
+        if not isinstance(item, dict) or not {"LocalAddress", "LocalPort", "OwningProcess"} <= set(item):
+            raise ValueError("unexpected listener entry")
+        out.append((str(item["LocalAddress"]), int(item["LocalPort"]), int(item["OwningProcess"])))
+    return out
+
+
+def list_listener_owners_windows(runner: Callable[..., CmdResult] = subprocess_runner
+                                 ) -> list[tuple[str, int, int]]:
+    proc = _powershell(_PS_LISTENER_OWNERS, runner)
+    if proc.returncode != 0:
+        raise OSError(f"Get-NetTCPConnection failed (exit {proc.returncode})")
+    try:
+        owners = parse_listener_owners_json(proc.stdout)
+    except ValueError as exc:
+        raise OSError(f"cannot parse listener list: {exc}") from exc
+    if not owners:
+        raise OSError("listener enumeration returned nothing")
+    return owners
+
+
+def list_listener_owners() -> list[tuple[str, int, int | None]]:
+    """Every TCP LISTEN socket with its owning PID (None where it cannot be known:
+    the identity checks then fail closed)."""
+    if sys.platform == "win32":
+        return list(list_listener_owners_windows())
+    return [(addr, port, None) for addr, port in list_listeners_procfs()]
+
+
+def parse_process_json(text: str) -> int | None:
+    """``Get-CimInstance Win32_Process | Select ProcessId,ParentProcessId | ConvertTo-Json``:
+    the parent PID, or None when no such process exists (empty output)."""
+    if not text or not text.strip():
+        return None
+    data = json.loads(text)
+    if not isinstance(data, dict) or "ParentProcessId" not in data:
+        raise ValueError("unexpected Win32_Process output")
+    return int(data["ParentProcessId"])
+
+
+def parent_pid_windows(pid: int, runner: Callable[..., CmdResult] = subprocess_runner) -> int | None:
+    pid = int(pid)
+    proc = _powershell(f"Get-CimInstance Win32_Process -Filter 'ProcessId={pid}' "
+                       "| Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress", runner)
+    if proc.returncode != 0:
+        raise OSError(f"Get-CimInstance Win32_Process failed (exit {proc.returncode})")
+    return parse_process_json(proc.stdout)
+
+
+def _parent_pid_procfs(pid: int) -> int | None:
+    try:
+        stat = Path(f"/proc/{int(pid)}/stat").read_text()
+    except OSError:
+        return None
+    return int(stat.rsplit(")", 1)[1].split()[1])
+
+
+def parent_pid(pid: int) -> int | None:
+    """Parent PID of ``pid`` (Win32_Process.ParentProcessId), None if it does not exist."""
+    return parent_pid_windows(pid) if sys.platform == "win32" else _parent_pid_procfs(pid)
+
+
+def pid_exists(pid: int) -> bool:
+    if sys.platform == "win32":
+        return parent_pid_windows(pid) is not None
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def taskkill_argv(pid: int) -> list[str]:
+    """Forced tree kill of exactly one PID (a windowless Python ignores the non-forced form)."""
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        raise GuardRefusal("refusing to kill: not a launched process id")
+    return ["taskkill", "/F", "/T", "/PID", str(pid)]
+
+
+def kill_process_tree(pid: int, *, runner: Callable[..., CmdResult] = subprocess_runner) -> CmdResult:
+    argv = taskkill_argv(pid)
+    if sys.platform == "win32":
+        return runner(argv, timeout=60)
+    import signal
+    try:
+        os.kill(pid, signal.SIGKILL)
+        return CmdResult(0, "", "")
+    except OSError as exc:
+        return CmdResult(1, "", type(exc).__name__)
+
+
+def is_descendant_or_self(pid: int | None, ancestor: int, parent_of: Callable[[int], int | None],
+                          *, max_depth: int = MAX_PARENT_DEPTH) -> bool:
+    """Walk parent PIDs from ``pid`` up to ``ancestor`` (bounded; loops and errors are False)."""
+    cur, seen = pid, set()
+    for _ in range(max_depth + 1):
+        if cur == ancestor:
+            return True
+        if cur is None or cur <= 0 or cur in seen:
+            return False
+        seen.add(cur)
+        try:
+            cur = parent_of(cur)
+        except Exception:
+            return False
+    return False
+
+
+_NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def http_get_json(url: str, timeout: float = 5.0) -> Any:
+    """GET a local health endpoint (no proxy); an HTTP error body is still parsed."""
+    try:
+        with _NO_PROXY_OPENER.open(url, timeout=timeout) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as exc:
+        body = exc.read()
+    return json.loads(body.decode("utf-8", errors="replace"))
+
+
+_LAUNCHED: list[subprocess.Popen] = []
+
+
+def launch_process(argv: list[str], *, cwd: Path | str, env: Mapping[str, str], log_path: Path | str) -> int:
+    """Start ``argv`` detached from the console, stdout+stderr to ``log_path``; returns its PID."""
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    with open(log_path, "ab") as log_file:
+        proc = subprocess.Popen(list(argv), cwd=str(cwd), env=dict(env), stdin=subprocess.DEVNULL,
+                                stdout=log_file, stderr=subprocess.STDOUT, creationflags=flags)
+    _LAUNCHED.append(proc)
+    return proc.pid
+
+
+def run_logged(argv: list[str], *, cwd: Path | str, env: Mapping[str, str], log_path: Path | str,
+               echo: Callable[[str], None] | None = None) -> int:
+    """Run ``argv`` to completion, output to ``log_path`` and echoed; returns its exit code."""
+    echo = echo or (lambda line: print(line, flush=True))
+    with open(log_path, "ab") as log_file:
+        proc = subprocess.Popen(list(argv), cwd=str(cwd), env=dict(env), stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            log_file.write(raw)
+            log_file.flush()
+            echo(raw.decode("utf-8", errors="replace").rstrip())
+        return proc.wait()
+
+
+def git_runner(args: list[str]) -> CmdResult:
+    return subprocess_runner(["git", *args], timeout=600)
+
+
+def start_docker_desktop() -> None:
+    if sys.platform != "win32":
+        raise OSError("Docker Desktop can only be started on Windows")
+    subprocess.Popen([DOCKER_DESKTOP_EXE], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
+
+
+def _log_stdout(line: str) -> None:
+    print(f"[{_utcnow().strftime('%Y-%m-%d %H:%M:%S')}Z] {line}", flush=True)
+
+
+@dataclass
+class RunDeps:
+    """Every side-effecting seam of check / run / cleanup (tests replace them all)."""
+
+    now: Callable[[], dt.datetime] = _utcnow
+    sleep: Callable[[float], None] = time.sleep
+    pg: PgDocker = field(default_factory=PgDocker)
+    launch: Callable[..., int] = launch_process
+    http_get_json: Callable[..., Any] = http_get_json
+    list_listener_owners: Callable[[], Iterable[tuple[str, int, int | None]]] = list_listener_owners
+    parent_pid: Callable[[int], int | None] = parent_pid
+    pid_exists: Callable[[int], bool] = pid_exists
+    kill_tree: Callable[[int], CmdResult] = kill_process_tree
+    git: Callable[[list[str]], CmdResult] = git_runner
+    run_runner: Callable[..., int] = run_logged
+    cmd: Callable[..., CmdResult] = subprocess_runner
+    start_docker_desktop: Callable[[], None] = start_docker_desktop
+    tcp_connect: TcpConnect = tcp_connect_probe
+    environ: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
+    log: Callable[[str], None] = _log_stdout
+    health_timeout_seconds: float = 180.0
+    health_poll_seconds: float = 2.0
+    docker_wait_seconds: float = 300.0
+    container_wait_seconds: float = 120.0
+    stop_verify_seconds: float = 30.0
+
+
+@dataclass
+class RunResult:
+    exit_code: int
+    error: str | None = None
+    isolation: dict[str, Any] | None = None
+    evidence_dir: Path | None = None
+
+
+# ── evidence copy (§2.6 step 8; never overwrites) ────────────────────────────
+
+def copy_evidence(src: Path | str, dest_root: Path | str, day: str, stamp: str, *,
+                  log: Callable[[str], None] = print) -> Path:
+    """Copy the meas day folder to ``dest_root/<day>``; if that exists and is not
+    empty, to ``<day>-isolated-<stamp>`` instead (logged). Never writes into an
+    existing non-empty folder: ``copytree`` creates the destination itself."""
+    src, dest_root = Path(src), Path(dest_root)
+    dest = dest_root / day
+    if dest.exists() or dest.is_symlink():
+        if dest.is_dir() and not dest.is_symlink() and not any(dest.iterdir()):
+            dest.rmdir()   # empty: copytree recreates it; fails if anything appeared meanwhile
+        else:
+            alt = dest_root / f"{day}-isolated-{stamp}"
+            log(f"evidence: scans/{day} already exists and is not empty; copying to scans/{alt.name} instead")
+            dest = alt
+            if dest.exists() or dest.is_symlink():
+                raise GuardRefusal(f"evidence folder scans/{dest.name} already exists; refusing to overwrite it")
+    dest_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest)
+    return dest
+
+
+# ── path scrubbing for isolation.json ────────────────────────────────────────
+
+_DRIVE_PATH_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]")
+
+
+def _path_forms(p: Path) -> list[str]:
+    forms = {str(p), p.as_posix()}
+    try:
+        r = Path(os.path.abspath(p)).resolve(strict=False)
+        forms.update({str(r), r.as_posix()})
+    except OSError:
+        pass
+    return sorted((f for f in forms if f and f not in (".", "/")), key=len, reverse=True)
+
+
+def scrub_paths(obj: Any, roots: Iterable[tuple[Path, str]]) -> Any:
+    """Replace every absolute form of each root (case-insensitive) with its label."""
+    pairs = sorted(((form, label) for root, label in roots for form in _path_forms(Path(root))),
+                   key=lambda fl: len(fl[0]), reverse=True)
+
+    def fix(s: str) -> str:
+        for form, label in pairs:
+            s = re.sub(re.escape(form), lambda _m: label, s, flags=re.IGNORECASE)
+        return s
+
+    def walk(o: Any) -> Any:
+        if isinstance(o, str):
+            return fix(o)
+        if isinstance(o, dict):
+            return {walk(k): walk(v) for k, v in o.items()}
+        if isinstance(o, (list, tuple)):
+            return [walk(v) for v in o]
+        return o
+
+    return walk(obj)
+
+
+def assert_no_absolute_path(text: str, roots: Iterable[Path]) -> None:
+    lowered = text.lower()
+    for root in roots:
+        for form in _path_forms(Path(root)):
+            if form.lower() in lowered or json.dumps(form)[1:-1].lower() in lowered:
+                raise GuardRefusal("absolute path found in isolation.json; refusing to write it")
+    if _DRIVE_PATH_RE.search(text) or "/home/" in text or "/Users/" in text:
+        raise GuardRefusal("absolute path found in isolation.json; refusing to write it")
+
+
+def _rel(path: Path | str, base: Path | str) -> str:
+    try:
+        return Path(os.path.abspath(path)).relative_to(Path(os.path.abspath(base))).as_posix()
+    except ValueError:
+        return Path(path).name
+
+
+# ── shared guard steps ───────────────────────────────────────────────────────
+
+def _docker_ready(deps: RunDeps, say: Callable[[str], None], *, allow_start: bool) -> str:
+    """Docker engine up (optionally start Docker Desktop), DB container running + healthy."""
+    pg = deps.pg
+
+    def engine_ok() -> bool:
+        try:
+            return pg.run([pg.docker, "info"], what="docker info", timeout=60).returncode == 0
+        except GuardRefusal:
+            return False
+
+    if not engine_ok():
+        if not allow_start:
+            raise GuardRefusal("the Docker engine is not running")
+        say("Docker engine not running: starting Docker Desktop")
+        try:
+            deps.start_docker_desktop()
+        except Exception as exc:
+            raise GuardRefusal(f"could not start Docker Desktop ({type(exc).__name__})") from None
+        deadline = deps.now() + dt.timedelta(seconds=deps.docker_wait_seconds)
+        while not engine_ok():
+            if deps.now() >= deadline:
+                raise GuardRefusal(f"the Docker engine did not come up in {deps.docker_wait_seconds:.0f} s")
+            deps.sleep(10)
+    fmt = "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}"
+    deadline = deps.now() + dt.timedelta(seconds=deps.container_wait_seconds)
+    while True:
+        res = pg.run([pg.docker, "inspect", "-f", fmt, pg.container], what="docker inspect", timeout=60)
+        state = res.stdout.strip() if res.returncode == 0 else f"inspect exit {res.returncode}"
+        if state.split() in (["running", "healthy"], ["running", "none"]):
+            say(f"container {pg.container}: {state}")
+            return state
+        if deps.now() >= deadline:
+            raise GuardRefusal(f"container {pg.container} is not healthy ({state})")
+        deps.sleep(5)
+
+
+def _identity(repo_root: Path, secret_file: Path) -> tuple[DbUrl, str, str, DbUrl]:
+    live = live_db_url(repo_root)
+    password = read_secret_file(secret_file)
+    meas_url = build_meas_url(live, password)
+    return live, password, meas_url, parse_db_url(meas_url)
+
+
+def _secret_values(repo_root: Path, *extra: str) -> list[str]:
+    values = [v for v in extra if v]
+    try:
+        env = read_env_file(Path(repo_root) / ".env")
+    except OSError:
+        env = {}
+    values += [v for k, v in env.items() if _SECRET_ENV_KEY_RE.search(k) and len(v) >= 6]
+    return values
+
+
+def _g1(live: DbUrl, meas: DbUrl, meas_checkout: Path, repo_root: Path, deps: RunDeps) -> list[GuardResult]:
+    return g1_checks(live, meas, meas_port=MEAS_PORT, meas_base=MEAS_BASE, meas_checkout=meas_checkout,
+                     repo_root=repo_root,
+                     list_listeners=lambda: [(a, p) for a, p, _o in deps.list_listener_owners()],
+                     tcp_connect=deps.tcp_connect)
+
+
+def _port_owners(deps: RunDeps, port: int) -> list[tuple[str, int, int | None]]:
+    return [(a, int(p), o) for a, p, o in deps.list_listener_owners() if int(p) == port]
+
+
+def _port_free(deps: RunDeps, port: int = MEAS_PORT) -> GuardResult:
+    rule = "meas_port_free"
+    try:
+        owners = _port_owners(deps, port)
+    except Exception as exc:
+        return GuardResult(rule, False, f"listener enumeration failed ({type(exc).__name__})")
+    connected = []
+    for host in ("127.0.0.1", "::1"):
+        try:
+            if deps.tcp_connect(host, port, timeout=1.0):
+                connected.append(host)
+        except Exception:
+            connected.append(host)
+    if owners or connected:
+        pids = sorted({o for _a, _p, o in owners if o is not None})
+        return GuardResult(rule, False, f"port {port} is in use (listener pid(s) {pids}, connect ok {connected})")
+    return GuardResult(rule, True, f"port {port} is free")
+
+
+def _health_pid(deps: RunDeps, base: str, *, require_ok: bool = False) -> int | None:
+    try:
+        data = deps.http_get_json(base + HEALTH_PATH, timeout=5.0)
+    except Exception:
+        return None
+    if not isinstance(data, dict) or (require_ok and data.get("ok") is not True):
+        return None
+    pid = data.get("pid")
+    return pid if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 else None
+
+
+def _tag_commit(repo_root: Path, deps: RunDeps) -> str:
+    res = deps.git(["-C", str(repo_root), "rev-parse", "--verify", f"{TAG}^{{commit}}"])
+    sha = res.stdout.strip()
+    if res.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise GuardRefusal(f"cannot resolve the tag {TAG} in the repo")
+    return sha
+
+
+def _verify_worktree(meas: Path, tag_commit: str, deps: RunDeps) -> None:
+    st = deps.git(["-C", str(meas), "status", "--porcelain", "--untracked-files=no"])
+    if st.returncode != 0:
+        raise GuardRefusal(f"git status failed in the meas checkout (exit {st.returncode})")
+    if st.stdout.strip():
+        raise GuardRefusal("the meas checkout has modified tracked files; refusing")
+    head = deps.git(["-C", str(meas), "rev-parse", "HEAD"])
+    if head.returncode != 0 or head.stdout.strip() != tag_commit:
+        raise GuardRefusal(f"the meas checkout HEAD is not the {TAG} commit; refusing")
+
+
+def _verify_ignored(meas: Path, deps: RunDeps) -> None:
+    for rel in RUNTIME_FILES:
+        res = deps.git(["-C", str(meas), "check-ignore", "-q", "--", rel.as_posix()])
+        if res.returncode == 1:
+            raise GuardRefusal(f"{rel.as_posix()} is not gitignored in the meas checkout; refusing to write it")
+        if res.returncode != 0:
+            raise GuardRefusal(f"git check-ignore failed for {rel.as_posix()} (exit {res.returncode})")
+
+
+# ── the run (§2.6 steps 1-9) ─────────────────────────────────────────────────
+
+class _IsolatedRun:
+    def __init__(self, repo_root: Path, jobs_dir: Path, meas: Path, secret_file: Path, deps: RunDeps):
+        self.repo, self.jobs, self.meas, self.secret_file, self.deps = repo_root, jobs_dir, meas, secret_file, deps
+        self.secrets: list[str] = _secret_values(repo_root)
+        self.start = deps.now()
+        self.stamp = self.start.astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        self.python = venv_python(repo_root)
+        logs = jobs_dir / "logs"
+        self.backend_log = logs / f"meas-{self.stamp}-backend.log"
+        self.runner_log = logs / f"meas-{self.stamp}-runner.log"
+        self.launched: int | None = None
+        self.health_pid: int | None = None
+        self.live_before: int | None = None
+        self.runner_started = False
+        self.refusal: str | None = None
+        self.failures: list[str] = []
+        self.evidence_dir: Path | None = None
+        self.et_date: str | None = None
+        self.rec: dict[str, Any] = {
+            "schema": 1, "tag": TAG, "meas_db": MEAS_DBNAME, "meas_user": MEAS_USER,
+            "ports": {"meas": MEAS_PORT, "live": LIVE_PORT, "ibkr": list(IBKR_PORTS)},
+            "guards": {}, "timestamps": {"start_utc": _iso(self.start)},
+            "paths": {"meas_checkout": _rel(meas, jobs_dir), "backend_log": _rel(self.backend_log, jobs_dir),
+                      "runner_log": _rel(self.runner_log, jobs_dir)},
+            "live_backend_pid": {"before": None, "after": None},
+        }
+
+    # logging
+    def say(self, line: str) -> None:
+        self.deps.log(redact_text(line, self.secrets))
+
+    def stamp_now(self, key: str) -> None:
+        self.rec["timestamps"][key] = _iso(self.deps.now())
+
+    def guards(self, key: str, results: list[GuardResult]) -> list[GuardResult]:
+        self.rec["guards"][key] = [r.to_dict() for r in results]
+        for r in results:
+            self.say(f"{key}: {'ok ' if r.ok else 'FAIL'} {r.rule}: {r.detail}")
+        return results
+
+    # step 1
+    def step_weekday_and_docker(self) -> None:
+        et = to_et(self.start)
+        if et.weekday() >= 5:
+            raise GuardRefusal(f"{et.date()} is a weekend in New York; no measurement day")
+        self.say(f"ET now {et:%Y-%m-%d %H:%M:%S} (weekday)")
+        self.rec["docker"] = _docker_ready(self.deps, self.say, allow_start=True)
+
+    # step 2
+    def step_guards(self) -> None:
+        live, password, meas_url, meas_db = _identity(self.repo, self.secret_file)
+        self.live, self.password, self.meas_url = live, password, meas_url
+        self.secrets = _secret_values(self.repo, password, live.password)
+        self.rec["live_db"] = live.identity()
+        self.meas_db = meas_db
+        enforce_g1(self.guards("g1", _g1(live, meas_db, self.meas, self.repo, self.deps)))
+        enforce_guard("G2", self.guards("g2", check_live_db_refused(live, password, pg=self.deps.pg)))
+        enforce_guard("port", self.guards("port", [_port_free(self.deps)]))
+        self.live_before = _health_pid(self.deps, LIVE_BASE)
+        self.rec["live_backend_pid"]["before"] = self.live_before
+        if self.live_before is None:
+            self.say(f"live backend on :{LIVE_PORT} absent (no health answer); allowed, continuing")
+        else:
+            self.say(f"live backend on :{LIVE_PORT} health pid {self.live_before}")
+
+    # step 3
+    def step_checkout_files_and_copy(self) -> None:
+        deps = self.deps
+        self.tag_commit = _tag_commit(self.repo, deps)
+        self.rec["tag_commit"] = self.tag_commit
+        if not self.meas.exists():
+            self.say(f"creating the meas worktree at {self.meas} ({TAG})")
+            res = deps.git(["-C", str(self.repo), "worktree", "add", "--detach", str(self.meas), TAG])
+            if res.returncode != 0:
+                raise GuardRefusal(f"git worktree add failed (exit {res.returncode})")
+        _verify_worktree(self.meas, self.tag_commit, deps)
+        _verify_ignored(self.meas, deps)
+
+        live_env = read_env_file(self.repo / ".env")
+        self.meas_env = meas_dotenv_values(live_env, self.meas_url)
+        write_meas_dotenv(self.meas / DOTENV_REL, self.meas_env, expected_database_url=self.meas_url)
+        (self.meas / SETTINGS_REL).parent.mkdir(parents=True, exist_ok=True)
+        shas = sanitize_settings_file(self.repo / SETTINGS_REL, self.meas / SETTINGS_REL)
+        self.rec["settings_sha256"] = {"live": shas["source_sha256"], "sanitized": shas["sanitized_sha256"]}
+        src, dst = self.repo / LOCAL_CREDENTIALS_REL, self.meas / LOCAL_CREDENTIALS_REL
+        if src.is_file():
+            _atomic_write_bytes(dst, src.read_bytes())   # content never printed
+            self.rec["local_credentials"] = "copied"
+        else:
+            dst.unlink(missing_ok=True)
+            self.rec["local_credentials"] = "absent in live"
+        self.say(f"meas files written (.env, sanitized settings.yaml, local_credentials.yaml: "
+                 f"{self.rec['local_credentials']})")
+        cache = prepare_confidence_cache(self.repo / CONFIDENCE_CACHE_REL, self.meas / CONFIDENCE_CACHE_REL,
+                                         run_start=self.start.timestamp())
+        self.rec["confidence_cache"] = cache
+        self.say(f"confidence cache: {cache['origin']}, {cache['tag_hittable_rows']} tag-hittable row(s)")
+
+        copy_live_to_meas(self.live, pg=deps.pg)
+        self.rec["copy"] = verify_copy(self.live, pg=deps.pg)
+        self.say(f"{MEAS_DBNAME} copied and verified; differing counts: {self.rec['copy']['count_differences']}")
+
+    # step 4 (before launch): interpreter facts
+    def record_python(self) -> None:
+        if not self.python.is_file():
+            raise GuardRefusal("the repo venv python is missing")
+        ver = self.deps.cmd([str(self.python), "-c", "import sys; print(sys.version)"], timeout=120)
+        freeze = self.deps.cmd([str(self.python), "-m", "pip", "freeze"], timeout=600)
+        self.rec["python"] = {
+            "version": ver.stdout.strip() if ver.returncode == 0 else None,
+            "pip_freeze_sha256": (hashlib.sha256(freeze.stdout.encode("utf-8")).hexdigest()
+                                  if freeze.returncode == 0 else None),
+        }
+        if ver.returncode != 0 or freeze.returncode != 0:
+            self.say("WARNING: python version or pip freeze unavailable; recorded as null")
+
+    def child_env(self) -> dict[str, str]:
+        return build_child_env(self.deps.environ, {**self.meas_env, "PYTHONUTF8": "1"})
+
+    def wait_health(self) -> int:
+        deps = self.deps
+        deadline = deps.now() + dt.timedelta(seconds=deps.health_timeout_seconds)
+        while True:
+            pid = _health_pid(deps, MEAS_BASE, require_ok=True)
+            if pid is not None:
+                return pid
+            if deps.now() >= deadline:
+                raise GuardRefusal(f"the frozen backend did not report healthy on :{MEAS_PORT} "
+                                   f"within {deps.health_timeout_seconds:.0f} s")
+            deps.sleep(deps.health_poll_seconds)
+
+    # G3 (§2.3)
+    def g3(self, key: str) -> list[GuardResult]:
+        deps = self.deps
+        out: list[GuardResult] = []
+        pid = _health_pid(deps, MEAS_BASE)
+        if pid is None:
+            out.append(GuardResult("g3_health_pid_descendant", False, f"no health pid on :{MEAS_PORT}"))
+        else:
+            ok = is_descendant_or_self(pid, self.launched, deps.parent_pid)
+            out.append(GuardResult("g3_health_pid_descendant", ok,
+                                   f"health pid {pid} {'is' if ok else 'is NOT'} the launched pid "
+                                   f"{self.launched} or a descendant of it"))
+        out.append(GuardResult("g3_health_pid_stable", pid is not None and pid == self.health_pid,
+                               f"health pid {pid}, at start {self.health_pid}"))
+        try:
+            owners = _port_owners(deps, MEAS_PORT)
+            ok = (pid is not None and bool(owners) and all(o == pid for _a, _p, o in owners)
+                  and any(a == MEAS_HOST for a, _p, _o in owners))
+            out.append(GuardResult("g3_listener_owner", ok,
+                                   f"{MEAS_HOST}:{MEAS_PORT} listeners {[(a, o) for a, _p, o in owners]}, "
+                                   f"health pid {pid}"))
+        except Exception as exc:
+            out.append(GuardResult("g3_listener_owner", False, f"listener enumeration failed ({type(exc).__name__})"))
+        out.append(meas_connections_ok(pg=deps.pg))
+        live_now = _health_pid(deps, LIVE_BASE)
+        self.rec["live_backend_pid"]["after"] = live_now
+        if self.live_before is None:
+            out.append(GuardResult("g3_live_backend_pid_unchanged", True,
+                                   f"live backend was absent before the run (now {live_now})"))
+        else:
+            out.append(GuardResult("g3_live_backend_pid_unchanged", live_now == self.live_before,
+                                   f"live :{LIVE_PORT} health pid {live_now}, before the run {self.live_before}"))
+        out += [r for r in _g1(self.live, self.meas_db, self.meas, self.repo, deps) if r.rule.startswith("ibkr_")]
+        return self.guards(key, out)
+
+    def wait_until_run_time(self) -> None:
+        deps = self.deps
+        et_now = to_et(deps.now())
+        target = dt.datetime.combine(et_now.date(), RUN_AT_ET)
+        if et_now >= target:
+            self.say(f"already past 13:00:30 ET ({et_now:%H:%M:%S}); skipping the wait")
+            return
+        self.say(f"waiting {(target - et_now).total_seconds():.0f} s for 13:00:30 ET")
+        while et_now < target:
+            deps.sleep(min((target - et_now).total_seconds(), 60.0))
+            et_now = to_et(deps.now())
+
+    def run_runner(self) -> int:
+        runner = self.meas / RUNNER_REL
+        argv = [str(self.python), str(runner), "core", "--base", MEAS_BASE, "--repo", str(self.meas)]
+        self.et_date = to_et(self.deps.now()).date().isoformat()
+        self.rec["et_date"] = self.et_date
+        self.rec["runner"] = {"argv": ["<repo venv python>", f"<meas>/{RUNNER_REL.as_posix()}", "core",
+                                       "--base", MEAS_BASE, "--repo", "<meas>"], "exit_code": None}
+        self.stamp_now("runner_start_utc")
+        self.runner_started = True
+        self.say("starting the tag runner (core)")
+        code = self.deps.run_runner(argv, cwd=self.meas, env=self.child_env(), log_path=self.runner_log)
+        self.stamp_now("runner_end_utc")
+        self.rec["runner"]["exit_code"] = code
+        self.say(f"tag runner exit code {code}")
+        if code != 0:
+            self.failures.append(f"the tag runner exited with {code}")
+        return code
+
+    # step 7: the only stop path
+    def stop(self) -> None:
+        deps, launched = self.deps, self.launched
+        assert launched is not None
+        results: list[GuardResult] = []
+        self.say(f"stopping the frozen backend: taskkill /F /T /PID {launched}")
+        try:
+            kr = deps.kill_tree(launched)
+            results.append(GuardResult("stop_taskkill", kr.returncode == 0,
+                                       f"forced tree kill of launched pid {launched}: exit {kr.returncode}"))
+        except Exception as exc:
+            results.append(GuardResult("stop_taskkill", False, f"kill of pid {launched} failed "
+                                                               f"({type(exc).__name__})"))
+        pids = sorted({p for p in (launched, self.health_pid) if p})
+        deadline = deps.now() + dt.timedelta(seconds=deps.stop_verify_seconds)
+        while True:
+            try:
+                owners: list | None = _port_owners(deps, MEAS_PORT)
+            except Exception:
+                owners = None
+            alive = []
+            for p in pids:
+                try:
+                    if deps.pid_exists(p):
+                        alive.append(p)
+                except Exception:
+                    alive.append(p)
+            if owners == [] and not alive:
+                break
+            if deps.now() >= deadline:
+                break
+            deps.sleep(1.0)
+        if owners is None:
+            results.append(GuardResult("stop_port_free", False, f"could not enumerate :{MEAS_PORT} listeners"))
+        else:
+            results.append(GuardResult(
+                "stop_port_free", not owners,
+                (f"port {MEAS_PORT} still has listener(s) owned by pid(s) {sorted({o for _a, _p, o in owners})}; "
+                 "nothing is ever stopped by port: check by hand") if owners else f"nothing listens on {MEAS_PORT}"))
+        results.append(GuardResult("stop_pids_gone", not alive,
+                                   f"pid(s) {alive} still exist" if alive else f"pid(s) {pids} gone"))
+        self.guards("stop", results)
+        self.stamp_now("stopped_utc")
+        failed = [r for r in results if not r.ok]
+        if failed:
+            msg = "stop verification failed: " + "; ".join(f"{r.rule} ({r.detail})" for r in failed)
+            self.say("WARNING: " + msg)
+            self.failures.append(msg)
+
+    def start_measure_stop(self) -> None:
+        deps = self.deps
+        self.record_python()
+        (self.jobs / "logs").mkdir(parents=True, exist_ok=True)
+        argv = [str(self.python), "-m", "uvicorn", "app.main:app", "--ws", "websockets-sansio",
+                "--host", MEAS_HOST, "--port", str(MEAS_PORT)]
+        self.say(f"starting the frozen backend on {MEAS_HOST}:{MEAS_PORT}")
+        self.launched = deps.launch(argv, cwd=self.meas / "backend", env=self.child_env(),
+                                    log_path=self.backend_log)
+        self.rec["meas_backend"] = {"launched_pid": self.launched, "health_pid": None}
+        self.stamp_now("launched_utc")
+        try:
+            self.health_pid = self.wait_health()
+            self.rec["meas_backend"]["health_pid"] = self.health_pid
+            self.stamp_now("backend_healthy_utc")
+            self.say(f"frozen backend healthy, health pid {self.health_pid} (launched {self.launched})")
+            enforce_guard("G3 before the first scan", self.g3("g3_start"))
+            self.wait_until_run_time()
+            self.run_runner()
+            g3_end = self.g3("g3_end")
+            failed = [r for r in g3_end if not r.ok]
+            if failed:
+                self.failures.append("G3 at the end failed: " + "; ".join(f"{r.rule} ({r.detail})" for r in failed))
+        finally:
+            self.stop()
+
+    # step 8
+    def copy_day(self) -> None:
+        src = self.meas / SCANS_REL / str(self.et_date)
+        if not src.is_dir():
+            self.failures.append(f"the runner wrote no day folder scans/{self.et_date} in the meas checkout")
+            self.say("WARNING: " + self.failures[-1])
+            return
+        self.evidence_dir = copy_evidence(src, self.repo / SCANS_REL, str(self.et_date), self.stamp, log=self.say)
+        self.rec["paths"]["evidence_dir"] = _rel(self.evidence_dir, self.repo)
+        self.say(f"evidence copied to {self.rec['paths']['evidence_dir']}")
+
+    def execute(self) -> RunResult:
+        try:
+            self.step_weekday_and_docker()
+            self.step_guards()
+            self.step_checkout_files_and_copy()
+            self.start_measure_stop()
+            self.copy_day()
+        except GuardRefusal as exc:
+            self.refusal = str(exc)
+        except Exception as exc:  # never a traceback (it could carry a secret); type + redacted text
+            self.refusal = f"unexpected error: {type(exc).__name__}: {exc}"
+            self.failures.append(self.refusal)
+        return self.finish()
+
+    def finish(self) -> RunResult:
+        if self.refusal is not None:
+            code = EXIT_FAILED if (self.runner_started or self.refusal in self.failures) else EXIT_REFUSED
+            if self.refusal not in self.failures:
+                self.failures.insert(0, self.refusal)
+        else:
+            code = EXIT_FAILED if self.failures else EXIT_OK
+        self.rec["exit_code"] = code
+        self.rec["failures"] = list(self.failures)
+        self.stamp_now("end_utc")
+        roots = [(self.meas, "<meas>"), (self.jobs, "<jobs>"), (self.repo, "<repo>"), (Path.home(), "~")]
+        record = scrub_paths(redact(self.rec, self.secrets), roots)
+        if self.evidence_dir is not None:
+            try:
+                text = json.dumps(record, indent=2, sort_keys=True) + "\n"
+                assert_no_secret(text, self.secrets)
+                assert_no_absolute_path(text, [r for r, _l in roots])
+                with open(self.evidence_dir / "isolation.json", "x", encoding="utf-8", newline="\n") as f:
+                    f.write(text)
+            except (GuardRefusal, OSError) as exc:
+                self.say(f"WARNING: isolation.json not written: {type(exc).__name__}: {exc}")
+                code = EXIT_FAILED
+        error = "; ".join(self.failures) if self.failures else None
+        error = redact_text(error, self.secrets) if error else None
+        verdict = {EXIT_OK: "OK", EXIT_FAILED: "FAILED", EXIT_REFUSED: "REFUSED"}[code]
+        self.say(f"RESULT {verdict} (exit {code})" + (f": {error}" if error else ""))
+        return RunResult(exit_code=code, error=error, isolation=record, evidence_dir=self.evidence_dir)
+
+
+def run_isolated_day(*, repo_root: Path | str = REPO_ROOT, jobs_dir: Path | str = JOBS_DIR,
+                     meas_checkout: Path | str | None = None, secret_file: Path | str | None = None,
+                     deps: RunDeps | None = None) -> RunResult:
+    """One isolated MEAS day (plan §2.6 steps 1-9). Refuses (exit 2, nothing
+    started) on any guard before the start; after the start, every exit path
+    stops the frozen backend by its launched PID (forced tree kill). The live
+    backend, main checkout and live DB are never stopped, switched or written."""
+    repo_root, jobs_dir = Path(repo_root), Path(jobs_dir)
+    meas = Path(meas_checkout) if meas_checkout is not None else jobs_dir / TAG
+    secret = Path(secret_file) if secret_file is not None else jobs_dir / "meas_db.secret"
+    return _IsolatedRun(repo_root, jobs_dir, meas, secret, deps or RunDeps()).execute()
+
+
+# ── check: every guard, nothing started, nothing written ─────────────────────
+
+def check_isolated_day(*, repo_root: Path | str = REPO_ROOT, jobs_dir: Path | str = JOBS_DIR,
+                       meas_checkout: Path | str | None = None, deps: RunDeps | None = None) -> int:
+    deps = deps or RunDeps()
+    repo_root, jobs_dir = Path(repo_root), Path(jobs_dir)
+    meas = Path(meas_checkout) if meas_checkout is not None else jobs_dir / TAG
+    secrets_ = _secret_values(repo_root)
+
+    def say(line: str) -> None:
+        deps.log(redact_text(line, secrets_))
+
+    try:
+        _docker_ready(deps, say, allow_start=False)
+        live, password, _url, meas_db = _identity(repo_root, jobs_dir / "meas_db.secret")
+        secrets_ += [password, live.password]
+        results = (_g1(live, meas_db, meas, repo_root, deps)
+                   + check_live_db_refused(live, password, pg=deps.pg) + [_port_free(deps)])
+        for r in results:
+            say(f"check: {'ok ' if r.ok else 'FAIL'} {r.rule}: {r.detail}")
+        enforce_guard("check", results)
+        live_pid = _health_pid(deps, LIVE_BASE)
+        say(f"live backend on :{LIVE_PORT}: " + (f"health pid {live_pid}" if live_pid else "absent"))
+        tag_commit = _tag_commit(repo_root, deps)
+        if meas.exists():
+            _verify_worktree(meas, tag_commit, deps)
+            _verify_ignored(meas, deps)
+            say(f"meas checkout clean at {TAG}; runtime files gitignored")
+        else:
+            say("meas checkout absent; `run` creates it")
+    except GuardRefusal as exc:
+        say(f"REFUSED: {exc}")
+        return EXIT_REFUSED
+    say("check OK: every guard passes (nothing was started or written)")
+    return EXIT_OK
+
+
+# ── cleanup: drop the copy, remove the runtime files ─────────────────────────
+
+def cleanup_isolated_day(*, repo_root: Path | str = REPO_ROOT, jobs_dir: Path | str = JOBS_DIR,
+                         meas_checkout: Path | str | None = None, reset_cache: bool = False,
+                         deps: RunDeps | None = None) -> int:
+    """Drop ``bamendjou_meas`` and remove the meas .env, sanitized settings.yaml and
+    copied local_credentials.yaml. The confidence cache is kept unless
+    ``reset_cache`` (logged). Refuses while anything listens on :8100."""
+    deps = deps or RunDeps()
+    repo_root, jobs_dir = Path(repo_root), Path(jobs_dir)
+    meas = Path(meas_checkout) if meas_checkout is not None else jobs_dir / TAG
+    log = deps.log
+    try:
+        if path_is_inside(meas, repo_root):
+            raise GuardRefusal("the meas checkout is inside the repo root; refusing to delete anything")
+        enforce_guard("cleanup", [_port_free(deps)])
+        live = live_db_url(repo_root)
+        _check_live_identity(live, deps.pg)
+        deps.pg.superuser_sql(f"/* meas:drop */ DROP DATABASE IF EXISTS {quote_ident(MEAS_DBNAME)} WITH (FORCE);\n",
+                              dbname=deps.pg.maintenance_db, read_only=False, what=f"drop {MEAS_DBNAME}",
+                              secret_values=[live.password])
+        log(f"dropped {MEAS_DBNAME}")
+        for rel in (DOTENV_REL, SETTINGS_REL, LOCAL_CREDENTIALS_REL):
+            target = meas / rel
+            existed = target.exists()
+            target.unlink(missing_ok=True)
+            log(f"{'removed' if existed else 'absent'}: <meas>/{rel.as_posix()}")
+        cache = meas / CONFIDENCE_CACHE_REL
+        if reset_cache:
+            for p in (cache, cache.with_name(cache.name + "-wal"), cache.with_name(cache.name + "-shm")):
+                p.unlink(missing_ok=True)
+            log(f"confidence cache RESET: removed <meas>/{CONFIDENCE_CACHE_REL.as_posix()} (--reset-cache)")
+        else:
+            log("confidence cache kept (only --reset-cache removes it)")
+    except GuardRefusal as exc:
+        log(f"REFUSED: {exc}")
+        return EXIT_REFUSED
+    return EXIT_OK
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+
+def main(argv: list[str] | None = None, *, deps: RunDeps | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="isolated_day.py",
+                                 description="Isolated MEAS day orchestrator (plan 2026-10-13, #230).")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    def common(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        p.add_argument("--repo-root", type=Path, default=REPO_ROOT, help=argparse.SUPPRESS)
+        p.add_argument("--jobs-dir", type=Path, default=JOBS_DIR, help=argparse.SUPPRESS)
+        return p
+
+    p_setup = common(sub.add_parser("setup", help="one-time: meas role + DB + REVOKE on live (needs approval)"))
+    p_setup.add_argument("--i-have-kenneths-approval", dest="approved", action="store_true",
+                         help="confirm Kenneth explicitly approved changing live DB privileges")
+    p_setup.add_argument("--rotate", action="store_true", help="generate a new meas password")
+    common(sub.add_parser("check", help="run every guard; start nothing"))
+    common(sub.add_parser("run", help="one isolated measurement day"))
+    p_cleanup = common(sub.add_parser("cleanup", help="drop the copy DB, remove meas runtime files"))
+    p_cleanup.add_argument("--reset-cache", action="store_true", help="also delete the meas confidence cache")
+    args = ap.parse_args(argv)
+    deps = deps or RunDeps()
+    repo_root, jobs_dir = Path(args.repo_root), Path(args.jobs_dir)
+
+    if args.command == "setup":
+        deps.log(SETUP_WARNING)
+        if not args.approved:
+            deps.log("REFUSED: setup needs --i-have-kenneths-approval")
+            return EXIT_REFUSED
+        try:
+            live = live_db_url(repo_root)
+            result = setup(live, jobs_dir / "meas_db.secret", rotate=args.rotate, pg=deps.pg, log=deps.log)
+        except GuardRefusal as exc:
+            deps.log(f"REFUSED: {exc}")
+            return EXIT_REFUSED
+        deps.log(json.dumps(result, indent=2))
+        return EXIT_OK
+    if args.command == "check":
+        return check_isolated_day(repo_root=repo_root, jobs_dir=jobs_dir, deps=deps)
+    if args.command == "cleanup":
+        return cleanup_isolated_day(repo_root=repo_root, jobs_dir=jobs_dir, reset_cache=args.reset_cache,
+                                    deps=deps)
+    return run_isolated_day(repo_root=repo_root, jobs_dir=jobs_dir, deps=deps).exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
