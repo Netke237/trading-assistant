@@ -107,6 +107,7 @@
 }
 
 .workspace { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.workspace h4 { font-size: 14px; font-weight: 500; margin: 0; }
 .workspace h3 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
 .workspaceColumns { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: var(--space-4); align-items: start; }
 .workspaceMain { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
@@ -145,6 +146,11 @@
 
 .workspace .planRow { gap: 8px; grid-template-columns: 65px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr); }
 .workspace .estimateRow { grid-template-columns: 55px repeat(3, minmax(0, 1fr)); gap: 8px; }
+.methodTargetRow { display: grid; grid-template-columns: 55px repeat(4, minmax(0, 1fr)); gap: var(--space-2); align-items: center; }
+.methodTargetRow > div { display: flex; flex-direction: column; gap: var(--space-1); }
+@media (max-width: 700px) {
+  .methodTargetRow { grid-template-columns: 45px repeat(2, minmax(0, 1fr)); }
+}
 .workspace .targetRow { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 8px; }
 .workspace .grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workspace { overflow-wrap: anywhere; }
