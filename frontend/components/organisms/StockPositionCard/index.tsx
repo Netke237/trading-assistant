@@ -1003,7 +1003,39 @@ export function StockPositionCard({
 
       </PositionGroup>
       {position && err?.includes('wrong side of entry') && <Text size={12} tone="reject">{err}</Text>}
-      {position && <div className={styles.targetsSection}><h3>Structural stop</h3>          <button
+      {position && <section id="structure-stops" aria-label="Structure & Stops" className={styles.targetsSection}>
+        <h3>Structure &amp; Stops</h3>
+        <div className={styles.stopComparison}>
+          <section aria-label="Entered execution stop" className={styles.stopBasis}>
+            <Text size={12}>Entered execution stop</Text>
+            <div><Text size={11} tone="dim">Stop price</Text><Data size={14}>{executionMoney(executionStop)}</Data></div>
+            <div><Text size={11} tone="dim">Risk / share</Text><Data size={14} tone="reject">{executionMoney(executionRiskPerShare)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for entered {overlay.shares} shares</Text><Data size={14} tone="reject">{executionMoney(executionRiskDollars)}</Data></div>
+            <Text size={11} tone="secondary">Current entered entry and execution stop · before costs</Text>
+            {executionStop == null && <Text size={11} tone="reject">Execution stop invalid — use a positive stop {card.direction === 'Bullish' ? 'below' : 'above'} the entered entry.</Text>}
+          </section>
+          {plan ? <section aria-label="Arithmetic final stop" className={styles.stopBasis}>
+            <Text size={12}>Arithmetic final stop</Text>
+            <div><Text size={11} tone="dim">Stop price</Text><Data size={14}>{executionMoney(plan.stop.price)}</Data></div>
+            <div><Text size={11} tone="dim">Risk / share</Text><Data size={14} tone="reject">{executionMoney(plan.stop.riskPerShare)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for entered {overlay.shares} shares</Text><Data size={14} tone="reject">{executionMoney(enteredSharesValid ? plan.stop.riskPerShare * overlay.shares : null)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for suggested {plan.recommendedShares != null ? `${plan.recommendedShares} ` : ''}shares</Text><Data size={14} tone="reject">{executionMoney(plan.recommendedShares != null && Number.isFinite(plan.recommendedShares) && plan.recommendedShares >= 0 ? plan.stop.riskPerShare * plan.recommendedShares : null)}</Data></div>
+            <Text size={11} tone="secondary">Returned Arithmetic stop and risk / share · before costs</Text>
+            <div><Text size={11} tone="dim">Final stop source</Text><Text size={11}>{plan.stop.source}</Text></div>
+            <div><Text size={11} tone="dim">Structural candidate</Text><Data size={12}>{executionMoney(plan.stop.structuralPrice)}</Data><Text size={11}>{plan.stop.structuralSource ?? 'Unavailable'}</Text></div>
+            <div><Text size={11} tone="dim">Structural confidence</Text><Data size={12}>{plan.stop.structuralConfidence ?? 'Unavailable'}</Data></div>
+            <div><Text size={11} tone="dim">ATR(14)</Text><Data size={12}>{executionMoney(plan.atr)}</Data></div>
+            <div><Text size={11} tone="dim">ATR floor</Text><Data size={12}>{executionMoney(plan.stop.atrFloorPrice)}</Data></div>
+            <div><Text size={11} tone="dim">Candidate / floor distance</Text><Data size={12}>{executionMoney(plan.stop.distanceDollar)}</Data></div>
+            <Text size={11} tone="secondary">{stopJustification(plan.stop)}</Text>
+          </section> : <div className={styles.stopBasis}>
+            <Text size={12}>Arithmetic final stop</Text>
+            <Text size={11} tone="secondary">{planning ? 'Computing Arithmetic final stop…' : 'Not computed or stale — run Arithmetic plan for the current inputs.'}</Text>
+          </div>}
+        </div>
+        {planErr && <Text size={11} tone="reject">Arithmetic calculation failed: {planErr}</Text>}
+        <Text size={11} tone="secondary">Checking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan&apos;s risk.</Text>
+        <Text size={11} tone="dim">{checkingStructure ? 'Checking current structure…' : !structural && !structuralErr ? 'Structural check not computed or stale — check the current entry.' : 'Structural check result'}</Text>          <button
             type="button"
             className={styles.actionBtn}
             onClick={onCheckStructure}
@@ -1024,6 +1056,7 @@ export function StockPositionCard({
                 <Text size={11} tone="dim">({structural.distancePct.toFixed(1)}% away)</Text>
               )}
               <Text size={11} tone="dim">{structural.source ?? '—'}</Text>
+              <Text size={11} tone="dim">Confidence: {structural.confidence ?? 'Unavailable'}</Text>
               <Data size={12} tone="dim">
                 {/* Guarded: a structural level that lands exactly on entry would
                     otherwise divide by zero and render Infinity. */}
@@ -1037,7 +1070,7 @@ export function StockPositionCard({
               position so STRUCTURAL STOP BREACHED can fire.
             </Text>
           </div>
-        )}</div>}
+        )}</section>}
       </PositionGroup>
       <PositionGroup active={position} tag="section" id="calculations" className={styles.workspaceMain}>
       {position && <h3>Calculations</h3>}
