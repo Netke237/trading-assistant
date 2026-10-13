@@ -3280,7 +3280,7 @@
       "id": "MEAS-LIVE-DB-ISOLATION",
       "name": "Frozen MEAS runs on an isolated DB copy, separate checkout and port; live DB refused",
       "status": "in_progress",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [
         "MEAS-MARKET-DATA-MEASUREMENT"
@@ -3296,6 +3296,12 @@
         "path": "scripts/meas/isolated_day.py",
         "pattern": "def check_live_db_refused",
         "note": "PRESENCE ONLY: the G2 probe function of the isolated MEAS orchestrator. Absent until T2 lands."
+      },
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan round 3 (fresh independent gate auditor) on 5a038daa..9158ac0a: zero gate findings; plan v3 @ 9158ac0a is the audited plan."
       },
       "audit_history": [
         {
@@ -3332,6 +3338,20 @@
           ],
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewer": "fresh gate-auditor subagent (plan round 3)",
+          "reviewed": "plan diff 5a038daa..9158ac0a (v3 fixes only)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_logged": [
+            "main invalidate_symbol can prefix-delete tag-format cache rows in the shared live file when main stores new bars, so old-process carry-over was activity-dependent; v3 carry-over is not strictly identical; recorded per day via tag-hittable count"
+          ],
+          "clean": true
         }
       ],
       "notes": "2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
