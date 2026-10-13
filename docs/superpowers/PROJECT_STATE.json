@@ -3188,7 +3188,8 @@
         "rounds": 1,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "Frozen Stocks plan independent round 1, exact SHA256 575e14696ab758e003036dbee51513c20c5829e93a03853bea1d6553a01963eb"
+        "closure_evidence": "Frozen Stocks plan independent round 1, exact SHA256 575e14696ab758e003036dbee51513c20c5829e93a03853bea1d6553a01963eb",
+        "record_note": "Canonical branch record recovers the existing frozen independent clean plan round1; reviewer/hash/history/counters unchanged, no new audit round."
       },
       "audit_history": [
         {
