@@ -3279,7 +3279,7 @@
     {
       "id": "MEAS-LIVE-DB-ISOLATION",
       "name": "Frozen MEAS runs on an isolated DB copy, separate checkout and port; live DB refused",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [
