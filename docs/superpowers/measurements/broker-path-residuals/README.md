@@ -73,3 +73,8 @@ zero; the target remains unfinished and is not ready to merge.
 
 The implementation plan must apply these choices. These approvals do not mark
 an audit clean or authorize skipping the independent phase gates.
+
+Follow-up answer in the same chat: "Record full fill and warn (Recommended)".
+If an additional fill breaches an exposure cap, record all actually filled
+units and show the breach. This changes the editor's former pre-trade-style
+clamp/refusal for increases; pre-trade order authorization still enforces caps.
