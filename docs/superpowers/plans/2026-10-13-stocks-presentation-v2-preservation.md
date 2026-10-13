@@ -24,7 +24,7 @@ Sources: StockPositionCard/index.tsx and its child components; step-7-position-c
 | Target-first/stop-first/neither allocated weights, times, terminal mean and nPaths | Supporting Arithmetic race | Returned race; allocated percentages unchanged; source statistic explicitly labelled; no premium barrier |
 | Latest calculation chronology and absent/stale states | Latest calculation | Local completed-action identity, current available session result; restored chronology unavailable |
 | Method availability, method IDs, explicit row keys/prices, judged-on/clear controls | Decision / MethodPickSelector | Existing methodPickOptions and applyMethodPick; Ladder means editable execution ladder, separate from immutable initial strategy |
-| Chosen summary and source-matched probability/time | Decision (ticket #254 pending) | Current matching row only; stock-space prices; selecting intent does not apply stop/shares or order |
+| Chosen summary and source-matched probability/time | Decision / Selected stock plan | Current matching row only; stock-space prices; selecting intent does not apply stop/shares or order |
 | Chart link and pin/unpin | Context actions | Original chart href and basket handlers |
 | Add to Portfolio and added/queued/in-flight feedback | Decision / Execution | Original onAddToPortfolio; target-side refusal, picked fields, snapshot, structural reference and holdMaxDays |
 | Recommendation and IBKR/Tradier/Alpaca/Tastytrade configured paper modes | Decision / Execution | Existing config sources and mode state; unavailable buttons remain disabled |
