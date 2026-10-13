@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/scan-report-isolation-b19c62b6",
       "claimed_at": "2026-10-13T04:52:25Z",
-      "expires_at": "2026-10-13T07:59:59Z",
+      "expires_at": "2026-10-13T08:01:21Z",
       "note": "Implement durable category-isolated scan reports #237-239",
       "task": "SCAN-REPORT-ISOLATION"
     }
