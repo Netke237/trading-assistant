@@ -1924,6 +1924,19 @@ export function TradeCard({
   // entry and in the contract-change effect, so deleting it changed no test —
   // verbatim the criticism this comment levels at the ref it replaced. A guard
   // no test can fail is not a guard, and two of them are not better than one.
+  // Display-only basis: prefer this result's server-rounded cents. The raw
+  // captured request can differ at a half-cent due to Python's rounding.
+  // A larger mismatch is not a matched basis for a dollar outcome.
+  const capturedMcPremium = firstPassageContext?.premium;
+  const echoedMcPremium = firstPassage?.race?.premiumUsed;
+  const hasMcEcho = firstPassage?.race != null;
+  const capturedMcValid = capturedMcPremium != null && Number.isFinite(capturedMcPremium) && capturedMcPremium > 0;
+  const echoedMcValid = echoedMcPremium != null && Number.isFinite(echoedMcPremium) && echoedMcPremium > 0;
+  const mcPremium = firstPassage == null ? null
+    : hasMcEcho
+      ? echoedMcValid && (firstPassageContext == null || (capturedMcValid && Math.abs(capturedMcPremium! - echoedMcPremium!) <= 0.005 + 1e-9))
+        ? echoedMcPremium! : null
+      : capturedMcValid ? Number(capturedMcPremium!.toFixed(2)) : null;
   const estimateIsFresh = raceBarriers?.contract === data.contract;
 
   const raceIsShowable = estimateIsFresh && !raceBarriersMoved;
@@ -3031,9 +3044,32 @@ export function TradeCard({
         </section>
 
         {/* Monte Carlo Profit Target (Feature 2 — renamed from "Profit Targets") */}
-        <section className={styles.planCard}>
+        <section className={`${styles.planCard} ${styles.monteCarloSection}`} aria-label="Monte Carlo Profit Target">
           <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
           <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
+          <div className={styles.arithmeticBasis}>
+            <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
+            <KV label="Scan stock reference" value={`$${data.price.toFixed(2)}`} mono />
+            <KV label={hasMcEcho ? 'Same-estimate echoed premium' : 'Captured request premium (rounded to cents)'} value={mcPremium != null && mcPremium > 0 ? `$${mcPremium.toFixed(2)}/share` : firstPassage ? 'Unavailable — estimate premium basis missing' : 'Not yet estimated'} mono />
+            <KV label="Editable order entry (separate basis)" value={`$${overlay.entryLimit.toFixed(2)}/share`} mono />
+          </div>
+          <Text size={10} tone="dim">Stored Monte Carlo run stock entry: unavailable in the saved context. The scan reference above is not the run&apos;s stock-entry snapshot.</Text>
+          {hasMcEcho && capturedMcValid && <Text size={10} tone="dim">Captured request premium: ${capturedMcPremium}/share; dollar outcomes use the same-estimate echoed cent basis when matched.</Text>}
+          <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − estimate premium basis) × quantity × 100, using displayed cent-rounded prices, before costs; not a fill or guaranteed profit.`}</Text>
+          {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
+          <Text size={11} tone="secondary">GBM simulated stock paths · Black-Scholes option repricing.</Text>
+          <Text size={10} tone="dim">{`Simulation uses calendar-day steps to expiry. Current selected-contract metadata: ${data.contractDetails?.dte ?? 'unavailable'} DTE; saved run DTE is unavailable in the stored context. Probability means target premium touched before expiry, even if a stop is also reached. Median time is conditional on target hits, in calendar days; independent target probabilities can sum past 100%.`}</Text>
+          <Text size={10} tone="dim">{`Current inherited holding/repricing settings (not saved run inputs): ${horizonPreset ?? 'backend default'}; hold minimum ${holdMin ?? 'default'}, maximum ${holdMax ?? 'default'} trading days. These are separate from the expiry simulation horizon.`}</Text>
+          <Text size={11} tone="secondary">Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.</Text>
+          <div className={styles.arithmeticBasis}>
+            <KV label="Companion race stock barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.stockStopPrice.toFixed(2)} stock` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
+            <KV label="Companion race premium exit-value barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.premiumStopPrice.toFixed(2)}/share` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
+            <KV label="Execution stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)} stock` : 'Unavailable'} mono />
+            <KV label="Execution premium-stop loss amount" value={premiumStopReadOnly
+              ? premiumStopTouched && overlay.premiumStop != null ? `$${overlay.premiumStop.toFixed(2)}/share · pinned` : `Global loss allowance: ${Number((globalPremiumStopPct * 100).toFixed(2))}% (fill-derived)`
+              : effectivePremiumStop != null ? `$${effectivePremiumStop.toFixed(2)}/share${premiumStopTouched ? ' · override' : showsGlobalOnLiveMid ? ` · global ${Number((globalPremiumStopPct * 100).toFixed(2))}%` : ' · scan seed'}` : 'Unavailable'} mono />
+          </div>
+          <Text size={10} tone="dim">Independent stock-stop touch probability and time remain in the Barrier Race disclosure. T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
           <div className={styles.targetPctRow}>
             {(['t1', 't2', 't3'] as const).map((key) => (
               <label key={key} className={styles.targetPctInput}>
@@ -3101,6 +3137,8 @@ export function TradeCard({
                 <ProfitTargetRow
                   key={`${t.pct}-${i}`}
                   target={t}
+                  estimatePremium={mcPremium != null && mcPremium > 0 ? mcPremium : null}
+                  quantity={overlay.contracts}
                   structuralPaired={structuralPairing === 'ok'}
                   structuralPending={structuralLoading}
                   structuralUnavailable={structuralStop === null}
@@ -3780,6 +3818,8 @@ function KV({
 
 function ProfitTargetRow({
   target,
+  estimatePremium,
+  quantity,
   structuralPaired,
   structuralPending,
   structuralUnavailable,
@@ -3787,6 +3827,8 @@ function ProfitTargetRow({
   sharedStopPrice,
 }: {
   target: FirstPassageTarget;
+  estimatePremium: number | null;
+  quantity: number;
   /** Both the stop and the estimate were confirmed fresh THIS mount, and the
    *  stop is not sitting on the price it was measured against. Only then is
    *  the level below honest to show. */
@@ -3803,6 +3845,10 @@ function ProfitTargetRow({
   sharedStopPrice: number | null;
 }) {
   const label = `T${Math.round(target.pct * 100)}%`;
+  const optionAvailable = Number.isFinite(target.optionPrice) && target.optionPrice >= 0;
+  const outcome = estimatePremium != null && optionAvailable && Number.isFinite(quantity) && quantity >= 0
+    ? (Math.round(Number(target.optionPrice.toFixed(2)) * 100) - Math.round(estimatePremium * 100)) * quantity
+    : null;
   // The "R:R vs. structural stop" cell that used to stand here is gone
   // (barrier-race spec section 3.4, Kenneth's OK obtained). Its risk leg was
   // premium x a fixed percentage, so premium cancelled out and the ratio
@@ -3844,19 +3890,20 @@ function ProfitTargetRow({
         </div>
         <div className={styles.resultColumns}>
         <div className={styles.targetValues}>
-          <KV label="Est. option" value={`$${target.optionPrice.toFixed(2)}`} mono />
+          <KV label="Option premium" value={optionAvailable ? `$${target.optionPrice.toFixed(2)}` : 'Unavailable'} mono />
+          <KV label="Estimated dollar outcome" value={outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'} mono />
           <KV
-            label="Stock price"
-            value={target.stockPrice != null ? `$${target.stockPrice.toFixed(2)}` : 'not reachable'}
+            label="Stock-price equivalent (display approximation)"
+            value={target.stockPrice == null ? 'not reachable' : Number.isFinite(target.stockPrice) ? `$${target.stockPrice.toFixed(2)}` : 'Unavailable'}
             mono
           />
           <KV label="Structural level found" value={structuralLevelValue} mono />
         </div>
         <div className={styles.probabilityColumn}>
-          <KV label="Probability" value={`${(target.probability * 100).toFixed(0)}%`} mono />
+          <KV label="Probability before expiry" value={Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'} mono />
           <KV
-            label="Expected time"
-            value={target.expectedDays != null ? `~${Math.round(target.expectedDays)}d` : 'unlikely'}
+            label="Conditional median time"
+            value={target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)} calendar days` : 'Unavailable — no conditional median'}
             mono
           />
         </div>

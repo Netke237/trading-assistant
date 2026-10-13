@@ -735,3 +735,6 @@
 .arithmeticTable tbody th > span + span { margin-top: var(--space-2); }
 .arithmeticTable tbody th { font-weight: 400; }
 .arithmeticTable tbody tr:last-child > * { border-bottom: 0; }
+
+/* Keep the complete MC basis and all target comparisons readable at desktop widths. */
+.monteCarloSection { grid-column: 1 / -1; min-width: 0; }

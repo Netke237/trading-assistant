@@ -1350,7 +1350,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
     expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
     expect(screen.getByText('72%')).toBeInTheDocument();       // T20% Probability
-    expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time
+    expect(screen.getByText('~5 calendar days')).toBeInTheDocument();       // T20% Expected time
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
     // The invalidation row moved off this card to the Barrier Race card
