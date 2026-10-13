@@ -1,8 +1,9 @@
 import { test, expect } from '../fixtures';
 import { MOCK_SCAN_CANDIDATE, MOCK_OPTION_CHAIN } from '../fixtures/api-mocks';
 
-for (const width of [1200, 1920]) {
-  test(`trade card scores, evidence, handling and alternatives at ${width}px`, async ({ page }) => {
+for (const theme of ['dark', 'light']) {
+  for (const width of [1200, 1920]) {
+  test(`trade card scores, evidence, handling and alternatives at ${width}px (${theme})`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.route('**/api/quote/stock?*', r => r.fulfill({ json: { symbol: 'AAPL', price: 185.2 } }));
     await page.route('**/api/quote/option?*', r => r.fulfill({ json: { symbol: 'AAPL', price: 2.15 } }));
@@ -28,8 +29,13 @@ for (const width of [1200, 1920]) {
       scanResult: { scan_id: 'ui-followup', timestamp: new Date().toISOString(), candidates: [c], rejected: [] },
       context: { direction: 'Bullish', horizon: 'Swing (5-15d)' }, screenerMode: 'options', scanState: 'COMPLETED',
     } })), candidate);
+    await page.addInitScript(t => localStorage.setItem('bamendjou:theme', JSON.stringify({ version: 0, state: { theme: t } })), theme);
     await page.goto('/screener/step-7-trade-card');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const scores = page.getByRole('button', { name: /Stock & contract scores/ });
+    await expect(scores).toHaveAttribute('aria-expanded', 'false');
+    await scores.focus();
+    await page.keyboard.press('Enter');
     await expect(scores).toHaveAttribute('aria-expanded', 'true');
     const health = page.getByText('Fundamental Health — no data');
     expect((await scores.boundingBox())!.y).toBeLessThan((await health.boundingBox())!.y);
@@ -58,11 +64,26 @@ for (const width of [1200, 1920]) {
     expect(Math.max(...exitValues) - Math.min(...exitValues)).toBeLessThan(2);
     const final = page.getByText('Final Recommendation').locator('..').locator('..');
     await expect(final.getByRole('radiogroup', { name: 'Exit method for this trade' })).toBeVisible();
+    const ladder = final.getByRole('radio', { name: 'Ladder', exact: true });
+    await ladder.focus();
+    await page.keyboard.press('Space');
+    await expect(final.getByText('Target not selected', { exact: true })).toBeVisible();
+    const target = final.getByRole('radiogroup', { name: 'Target row', exact: true }).getByRole('radio').first();
+    await target.focus();
+    await page.keyboard.press('Space');
+    await expect(target).toHaveAttribute('aria-checked', 'true');
+    await expect(final.getByText('Recorded stock target', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Set trade loss budget' })).toBeVisible();
     await page.getByRole('button', { name: /ALTERNATIVES \(2\)/ }).click();
     await expect(page.getByText('Alt 1', { exact: true })).toBeVisible();
     await expect(page.getByText('Alt 2', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)).toBe(false);
-    await page.screenshot({ path: `test-results/trade-card-ui-${width}.png`, fullPage: true });
+    await page.screenshot({ path: test.info().outputPath(`trade-card-ui-${width}-${theme}.png`), fullPage: true });
+    await order.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath(`trade-card-order-${width}-${theme}.png`) });
+    await final.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath(`trade-card-decision-${width}-${theme}.png`) });
   });
+}
+
 }

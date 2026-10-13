@@ -2997,6 +2997,162 @@
         "closed_by": "clean"
       },
       "merge_commit": "51b4821465e298eaee611be10b18513dc9654e50"
+    },
+    {
+      "id": "OPTIONS-PRESENTATION-V2",
+      "name": "Approved Options trade-card layout; information, numbers and execution preserved",
+      "status": "built",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board/tracking #233",
+        "OPT-PRES-01\u201310 #240\u2013249"
+      ],
+      "plan": "docs/superpowers/specs/2026-10-13-approved-screener-designs/options-presentation-tickets.md",
+      "branch": "board/options-presentation-resume-20261013",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/components/organisms/TradeCard/index.tsx",
+        "pattern": "data-presentation=\"options-v2\"",
+        "note": "PRESENCE ONLY: final integrated Options presentation marker. Added only when build complete; behavior verified by source crosswalk/tests and independent audit."
+      },
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "Frozen Options plan independent round 2, exact hash DAFF9D152B4558D37B9650B27CB19AEC530B3179CE98F93E22FEC031A981C112"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/options_ticket_audit_r1",
+          "reviewed": "Frozen plan SHA256 A0AF630A0C2BAE871415C8AC8CB7532AFDDDAACC4DFDA239E3C3D518F70F59F6; full scope, original record in options-ticket-audit.md",
+          "gate_findings": 1,
+          "findings": [
+            "OPT-PRES-04 named incorrect stop-cost source fields"
+          ],
+          "fixes": [
+            "Corrected to matched stopRisk/sharedStop/stopCostShown/stopPremiumRisk and StopCostOut premium/valueAtStop/loss fields"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/options_ticket_audit_r2",
+          "reviewed": "Frozen plan SHA256 DAFF9D152B4558D37B9650B27CB19AEC530B3179CE98F93E22FEC031A981C112; round1 fix/interactions; original record in options-ticket-audit.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/options_code_audit_r1",
+          "reviewed": "82d565cff9ecb928cfe2f2d4b70adba6806b9b90..6ad35664689cf46a3ca733dea8608dbdf375223e; entire integrated Options phase, all 18 changed files; production identical to 8605953b",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "/root/options_buildfix_audit_r2",
+          "reviewed": "6ad35664..439cf801 plus sole JSX apostrophe escape at TradeCard:2659; corrected source SHA256 f5815e6e3fb97c39d4e5a58fb457ee93ee2cf2b2c1c5139aaabef26cfe911c5c",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "reason": "Required CI passed all5091 frontend tests but build found one unescaped JSX apostrophe from recovered #242; required build correction independently rechecked"
+        }
+      ],
+      "note": "2026-10-13 #240\u2013249 built/audited. Original plan2 retained; full code1 clean and syntax-only required CI build correction independently clean code2. GitHub all5091 frontend tests passed before build correction; corrected local production build/typecheck pass. Final exact-head CI required before merge; not shipped.",
+      "implementation_tickets": [
+        {
+          "issue": 240,
+          "commit": "1ad8592a62a093bfa957f005d4130e9241a6418a",
+          "validation": "Typecheck clean; 3 focused TradeCard suites/207 tests pass including 3 new context identity, IV basis and zero-valued spread/alternative preservation regressions"
+        },
+        {
+          "issue": 241,
+          "commit": "d4d2ea669a7a365953537432b825c16f016dbeed",
+          "validation": "typecheck clean; 248 scoped tests across 10 suites passed after unchanged clock-sensitive rerun; fresh scores collapsed and saved open/closed evidence preferences preserved"
+        },
+        {
+          "issue": 242,
+          "commit": "8e4769f948c2a6d6e8de23433ef367a02e4f890f",
+          "validation": "typecheck clean; 8 new order/budget regressions and 569 existing tests across 20 suites passed; handlers, numeric helpers and persistence unchanged"
+        },
+        {
+          "issue": 243,
+          "commit": "eec49c3c9c8c386b10844ed11a6b9c8356193617",
+          "validation": "typecheck clean; 328 focused tests across 8 suites and final 165-test TradeCard suite passed; four matched stop-cost figures, quantity scaling, separate scan/calculation/execution sources preserved"
+        },
+        {
+          "issue": 244,
+          "commit": "3bf271063ec96b209152871af979f655c6f869a7",
+          "validation": "typecheck clean; 213 focused tests across 4 suites plus final 8-case Arithmetic regressions passed; actual custom rows, matched premium basis, unavailable states, request/selection/sizing behavior preserved"
+        },
+        {
+          "issue": 245,
+          "commit": "7aa2183b70168ee49a9fb28bec4f18c373c5c72c",
+          "validation": "typecheck clean; 355 of 357 relevant tests initially passed, two failures cleared by unchanged methodPick32 and final MonteCarlo/P2 28 reruns; 15 new MC regressions pass; handlers, request/persistence shapes and freshness guards unchanged"
+        },
+        {
+          "issue": 246,
+          "commit": "a481515a",
+          "validation": "140 focused tests passed; typecheck clean; returned reward quantity outcomes and existing guards preserved"
+        },
+        {
+          "issue": 247,
+          "commit": "675b79c2",
+          "validation": "Typecheck clean; downstream suites passed; corrected TradeCard/method tests 205 passed; final method suite 41 passed including eight new summary cases"
+        },
+        {
+          "issue": 248,
+          "commit": "60c4b073",
+          "validation": "Typecheck clean; 404 tests across nine ladder/method/dialog/direct/basket/arm/context suites passed; eight new cases"
+        },
+        {
+          "issue": 249,
+          "validation": "40-row preservation crosswalk; independent phase code round1 clean; full frontend 5090/5091 initially pass, legacy ladder-collapse assertion corrected and all13 p2 tests pass; typecheck clean; four width/theme keyboard browser cases pass"
+        }
+      ],
+      "implementation_interruption": {
+        "next_issue": 242,
+        "reason": "Account usage limit prevented fresh ticket implementer from proceeding; no partial changes",
+        "branch": "board/options-presentation-v2-892b8ac5",
+        "code_audit_started": false,
+        "validation": "Final typecheck clean; state.py --quiet exit0; prior baseline and scoped tests recorded in validation document",
+        "resumed_branch": "board/options-presentation-v2-45bd8065",
+        "resolved": "Account permits ordinary usage; fresh #242 implementer started"
+      },
+      "validation_limitations": [
+        {
+          "kind": "existing_clock_sensitive_test",
+          "path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx:501",
+          "scenario": "Unchanged regex /6.24|40%|computed via: Monte Carlo/ also matches Barrier Race timestamp 06:24 or 16:24. Observed during #241 and #245; unchanged suite reruns passed at another minute. No method-pick behavior changed."
+        },
+        {
+          "kind": "existing_windows_locale_tests",
+          "record": "docs/superpowers/plans/2026-10-13-options-presentation-v2-validation.md",
+          "scenario": "Original full frontend baseline has two locale grouping failures, StockSendDialog.session and BarrierRaceCard. No production formatting or unrelated tests changed to hide them."
+        }
+      ],
+      "code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "Independent follow-up round4 (code2) verified required JSX build correction; zero gate findings, original full code round1 remains clean"
+      }
     }
   ],
   "already_shipped": [

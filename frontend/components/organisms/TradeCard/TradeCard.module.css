@@ -483,7 +483,7 @@
 
 .handlingGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   gap: var(--space-4);
 }
 
@@ -638,3 +638,103 @@
 }
 
 .scorePanelsGrid > * { min-width: 0; }
+
+/* One selected context retains snapshot details and conditional spread data. */
+.contextDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.snapshotNote {
+  display: block;
+  margin-top: var(--space-2);
+}
+
+.headerCard .detailsCell {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Budget and quantity stay beside the existing execution fields. */
+.budgetSummary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.handlingGrid .targetPctRow {
+  flex-wrap: wrap;
+}
+
+.handlingGrid .targetPctRow .editInput {
+  flex: 1 1 100px;
+  width: auto;
+  min-width: 0;
+}
+
+/* Keep stop geometry and its matched contract-cost check together across the card. */
+.structureSection {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.stopLossFigures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: var(--space-3) 0;
+}
+
+.stopLossFigures > div {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.stopRiskHead {
+  flex-wrap: wrap;
+}
+
+.structuralSnapshot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* All returned Arithmetic targets share a single comparison and calculation basis. */
+.arithmeticSection { grid-column: 1 / -1; min-width: 0; }
+.arithmeticBasis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: var(--space-3);
+}
+.arithmeticBasis > div { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.arithmeticTableScroll { overflow-x: auto; }
+.arithmeticTable { width: 100%; border-collapse: collapse; text-align: left; }
+.arithmeticTable th, .arithmeticTable td {
+  padding: var(--space-3);
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-subtle);
+  min-width: 95px;
+}
+.arithmeticTable th:first-child { min-width: 200px; max-width: 290px; }
+.arithmeticTable tbody th > span, .arithmeticTable td > span { display: block; }
+.arithmeticTable tbody th > span + span { margin-top: var(--space-2); }
+.arithmeticTable tbody th { font-weight: 400; }
+.arithmeticTable tbody tr:last-child > * { border-bottom: 0; }
+
+/* Keep the complete MC basis and all target comparisons readable at desktop widths. */
+.monteCarloSection { grid-column: 1 / -1; min-width: 0; }
