@@ -2969,7 +2969,14 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 user instructed implementation in current chat. Source-main parity with frozen review verified; no original audit counters reset. Plan clean, production build/code audit unfinished and not ready to merge. First ticket #240 in progress."
+      "note": "2026-10-13 #240 implemented at 1ad8592a: Typecheck clean; 3 focused TradeCard suites/207 tests pass including 3 new context identity, IV basis and zero-valued spread/alternative preservation regressions. Next #241. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
+      "implementation_tickets": [
+        {
+          "issue": 240,
+          "commit": "1ad8592a62a093bfa957f005d4130e9241a6418a",
+          "validation": "Typecheck clean; 3 focused TradeCard suites/207 tests pass including 3 new context identity, IV basis and zero-valued spread/alternative preservation regressions"
+        }
+      ]
     }
   ],
   "already_shipped": [
