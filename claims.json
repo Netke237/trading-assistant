@@ -2,18 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/broker-path-residuals-4e66cb72",
-      "claimed_at": "2026-10-13T04:14:38Z",
-      "expires_at": "2026-10-13T08:01:17Z",
-      "note": "Resume broker error and position risk race reproductions",
-      "task": "BROKER-PATH-RESIDUALS"
-    },
-    {
-      "agent": "claude",
       "branch": "board/options-presentation-v2-45bd8065",
-      "claimed_at": "2026-10-13T05:28:35Z",
-      "expires_at": "2026-10-13T08:55:00Z",
-      "note": "Resume approved Options UI tickets #242-249",
+      "claimed_at": "2026-10-13T14:01:52Z",
+      "expires_at": "2026-10-13T17:01:52Z",
+      "note": "Resume approved Options UI after usage interruption",
       "task": "OPTIONS-PRESENTATION-V2"
     }
   ]
