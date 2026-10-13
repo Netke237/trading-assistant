@@ -2933,10 +2933,10 @@
       "verify": {
         "kind": "present",
         "path": "backend/app/models/broker_attempt.py",
-        "pattern": "class .*Attempt",
-        "note": "Future durable submission model presence only. Update exact marker to final audited implementation scope; no application code exists for this phase yet."
+        "pattern": "class BrokerAttempt",
+        "note": "Presence only: durable attempt model; behavior requires independent audit and tests."
       },
-      "note": "2026-10-13 evidence-only discovery complete on source 5f98b791. Python3.11.16 probes reproduce uncertain duplicate dispatch, post-submit parsing, approval orphan and concurrent PATCH exposure breach. Implementation plan drafting; no plan/code audit rounds run. User chat chose durable uncertain attempt hold until manual verification, added fills with required fill price and weighted-average entry, full filled quantity recorded even above exposure caps with breach warning. Existing approval cleanup policy preserved. Work unfinished, not ready to merge."
+      "note": "2026-10-13 evidence-only discovery complete on source 5f98b791. Python3.11.16 probes reproduce uncertain duplicate dispatch, post-submit parsing, approval orphan and concurrent PATCH exposure breach. Implementation plan drafting; no plan/code audit rounds run. User chat chose durable uncertain attempt hold until manual verification, added fills with required fill price and weighted-average entry, full filled quantity recorded even above exposure caps with breach warning. Existing approval cleanup policy preserved. Work unfinished, not ready to merge. Draft plan complete; plan round 1 will review exact plan commit against current source. No implementation started."
     }
   ],
   "already_shipped": [
