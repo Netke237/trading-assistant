@@ -3188,6 +3188,8 @@ export function TradeCard({
              proposes no level of its own; it only decides which of the three
              existing barriers each simulated path reaches first. */}
         <BarrierRaceCard
+          quantity={overlay.contracts}
+          isSpread={!!data.spreadType && data.spreadType !== 'single'}
           // Gated on freshness too: `firstPassage` holds the PREVIOUS
           // contract's estimate for the frame between a contract switch and the
           // reset effect, so an un-gated `race === null` put "Not simulated —

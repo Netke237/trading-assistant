@@ -440,6 +440,20 @@ const runEstimate = async (race = true) => {
 };
 
 describe('TC-UI-02 selected recommendation', () => {
+  it('race dollar outcome follows edited entered quantity without another simulation or changing per-contract edge', async () => {
+    render(<TradeCard data={card} contracts={2} />);
+    await runEstimate();
+    const race = within(screen.getByText('Which barrier is reached first').closest('section')!);
+    expect(race.getByText('$950.00')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const input = screen.getByLabelText('Edit Contracts');
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.blur(input);
+    expect(race.getByText('$1425.00')).toBeVisible();
+    expect(race.getByText('$120.00')).toBeVisible();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the selector alongside the heading and shows initial ladder defaults with no pick', () => {
     render(<TradeCard data={card} />);
     const heading = screen.getByText('Final Recommendation');
