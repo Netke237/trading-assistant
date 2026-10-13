@@ -2921,7 +2921,7 @@
       "id": "SCAN-REPORT-ISOLATION",
       "name": "Durable isolated latest-run reports for five scan categories (#236)",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2937,7 +2937,7 @@
         "pattern": "async def run_with_report",
         "note": "Lifecycle integration presence only; entire target remains unfinished until code audit and frontend prerequisites."
       },
-      "note": "2026-10-13 implementation started. Main 5f98b791 reconciled: legacy ScanSession uses current/stock-current; scheduled scans use separate core functions and run storage; Pullback shares stock endpoint. Additive backend first; frontend integration waits for presentation prerequisites. Existing frozen plan clean; code audit not started. Options #233 owned by another branch, untouched.",
+      "note": "LOG-01 storage built at 759bd364; focused tests green, full-suite result pending. Plan elaboration round2 found1; fixing for last plan round3. LOG02/03 not implemented. No phase code audit or merge readiness.",
       "audit_history": [
         {
           "round": 1,
@@ -2948,6 +2948,23 @@
           "findings": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/log_plan_round2",
+          "reviewed": "Lifecycle elaboration SHA256 cc214b789db12951302a8700c7c57e07dda8d5f561040ef6bee73d688ccd4bcb against source main 5f98b791 and LOG-01",
+          "gate_findings": 1,
+          "findings": [
+            "G1: plan incorrectly delegates free-text secret validation to service key-name validator; credential-bearing override/exclusion text can be persisted."
+          ],
+          "fixes": [
+            "Lifecycle adapters must allowlist supported typed/domain override values and omit unsafe arbitrary text before begin/finish; regression required."
+          ],
+          "outstanding": [
+            "G1 pending plan round3 independent review"
+          ],
+          "clean": false
         }
       ]
     }
