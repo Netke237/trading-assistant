@@ -601,3 +601,113 @@ it.each(['entry', 'symbol', 'run'] as const)('ignores late Arithmetic and struct
   expect(within(stops).getByText(/Not computed or stale/)).toBeInTheDocument();
   expect(stops).not.toHaveTextContent('swing_low');
 });
+
+const selectedSummary = () => screen.getByRole('region', { name: 'Selected stock plan' });
+const summaryField = (label: string, value: string) => expect(within(selectedSummary()).getByText(label).parentElement).toHaveTextContent(value);
+it('shows method-only intent with a target prompt and limits summary to position presentation', () => {
+  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  expect(selectedSummary()).toHaveTextContent('Choose a method');
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
+  expect(selectedSummary()).toHaveTextContent('Choose a target');
+  expect(useScanStore.getState().stocksCardEdits.picks.AAPL.rowStockPrice).toBeNull();
+  view.rerender(<StockPositionCard card={card()} strategyKey="pullback_ema" />);
+  expect(screen.queryByRole('region', { name: 'Selected stock plan' })).not.toBeInTheDocument();
+});
+it.each(['Bullish', 'Bearish'] as const)('summarizes edited %s Ladder signed outcome without applying selection', async direction => {
+  const c = card('AAPL', direction);
+  if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, targets: [140, 135, 130] };
+  useScanStore.getState().setStockScanResult(scan([c]));
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  await edit('T1 TARGET', direction === 'Bullish' ? '147' : '153'); await edit('SHARES', '12');
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  const before = useScanStore.getState().stockExecution[identity].overlay;
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
+  summaryField('Selected method / target', 'Ladder · T1'); summaryField('Stock target', direction === 'Bullish' ? '$147.00' : '$153.00');
+  summaryField('Calculation stop basis', direction === 'Bullish' ? 'Current execution stop · $145.00' : 'Current execution stop · $155.00');
+  summaryField('Entered quantity', '12 shares'); summaryField('Full-position outcome', '$-36.00');
+  expect(selectedSummary()).toHaveTextContent('Probability and time unavailable');
+  expect(useScanStore.getState().stockExecution[identity].overlay).toEqual(before); expect(api.postStockOrder).not.toHaveBeenCalled();
+  await edit('STOP', '150'); summaryField('Calculation stop basis', 'Unavailable');
+});
+it.each(['Bullish', 'Bearish'] as const)('uses returned %s Arithmetic reward, separate final stop and entered quantity', async direction => {
+  const c = card('AAPL', direction); if (direction === 'Bearish') c.strategy.stop_price = 155;
+  const p = makePlan({ recommendedShares: 83 }); p.stop.price = direction === 'Bullish' ? 144 : 156;
+  p.targets[0] = { ...p.targets[0], price: direction === 'Bullish' ? 162 : 138, rewardPerShare: 11.99, probability: 0, expectedDays: 4.5 };
+  (api.getStockExitPlan as jest.Mock).mockResolvedValue(p);
+  useScanStore.getState().setStockScanResult(scan([c]));
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' })); fireEvent.click(screen.getByRole('radio', { name: '2R' }));
+  summaryField('Calculation stop basis', direction === 'Bullish' ? 'Arithmetic final stop · $144.00' : 'Arithmetic final stop · $156.00');
+  summaryField('Execution stop', direction === 'Bullish' ? '$145.00' : '$155.00'); summaryField('Full-position outcome', '$359.70');
+  summaryField('Target hit probability', '0%'); summaryField('Median first-touch time', '4.5 trading days');
+  expect(selectedSummary()).toHaveTextContent('among paths that reach the target'); expect(selectedSummary()).toHaveTextContent('same path can also hit the stop');
+  const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
+  act(() => { const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(c); useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, shares: 0 } }); });
+  summaryField('Full-position outcome', '$0.00');
+  await edit('ENTRY', '151'); expect(selectedSummary()).toHaveTextContent('Choose a method');
+});
+it.each(['Bullish', 'Bearish'] as const)('uses actual returned %s Monte Carlo target and current quantity', async direction => {
+  const c = card('AAPL', direction); if (direction === 'Bearish') c.strategy.stop_price = 155;
+  (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [{ price: direction === 'Bullish' ? 163 : 137, probability: .62, expectedDays: 4.5 }] });
+  useScanStore.getState().setStockScanResult(scan([c]));
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
+  summaryField('Stock target', direction === 'Bullish' ? '$163.00' : '$137.00'); summaryField('Full-position outcome', '$390.00');
+  summaryField('Median first-touch time', '4.5 trading days'); await edit('SHARES', '12'); summaryField('Full-position outcome', '$156.00');
+  await edit('STOP', direction === 'Bullish' ? '144' : '156'); expect(selectedSummary()).toHaveTextContent('Choose a method');
+});
+it.each(['ladder', 'arithmetic', 'monte_carlo'] as const)('does not borrow evidence from ambiguous %s rows', async method => {
+  const c = card(); c.strategy.targets = [160, 160, 170]; const p = makePlan(); p.targets[1].price = p.targets[0].price;
+  (api.getStockExitPlan as jest.Mock).mockResolvedValue(p);
+  (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [estimate.targets[0], { ...estimate.targets[0], probability: .1, expectedDays: 9.5 }] });
+  useScanStore.getState().setStockScanResult(scan([c]));
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  if (method !== 'ladder') { fireEvent.click(screen.getByRole('button', { name: method === 'arithmetic' ? 'Arithmetic plan' : 'Estimate' })); await screen.findByText(method === 'arithmetic' ? 'Latest: Arithmetic' : 'Latest: Monte Carlo'); }
+  fireEvent.click(screen.getByRole('radio', { name: method === 'ladder' ? 'Ladder' : method === 'arithmetic' ? 'Arithmetic' : 'Monte Carlo' }));
+  fireEvent.click(screen.getByRole('radio', { name: method === 'arithmetic' ? '2R' : 'T1' }));
+  expect(selectedSummary()).toHaveTextContent('Target row ambiguous'); expect(selectedSummary()).toHaveTextContent('Probability and time unavailable');
+  if (method === 'arithmetic') summaryField('Full-position outcome', 'Unavailable');
+});
+it('distinguishes zero probability from absent time and clears row when method changes', async () => {
+  (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [{ price: 160, probability: 0, expectedDays: null }] });
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
+  summaryField('Target hit probability', '0%'); summaryField('Median first-touch time', 'Unavailable');
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); expect(selectedSummary()).toHaveTextContent('Choose a target');
+});
+it.each(['symbol', 'run'] as const)('keeps summary scoped to %s and rejects late estimates', async change => {
+  const pending = deferred<typeof estimate>(); (api.getStockFirstPassage as jest.Mock).mockReturnValue(pending.promise);
+  useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')]));
+  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' })); fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  if (change === 'symbol') view.rerender(<StockPositionCard card={card('MSFT')} strategyKey="pullback_ema" presentation="position" />);
+  else act(() => useScanStore.getState().setStockScanResult({ ...scan(), scan_id: 'new-run' }));
+  await act(async () => pending.resolve(estimate)); expect(selectedSummary()).toHaveTextContent('Choose a method'); expect(selectedSummary()).not.toHaveTextContent('62%');
+});
+it.each(['ladder', 'monte_carlo', 'arithmetic'] as const)('does not invent estimates for restored %s picks', method => {
+  act(() => useScanStore.getState().setCardEdit('stocks', 'picks', 'AAPL', { method, rowStockPrice: 160, rowOptionPrice: null, stopBasis: 'stock', pickedAt: 'legacy' }));
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  if (method === 'ladder') { summaryField('Stock target', '$160.00'); expect(selectedSummary()).toHaveTextContent('Probability and time unavailable'); }
+  else expect(selectedSummary()).toHaveTextContent('Choose a method');
+});
+
+it.each(['Bullish', 'Bearish'] as const)('keeps returned Arithmetic magnitude with a losing %s target sign', async direction => {
+  const c = card('AAPL', direction); if (direction === 'Bearish') c.strategy.stop_price = 155;
+  const p = makePlan(); p.targets[0] = { ...p.targets[0], price: direction === 'Bullish' ? 147 : 153, rewardPerShare: 2.99 };
+  useScanStore.getState().setStockScanResult(scan([c])); (api.getStockExitPlan as jest.Mock).mockResolvedValue(p);
+  render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' })); fireEvent.click(screen.getByRole('radio', { name: '2R' }));
+  summaryField('Full-position outcome', '$-89.70');
+});
+
+it('restores an explicit Ladder target on remount and clears it when its edited row disappears', async () => {
+  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
+  view.unmount(); render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  summaryField('Selected method / target', 'Ladder · T1');
+  await edit('T1 TARGET', '161'); expect(selectedSummary()).toHaveTextContent('Choose a method');
+});

@@ -475,6 +475,30 @@ export function StockPositionCard({
           && row.rowOptionPrice === methodPick.rowOptionPrice)));
   const pickMissing = !checkMethodPick(methodPick) || pickedMethodGone;
 
+  // Picks persist a price pair, not a row key. Duplicate prices cannot identify
+  // which row supplied its statistics; never borrow the first matching result.
+  const selectedMatches = !pickedMethodGone && methodPick && pickedOption
+    ? pickedOption.rows.filter(row => row.rowStockPrice === methodPick.rowStockPrice
+      && row.rowOptionPrice === methodPick.rowOptionPrice) : [];
+  const selectedRow = selectedMatches.length === 1 ? selectedMatches[0] : null;
+  const selectedTarget = !pickedMethodGone ? methodPick?.rowStockPrice ?? null : null;
+  const arithmeticMatches = selectedRow && methodPick?.method === 'arithmetic'
+    ? (plan?.targets ?? []).filter(row => `arith-${row.rrRatio}` === selectedRow.key && row.price === selectedTarget) : [];
+  const arithmeticTarget = arithmeticMatches.length === 1 ? arithmeticMatches[0] : null;
+  const mcTarget = selectedRow && methodPick?.method === 'monte_carlo'
+    ? estimate?.targets.find((row, index) => `mc-${index}` === selectedRow.key && row.price === selectedTarget) ?? null : null;
+  const selectedEvidence = arithmeticTarget ?? mcTarget;
+  const selectedWindow = arithmeticTarget ? plan?.horizonDays : mcTarget ? estimate?.horizonDays : null;
+  const selectedMove = selectedTarget != null && Number.isFinite(overlay.entry) && overlay.entry > 0
+    && (card.direction === 'Bullish' || card.direction === 'Bearish')
+    ? (card.direction === 'Bullish' ? selectedTarget - overlay.entry : overlay.entry - selectedTarget) : null;
+  const selectedReward = methodPick?.method === 'arithmetic'
+    ? arithmeticTarget && selectedMove != null ? Math.sign(selectedMove) * arithmeticTarget.rewardPerShare : null
+    : selectedMove;
+  const selectedOutcome = selectedReward != null && enteredSharesValid ? selectedReward * overlay.shares : null;
+  const selectedCalculationStop = methodPick?.method === 'arithmetic' && !pickedMethodGone ? plan?.stop.price ?? null : executionStop;
+
+
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
   // Keep the unavailable-method explanation with this execution identity.
@@ -1475,6 +1499,26 @@ export function StockPositionCard({
         pick={methodPick}
         onChange={applyMethodPick}
       />
+
+      {position && <section aria-label="Selected stock plan" className={styles.workspaceCard}>
+        <h4>Selected stock plan</h4>
+        {!methodPick || pickedMethodGone ? <Text size={12}>Choose a method</Text> : <>
+          <div><Text size={11} tone="dim">Selected method / target</Text><Data size={14}>{pickedOption?.label} · {selectedTarget == null ? 'Choose a target' : selectedRow?.label ?? (selectedMatches.length > 1 ? 'Target row ambiguous' : 'Target row unavailable')}</Data></div>
+          <div className={styles.riskGrid}>
+            <div><Text size={11} tone="dim">Stock target</Text><Data size={14}>{executionMoney(selectedTarget)}</Data></div>
+            <div><Text size={11} tone="dim">Calculation stop basis</Text><Data size={14}>{methodPick.method === 'arithmetic' ? 'Arithmetic final stop' : 'Current execution stop'} · {executionMoney(selectedCalculationStop)}</Data></div>
+            <div><Text size={11} tone="dim">Execution stop</Text><Data size={14}>{executionMoney(executionStop)}</Data></div>
+            <div><Text size={11} tone="dim">Entered quantity</Text><Data size={14}>{enteredSharesValid ? `${overlay.shares} shares` : 'Unavailable'}</Data></div>
+            <div><Text size={11} tone="dim">Full-position outcome</Text><Data size={14}>{executionMoney(selectedOutcome)}</Data></div>
+          </div>
+          {selectedEvidence ? <>
+            <div><Text size={11} tone="dim">Target hit probability</Text><Data size={14}>{Number.isFinite(selectedEvidence.probability) ? `${(selectedEvidence.probability * 100).toFixed(0)}%` : 'Unavailable'} within {selectedWindow} trading days</Data></div>
+            <div><Text size={11} tone="dim">Median first-touch time</Text><Data size={14}>{selectedEvidence.expectedDays != null && Number.isFinite(selectedEvidence.expectedDays) ? `${selectedEvidence.expectedDays} trading days` : 'Unavailable'}</Data></div>
+            <Text size={11} tone="secondary">Independent target hit probability within the simulated window; the same path can also hit the stop. Time is the median first-touch time among paths that reach the target, using 1/252-year trading days.</Text>
+          </> : <Text size={11} tone="dim">Probability and time unavailable — no uniquely matching current calculation.</Text>}
+          <Text size={11} tone="secondary">{card.direction} full exit at the selected target, before costs, using entered shares. Selection records intent and does not apply a stop, target or share change.</Text>
+        </>}
+      </section>}
 
       {position && <h3>Execution</h3>}
       {/* Section 3 — Action buttons */}
