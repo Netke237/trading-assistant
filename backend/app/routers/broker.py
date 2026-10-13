@@ -2,19 +2,33 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import re
 import threading
 import time
-import uuid
 import logging
+from decimal import Decimal
 from typing import Literal, Optional
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.ibkr_paper import BrokerOrder
-from app.data.order_errors import OrderAdmissionRefusedError
+from app.data.order_errors import (
+    OrderAdmissionRefusedError,
+    OrderBeforeSubmissionError,
+    OrderPreflightRefusedError,
+)
 from app.data.option_symbol import option_right
+from app.database import get_db
 from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
+from app.services.broker_attempts import (
+    BrokerAttemptConflict,
+    BrokerAttemptRejected,
+    BrokerAttemptService,
+    BrokerAttemptStorageError,
+)
 from app.services.broker_router import build_router_from_credentials
 from app.services.audit import log_event, new_rec_id
 
@@ -23,6 +37,11 @@ router = APIRouter(prefix="/broker", tags=["broker"])
 
 def _selected_adapter(router_, broker):
     return router_.resolve(broker)
+
+
+def _release_open_risk(order, hooks, attempt_id, reserved, definite, outcome):
+    if order.effect == "OPEN" and reserved:
+        hooks.resolve(attempt_id, definitely_not_submitted=definite, outcome=outcome)
 
 
 def _dispatch_order(router_, broker, order, hooks, attempt_id):
@@ -37,14 +56,17 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
             bearish = (order.action == "BUY" and right == "P") or (order.action == "SELL" and right == "C")
         if bearish:
             raise HTTPException(status_code=422, detail=BEARISH_UNVALIDATED_MESSAGE)
-    adapter = _selected_adapter(router_, broker)
+    try:
+        adapter = _selected_adapter(router_, broker)
+    except ValueError as exc:
+        raise OrderPreflightRefusedError(str(exc)) from exc
+    reserved = False
     if order.effect == "OPEN":
         from app.services.portfolio_risk import account_value, AccountValueError
         try:
             account_value()
         except AccountValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        from app.services.daily_risk import DailyRiskError
         if order.sec_type == "OPT" and order.action != "BUY":
             raise HTTPException(status_code=422, detail="Daily risk budget refuses naked short option opens")
         instrument = order.option_symbol if order.sec_type == "OPT" else f"{order.symbol}|STOCK"
@@ -53,22 +75,27 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
                           source="manual_option" if order.sec_type == "OPT" else "manual_stock",
                           multiplier=100 if order.sec_type == "OPT" else 1,
                           order_type=order.order_type, limit_price=order.limit_price)
+            reserved = True
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Daily risk budget refused opening order: {exc}") from exc
     try:
         result = adapter.place_order(order)
     except OrderAdmissionRefusedError:
-        if order.effect == "OPEN":
-            hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
+        raise
+    except OrderBeforeSubmissionError:
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
+        raise
+    except OrderPreflightRefusedError:
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
         raise
     except Exception:
-        if order.effect == "OPEN":
-            hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")
+        _release_open_risk(order, hooks, attempt_id, reserved, False, "dispatch_error")
         raise
     if order.effect == "OPEN":
         from app.services.auto_trader import _is_rejected_status
         rejected = _is_rejected_status(result.status) or getattr(result, "awaiting_confirmation", False) is True
-        hooks.resolve(attempt_id, definitely_not_submitted=rejected, outcome=str(result.status))
+        _release_open_risk(order, hooks, attempt_id, reserved, rejected, str(result.status))
     return result
 
 
@@ -250,6 +277,10 @@ class StockOrderRequest(BaseModel):
     # the caller knows the live quote.
     limit_price: Optional[float] = Field(default=None, gt=0)
     tif: Literal["DAY", "GTC"] = "DAY"
+    attempt_id: Optional[str] = None
+    saved_rec_id: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("saved_rec_id", "savedRecId"),
+    )
 
 
 class OptionOrderRequest(BaseModel):
@@ -275,159 +306,353 @@ class OptionOrderRequest(BaseModel):
     limit_price: Optional[float] = Field(default=None, gt=0)
     tif: Literal["DAY", "GTC"] = "DAY"
     conid: Optional[int] = None
+    attempt_id: Optional[str] = None
+    saved_rec_id: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("saved_rec_id", "savedRecId"),
+    )
+
+
+_FILLED_STATUSES = frozenset({"filled", "fill"})
+_UNKNOWN_STATUSES = frozenset({"", "unknown", "unknownstatus"})
+_UNUSABLE_ORDER_IDS = frozenset({"", "unknown", "none", "null"})
+_TERMINAL_ATTEMPT_STATES = frozenset({
+    "proven-not-submitted", "submitted", "filled", "outcome-unknown",
+})
+_attempt_waiters: dict[str, asyncio.Future] = {}
+
+
+def _attempt_service(db: AsyncSession) -> BrokerAttemptService:
+    def factory():
+        class _Bound:
+            async def __aenter__(self):
+                return db
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        return _Bound()
+
+    return BrokerAttemptService(factory)
+
+
+def _canonical_order(kind: str, req) -> dict:
+    if kind == "option":
+        instrument = req.option_symbol
+        conid = req.conid
+    else:
+        instrument = f"{req.symbol}|STOCK"
+        conid = None
+    limit = None
+    if req.order_type == "LMT":
+        if req.limit_price is None:
+            raise BrokerAttemptRejected("limit order requires an exact limit")
+        limit = format(Decimal(str(req.limit_price)).normalize(), "f")
+    return {
+        "kind": kind,
+        "broker": req.broker,
+        "symbol": req.symbol,
+        "instrument": instrument,
+        "action": req.action,
+        "effect": req.effect,
+        "quantity": req.quantity,
+        "order_type": req.order_type,
+        "limit": limit,
+        "tif": req.tif,
+        "conid": conid,
+    }
+
+
+def _supplied_attempt_id(req) -> str | None:
+    value = req.attempt_id
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or value.strip() != value:
+        raise BrokerAttemptRejected("attempt id is inconsistent")
+    return value
+
+
+def _outcome_state(result) -> str:
+    from app.services.auto_trader import _is_rejected_status
+    if getattr(result, "awaiting_confirmation", False) is True:
+        return "proven-not-submitted"
+    status = str(getattr(result, "status", "") or "").strip().lower()
+    if _is_rejected_status(status):
+        return "proven-not-submitted"
+    order_id = str(getattr(result, "order_id", "") or "").strip().lower()
+    usable = order_id not in _UNUSABLE_ORDER_IDS
+    if usable and status in _FILLED_STATUSES:
+        return "filled"
+    if usable and status not in _UNKNOWN_STATUSES:
+        return "submitted"
+    return "outcome-unknown"
+
+
+def _pack_response(status: int, body: dict) -> str:
+    return json.dumps(
+        {"http_status": status, "body": body},
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _stored_response(raw):
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        status = parsed["http_status"]
+        body = parsed["body"]
+    except (TypeError, ValueError, KeyError):
+        return None
+    if isinstance(status, bool) or not isinstance(status, int) or not isinstance(body, dict):
+        return None
+    return status, body
+
+
+def _client_response(status: int, body: dict, *, deduped: bool):
+    replay = dict(body)
+    if status == 200:
+        if deduped:
+            replay["deduped"] = True
+        return replay
+    return JSONResponse(status_code=status, content=replay)
+
+
+async def _record_attempt(service, claim, state: str, status: int, body: dict, result=None):
+    order_id = None if result is None else getattr(result, "order_id", None)
+    broker_status = None if result is None else getattr(result, "status", None)
+    await service.record_outcome(
+        claim.attempt_id,
+        state,
+        expected_version=claim.verification_version,
+        broker_order_id=None if order_id is None else str(order_id),
+        broker_status=None if broker_status is None else str(broker_status),
+        broker_response=_pack_response(status, body),
+    )
+
+
+def _audit_outcome(state: str, rec_id: str, kind: str, req, result, attempt_id: str) -> None:
+    event = {
+        "filled": "broker_order_filled",
+        "submitted": "broker_order_submitted",
+        "outcome-unknown": "broker_order_unknown",
+        "proven-not-submitted": "broker_order_failed",
+    }[state]
+    order_id = getattr(result, "order_id", None)
+    status = getattr(result, "status", None)
+    log_event(event, rec_id, {
+        "kind": kind,
+        "broker": str(getattr(result, "broker", req.broker)),
+        "symbol": req.symbol,
+        "order_id": None if order_id is None else str(order_id),
+        "status": None if status is None else str(status),
+        "attempt_id": attempt_id,
+    })
+
+
+async def _replay_claim(service, claim, explicit: bool):
+    del explicit
+    stored = _stored_response(claim.broker_response)
+    if claim.state in _TERMINAL_ATTEMPT_STATES:
+        if stored is None:
+            return JSONResponse(status_code=502, content={"detail": "submission outcome unknown"})
+        return _client_response(*stored, deduped=True)
+    fut = _attempt_waiters.get(claim.attempt_id)
+    if fut is not None:
+        status, body = await fut
+        return _client_response(status, body, deduped=True)
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        fut = _attempt_waiters.get(claim.attempt_id)
+        if fut is not None:
+            status, body = await fut
+            return _client_response(status, body, deduped=True)
+        try:
+            fresh = await service.read(claim.attempt_id)
+        except BrokerAttemptStorageError:
+            return JSONResponse(status_code=503, content={"detail": "attempt storage failed closed"})
+        if fresh.state in _TERMINAL_ATTEMPT_STATES:
+            stored = _stored_response(fresh.broker_response)
+            if stored is None:
+                return JSONResponse(status_code=502, content={"detail": "submission outcome unknown"})
+            return _client_response(*stored, deduped=True)
+    return JSONResponse(status_code=502, content={"detail": "submission outcome unknown"})
+
+
+async def _lead_submission(kind, req, order, service, claim, rec_id):
+    fields = {
+        "kind": kind, "broker": req.broker, "symbol": req.symbol,
+        "action": req.action, "quantity": req.quantity,
+        "order_type": req.order_type, "limit_price": req.limit_price,
+        "tif": req.tif, "attempt_id": claim.attempt_id,
+    }
+    if kind == "option":
+        fields["option_symbol"] = req.option_symbol
+    log_event("broker_order_attempt", rec_id, fields)
+    try:
+        router_ = build_router_from_credentials()
+    except Exception as exc:
+        body = {"detail": f"Broker credentials unavailable: {exc}"}
+        log_event("broker_order_failed", rec_id, {
+            "kind": kind, "broker": req.broker, "symbol": req.symbol,
+            "http_status": 503, "attempt_id": claim.attempt_id,
+            "error": f"credentials: {exc}",
+        })
+        await _record_attempt(service, claim, "proven-not-submitted", 503, body)
+        return 503, body
+    from app.services.daily_risk_hooks import capture_daily_risk_hooks
+    hooks = capture_daily_risk_hooks() if order.effect == "OPEN" else None
+    result = await asyncio.to_thread(
+        _dispatch_order, router_, req.broker, order, hooks, claim.attempt_id,
+    )
+    if _confirmation_question(result) is not None:
+        _raise_if_awaiting_confirmation(result, rec_id, kind, req.symbol)
+    state = _outcome_state(result)
+    body = {
+        "order_id": "" if getattr(result, "order_id", None) is None else str(result.order_id),
+        "status": "" if getattr(result, "status", None) is None else str(result.status),
+        "broker": "" if getattr(result, "broker", None) is None else str(result.broker),
+        "deduped": False,
+    }
+    await _record_attempt(service, claim, state, 200, body, result)
+    _audit_outcome(state, rec_id, kind, req, result, claim.attempt_id)
+    return 200, body
+
+
+def _failure_response(exc: Exception) -> tuple[int, str, dict]:
+    proven = isinstance(exc, (
+        OrderAdmissionRefusedError, OrderBeforeSubmissionError, OrderPreflightRefusedError,
+    ))
+    if isinstance(exc, OrderPreflightRefusedError) or (isinstance(exc, ValueError) and not proven):
+        status = 400
+    else:
+        status = 502
+    state = "proven-not-submitted" if proven else "outcome-unknown"
+    return status, state, {"detail": str(exc)}
+
+
+async def _submit(kind: str, req, order: BrokerOrder, db: AsyncSession):
+    """Claim one durable attempt, then dispatch at most once."""
+    rec_id = new_rec_id()
+    service = _attempt_service(db)
+    explicit = req.attempt_id is not None
+    try:
+        claim = await service.claim_production(
+            _canonical_order(kind, req),
+            attempt_id=_supplied_attempt_id(req),
+            saved_rec_id=req.saved_rec_id,
+        )
+    except BrokerAttemptConflict as exc:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+    except BrokerAttemptRejected as exc:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+    except BrokerAttemptStorageError as exc:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+    if not claim.authorized:
+        log_event("broker_order_deduped", rec_id, {
+            "kind": kind, "broker": req.broker, "symbol": req.symbol,
+            "attempt_id": claim.attempt_id,
+            "note": "duplicate submission - returning the durable result",
+        })
+        return await _replay_claim(service, claim, explicit)
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    _attempt_waiters[claim.attempt_id] = fut
+    holder = {"status": 502, "body": {"detail": "submission outcome unknown"}}
+    try:
+        try:
+            status, body = await _lead_submission(kind, req, order, service, claim, rec_id)
+            holder["status"] = status
+            holder["body"] = body
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+            holder["status"] = exc.status_code
+            holder["body"] = {"detail": detail}
+            if not detail.startswith("IBKR did not place the order:"):
+                log_event("broker_order_failed", rec_id, {
+                    "kind": kind, "broker": req.broker, "symbol": req.symbol,
+                    "http_status": exc.status_code, "attempt_id": claim.attempt_id,
+                    "error": "bearish unvalidated" if detail == BEARISH_UNVALIDATED_MESSAGE else detail,
+                })
+            try:
+                await _record_attempt(
+                    service, claim, "proven-not-submitted", holder["status"], holder["body"],
+                )
+            except Exception:
+                holder["status"] = 502
+                holder["body"] = {"detail": "submission outcome unknown"}
+                return JSONResponse(status_code=502, content=holder["body"])
+            raise
+        except asyncio.CancelledError:
+            holder["status"] = 502
+            holder["body"] = {"detail": "submission outcome unknown"}
+            try:
+                await asyncio.shield(_record_attempt(
+                    service, claim, "outcome-unknown", 502, holder["body"],
+                ))
+            except Exception:
+                pass
+            raise
+        except Exception as exc:
+            status, state, body = _failure_response(exc)
+            holder["status"] = status
+            holder["body"] = body
+            event = "broker_order_failed" if state == "proven-not-submitted" else "broker_order_unknown"
+            log_event(event, rec_id, {
+                "kind": kind, "broker": req.broker, "symbol": req.symbol,
+                "http_status": status, "attempt_id": claim.attempt_id, "error": str(exc),
+            })
+            try:
+                await _record_attempt(service, claim, state, status, body)
+            except Exception:
+                holder["status"] = 502
+                holder["body"] = {"detail": "submission outcome unknown"}
+    finally:
+        if not fut.done():
+            fut.set_result((holder["status"], dict(holder["body"])))
+        _attempt_waiters.pop(claim.attempt_id, None)
+    if holder["status"] == 200:
+        return holder["body"]
+    return JSONResponse(status_code=holder["status"], content=holder["body"])
 
 
 @router.post("/stock-order")
-async def place_stock_order(req: StockOrderRequest) -> dict:
+async def place_stock_order(
+    req: StockOrderRequest, db: AsyncSession = Depends(get_db),
+):
     """Place a paper stock order on the specified broker."""
-    rec_id = new_rec_id()
-    idem_key = _natural_order_key("stock", req)
-    cached, claimed = await _claim_or_wait(idem_key)
-    if not claimed:
-        log_event("broker_order_deduped", rec_id, {
-            "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-            "note": "duplicate submission within dedup window — returning cached result",
-        })
-        return cached
-    log_event("broker_order_attempt", rec_id, {
-        "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-        "action": req.action, "quantity": req.quantity,
-        "order_type": req.order_type, "limit_price": req.limit_price, "tif": req.tif,
-    })
-    # response stays None unless execution succeeds — the finally below
-    # releases the claim unconditionally (success, a handled ValueError/
-    # RuntimeError, OR any other exception that escapes this block, e.g. a
-    # malformed broker response or a cancelled request) so a stuck
-    # reservation can never permanently wedge this natural key.
-    response: dict | None = None
-    try:
-        try:
-            router_ = build_router_from_credentials()
-        except Exception as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 503, "error": f"credentials: {exc}",
-            })
-            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-        order = BrokerOrder(
-            symbol=req.symbol,
-            action=req.action,
-            effect=req.effect,
-            quantity=req.quantity,
-            order_type=req.order_type,
-            limit_price=req.limit_price,
-            tif=req.tif,
-            sec_type="STK",
-        )
-        try:
-            from app.services.daily_risk_hooks import capture_daily_risk_hooks
-            hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
-            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
-        except HTTPException as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-                "http_status": exc.status_code,
-                "error": "bearish unvalidated" if exc.detail == BEARISH_UNVALIDATED_MESSAGE else str(exc.detail),
-            })
-            raise
-        except ValueError as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 400, "error": str(exc),
-            })
-            raise HTTPException(status_code=400, detail=str(exc))
-        except RuntimeError as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "stock", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 502, "error": str(exc),
-            })
-            raise HTTPException(status_code=502, detail=str(exc))
-        _raise_if_awaiting_confirmation(result, rec_id, "stock", req.symbol)
-        log_event("broker_order_filled", rec_id, {
-            "kind": "stock", "broker": result.broker, "symbol": req.symbol,
-            "order_id": result.order_id, "status": result.status,
-        })
-        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-        return response
-    finally:
-        _release_claim(idem_key, response)
+    order = BrokerOrder(
+        symbol=req.symbol,
+        action=req.action,
+        effect=req.effect,
+        quantity=req.quantity,
+        order_type=req.order_type,
+        limit_price=req.limit_price,
+        tif=req.tif,
+        sec_type="STK",
+    )
+    return await _submit("stock", req, order, db)
 
 
 @router.post("/option-order")
-async def place_option_order(req: OptionOrderRequest) -> dict:
+async def place_option_order(
+    req: OptionOrderRequest, db: AsyncSession = Depends(get_db),
+):
     """Place a paper options order on the specified broker."""
-    rec_id = new_rec_id()
-    idem_key = _natural_order_key("option", req)
-    cached, claimed = await _claim_or_wait(idem_key)
-    if not claimed:
-        log_event("broker_order_deduped", rec_id, {
-            "kind": "option", "broker": req.broker, "symbol": req.symbol,
-            "note": "duplicate submission within dedup window — returning cached result",
-        })
-        return cached
-    log_event("broker_order_attempt", rec_id, {
-        "kind": "option", "broker": req.broker, "symbol": req.symbol,
-        "option_symbol": req.option_symbol, "action": req.action,
-        "quantity": req.quantity, "order_type": req.order_type,
-        "limit_price": req.limit_price, "tif": req.tif,
-    })
-    # See place_stock_order's matching comment — the finally below releases
-    # the claim unconditionally so a stuck reservation can never permanently
-    # wedge this natural key.
-    response: dict | None = None
-    try:
-        try:
-            router_ = build_router_from_credentials()
-        except Exception as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "option", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 503, "error": f"credentials: {exc}",
-            })
-            raise HTTPException(status_code=503, detail=f"Broker credentials unavailable: {exc}")
-        order = BrokerOrder(
-            symbol=req.symbol,
-            action=req.action,
-            effect=req.effect,
-            quantity=req.quantity,
-            order_type=req.order_type,
-            limit_price=req.limit_price,
-            tif=req.tif,
-            conid=req.conid,
-            sec_type="OPT",
-            option_symbol=req.option_symbol,
-        )
-        try:
-            from app.services.daily_risk_hooks import capture_daily_risk_hooks
-            hooks = capture_daily_risk_hooks() if req.effect == "OPEN" else None
-            result = await asyncio.to_thread(_dispatch_order, router_, req.broker, order, hooks, uuid.uuid4().hex)
-        except HTTPException as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "option", "broker": req.broker, "symbol": req.symbol,
-                "http_status": exc.status_code,
-                "error": "bearish unvalidated" if exc.detail == BEARISH_UNVALIDATED_MESSAGE else str(exc.detail),
-            })
-            raise
-        except ValueError as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "option", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 400, "error": str(exc),
-            })
-            raise HTTPException(status_code=400, detail=str(exc))
-        except RuntimeError as exc:
-            log_event("broker_order_failed", rec_id, {
-                "kind": "option", "broker": req.broker, "symbol": req.symbol,
-                "http_status": 502, "error": str(exc),
-            })
-            raise HTTPException(status_code=502, detail=str(exc))
-        _raise_if_awaiting_confirmation(result, rec_id, "option", req.symbol)
-        log_event("broker_order_filled", rec_id, {
-            "kind": "option", "broker": result.broker, "symbol": req.symbol,
-            "order_id": result.order_id, "status": result.status,
-        })
-        response = {"order_id": result.order_id, "status": result.status, "broker": result.broker, "deduped": False}
-        return response
-    finally:
-        _release_claim(idem_key, response)
+    order = BrokerOrder(
+        symbol=req.symbol,
+        action=req.action,
+        effect=req.effect,
+        quantity=req.quantity,
+        order_type=req.order_type,
+        limit_price=req.limit_price,
+        tif=req.tif,
+        conid=req.conid,
+        sec_type="OPT",
+        option_symbol=req.option_symbol,
+    )
+    return await _submit("option", req, order, db)
+
 
 
 @router.get("/status")

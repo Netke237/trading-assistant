@@ -7,7 +7,7 @@ from typing import Literal, Optional
 import httpx
 
 from app.data.option_symbol import to_occ
-from app.data.order_errors import OrderAdmissionRefusedError
+from app.data.order_errors import OrderAdmissionRefusedError, OrderSubmissionUnknownError
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class TradierPaperAdapter:
         except Exception as exc:
             msg = f"Tradier paper order failed: connection error — {exc}"
             logger.error(msg)
-            raise RuntimeError(msg) from exc
+            raise OrderSubmissionUnknownError(msg) from exc
         if resp.status_code == 401:
             # A live (api.tradier.com) token does NOT work against the sandbox
             # endpoint, and sandbox tokens are rotated/expire — the most common
@@ -125,12 +125,26 @@ class TradierPaperAdapter:
                 "sandbox/paper orders."
             )
             logger.error("%s (raw: %s)", msg, resp.text[:300])
-            raise RuntimeError(msg)
+            raise OrderSubmissionUnknownError(msg)
         if resp.status_code >= 400:
             msg = f"Tradier paper order failed: HTTP {resp.status_code} — {resp.text[:500]}"
             logger.error(msg)
-            raise RuntimeError(msg)
-        data = resp.json().get("order", {})
+            raise OrderSubmissionUnknownError(msg)
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            msg = f"Tradier paper order failed: response was not JSON — {exc}"
+            logger.error(msg)
+            raise OrderSubmissionUnknownError(msg) from exc
+        if not isinstance(data, dict):
+            msg = "Tradier paper order failed: response was not an order object"
+            logger.error(msg)
+            raise OrderSubmissionUnknownError(msg)
+        data = data.get("order", {})
+        if not isinstance(data, dict):
+            msg = "Tradier paper order failed: response was not an order object"
+            logger.error(msg)
+            raise OrderSubmissionUnknownError(msg)
         return OrderResult(
             order_id=str(data.get("id", "")),
             status=str(data.get("status", "unknown")),

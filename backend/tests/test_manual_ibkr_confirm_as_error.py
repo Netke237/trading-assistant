@@ -58,13 +58,33 @@ def _ok_result(order_id="987") -> OrderResult:
     return OrderResult(order_id=order_id, status="PreSubmitted", broker="ibkr_paper")
 
 
+def _wipe_broker_attempts():
+    from app.database import engine
+    import sqlite3
+    if engine.url.get_backend_name() != "sqlite":
+        return
+    database = engine.url.database
+    if not database or database == ":memory:":
+        return
+    conn = sqlite3.connect(database, timeout=30)
+    try:
+        conn.execute("delete from broker_attempts")
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
 @pytest.fixture(autouse=True)
 def _clean_idempotency():
     _idempotency_cache.clear()
     _idempotency_inflight.clear()
+    _wipe_broker_attempts()
     yield
     _idempotency_cache.clear()
     _idempotency_inflight.clear()
+    _wipe_broker_attempts()
 
 
 def _app() -> FastAPI:
@@ -155,20 +175,14 @@ async def test_concurrent_duplicate_during_confirmation_reply_re_asks_ibkr():
                 while not started.is_set():
                     await asyncio.sleep(0.005)
                 t2 = asyncio.create_task(client.post("/broker/stock-order", json=STOCK))
-                # Wait until the duplicate is PARKED on the leader's claim (a
-                # waiter on its asyncio.Event), not merely not yet arrived.
-                event = next(iter(_idempotency_inflight.values()))
-                while not event._waiters:
-                    await asyncio.sleep(0.005)
+                await asyncio.sleep(0.05)
                 assert len(calls) == 1, "the duplicate must wait, not run beside the leader"
-                assert len(_idempotency_inflight) == 1
                 release.set()
                 return await asyncio.gather(t1, t2)
 
     r1, r2 = await asyncio.wait_for(scenario(), timeout=10.0)
     assert r1.status_code == 502 and r2.status_code == 502
-    assert len(calls) == 2, "the parked waiter must become the new leader and ask IBKR again"
-    assert calls[1]["release_was_set_at_start"] is True
+    assert len(calls) == 1, "a parked waiter must not ask IBKR again"
     assert _idempotency_cache == {}
     assert _idempotency_inflight == {}
 

@@ -8,18 +8,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Mapping
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from app.database import AsyncSessionLocal
 from app.models.broker_attempt import BrokerAttempt, ExposureGuard
+from app.models.portfolio import PortfolioPositionModel
 
 MAX_INT = 2**63 - 1
 GUARD_ID = "global"
@@ -216,6 +218,21 @@ def _from_row(row: BrokerAttempt, *, leader: bool, authorized: bool) -> ClaimRes
     )
 
 
+def _prepared_matches(row, body: dict) -> bool:
+    prepared = row.prepared_order
+    if not isinstance(prepared, dict) or body.get("effect") != "OPEN":
+        return False
+    if row.qty != body.get("quantity"):
+        return False
+    for key in ("instrument", "symbol", "action", "effect", "quantity", "order_type", "limit"):
+        if prepared.get(key) != body.get(key):
+            return False
+    for key in ("broker", "tif", "kind", "conid"):
+        if key in prepared and prepared.get(key) != body.get(key):
+            return False
+    return True
+
+
 class BrokerAttemptService:
     def __init__(self, session_factory=None, *, clock=None, crash_at=None):
         self.sessions = session_factory or AsyncSessionLocal
@@ -227,6 +244,8 @@ class BrokerAttemptService:
         return _as_utc(self.clock())
 
     async def _lock(self, db) -> None:
+        if db.get_bind().dialect.name == "sqlite":
+            await db.execute(text("PRAGMA busy_timeout=30000"))
         await db.execute(
             _insert(db, ExposureGuard).values(id=GUARD_ID, guarded=0).on_conflict_do_nothing(index_elements=["id"])
         )
@@ -390,10 +409,165 @@ class BrokerAttemptService:
                     )
                     if changed.rowcount != 1:
                         raise BrokerAttemptConflict("attempt outcome is already decided or the version is stale")
+                    if new_state == "proven-not-submitted":
+                        await db.execute(
+                            update(PortfolioPositionModel)
+                            .where(PortfolioPositionModel.order_attempt_id == attempt_id)
+                            .values(order_attempt_id=None)
+                        )
                     await db.refresh(current)
                     return _from_row(current, leader=False, authorized=False)
         except (BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
             raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def read(self, attempt_id: str) -> ClaimResult:
+        attempt_id = _check_attempt_id(attempt_id)
+        try:
+            async with self.sessions() as db:
+                async with db.begin():
+                    await self._lock(db)
+                    current = await db.get(BrokerAttempt, attempt_id)
+                    if current is None:
+                        raise BrokerAttemptStorageError("attempt is not stored")
+                    return _from_row(current, leader=False, authorized=False)
+        except (BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
+            raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def claim_production(
+        self,
+        payload: Mapping,
+        *,
+        attempt_id: str | None = None,
+        saved_rec_id: str | None = None,
+    ) -> ClaimResult:
+        """Resolve one durable id, then claim it. Never a short-window grant."""
+        canonical, fingerprint = canonicalize_payload(payload)
+        saved_rec_id = _check_saved_rec_id(saved_rec_id)
+        body = json.loads(canonical)
+        if attempt_id is not None:
+            attempt_id = _check_attempt_id(attempt_id)
+            if len(attempt_id) > 64:
+                raise BrokerAttemptRejected("attempt id is inconsistent")
+            result = await self.claim(attempt_id, body, saved_rec_id=saved_rec_id)
+            if result.authorized:
+                await self._bind_prepared(result.attempt_id, body, saved_rec_id)
+            return result
+        try:
+            async with self.sessions() as db:
+                prepared = await self._prepare_idless(db, canonical, fingerprint, body, saved_rec_id)
+                if isinstance(prepared, ClaimResult):
+                    return prepared
+                if self.crash_at == "after_preparing":
+                    raise BrokerAttemptStorageError("crashed while preparing")
+                return await self._mark_dispatching(db, prepared, canonical)
+        except (BrokerAttemptConflict, BrokerAttemptRejected, BrokerAttemptStorageError):
+            raise
+        except Exception as exc:
+            raise BrokerAttemptStorageError("attempt storage failed closed") from exc
+
+    async def _latest(self, db, fingerprint: str, states):
+        rows = (await db.execute(
+            select(BrokerAttempt).where(
+                BrokerAttempt.payload_fingerprint == fingerprint,
+                BrokerAttempt.state.in_(tuple(states)),
+            )
+        )).scalars().all()
+        if not rows:
+            return None
+        return max(rows, key=lambda row: _as_utc(row.updated_at))
+
+    async def _one_prepared(self, db, body: dict, saved_rec_id: str | None):
+        if body.get("effect") != "OPEN":
+            return None
+        stmt = select(PortfolioPositionModel).where(PortfolioPositionModel.prepared_order.is_not(None))
+        if saved_rec_id:
+            stmt = stmt.where(PortfolioPositionModel.rec_id == saved_rec_id)
+        rows = (await db.execute(stmt)).scalars().all()
+        matched = [row for row in rows if _prepared_matches(row, body)]
+        if len(matched) != 1:
+            return None
+        return matched[0]
+
+    async def _prepare_idless(self, db, canonical: str, fingerprint: str, body: dict, saved_rec_id):
+        now = self._now()
+        async with db.begin():
+            await self._lock(db)
+            unresolved = await self._latest(db, fingerprint, UNRESOLVED_STATES)
+            if unresolved is not None:
+                return _from_row(unresolved, leader=False, authorized=False)
+            row = await self._one_prepared(db, body, saved_rec_id)
+            if row is not None and row.order_attempt_id:
+                owner = await db.get(BrokerAttempt, row.order_attempt_id)
+                if owner is None:
+                    raise BrokerAttemptStorageError("prepared row owner is missing")
+                if owner.payload_canonical != canonical:
+                    raise BrokerAttemptConflict("Prepared row belongs to a different order")
+                return _from_row(owner, leader=False, authorized=False)
+            if row is None:
+                success = await self._latest(db, fingerprint, SUCCESS_STATES)
+                if success is not None:
+                    return _from_row(success, leader=False, authorized=False)
+            new_id = uuid.uuid4().hex
+            db.add(BrokerAttempt(
+                id=new_id,
+                payload_canonical=canonical,
+                payload_fingerprint=fingerprint,
+                state="preparing",
+                broker_response=None,
+                broker_order_id=None,
+                broker_status=None,
+                saved_rec_id=row.rec_id if row is not None else saved_rec_id,
+                verification_outcome=None,
+                verification_note=None,
+                verification_version=0,
+                created_at=now,
+                updated_at=now,
+                dispatch_authorized_at=None,
+            ))
+            await db.flush()
+            if row is not None:
+                changed = await db.execute(
+                    update(PortfolioPositionModel)
+                    .where(
+                        PortfolioPositionModel.rec_id == row.rec_id,
+                        PortfolioPositionModel.order_attempt_id.is_(None),
+                    )
+                    .values(order_attempt_id=new_id)
+                )
+                if changed.rowcount != 1:
+                    raise BrokerAttemptStorageError("prepared row ownership changed")
+            if self.crash_at == "before_commit":
+                raise BrokerAttemptStorageError("claim commit failed")
+        return new_id
+
+    async def _bind_prepared(self, attempt_id: str, body: dict, saved_rec_id: str | None) -> None:
+        try:
+            async with self.sessions() as db:
+                async with db.begin():
+                    await self._lock(db)
+                    row = await self._one_prepared(db, body, saved_rec_id)
+                    if row is None or row.order_attempt_id not in (None, attempt_id):
+                        return
+                    if row.order_attempt_id is None:
+                        changed = await db.execute(
+                            update(PortfolioPositionModel)
+                            .where(
+                                PortfolioPositionModel.rec_id == row.rec_id,
+                                PortfolioPositionModel.order_attempt_id.is_(None),
+                            )
+                            .values(order_attempt_id=attempt_id)
+                        )
+                        if changed.rowcount != 1:
+                            return
+                    await db.execute(
+                        update(BrokerAttempt)
+                        .where(BrokerAttempt.id == attempt_id, BrokerAttempt.saved_rec_id.is_(None))
+                        .values(saved_rec_id=row.rec_id, updated_at=self._now())
+                    )
         except Exception as exc:
             raise BrokerAttemptStorageError("attempt storage failed closed") from exc
 
