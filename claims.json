@@ -7,6 +7,14 @@
       "expires_at": "2026-10-13T23:18:08Z",
       "note": "",
       "task": "BROKER-PATH-RESIDUALS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/meas-live-db-isolation-c461488d",
+      "claimed_at": "2026-10-13T20:57:30Z",
+      "expires_at": "2026-10-13T23:57:30Z",
+      "note": "Isolate frozen MEAS runs from the live DB (#230)",
+      "task": "MEAS-LIVE-DB-ISOLATION"
     }
   ]
 }
