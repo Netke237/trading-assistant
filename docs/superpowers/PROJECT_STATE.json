@@ -3346,7 +3346,7 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "Plan2 clean; original plan1 and separate layout revision1 preserved. #258/#259 complete, #260 next; code stage0 and audit_clean false. #150/PR224 open/untouched. Additive provider news URL source gap documented for approved original-link requirement; no numerical/trading plan change.",
+      "note": "Plan2 clean; original plan1 and separate layout revision1 preserved. #258\u2013260 complete; #261 next, code stage0/audit_clean false. #150/PR224 untouched/open. Initial backend7962 pass/9skip with one inherited environment-driven Telegram no-config test failure; all6 notification tests pass with notification environment removed only for tests.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3357,6 +3357,11 @@
           "issue": 259,
           "commit": "a35da6c7",
           "validation": "3 expected RED cases before implementation; focused3 suites12 tests; full243 suites5169 tests/typecheck pass; snapshot identity/request invalidation/report linkage guards"
+        },
+        {
+          "issue": 260,
+          "commit": "1b8402559324585c5d73a109a90719ae7413462c",
+          "validation": "4 expected RED failures; focused4 suites18 tests/full244 suites5175 tests/typecheck pass; mode units/order, action grouping, raw/legacy evidence and applied1.55% Fib tolerance"
         }
       ]
     }
