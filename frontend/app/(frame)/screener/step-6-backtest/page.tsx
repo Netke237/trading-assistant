@@ -5,7 +5,7 @@ import { Title, Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
-import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { WatchStar } from '@/components/atoms/WatchStar';
@@ -79,7 +79,7 @@ export default function Step6BacktestPage() {
     {feedback.notice && <Text size={12} tone="caution">{feedback.notice}</Text>}
     <DirectSendNotesPanel />
     {!result && <Text size={13} tone="dim">No stock scan result. Go back to Step 4 (Strategy) and run a scan.</Text>}
-    {result && <button type="button" className={styles.inspectBtn} onClick={() => setInspectorOpen(true)}>Filter Breakdown ({notRanked} Not Ranked)</button>}
+    {<button type="button" className={styles.inspectBtn} onClick={() => setInspectorOpen(true)}>Filter Breakdown{result ? ` (${notRanked} Not Ranked)` : ' · saved report'}</button>}
     {result?.direction_banner && <div className={styles.directionBanner}><Text size={12} tone="caution">{result.direction_banner}</Text></div>}
     {candidates.length > filteredCandidates.length && <Text size={11} tone="caution">{candidates.length - filteredCandidates.length} of {candidates.length} hidden by the event filter.</Text>}
     {result && filteredCandidates.length === 0 && <Text size={13} tone="dim">No candidates to display. Adjust the filter or return to Strategy and run another scan.</Text>}
@@ -197,6 +197,6 @@ export default function Step6BacktestPage() {
     </div>}
     {stockBasket.length > 0 && <button type="button" className={styles.actionBtn} onClick={() => setShowSendDialog(true)}>Send basket ({stockBasket.length})</button>}
     {showSendDialog && <StockSendDialog cards={stockBasket} onClose={() => setShowSendDialog(false)} onSubmit={() => setShowSendDialog(false)} />}
-    {result && <PipelineInspector mode="stock" isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} pipeline={result.pipeline} rejected={result.rejected} survivors={candidateSymbols} />}
+    <SavedScanReportInspector category="stocks" tableRunId={result?.report_run_id} isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} />
   </div>;
 }

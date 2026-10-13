@@ -17,7 +17,7 @@ import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
-import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import styles from '../screener.module.css';
@@ -929,12 +929,12 @@ export default function Step3Page() {
         )}
       </div>
 
-      {screenerMode !== 'stocks' && (totalScanned > 0 || rejectedLog.length > 0) && (
+      {(
         <div className={formStyles.logSection}>
           <div className={formStyles.logHeader}>
-            <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
+            <Text size={11} tone="dim" weight={500}>SCAN LOG · CURRENT TABLE COUNTS</Text>
             <div className={formStyles.logStats}>
-              {totalScanned > 0 && (
+              {screenerMode === 'options' && totalScanned > 0 && (
                 <>
                   <span className={formStyles.logStat}>
                     <Text size={11} tone="dim">Scanned</Text>
@@ -964,15 +964,7 @@ export default function Step3Page() {
               )}
             </div>
           </div>
-          <PipelineInspector
-            isDrawer={false}
-            isOpen={true}
-            pipeline={shownResult?.pipeline}
-            rejected={rejectedLog}
-            survivors={shownResult?.candidates?.map((c) => c.symbol) ?? []}
-            contractRules={shownResult?.contract_rules}
-            dteWindow={shownResult?.dte_window}
-          />
+          <SavedScanReportInspector category={screenerMode} tableRunId={screenerMode === 'options' ? shownResult?.report_run_id : undefined} />
         </div>
       )}
 
