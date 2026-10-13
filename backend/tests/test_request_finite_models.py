@@ -362,8 +362,8 @@ def test_schedule_list_skips_an_entry_that_no_longer_validates(caplog):
 
 @pytest.mark.asyncio
 async def test_scheduler_records_a_failed_run_for_a_non_finite_entry(monkeypatch):
-    """T2(a): the scheduler's existing except records a failed run; the scan
-    core is never called with the non-finite value."""
+    """T2(a): refuse non-finite stored input before the core runs, then save
+    and notify a classified failure without exposing the validation payload."""
     import app.database as dbmod
     from app.services import scan_schedule_scheduler as sss
     from app.services.scan_schedule_store import list_scheduled_scan_runs, scan_schedule_store
@@ -377,17 +377,26 @@ async def test_scheduler_records_a_failed_run_for_a_non_finite_entry(monkeypatch
         raise RuntimeError("scan core reached")
 
     monkeypatch.setattr("app.routers.scan._execute_scan_core", _core)
-    monkeypatch.setattr(sss, "_notify_scan_schedule_error", AsyncMock())
-    monkeypatch.setattr(sss, "_notify_scan_schedule_success", AsyncMock())
+    failure_notice = AsyncMock()
+    success_notice = AsyncMock()
+    monkeypatch.setattr(sss, "_notify_scan_schedule_error", failure_notice)
+    monkeypatch.setattr(sss, "_notify_scan_schedule_success", success_notice)
 
-    scan_schedule_store.upsert(_schedule_entry("t2-sched", min_price=float("inf")))
+    secret_payload = "https://user:password@broker"
+    scan_schedule_store.upsert(_schedule_entry(
+        "t2-sched", min_price=float("inf"), horizon_preset=secret_payload))
     try:
         await sss._run_scheduled_entry("t2-sched")
         async with _TestSession() as db:
             runs = await list_scheduled_scan_runs(db, "t2-sched")
         assert core_calls == []
         assert len(runs) == 1 and runs[0].status == "error"
-        assert "finite" in runs[0].error
+        assert runs[0].error == "scan_failed"
+        failure_notice.assert_awaited_once_with("T2 t2-sched", "scan_failed")
+        success_notice.assert_not_awaited()
+        assert secret_payload not in runs[0].error
+        assert secret_payload not in failure_notice.await_args.args[1]
+        assert "inf" not in runs[0].error
     finally:
         scan_schedule_store.delete("t2-sched")
 
