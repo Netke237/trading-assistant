@@ -1075,6 +1075,9 @@ class ScanRequestContext(BaseModel):
 
 
 class ScanResult(BaseModel):
+    report_run_id: Optional[str] = None
+    report_generation: Optional[int] = None
+    report_persistence: Optional[Literal["saved", "unavailable"]] = None
     scan_id: str
     timestamp: str
     # Absent means PRE-SPLIT. A scan result is persisted to `scan_sessions`
