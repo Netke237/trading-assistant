@@ -2405,7 +2405,8 @@ describe('TradeCard', () => {
         // which is the case this fixture exists to render -- plus the Exit
         // Plan's Invalidation (169.00 in this fixture), which is always
         // visible since P2-21 moved it out of the collapsed ladder group.
-        expect(screen.getAllByText('$169.00')).toHaveLength(3);
+        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(3);
+        expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$169.00');
         // The LOSING candidate rides along: the row prints both levels and the
         // gap, so a reader can see the floor was what widened the stop.
         expect(screen.getByText('Structural stop — Swing Low')).toBeInTheDocument();
@@ -3002,6 +3003,55 @@ describe('TradeCard — stop-vs-premium gate', () => {
 
   const ORDER_BLOCK = { price: 178.5, source: 'order_block' as const, confidence: 75, distancePct: 3.6 };
 
+  it('groups matched stop-cost figures separately from execution, quote and order bases', () => {
+    const matched = stopCost({ premium: 4, valueAtStop: 1.8, lossDollar: 2.2, fraction: 0.55, status: 'PASS' });
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: matched }, 190)} liveMid={9} contracts={2} />);
+    const section = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(section.getByRole('button', { name: 'Check structure' })).toBeVisible();
+    expect(section.getByText('Estimated premium remaining per share').parentElement).toHaveTextContent('$1.80/share');
+    expect(section.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.20/share');
+    expect(section.getByText('Estimated loss per contract').parentElement).toHaveTextContent('$220 per contract');
+    expect(section.getByText('Estimated loss for 2 entered contracts').parentElement).toHaveTextContent('$440');
+    expect(section.getByText(/Selected contract only.*100 shares/)).toBeVisible();
+    expect(section.getByText(/Calculation does not replace/)).toBeVisible();
+    expect(section.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(section.getByText(/\$4.00 premium − \$1.80 at \$178.50/)).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    fireEvent.change(screen.getByLabelText('Edit Limit'), { target: { value: '8' } });
+    fireEvent.blur(screen.getByLabelText('Edit Limit'));
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    fireEvent.change(screen.getByLabelText('Edit Contracts'), { target: { value: '3' } });
+    fireEvent.blur(screen.getByLabelText('Edit Contracts'));
+    expect(section.getByText('Estimated loss for 3 entered contracts').parentElement).toHaveTextContent('$660');
+    expect(section.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.20/share');
+  });
+
+  it('keeps missing and zero-width stop costs unavailable in the dedicated section', () => {
+    const { rerender } = render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: null }, 190)} />);
+    const section = () => within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(section().getByText(/Not computed — no priced contract/)).toBeVisible();
+    expect(section().queryByText('Premium loss per share')).not.toBeInTheDocument();
+    rerender(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190, distancePct: 0, stopCost: stopCost({ stopPrice: 190, lossDollar: 0, valueAtStop: 2.5 }) }, 190)} resetKey={1} />);
+    expect(section().getByText('N/A (stop = price)')).toBeVisible();
+    expect(section().queryByText('Premium loss per share')).not.toBeInTheDocument();
+  });
+
+  it('hides priced figures while structure refreshes and after its error', async () => {
+    let reject!: (reason: Error) => void;
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ price: 190 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({ price: 9 });
+    (api.getStructuralStop as jest.Mock).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: stopCost() }, 190)} />);
+    const section = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    fireEvent.click(section.getByRole('button', { name: 'Check structure' }));
+    await waitFor(() => expect(reject).toBeDefined());
+    expect(section.getByText('Checking…')).toBeVisible();
+    expect(section.queryByText('Premium loss per share')).not.toBeInTheDocument();
+    await act(async () => reject(new Error('unavailable')));
+    expect(section.getByText(/Couldn't check structure/)).toBeVisible();
+    expect(section.queryByText('Premium loss per share')).not.toBeInTheDocument();
+  });
+
   it('flags a stop that costs the whole premium, and shows every input behind it', () => {
     // The contract is worthless at $178.50: nothing of the $2.50 premium
     // survives the stop, so the stop is not a risk control on this contract.
@@ -3108,6 +3158,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
   // existed. After the fix, both should agree on the exit-plan's stop once
   // one has been computed this mount.
   it('gate and structuralRR both use the exit-plan stop, not the raw structural stop, once an Arithmetic Plan is computed', async () => {
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({ price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100 });
     // 1) Check structure — raw structural stop at $178.50, fresh stock price $182.00.
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 182.0 });
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
@@ -3171,6 +3222,14 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     expect(screen.getByText(/\$2\.60 premium − \$0\.00 at \$170\.00 = \$2\.60 of \$2\.60 premium/))
       .toBeInTheDocument();
     expect(screen.queryByText('PASS · 63% of premium · $0.92/share left')).not.toBeInTheDocument();
+    const stops = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(stops.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.60/share');
+    expect(stops.getByText('Estimated premium remaining per share').parentElement).toHaveTextContent('$0.00/share');
+    expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
+    expect(stops.getByText('Arithmetic contract value at stop').parentElement).toHaveTextContent('$1.00/share');
+    expect(stops.getByText('Stop-cost source: Arithmetic calculation stop.')).toBeVisible();
+    expect(stops.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
     // structuralIsFreshRef is already true from step 1, so this does NOT
@@ -3190,6 +3249,9 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     await waitFor(() => {
       expect(screen.getByText('Structural level found')).toBeInTheDocument();
     });
+
+    expect(stops.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.60/share');
+    expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
 
     // The row must quote the EXIT-PLAN stop ($170.00), not the raw structural
     // one ($178.50) — that is Piece 2's whole point, and reading the level
