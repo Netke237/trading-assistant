@@ -18,8 +18,8 @@ Sources: StockPositionCard/index.tsx and its child components; step-7-position-c
 | T1/T2/T3 prices, R:R, return and allocated shares | Existing editor disclosure | Current overlay and existing allocation clamps; mounted controls; losing targets carry signed ratios |
 | Structure check, loading/error/no-level, price/source/distance/reference ratio | Structure & Stops | Existing onCheckStructure response/guard; candidate is reference, not execution or calculated final stop |
 | Arithmetic final stop, ATR floor/source/widening, stop risk and justification | Structure & Stops / Arithmetic | Returned plan.stop; execution stop remains distinct and unchanged |
-| MC Estimate/loading/error, targets and stop independent-hit probabilities/times, horizon/caveat | Stacked calculation evidence (ticket #253 pending) | Existing getStockFirstPassage request/response; explicit actual trading-day statistic |
-| Arithmetic Compute/loading/error, targets/reward/R:R/geometry/snap/quality and model caveat | Stacked calculation evidence (ticket #253 pending) | Existing getStockExitPlan; all rows share returned final stop |
+| MC Estimate/loading/error, targets and stop independent-hit probabilities/times, horizon/caveat | Stacked calculation evidence | Existing getStockFirstPassage request/response; explicit actual trading-day statistic |
+| Arithmetic Compute/loading/error, targets/reward/R:R/geometry/snap/quality and model caveat | Stacked calculation evidence | Existing getStockExitPlan; all rows share returned final stop |
 | Risk budget, recommended shares/notional, concentration flag, Apply shares and mismatch note | Arithmetic sizing evidence | Original budget and stock cap; Apply positive recommended shares changes quantity only |
 | Target-first/stop-first/neither allocated weights, times, terminal mean and nPaths | Supporting Arithmetic race | Returned race; allocated percentages unchanged; source statistic explicitly labelled; no premium barrier |
 | Latest calculation chronology and absent/stale states | Latest calculation | Local completed-action identity, current available session result; restored chronology unavailable |
@@ -38,3 +38,5 @@ Sources: StockPositionCard/index.tsx and its child components; step-7-position-c
 | Five durable scan report categories and saved-run inspector | Existing audited LOG integration (ticket #256 reconciliation pending) | Report identity captured at dispatch; category isolation, unavailable diagnostics and retention preserved |
 
 Final verification must reconcile each pending row to committed source and record field/source/unit checks, bullish/bearish payload parity, response/persistence guards and mocked browser results at 1200/1920 in both themes. Passing ticket tests do not clear the phase code-audit gate.
+
+Timing source verification: backend/app/scoring/first_passage.py stock `_barrier` returns the median first-touch day among paths ever touching that level; race medians use paths where the respective outcome wins. All stock simulation steps are trading days (1/252). Arithmetic applies stock first-passage to its returned final stop/targets. Fractional median days are source evidence, not calendar-duration predictions.
