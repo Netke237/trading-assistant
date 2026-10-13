@@ -15,6 +15,14 @@
       "expires_at": "2026-10-14T00:15:29Z",
       "note": "Isolate frozen MEAS runs from the live DB (#230)",
       "task": "MEAS-LIVE-DB-ISOLATION"
+    },
+    {
+      "agent": "claude",
+      "branch": "main",
+      "claimed_at": "2026-10-13T21:15:32Z",
+      "expires_at": "2026-10-14T00:15:32Z",
+      "note": "Allow opening the frontend from another PC on the LAN (opt-in bind + CORS)",
+      "task": "LAN-ACCESS"
     }
   ]
 }
