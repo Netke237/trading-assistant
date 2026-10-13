@@ -2,10 +2,16 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/options-presentation-v2-45bd8065",
-      "claimed_at": "2026-10-13T14:01:52Z",
-      "expires_at": "2026-10-13T17:28:53Z",
-      "note": "Resume approved Options UI after usage interruption",
+      "branch": "board/options-presentation-resume-20261013",
+      "claimed_at": "2026-10-13T14:58:27Z",
+      "expires_at": "2026-10-13T17:58:27Z",
+      "note": "Explicit user approved takeover of interrupted Options session",
+      "previous": [
+        {
+          "branch": "board/options-presentation-v2-45bd8065",
+          "claimed_at": "2026-10-13T14:01:52Z"
+        }
+      ],
       "task": "OPTIONS-PRESENTATION-V2"
     }
   ]
