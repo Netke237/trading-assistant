@@ -867,7 +867,7 @@ export function StockPositionCard({
   return (
     <div className={position ? styles.workspace : styles.wrap} key={executionIdentity ?? card.symbol}>
       {position && <>
-        <header className={styles.identity} aria-label="Stock context">
+        <header data-presentation="stocks-v2" className={styles.identity} aria-label="Stock context">
           <div><Data size={24}>{card.symbol}</Data><Text size={14} weight={600}>{card.company}</Text><Text size={11} tone="secondary">{card.direction} · {card.strategy.strategy.replace(/_/g, ' ')}</Text></div>
           <div className={styles.identityBadges}><ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} /><StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} /></div>
           <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>

@@ -1,6 +1,6 @@
 # Stocks presentation V2 preservation crosswalk
 
-Coordinator inventory for #257, 13 October 2026. This is a working inventory during the serial build; final placement, browser verification and independent integrated audit remain pending. Frozen examples are not numerical or execution authority.
+Coordinator inventory for #257, 13 October 2026. This inventory maps the completed serial build; eight mocked browser cases pass. Independent integrated audit remains pending. Frozen examples are not numerical or execution authority.
 
 Sources: StockPositionCard/index.tsx and its child components; step-7-position-card/page.tsx; MethodPickSelector; stockExecutionSession; cardEdits; scanStore; StockAutoTradeArm; StockSendDialog; DirectSendNotesPanel; existing shared frame and context rail.
 
@@ -35,8 +35,10 @@ Sources: StockPositionCard/index.tsx and its child components; step-7-position-c
 | MC entry/stop/targets key, Arithmetic entry key, structure entry key | Unchanged session dependencies | Quantity/allocation preserve results; target clears MC; stop preserves Arithmetic/structure; entry clears all |
 | Abort controllers, revisions, request tokens, symbol/run freshness | Existing request/session paths | Late/reordered responses cannot replace current evidence; use isStockExecutionCurrent |
 | Pick stamp, disappearance checks, same-version sanitation/migration/reload | cardEdits / scanStore | Existing keys/schema and per-scan/per-symbol ownership; numerical evidence not persisted just to restore a label |
-| Five durable scan report categories and saved-run inspector | Existing audited LOG integration (ticket #256 reconciliation pending) | Report identity captured at dispatch; category isolation, unavailable diagnostics and retention preserved |
+| Five durable scan report categories and saved-run inspector | Existing audited LOG integration (reconciled #256) | Report identity captured at dispatch; category isolation, unavailable diagnostics and retention preserved |
 
 Final verification must reconcile each pending row to committed source and record field/source/unit checks, bullish/bearish payload parity, response/persistence guards and mocked browser results at 1200/1920 in both themes. Passing ticket tests do not clear the phase code-audit gate.
 
 Timing source verification: backend/app/scoring/first_passage.py stock `_barrier` returns the median first-touch day among paths ever touching that level; race medians use paths where the respective outcome wins. All stock simulation steps are trading days (1/252). Arithmetic applies stock first-passage to its returned final stop/targets. Fractional median days are source evidence, not calendar-duration predictions.
+
+Final browser verification: Chromium bullish/bearish × dark/light × 1200/1920, eight passing cases. Keyboard disclosures, candidate navigation, explicit Arithmetic/Ladder target selection, matching stop/quantity/outcomes and fractional median timing checked. Exactly one mocked portfolio payload preserves entry, execution stop, entered shares, original allocations and picked price; no real broker/arm/save calls. Screenshot inspection includes narrow dark stop/decision and wide light context/stop layouts. Independent integrated code audit is still required.
