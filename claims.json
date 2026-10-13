@@ -1,20 +1,20 @@
 {
   "claims": [
     {
-      "agent": "grok",
-      "branch": "board/broker-path-residuals-d325c381",
-      "claimed_at": "2026-10-13T15:18:38Z",
-      "expires_at": "2026-10-13T18:25:28Z",
-      "note": "Resume abandoned broker-path item; plan clean, build tickets open",
-      "task": "BROKER-PATH-RESIDUALS"
-    },
-    {
       "agent": "claude",
       "branch": "board/stocks-presentation-v2-b07faea8",
       "claimed_at": "2026-10-13T18:04:01Z",
       "expires_at": "2026-10-13T21:17:30Z",
       "note": "Proceed with approved Stocks successor after Options merge",
       "task": "STOCKS-PRESENTATION-V2"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/broker-path-residuals-07462388",
+      "claimed_at": "2026-10-13T18:56:11Z",
+      "expires_at": "2026-10-13T21:56:11Z",
+      "note": "",
+      "task": "BROKER-PATH-RESIDUALS"
     }
   ]
 }
