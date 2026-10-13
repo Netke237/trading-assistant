@@ -3001,7 +3001,7 @@
     {
       "id": "OPTIONS-PRESENTATION-V2",
       "name": "Approved Options trade-card layout; information, numbers and execution preserved",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
