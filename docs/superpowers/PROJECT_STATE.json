@@ -2969,12 +2969,17 @@
           "clean": true
         }
       ],
-      "note": "2026-10-13 #240 implemented at 1ad8592a: Typecheck clean; 3 focused TradeCard suites/207 tests pass including 3 new context identity, IV basis and zero-valued spread/alternative preservation regressions. Next #241. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
+      "note": "2026-10-13 #241 implemented at d4d2ea66: typecheck clean; 248 scoped tests across 10 suites passed after unchanged clock-sensitive rerun; fresh scores collapsed and saved open/closed evidence preferences preserved. Next #242. Phase build/code audit unfinished; audit_clean false, not ready to merge.",
       "implementation_tickets": [
         {
           "issue": 240,
           "commit": "1ad8592a62a093bfa957f005d4130e9241a6418a",
           "validation": "Typecheck clean; 3 focused TradeCard suites/207 tests pass including 3 new context identity, IV basis and zero-valued spread/alternative preservation regressions"
+        },
+        {
+          "issue": 241,
+          "commit": "d4d2ea669a7a365953537432b825c16f016dbeed",
+          "validation": "typecheck clean; 248 scoped tests across 10 suites passed after unchanged clock-sensitive rerun; fresh scores collapsed and saved open/closed evidence preferences preserved"
         }
       ]
     }
