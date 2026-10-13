@@ -140,6 +140,63 @@ describe('TradeCard', () => {
     expect(screen.getByText('-0.6x')).toBeInTheDocument();
   });
 
+  it('keeps contract snapshot basis and numeric details together in selected context', () => {
+    render(<TradeCard data={mockTradeCard} liveMid={7.5} liveStockPrice={220} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
+    expect(within(context).getByText('Contract Details')).toBeInTheDocument();
+    expect(within(context).getByText('Contract snapshot')).toBeInTheDocument();
+    expect(within(context).getByText('IV RANK')).toBeInTheDocument();
+    expect(within(context).getByText('45')).toBeInTheDocument();
+    const mid = within(context).getByText('MID').parentElement!;
+    expect(mid).toHaveTextContent('$2.50');
+    expect(mid).not.toHaveTextContent('$7.50');
+    expect(within(context).getByText('CAR').parentElement).toHaveTextContent('$250');
+  });
+
+  it('preserves absolute IV and missing details without substituting rank or live mid', () => {
+    const { rerender } = render(<TradeCard data={{ ...mockTradeCard, contractDetails: {
+      ...mockTradeCard.contractDetails!, ivRank: null, iv: 38,
+    } }} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByText('IV')).toBeInTheDocument();
+    expect(within(context).getByText('38.0%')).toBeInTheDocument();
+    expect(within(context).queryByText('IV RANK')).not.toBeInTheDocument();
+    rerender(<TradeCard data={{ ...mockTradeCard, contractDetails: undefined }} liveMid={7.5} />);
+    expect(within(context).getAllByText(mockTradeCard.contract).length).toBeGreaterThan(0);
+    expect(within(context).queryByText('Contract Details')).not.toBeInTheDocument();
+    expect(within(context).queryByText('CAR')).not.toBeInTheDocument();
+  });
+
+  it('keeps conditional spread values and alternative reasons in the same selected context', () => {
+    const spread: TradeCardData = {
+      ...mockTradeCard, spreadType: 'bear_put',
+      legs: [
+        { action: 'BUY', qty: 1, strike: 190, right: 'P', expiry: '2026-05-15', bid: 5, ask: 5.2 },
+        { action: 'SELL', qty: 1, strike: 180, right: 'P', expiry: '2026-05-15', bid: 2.2, ask: 2.4 },
+      ],
+      netDebitCredit: 0, maxProfit: 725, maxLoss: 275, breakeven: 187.25,
+      alternatives: [{
+        symbol: 'AAPL', strike: 195, right: 'C', expiry: '2026-05-15', dte: 24,
+        mid: 1.75, delta: 0.35, theta: -0.07, ivRank: 0, score: 65,
+        contractConfidence: 'CAUTION', contractBreakdown: mockTradeCard.contractBreakdown,
+        rrRatio: 2.1, rrModel: 'Heston repriced', reason: 'Lower premium with a smaller delta',
+      }],
+    };
+    render(<TradeCard data={spread} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByText(/Spread Legs/)).toHaveTextContent('Bear Put Spread');
+    for (const value of ['$725.00', '$275.00', '$187.25', '+$0.00']) {
+      expect(within(context).getByText(value)).toBeInTheDocument();
+    }
+    expect(within(context).getByText('BUY')).toBeInTheDocument();
+    expect(within(context).getByText('SELL')).toBeInTheDocument();
+    const alternatives = within(context).getByRole('button', { name: /ALTERNATIVES/ });
+    expect(alternatives).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(alternatives);
+    expect(within(context).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
+    expect(within(context).getByText('0')).toBeInTheDocument();
+  });
   it('renders symbol and company in header', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');

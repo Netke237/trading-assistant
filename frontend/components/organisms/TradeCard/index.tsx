@@ -2204,7 +2204,7 @@ export function TradeCard({
     <div className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
       {/* 1. Header */}
-      <div className={styles.headerCard}>
+      <section className={styles.headerCard} aria-label="Selected stock and contract">
         <div className={styles.headerRow}>
           <SymbolHeader
             ticker={data.symbol}
@@ -2233,6 +2233,7 @@ export function TradeCard({
             </Tooltip>
           )}
         </div>
+        <Text size={11} tone="secondary" className={styles.snapshotNote}>Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.</Text>
         <div className={styles.identityFacts}>
           <div>
             <Text size={12}>Stock score {data.stockScore}/100 · {data.stockConfidence}</Text>
@@ -2248,7 +2249,97 @@ export function TradeCard({
             {data.contractDetails && <Text size={11} tone="secondary">${data.contractDetails.mid.toFixed(2)} mid / share · {data.contractDetails.dte}d DTE · ${car.toFixed(0)} CaR</Text>}
           </div>
         </div>
-      </div>
+        {/* 5. Contract Details */}
+        {data.contractDetails && (
+          <section className={styles.contextDetails}>
+            <Text size={14} weight={600}>Contract Details</Text>
+            <Text size={11} tone="secondary">Contract snapshot</Text>
+            <div className={styles.detailsGrid}>
+              <DetailCell label="Strike" value={`$${data.contractDetails.strike}`} />
+              <DetailCell label="Expiry" value={data.contractDetails.expiry} />
+              <DetailCell label="Right" value={data.contractDetails.right === 'C' ? 'Call' : 'Put'} />
+              <DetailCell label="Mid" value={`$${data.contractDetails.mid.toFixed(2)}`} />
+              <DetailCell label="Δ" value={data.contractDetails.delta.toFixed(2)} mono />
+              <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
+              {/* A percentile when a rank source answered, otherwise the
+                  ABSOLUTE implied volatility — the label follows the figure,
+                  because printing 45% IV as "IV rank 45" is the misreading
+                  Phase A exists to end (PHASE-A-NULL-IVRANK-2026-09-06). */}
+              <DetailCell
+                label={resolveIv(data.contractDetails).basis === 'rank' ? 'IV rank' : 'IV'}
+                value={formatIv(resolveIv(data.contractDetails), data.symbol).text}
+                mono
+              />
+              <DetailCell label="DTE" value={`${data.contractDetails.dte}d`} mono />
+              <DetailCell label="CaR" value={`$${car.toFixed(0)}`} mono />
+            </div>
+          </section>
+        )}
+
+        {/* 5b. Spread legs panel — shown only for multi-leg spreads */}
+        {data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 && (
+          <section className={styles.contextDetails}>
+            <Text size={14} weight={600}>
+              Spread Legs —{' '}
+              {data.spreadType === 'bear_put' ? 'Bear Put Spread' : 'Bear Call Spread'}
+            </Text>
+            <div className={styles.legsTableHead}>
+              <Text size={10} tone="dim">ACTION</Text>
+              <Text size={10} tone="dim">QTY</Text>
+              <Text size={10} tone="dim">STRIKE</Text>
+              <Text size={10} tone="dim">RIGHT</Text>
+              <Text size={10} tone="dim">EXPIRY</Text>
+            </div>
+            {data.legs.map((leg, i) => (
+              <div key={i} className={styles.legRow}>
+                <Data size={12} weight={500} tone={leg.action === 'BUY' ? 'pass' : 'caution'}>
+                  {leg.action}
+                </Data>
+                <Data size={12}>{leg.qty}</Data>
+                <Data size={12}>${leg.strike}</Data>
+                <Data size={12}>{leg.right === 'C' ? 'Call' : 'Put'}</Data>
+                <Data size={12}>{leg.expiry}</Data>
+              </div>
+            ))}
+            <div className={styles.spreadSummary}>
+              <KV
+                label="Net debit / credit"
+                value={
+                  data.netDebitCredit != null
+                    ? `${data.netDebitCredit >= 0 ? '+' : '−'}$${Math.abs(data.netDebitCredit).toFixed(2)}`
+                    : '—'
+                }
+                mono
+              />
+              <KV label="Max profit" value={data.maxProfit != null ? `$${data.maxProfit.toFixed(2)}` : '—'} mono />
+              <KV label="Max loss"   value={data.maxLoss   != null ? `$${data.maxLoss.toFixed(2)}`   : '—'} mono />
+              <KV label="Breakeven"  value={data.breakeven  != null ? `$${data.breakeven.toFixed(2)}`  : '—'} mono />
+            </div>
+          </section>
+        )}
+
+        {data.alternatives && data.alternatives.length > 0 && (
+          <div className={styles.altSection}>
+            <button
+              type="button"
+              className={styles.altToggle}
+              onClick={() => setAltOpen((v) => !v)}
+              aria-expanded={altOpen}
+            >
+              <Text size={11} tone="dim">ALTERNATIVES ({data.alternatives.length})</Text>
+              <Text size={11} tone="dim">{altOpen ? '▲' : '▼'}</Text>
+            </button>
+            {altOpen && (
+              <div className={styles.altList}>
+                {data.alternatives.map((alt, i) => (
+                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      </section>
       <CollapsibleSection
         title="Stock & contract scores"
         storageKey="bamendjou:tradecard-scores-collapsed"
@@ -2579,95 +2670,6 @@ export function TradeCard({
             )}
           </div>
         </section>
-
-        {/* 5. Contract Details */}
-        {data.contractDetails && (
-          <section className={styles.detailsCard}>
-            <Text size={14} weight={600}>Contract Details</Text>
-            <div className={styles.detailsGrid}>
-              <DetailCell label="Strike" value={`$${data.contractDetails.strike}`} />
-              <DetailCell label="Expiry" value={data.contractDetails.expiry} />
-              <DetailCell label="Right" value={data.contractDetails.right === 'C' ? 'Call' : 'Put'} />
-              <DetailCell label="Mid" value={`$${data.contractDetails.mid.toFixed(2)}`} />
-              <DetailCell label="Δ" value={data.contractDetails.delta.toFixed(2)} mono />
-              <DetailCell label="Θ / day" value={`$${data.contractDetails.theta.toFixed(2)}`} mono />
-              {/* A percentile when a rank source answered, otherwise the
-                  ABSOLUTE implied volatility — the label follows the figure,
-                  because printing 45% IV as "IV rank 45" is the misreading
-                  Phase A exists to end (PHASE-A-NULL-IVRANK-2026-09-06). */}
-              <DetailCell
-                label={resolveIv(data.contractDetails).basis === 'rank' ? 'IV rank' : 'IV'}
-                value={formatIv(resolveIv(data.contractDetails), data.symbol).text}
-                mono
-              />
-              <DetailCell label="DTE" value={`${data.contractDetails.dte}d`} mono />
-              <DetailCell label="CaR" value={`$${car.toFixed(0)}`} mono />
-            </div>
-          </section>
-        )}
-
-        {/* 5b. Spread legs panel — shown only for multi-leg spreads */}
-        {data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 && (
-          <section className={`${styles.detailsCard} ${styles.spreadLegsCard}`}>
-            <Text size={14} weight={600}>
-              Spread Legs —{' '}
-              {data.spreadType === 'bear_put' ? 'Bear Put Spread' : 'Bear Call Spread'}
-            </Text>
-            <div className={styles.legsTableHead}>
-              <Text size={10} tone="dim">ACTION</Text>
-              <Text size={10} tone="dim">QTY</Text>
-              <Text size={10} tone="dim">STRIKE</Text>
-              <Text size={10} tone="dim">RIGHT</Text>
-              <Text size={10} tone="dim">EXPIRY</Text>
-            </div>
-            {data.legs.map((leg, i) => (
-              <div key={i} className={styles.legRow}>
-                <Data size={12} weight={500} tone={leg.action === 'BUY' ? 'pass' : 'caution'}>
-                  {leg.action}
-                </Data>
-                <Data size={12}>{leg.qty}</Data>
-                <Data size={12}>${leg.strike}</Data>
-                <Data size={12}>{leg.right === 'C' ? 'Call' : 'Put'}</Data>
-                <Data size={12}>{leg.expiry}</Data>
-              </div>
-            ))}
-            <div className={styles.spreadSummary}>
-              <KV
-                label="Net debit / credit"
-                value={
-                  data.netDebitCredit != null
-                    ? `${data.netDebitCredit >= 0 ? '+' : '−'}$${Math.abs(data.netDebitCredit).toFixed(2)}`
-                    : '—'
-                }
-                mono
-              />
-              <KV label="Max profit" value={data.maxProfit != null ? `$${data.maxProfit.toFixed(2)}` : '—'} mono />
-              <KV label="Max loss"   value={data.maxLoss   != null ? `$${data.maxLoss.toFixed(2)}`   : '—'} mono />
-              <KV label="Breakeven"  value={data.breakeven  != null ? `$${data.breakeven.toFixed(2)}`  : '—'} mono />
-            </div>
-          </section>
-        )}
-
-        {data.alternatives && data.alternatives.length > 0 && (
-          <div className={styles.altSection}>
-            <button
-              type="button"
-              className={styles.altToggle}
-              onClick={() => setAltOpen((v) => !v)}
-              aria-expanded={altOpen}
-            >
-              <Text size={11} tone="dim">ALTERNATIVES ({data.alternatives.length})</Text>
-              <Text size={11} tone="dim">{altOpen ? '▲' : '▼'}</Text>
-            </button>
-            {altOpen && (
-              <div className={styles.altList}>
-                {data.alternatives.map((alt, i) => (
-                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Max loss budget">
           {/* Feature 5 — pre-trade max-loss override. Feeds recommendedSize
