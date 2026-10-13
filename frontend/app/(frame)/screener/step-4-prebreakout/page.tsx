@@ -24,6 +24,7 @@ import { _horizonEnum } from '@/lib/analysisStore';
 import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
 import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
+import { fmtThreshold, truncPreBreakoutInts, truncFibInts, rememberScan, scanSnapshot, type ScanSnapshot } from './scanThresholds';
 import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
 
@@ -103,6 +104,8 @@ export default function Step4PreBreakoutPage() {
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
   const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const requestToken = useRef(0);
   const isFirstRender                       = useRef(true);
 
   useEffect(() => {
@@ -110,11 +113,16 @@ export default function Step4PreBreakoutPage() {
       isFirstRender.current = false;
       return;
     }
+    requestToken.current += 1;
+    setScanning(false);
     setTableRunIds({});
     setResults([]);
     setFibResults([]);
     setPullbackResults([]);
   }, [params, fibParams, pullbackEmaParams, universePick, direction, setResults, setFibResults]);
+
+  useEffect(() => { requestToken.current += 1; setScanning(false); }, [scanMode, symbolOverride, customRaw, context?.horizon]);
+  useEffect(() => () => { requestToken.current += 1; }, []);
 
   const runScan = useCallback(async () => {
     const manualSymbols = parseSymbols(symbolOverride);
@@ -146,6 +154,14 @@ export default function Step4PreBreakoutPage() {
       return;
     }
 
+    const token = ++requestToken.current;
+    let runId: string | null = null;
+    const snapshot: ScanSnapshot = {
+      scope: Object.freeze({mode: scanMode, direction, horizon: context?.horizon, symbols: Object.freeze([...symbols]), universe: universe ? Object.freeze([...universe]) : undefined, runId: null}),
+      pre: truncPreBreakoutInts(params), fib: truncFibInts(fibParams),
+      pullback: {emaPeriod: Math.trunc(pullbackEmaParams.emaPeriod), trendEma: Math.trunc(pullbackEmaParams.trendEma)},
+    };
+    const remember = (rows: object) => rememberScan(rows, {...snapshot, scope: Object.freeze({...snapshot.scope, runId})});
     setError(null);
     setScanning(true);
     try {
@@ -166,6 +182,9 @@ export default function Step4PreBreakoutPage() {
           account_size: sizing.accountSize,
           risk_pct: sizing.riskPct,
         });
+        if (token !== requestToken.current) return;
+        runId = result.report_run_id ?? null;
+        remember(result.candidates);
         setTableRunIds(ids=>({...ids,pullback:result.report_run_id}));
         setPullbackResults(result.candidates);
       } else if (scanMode === 'fib') {
@@ -174,13 +193,16 @@ export default function Step4PreBreakoutPage() {
           direction,
           {
             fib_swing_lookback: fibParams.fibSwingLookback,
-            fib_levels: fibParams.fibLevels,
+            fib_levels: [...fibParams.fibLevels],
             fib_tolerance_pct: fibParams.fibTolerancePct,
             ema_filter_period: fibParams.emaFilterPeriod,
           },
           universe,
-          metadata => setTableRunIds(ids=>({...ids,fib:metadata.run_id})),
+          metadata => { runId = metadata.run_id; },
         );
+        if (token !== requestToken.current) return;
+        remember(results);
+        setTableRunIds(ids=>({...ids,fib:runId}));
         setFibResults(results);
       } else {
         const paramsOverride: Record<string, unknown> = {
@@ -192,13 +214,16 @@ export default function Step4PreBreakoutPage() {
           resistance_proximity_pct: params.resistanceProximityPct,
           swing_lookback:           params.swingLookback,
         };
-        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe, metadata => setTableRunIds(ids=>({...ids,prebreakout:metadata.run_id})));
+        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe, metadata => { runId = metadata.run_id; });
+        if (token !== requestToken.current) return;
+        remember(results);
+        setTableRunIds(ids=>({...ids,prebreakout:runId}));
         setResults(results);
       }
     } catch (e) {
-      setError((e as Error).message);
+      if (token === requestToken.current) setError((e as Error).message);
     } finally {
-      setScanning(false);
+      if (token === requestToken.current) setScanning(false);
     }
   }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, context?.horizon, pullbackEmaParams.emaPeriod, pullbackEmaParams.trendEma, setResults, setFibResults]);
 
@@ -209,6 +234,26 @@ export default function Step4PreBreakoutPage() {
   const inspectionUniverse = inspectionSymbols.length || universePick === 'Custom' || universePick === 'Watchlist' ? null : [universePick];
   const inspectionInputs = scanMode === 'pullback' ? {universe:inspectionUniverse??inspectionSymbols,direction,horizon:_horizonEnum(context?.horizon),strategy:'pullback_ema',pullback_ema_period:pullbackEmaParams.emaPeriod,pullback_trend_ema:pullbackEmaParams.trendEma,account_size:inspectionRisk.portfolioValue,risk_pct:inspectionRisk.maxLossPerTradePct} : {symbols:inspectionSymbols,universe:inspectionUniverse,direction,params_override:scanMode==='fib'?{fib_swing_lookback:fibParams.fibSwingLookback,fib_levels:fibParams.fibLevels,fib_tolerance_pct:fibParams.fibTolerancePct,ema_filter_period:fibParams.emaFilterPeriod}:{atr_compression_ratio:params.atrCompressionRatio,atr_avg_lookback:params.atrAvgLookback,range_atr_mult:params.rangeAtrMult,range_lookback_bars:params.rangeLookbackBars,vol_compression_ratio:params.volCompressionRatio,resistance_proximity_pct:params.resistanceProximityPct,swing_lookback:params.swingLookback}};
   const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
+
+  const activeRows = scanMode === 'prebreakout' ? sorted : scanMode === 'fib' ? fibResults : pullbackResults;
+  const sourceRows = scanMode === 'prebreakout' ? preResults : scanMode === 'fib' ? fibResults : pullbackResults;
+  const applied = scanSnapshot(sourceRows);
+  const preApplied = scanSnapshot(preResults)?.pre;
+  const fibApplied = scanSnapshot(fibResults)?.fib;
+  const selected = activeRows.find(row => row.symbol === selectedSymbol) ?? null;
+  useEffect(() => { setSelectedSymbol(null); }, [scanMode]);
+  useEffect(() => { if (!activeRows.some(row => row.symbol === selectedSymbol)) setSelectedSymbol(null); }, [activeRows, selectedSymbol]);
+  const selectionProps = (symbol: string) => ({
+    role: 'button' as const, tabIndex: 0, 'aria-label': `Select ${symbol}`, 'aria-pressed': selectedSymbol === symbol,
+    onClick: (event: React.MouseEvent) => { if (!(event.target as HTMLElement).closest('button')) setSelectedSymbol(symbol); },
+    onKeyDown: (event: React.KeyboardEvent) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSymbol(symbol); } },
+  });
+  const chartShell = <section className={styles.chartShell} role="region" aria-label="Selected setup chart">
+    <Title as="h2" size={20}>Selected setup</Title>
+    <div aria-label="Selected setup"><Text size={13} tone="secondary">{selected?.symbol ?? 'Select a candidate'}</Text></div>
+    <Text size={12} tone="dim">{selected ? 'Chart data unavailable.' : 'Select a row to inspect its chart.'}</Text>
+    {selected && <Text size={11} tone="dim">{applied ? `${applied.scope.direction} · ${applied.scope.horizon ?? 'Horizon unavailable'} · ${applied.scope.mode}` : 'Scan snapshot unavailable'}</Text>}
+  </section>;
 
   const universeLabel =
     symbolOverride.trim()          ? 'manual symbols'
@@ -221,7 +266,7 @@ export default function Step4PreBreakoutPage() {
       <div className={styles.header}>
         <Title as="h2" size={20}>Setup Scanner</Title>
         <Text size={13} tone="secondary">
-          Scanning {universeLabel} · {direction}
+          Scanning {universeLabel} · {direction} · {context?.horizon ?? 'Horizon unavailable'}
         </Text>
       </div>
 
@@ -328,8 +373,8 @@ export default function Step4PreBreakoutPage() {
 
           {error && <Text size={12} tone="reject">{error}</Text>}
 
-          {pullbackResults.length > 0 && (
-            <div className={styles.tableWrap}>
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.tableHeader}>
                 <span />
                 <Text size={11} tone="dim" weight={500}>Symbol</Text>
@@ -341,7 +386,7 @@ export default function Step4PreBreakoutPage() {
                 <span />
               </div>
               {pullbackResults.map((row) => (
-                <div key={row.symbol} className={styles.tableRow}>
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={styles.tableRow}>
                   <WatchStar symbol={row.symbol} size="sm" />
                   <Text size={13} weight={500}>{row.symbol}</Text>
                   <Text size={12} tone="secondary">{row.company}</Text>
@@ -374,7 +419,7 @@ export default function Step4PreBreakoutPage() {
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {pullbackResults.length === 0 && !scanning && !error && (
@@ -384,7 +429,7 @@ export default function Step4PreBreakoutPage() {
       ) : scanMode === 'fib' ? (
         <>
           <Text size={12} tone="dim">
-            Stocks retracing to a key Fibonacci level (38.2%, 61.8%) after a significant swing move.
+            Stocks retracing to a key Fibonacci level ({fibApplied ? fibApplied.fibLevels.map(level => `${level}%`).join(', ') : 'scanned levels unavailable'}) after a significant swing move.
             At-level hits are sorted first. Set a regime alert to be notified when conditions align.
           </Text>
 
@@ -414,8 +459,8 @@ export default function Step4PreBreakoutPage() {
 
           {error && <Text size={12} tone="reject">{error}</Text>}
 
-          {fibResults.length > 0 && (
-            <div className={styles.tableWrap}>
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.fibTableHeader}>
                 <span />
                 <Text size={11} tone="dim" weight={500}>Symbol</Text>
@@ -427,7 +472,7 @@ export default function Step4PreBreakoutPage() {
                 <span />
               </div>
               {(fibResults as FibScanRow[]).map((row) => (
-                <div key={row.symbol} className={styles.fibTableRow}>
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={styles.fibTableRow}>
                   <div className={styles.iconCell}>
                     <WatchStar symbol={row.symbol} size="sm" />
                     <button
@@ -446,8 +491,8 @@ export default function Step4PreBreakoutPage() {
                   <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
                   <Data
                     size={12}
-                    tone={row.fib_dist_pct != null && row.fib_dist_pct <= fibParams.fibTolerancePct * 100 ? 'pass' : 'caution'}
-                    title={`Distance from current price to the nearest Fibonacci level. ≤${(fibParams.fibTolerancePct * 100).toFixed(1)}% (the tolerance band, adjustable above) = within range.`}
+                    tone={fibApplied && row.fib_dist_pct != null ? row.fib_dist_pct <= fibApplied.fibTolerancePct * 100 ? 'pass' : 'caution' : 'secondary'}
+                    title={fibApplied ? `Distance from current price to the nearest Fibonacci level. ≤${fmtThreshold(fibApplied.fibTolerancePct * 100, 1)}% scanned tolerance = within range.` : 'Scanned tolerance unavailable'}
                   >
                     {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
                   </Data>
@@ -475,7 +520,7 @@ export default function Step4PreBreakoutPage() {
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {fibResults.length === 0 && !scanning && !error && (
@@ -485,8 +530,8 @@ export default function Step4PreBreakoutPage() {
       ) : (
         <>
           <Text size={12} tone="dim">
-            Stocks coiling near a key resistance level — ATR compressed, volume dry, close
-            within {(params.resistanceProximityPct * 100).toFixed(1)}% of swing high.
+            Stocks coiling near a key swing level — ATR compressed, volume dry, close
+            within {preApplied ? fmtThreshold(preApplied.resistanceProximityPct * 100, 1) + '%' : 'an unavailable scanned distance'} of the {direction === 'Bullish' ? 'swing high' : 'swing low'}.
             Set a regime alert to be notified when conditions align.
           </Text>
 
@@ -516,8 +561,8 @@ export default function Step4PreBreakoutPage() {
 
           {error && <Text size={12} tone="reject">{error}</Text>}
 
-          {sorted.length > 0 && (
-            <div className={styles.tableWrap}>
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.tableHeader}>
                 <span />
                 <Text size={11} tone="dim" weight={500}>Symbol</Text>
@@ -529,7 +574,7 @@ export default function Step4PreBreakoutPage() {
                 <span />
               </div>
               {sorted.map((row) => (
-                <div key={row.symbol} className={styles.tableRow}>
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={styles.tableRow}>
                   <div className={styles.iconCell}>
                     <WatchStar symbol={row.symbol} size="sm" />
                     <button
@@ -556,7 +601,7 @@ export default function Step4PreBreakoutPage() {
                     size={12}
                     tone="secondary"
                     title={row.metrics.atr_ratio != null
-                      ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ 20-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${params.atrCompressionRatio.toFixed(2)} to pass. Contributes 30% of the confidence score.`
+                      ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ ${preApplied ? preApplied.atrAvgLookback : 'unknown'}-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${preApplied ? fmtThreshold(preApplied.atrCompressionRatio, 2) : 'unavailable (scan snapshot unknown)'} to pass. Contributes 30% of the confidence score.`
                       : undefined}
                   >
                     {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
@@ -565,7 +610,7 @@ export default function Step4PreBreakoutPage() {
                     size={12}
                     tone="secondary"
                     title={row.metrics.vol_ratio != null
-                      ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${params.volCompressionRatio.toFixed(2)} to pass. Contributes 25% of the confidence score.`
+                      ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${preApplied ? fmtThreshold(preApplied.volCompressionRatio, 2) : 'unavailable (scan snapshot unknown)'} to pass. Contributes 25% of the confidence score.`
                       : undefined}
                   >
                     {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
@@ -574,7 +619,7 @@ export default function Step4PreBreakoutPage() {
                     size={12}
                     tone="secondary"
                     title={row.metrics.proximity_pct != null
-                      ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${(params.resistanceProximityPct * 100).toFixed(1)}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
+                      ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${preApplied ? fmtThreshold(preApplied.resistanceProximityPct * 100, 1) : 'unavailable (scan snapshot unknown)'}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
                       : undefined}
                   >
                     {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
@@ -588,7 +633,7 @@ export default function Step4PreBreakoutPage() {
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {sorted.length === 0 && !scanning && (

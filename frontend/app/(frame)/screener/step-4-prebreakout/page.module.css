@@ -152,3 +152,10 @@
   cursor: pointer;
 }
 .resetBtn:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+.resultsGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+.tableWrap { min-width: 0; overflow-x: auto; }
+.chartShell { display: flex; flex-direction: column; gap: 12px; min-height: 260px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); }
+.tableRow[aria-pressed="true"], .fibTableRow[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.tableRow:focus-visible, .fibTableRow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1100px) { .resultsGrid { grid-template-columns: 1fr; } }
