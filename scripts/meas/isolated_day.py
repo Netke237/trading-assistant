@@ -3,9 +3,10 @@
 Plan: docs/superpowers/plans/2026-10-13-meas-live-db-isolation-plan.md (#230).
 This module is ticket T1 (#281): §2.2 fixed names, §2.3 G1, §2.4 the files the
 orchestrator writes into the meas checkout, the child environment, the secret
-file and the confidence-cache seed/carry-over (§2.4 [v3 R2-1], §2.7). The DB
-layer (setup / copy / G2 / G3 DB probe, T2) and the run sequence
-(run / check / cleanup, T3) are added on top of it.
+file and the confidence-cache seed/carry-over (§2.4 [v3 R2-1], §2.7). Ticket T2
+(#282) adds the DB layer at the end of the file: one-time ``setup`` (§2.3 G2),
+the per-run copy and its verification (§2.5), the G2 probe and the G3 DB probe.
+The run sequence (run / check / cleanup, T3) is added on top of it.
 
 Rules for everything in here:
 - stdlib + PyYAML only; never import ``app.*`` (the frozen code must not be
@@ -27,6 +28,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import socket
 import sqlite3
 import subprocess
@@ -64,8 +66,11 @@ MEAS_DOTENV_KEYS: tuple[str, ...] = ("DATABASE_URL", *MARKET_DATA_ENV_KEYS, MEAS
 
 # Child environment: every key matching this is removed (case-insensitively,
 # Windows env keys are case-insensitive) before the meas keys are added.
+# ``PG`` covers every libpq variable (PGPASSWORD, PGHOST, PGPORT, PGUSER,
+# PGDATABASE, PGSERVICE, PGPASSFILE, ...): asyncpg reads them when a URL part is
+# missing, and the DB layer (T2) puts PGPASSWORD into docker's subprocess env.
 _CHILD_ENV_STRIP_RE = re.compile(
-    r"^(?:DATABASE_URL$|BAMENDJOU_|TRADIER_|TIINGO_|ALPACA_|TASTY|IBKR_|POSTGRES_)", re.IGNORECASE
+    r"^(?:DATABASE_URL$|BAMENDJOU_|TRADIER_|TIINGO_|ALPACA_|TASTY|IBKR_|POSTGRES_|PG)", re.IGNORECASE
 )
 _NOTIFICATION_KEY_RE = re.compile(r"TELEGRAM|GMAIL", re.IGNORECASE)
 
@@ -685,3 +690,455 @@ def prepare_confidence_cache(live_cache: Path | str, meas_cache: Path | str, *,
         return {"origin": "cold", "sha256": None, "total_rows": 0, "tag_hittable_rows": 0,
                 "tag_hittable_oldest_expires_at": None, "tag_hittable_newest_expires_at": None}
     return {"origin": origin, **cache_stats(meas_cache, run_start=run_start)}
+
+
+# ── DB layer (T2, #282): §2.3 G2, §2.5 copy + verification, G3 DB probe ──────
+#
+# Every database action is a ``docker exec`` into the Postgres container,
+# through one injectable runner (``PgDocker.runner``) so tests never run docker.
+# - Superuser sessions use the container's own ``$POSTGRES_USER`` (expanded by
+#   ``sh`` inside the container) and read SQL from stdin: no credential and no
+#   SQL in argv. Admin statements run on the maintenance database
+#   (``postgres``), never in a session on the live database.
+# - Every session on the live database is read-only (``READ_ONLY_PREFIX``) and
+#   SELECT-only; the live database name appears only in ``pg_dump``, in those
+#   SELECT sessions, in setup's single ``REVOKE`` and in the G2 connect attempt.
+# - The meas password reaches docker only as ``docker exec -e PGPASSWORD`` with
+#   the value in the docker subprocess env, and in setup's role statement on
+#   stdin. Every error text is redacted before it is put in an exception.
+
+DB_CONTAINER = "tradingassistant-db"
+MAINTENANCE_DB = "postgres"
+READ_ONLY_PREFIX = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;\n"
+MEAS_ROLE_ATTRIBUTES = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+# libpq / psql connection-failure texts that mean "authenticated, but not allowed
+# into this database". Anything else (bad password, container down, no output)
+# is not proof of G2 and refuses with a different message.
+G2_PERMISSION_PATTERNS: tuple[str, ...] = ("permission denied for database", "not allowed to connect")
+
+
+@dataclass(frozen=True)
+class CmdResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+DockerRunner = Callable[..., CmdResult]
+
+
+def subprocess_runner(argv: list[str], *, input: str | None = None,
+                      env: Mapping[str, str] | None = None, timeout: float | None = None) -> CmdResult:
+    """The real runner: ``subprocess.run`` with captured text output."""
+    proc = subprocess.run(list(argv), input=input, env=None if env is None else dict(env),
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          timeout=timeout)
+    return CmdResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+
+
+def quote_ident(name: str) -> str:
+    if not name or "\x00" in name:
+        raise GuardRefusal("empty or NUL-containing SQL identifier")
+    return '"' + name.replace('"', '""') + '"'
+
+
+def quote_literal(value: str) -> str:
+    if "\x00" in value:
+        raise GuardRefusal("NUL in SQL literal")
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _check_dbname(name: str) -> None:
+    """psql/pg_dump treat a ``-d`` value with ``=`` or a URI prefix as a conninfo string."""
+    if not name or "\x00" in name or "=" in name or "://" in name:
+        raise GuardRefusal("database name is empty or looks like a connection string")
+
+
+def _redacted_tail(res: CmdResult, secret_values: Iterable[str], limit: int = 400) -> str:
+    """stderr+stdout, redacted first (so a cut can never expose part of a secret), then cut."""
+    text = redact_text(f"{res.stderr or ''}\n{res.stdout or ''}".strip(), secret_values)
+    return text[-limit:] if len(text) > limit else text
+
+
+@dataclass(frozen=True)
+class PgDocker:
+    """``docker exec`` access to the Postgres container (the test / T4 seam)."""
+
+    container: str = DB_CONTAINER
+    runner: DockerRunner = subprocess_runner
+    docker: str = "docker"
+    maintenance_db: str = MAINTENANCE_DB
+    timeout: float = 120.0
+    copy_timeout: float = 4 * 3600.0
+
+    def run(self, argv: list[str], *, what: str, input: str | None = None,
+            env: Mapping[str, str] | None = None, timeout: float | None = None) -> CmdResult:
+        try:
+            return self.runner(argv, input=input, env=env, timeout=timeout or self.timeout)
+        except Exception as exc:  # docker missing, timeout, ...: fail closed, never echo output
+            raise GuardRefusal(f"{what}: could not run docker ({type(exc).__name__})") from None
+
+    def superuser_argv(self, dbname: str) -> list[str]:
+        _check_dbname(dbname)
+        script = ("exec psql -X -q -A -t -v ON_ERROR_STOP=1 -v VERBOSITY=terse "
+                  f'-U "$POSTGRES_USER" -d {shlex.quote(dbname)}')
+        return [self.docker, "exec", "-i", self.container, "sh", "-c", script]
+
+    def superuser_sql(self, sql: str, *, dbname: str, read_only: bool, what: str,
+                      secret_values: Iterable[str] = ()) -> str:
+        text = (READ_ONLY_PREFIX if read_only else "") + sql
+        res = self.run(self.superuser_argv(dbname), what=what, input=text)
+        if res.returncode != 0:
+            raise GuardRefusal(f"{what} failed (exit {res.returncode}): {_redacted_tail(res, secret_values)}")
+        return res.stdout
+
+    def select_json(self, sql: str, *, dbname: str, what: str) -> Any:
+        """One read-only SELECT session returning a single JSON value."""
+        out = self.superuser_sql(sql, dbname=dbname, read_only=True, what=what)
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        if not lines:
+            raise GuardRefusal(f"{what}: no output")
+        try:
+            return json.loads(lines[-1])
+        except ValueError:
+            raise GuardRefusal(f"{what}: unexpected output") from None
+
+    def meas_runner_connect_argv(self, dbname: str) -> list[str]:
+        """Connect as meas_runner over TCP inside the container (password auth, then
+        the CONNECT privilege); ``-e PGPASSWORD`` takes the value from docker's env."""
+        _check_dbname(dbname)
+        return [self.docker, "exec", "-e", "PGPASSWORD", self.container,
+                "psql", "-X", "-q", "-A", "-t", "-w", "-h", "127.0.0.1",
+                "-U", MEAS_USER, "-d", dbname, "-c", "SELECT 1"]
+
+
+def _check_live_identity(live: DbUrl, pg: PgDocker) -> None:
+    """The live identity must never collide with the meas names or the admin DB."""
+    if not live.dbname or not live.user:
+        raise GuardRefusal("live DATABASE_URL has no database name or user")
+    _check_dbname(live.dbname)
+    _check_dbname(pg.maintenance_db)
+    if live.dbname.casefold() == MEAS_DBNAME.casefold():
+        raise GuardRefusal("the live database is the meas database; refusing")
+    if live.user.casefold() == MEAS_USER.casefold():
+        raise GuardRefusal("the live user is the meas role; refusing")
+    if pg.maintenance_db.casefold() in (live.dbname.casefold(), MEAS_DBNAME.casefold()):
+        raise GuardRefusal("the maintenance database must be neither the live nor the meas database")
+
+
+def reverse_revoke_command(live: DbUrl) -> str:
+    """Undo setup's only change to the live database."""
+    return f"GRANT CONNECT ON DATABASE {quote_ident(live.dbname)} TO PUBLIC"
+
+
+def enforce_guard(name: str, results: Iterable[GuardResult]) -> None:
+    failed = [r for r in results if not r.ok]
+    if failed:
+        raise GuardRefusal(f"{name} refused: " + "; ".join(f"{r.rule} ({r.detail})" for r in failed))
+
+
+# ── one-time setup (§2.3 G2; runs only after Kenneth's explicit yes) ─────────
+
+def setup(live: DbUrl, secret_file: Path | str, *, rotate: bool = False, pg: PgDocker | None = None,
+          log: Callable[[str], None] = print,
+          restrict_acl: Callable[[Path], None] | None = None,
+          token_factory: Callable[[], str] | None = None) -> dict[str, Any]:
+    """Create ``meas_runner`` (password from the secret file) and ``bamendjou_meas``,
+    ``REVOKE CONNECT ON DATABASE <live> FROM PUBLIC``, verify the live user still
+    connects and that G2 now holds. Idempotent; returns a secret-free summary
+    with the reverse command (also logged)."""
+    pg = pg or PgDocker()
+    _check_live_identity(live, pg)
+    reverse = reverse_revoke_command(live)
+    lit_db, lit_user = quote_literal(live.dbname), quote_literal(live.user)
+
+    pre = pg.select_json(
+        "/* meas:setup-precheck */ SELECT json_build_object("
+        f"'live_db_exists', EXISTS (SELECT 1 FROM pg_database WHERE datname = {lit_db}), "
+        f"'live_user_super', COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname = {lit_user}), false), "
+        "'live_user_owner', EXISTS (SELECT 1 FROM pg_database d JOIN pg_roles r ON r.oid = d.datdba "
+        f"WHERE d.datname = {lit_db} AND r.rolname = {lit_user}), "
+        f"'role_exists', EXISTS (SELECT 1 FROM pg_roles WHERE rolname = {quote_literal(MEAS_USER)}), "
+        f"'meas_db_exists', EXISTS (SELECT 1 FROM pg_database WHERE datname = {quote_literal(MEAS_DBNAME)}));\n",
+        dbname=pg.maintenance_db, what="setup pre-check")
+    if not isinstance(pre, dict):
+        raise GuardRefusal("setup pre-check: unexpected output")
+    if pre.get("live_db_exists") is not True:
+        raise GuardRefusal(f"the live database {live.dbname!r} does not exist in the container; refusing")
+    if pre.get("live_user_super") is not True and pre.get("live_user_owner") is not True:
+        raise GuardRefusal(f"live user {live.user!r} is neither superuser nor owner of the live database: "
+                           "REVOKE CONNECT FROM PUBLIC would lock it out; refusing")
+
+    # The secret comes after the pre-check. The file is written before the role
+    # is changed and every setup re-syncs the role to the file, so a failure in
+    # between heals on the next run.
+    secret_path = Path(secret_file)
+    if secret_path.exists() and not rotate:
+        password = read_secret_file(secret_path)
+    else:
+        password = write_secret_file(secret_path, rotate=rotate, restrict_acl=restrict_acl,
+                                     token_factory=token_factory)
+    secret_values = [password, live.password]
+
+    def emit(line: str) -> None:
+        assert_no_secret(line, secret_values)
+        log(line)
+
+    verb = "ALTER" if pre.get("role_exists") is True else "CREATE"
+    pg.superuser_sql(
+        f"/* meas:{verb.lower()}-role */ {verb} ROLE {MEAS_USER} WITH {MEAS_ROLE_ATTRIBUTES} "
+        f"PASSWORD {quote_literal(password)};\n",
+        dbname=pg.maintenance_db, read_only=False, what=f"{verb} ROLE {MEAS_USER}",
+        secret_values=secret_values)
+
+    if pre.get("meas_db_exists") is True:
+        db_sql = (f"/* meas:alter-db-owner */ ALTER DATABASE {quote_ident(MEAS_DBNAME)} "
+                  f"OWNER TO {quote_ident(MEAS_USER)};\n")
+        db_state = "exists"
+    else:
+        db_sql = (f"/* meas:create-db */ CREATE DATABASE {quote_ident(MEAS_DBNAME)} "
+                  f"OWNER {quote_ident(MEAS_USER)};\n")
+        db_state = "created"
+    pg.superuser_sql(db_sql, dbname=pg.maintenance_db, read_only=False,
+                     what=f"database {MEAS_DBNAME}", secret_values=secret_values)
+
+    pg.superuser_sql(f"/* meas:revoke */ REVOKE CONNECT ON DATABASE {quote_ident(live.dbname)} FROM PUBLIC;\n",
+                     dbname=pg.maintenance_db, read_only=False, what="REVOKE CONNECT on the live database",
+                     secret_values=secret_values)
+    emit(f"REVOKE CONNECT ON DATABASE {quote_ident(live.dbname)} FROM PUBLIC done. To undo: {reverse}")
+
+    try:
+        chk = pg.select_json(
+            "/* meas:live-connect */ SELECT json_build_object('one', 1, 'live_user_can_connect', "
+            f"has_database_privilege({lit_user}, {lit_db}, 'CONNECT'));\n",
+            dbname=live.dbname, what="live connect check")
+    except GuardRefusal as exc:
+        raise GuardRefusal(f"{exc}. The live database may be unreachable; to undo run: {reverse}") from None
+    if not isinstance(chk, dict) or chk.get("one") != 1 or chk.get("live_user_can_connect") is not True:
+        raise GuardRefusal(f"live user {live.user!r} lost CONNECT on the live database; to undo run: {reverse}")
+
+    g2 = check_live_db_refused(live, password, pg=pg)
+    try:
+        enforce_guard("G2", g2)
+    except GuardRefusal as exc:
+        raise GuardRefusal(f"{exc} (after setup); to undo the REVOKE run: {reverse}") from None
+
+    result = {
+        "meas_role": MEAS_USER,
+        "meas_db": MEAS_DBNAME,
+        "role": "created" if verb == "CREATE" else "updated",
+        "database": db_state,
+        "revoked_connect_on": live.dbname,
+        "live_user_connects": True,
+        "reverse_command": reverse,
+        "g2": [r.to_dict() for r in g2],
+    }
+    assert_no_secret(result, secret_values)
+    emit(f"setup complete; G2 holds. Reverse command (run as the container superuser): {reverse}")
+    return result
+
+
+# ── per-run copy (§2.5; the live DB is only read) ────────────────────────────
+
+def dump_restore_script(live_dbname: str) -> str:
+    """``pg_dump | pg_restore`` inside the container; both exit codes enforced.
+
+    POSIX equivalent of ``set -o pipefail`` (works in busybox ash and dash):
+    pg_dump's status goes to a temp file, pg_restore's is ``$?`` of the pipe.
+    A missing or empty status counts as failure.
+    """
+    _check_dbname(live_dbname)
+    dump = f'pg_dump -U "$POSTGRES_USER" -Fc --no-acl --no-owner -d {shlex.quote(live_dbname)}'
+    restore = (f'pg_restore -U "$POSTGRES_USER" --no-acl --no-owner --role={MEAS_USER} '
+               f"--exit-on-error -d {MEAS_DBNAME}")
+    return (
+        "st=$(mktemp)\n"
+        'if [ -z "$st" ]; then echo "mktemp failed" >&2; exit 90; fi\n'
+        f'{{ {dump}; echo $? > "$st"; }} | {restore}\n'
+        "rr=$?\n"
+        'dr=$(cat "$st" 2>/dev/null); rm -f "$st"\n'
+        'if [ "$dr" != 0 ]; then echo "pg_dump failed (exit ${dr:-unknown})" >&2; exit 91; fi\n'
+        'if [ "$rr" != 0 ]; then echo "pg_restore failed (exit $rr)" >&2; exit 92; fi\n'
+        "exit 0\n"
+    )
+
+
+def copy_live_to_meas(live: DbUrl, *, pg: PgDocker | None = None) -> dict[str, Any]:
+    """Drop and recreate ``bamendjou_meas``, then restore a ``pg_dump`` of live into it."""
+    pg = pg or PgDocker()
+    _check_live_identity(live, pg)
+    pg.superuser_sql(
+        "/* meas:drop-create */\n"
+        f"DROP DATABASE IF EXISTS {quote_ident(MEAS_DBNAME)} WITH (FORCE);\n"
+        f"CREATE DATABASE {quote_ident(MEAS_DBNAME)} OWNER {quote_ident(MEAS_USER)};\n",
+        dbname=pg.maintenance_db, read_only=False, what=f"drop/create {MEAS_DBNAME}",
+        secret_values=[live.password])
+    argv = [pg.docker, "exec", pg.container, "sh", "-c", dump_restore_script(live.dbname)]
+    res = pg.run(argv, what="dump/restore", timeout=pg.copy_timeout)
+    if res.returncode != 0:
+        raise GuardRefusal(f"dump/restore failed (exit {res.returncode}): "
+                           f"{_redacted_tail(res, [live.password])}")
+    return {"database": MEAS_DBNAME, "dump_restore": "ok"}
+
+
+def _str_list(value: Any, what: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise GuardRefusal(f"{what}: unexpected output")
+    return value
+
+
+def _count_map(value: Any, tables: list[str], what: str) -> dict[str, int]:
+    if (not isinstance(value, dict) or set(value) != set(tables)
+            or not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in value.values())):
+        raise GuardRefusal(f"{what}: unexpected output")
+    return value
+
+
+def _ohlcv_stats(value: Any, what: str) -> dict[str, Any]:
+    if (not isinstance(value, dict) or set(value) != {"count", "min", "max"}
+            or not isinstance(value["count"], int) or isinstance(value["count"], bool)
+            or not all(v is None or isinstance(v, str) for v in (value["min"], value["max"]))):
+        raise GuardRefusal(f"{what}: unexpected output")
+    return value
+
+
+def verify_copy(live: DbUrl, *, pg: PgDocker | None = None) -> dict[str, Any]:
+    """§2.5 (a)-(c), SELECT-only. Each read is done on the copy first, then on
+    live (live can only gain rows meanwhile). Returns the secret-free part for
+    isolation.json; refuses on the plan's rules, records other differences."""
+    pg = pg or PgDocker()
+    _check_live_identity(live, pg)
+    pair = ((MEAS_DBNAME, "copy"), (live.dbname, "live"))
+
+    def both(sql: str, what: str) -> dict[str, Any]:
+        return {side: pg.select_json(sql, dbname=db, what=f"{what} ({side})") for db, side in pair}
+
+    # (a) the set of public tables
+    t = both("/* meas:tables */ SELECT coalesce(json_agg(tablename ORDER BY tablename), '[]'::json) "
+             "FROM pg_tables WHERE schemaname = 'public';\n", "table list")
+    copy_tables, live_tables = _str_list(t["copy"], "table list"), _str_list(t["live"], "table list")
+    if set(copy_tables) != set(live_tables):
+        missing = sorted(set(live_tables) - set(copy_tables))
+        extra = sorted(set(copy_tables) - set(live_tables))
+        raise GuardRefusal(f"copy verification: table set differs (missing in copy {missing}, "
+                           f"extra in copy {extra})")
+    tables = sorted(live_tables)
+    if not tables:
+        raise GuardRefusal("copy verification: no tables in schema public")
+    for required in ("ohlcv_daily", "alembic_version"):
+        if required not in tables:
+            raise GuardRefusal(f"copy verification: {required} table missing")
+
+    # (b) per-table row counts, and the ohlcv_daily bounds
+    selects = "\nUNION ALL\n".join(
+        f"SELECT {quote_literal(name)} AS t, count(*) AS n FROM public.{quote_ident(name)}" for name in tables)
+    c = both(f"/* meas:counts */ SELECT coalesce(json_object_agg(t, n), '{{}}'::json) FROM (\n{selects}\n) s;\n",
+             "row counts")
+    copy_n, live_n = _count_map(c["copy"], tables, "row counts"), _count_map(c["live"], tables, "row counts")
+    for name in tables:
+        if copy_n[name] == 0 and live_n[name] > 0:
+            raise GuardRefusal(f"copy verification: table {name} is empty in the copy but has rows in live")
+
+    o = both("/* meas:ohlcv */ SELECT json_build_object('count', count(*), 'min', min(date)::text, "
+             "'max', max(date)::text) FROM public.ohlcv_daily;\n", "ohlcv_daily stats")
+    co, lo = _ohlcv_stats(o["copy"], "ohlcv_daily stats"), _ohlcv_stats(o["live"], "ohlcv_daily stats")
+    if co["count"] > lo["count"]:
+        raise GuardRefusal(f"copy verification: ohlcv_daily count in copy ({co['count']}) "
+                           f"above live ({lo['count']})")
+    if co["max"] is not None and (lo["max"] is None or co["max"] > lo["max"]):
+        raise GuardRefusal(f"copy verification: ohlcv_daily max(date) in copy ({co['max']}) "
+                           f"above live ({lo['max']})")
+    if co["min"] != lo["min"]:
+        raise GuardRefusal(f"copy verification: ohlcv_daily min(date) differs "
+                           f"(copy {co['min']}, live {lo['min']})")
+
+    # (c) alembic_version
+    a = both("/* meas:alembic */ SELECT coalesce(json_agg(version_num ORDER BY version_num), '[]'::json) "
+             "FROM public.alembic_version;\n", "alembic_version")
+    copy_av, live_av = _str_list(a["copy"], "alembic_version"), _str_list(a["live"], "alembic_version")
+    if not live_av or copy_av != live_av:
+        raise GuardRefusal(f"copy verification: alembic_version differs or is empty "
+                           f"(copy {copy_av}, live {live_av})")
+
+    result = {
+        "database": MEAS_DBNAME,
+        "tables": tables,
+        "row_counts": {name: {"copy": copy_n[name], "live": live_n[name]} for name in tables},
+        "count_differences": [name for name in tables if copy_n[name] != live_n[name]],
+        "ohlcv_daily": {"copy": co, "live": lo},
+        "alembic_version": live_av,
+    }
+    assert_no_secret(result, [live.password])
+    return result
+
+
+# ── G2 probe (§2.3; on every check and run) ──────────────────────────────────
+
+def check_live_db_refused(live: DbUrl, password: str, *, pg: PgDocker | None = None) -> list[GuardResult]:
+    """G2: ``meas_runner`` is not a superuser, and connecting as it to the live
+    database fails with a permission refusal. Never raises: any other outcome
+    (it connects, wrong password, container down) is a failed result."""
+    pg = pg or PgDocker()
+    secret_values = [password, live.password]
+    results: list[GuardResult] = []
+
+    try:
+        info = pg.select_json(
+            "/* meas:g2-role */ SELECT json_build_object('exists', count(*) > 0, 'rolsuper', bool_or(rolsuper)) "
+            f"FROM pg_roles WHERE rolname = {quote_literal(MEAS_USER)};\n",
+            dbname=pg.maintenance_db, what="G2 role check")
+        if not isinstance(info, dict) or info.get("exists") is not True:
+            results.append(GuardResult("g2_meas_role_not_superuser", False,
+                                       f"role {MEAS_USER} does not exist; run setup"))
+        elif info.get("rolsuper") is not False:
+            results.append(GuardResult("g2_meas_role_not_superuser", False, f"role {MEAS_USER} is a superuser"))
+        else:
+            results.append(GuardResult("g2_meas_role_not_superuser", True, f"role {MEAS_USER} is not a superuser"))
+    except GuardRefusal as exc:
+        results.append(GuardResult("g2_meas_role_not_superuser", False,
+                                   redact_text(f"could not check the meas role: {exc}", secret_values)))
+
+    try:
+        res = pg.run(pg.meas_runner_connect_argv(live.dbname), what="G2 connect attempt",
+                     env={**os.environ, "PGPASSWORD": password})
+        if res.returncode == 0:
+            results.append(GuardResult("g2_live_db_refused", False,
+                                       f"{MEAS_USER} CONNECTED to the live database {live.dbname!r}"))
+        else:
+            text = _redacted_tail(res, secret_values)
+            if any(p in text.lower() for p in G2_PERMISSION_PATTERNS):
+                results.append(GuardResult("g2_live_db_refused", True,
+                                           f"{MEAS_USER} is refused by the live database (permission)"))
+            else:
+                results.append(GuardResult(
+                    "g2_live_db_refused", False,
+                    "could not verify: the connect attempt failed, but not a permission refusal "
+                    f"(exit {res.returncode}): {text or 'no output'}"))
+    except GuardRefusal as exc:
+        results.append(GuardResult("g2_live_db_refused", False,
+                                   redact_text(f"could not verify: {exc}", secret_values)))
+    return results
+
+
+# ── G3 DB probe (§2.3; after the frozen backend is healthy, and at the end) ──
+
+def meas_connections_ok(*, pg: PgDocker | None = None) -> GuardResult:
+    """Every ``meas_runner`` connection is on the copy, and there is at least one."""
+    pg = pg or PgDocker()
+    rule = "g3_meas_connections_on_copy"
+    try:
+        counts = pg.select_json(
+            "/* meas:g3-activity */ SELECT coalesce(json_object_agg(d, n), '{}'::json) FROM ("
+            "SELECT coalesce(datname, '') AS d, count(*) AS n FROM pg_stat_activity "
+            f"WHERE usename = {quote_literal(MEAS_USER)} GROUP BY datname) s;\n",
+            dbname=pg.maintenance_db, what="G3 pg_stat_activity")
+    except GuardRefusal as exc:
+        return GuardResult(rule, False, f"could not query pg_stat_activity: {exc}")
+    if not isinstance(counts, dict):
+        return GuardResult(rule, False, "pg_stat_activity: unexpected output")
+    if not counts:
+        return GuardResult(rule, False, f"no {MEAS_USER} connection at all (the backend is not using the copy)")
+    others = sorted(k for k in counts if k != MEAS_DBNAME)
+    if others:
+        return GuardResult(rule, False, f"{MEAS_USER} connected to other database(s) {others}: {counts}")
+    return GuardResult(rule, True, f"{MEAS_USER} connections by database: {counts}")
