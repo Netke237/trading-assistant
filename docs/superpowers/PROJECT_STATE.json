@@ -3280,7 +3280,7 @@
       "id": "MEAS-LIVE-DB-ISOLATION",
       "name": "Frozen MEAS runs on an isolated DB copy, separate checkout and port; live DB refused",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [
         "MEAS-MARKET-DATA-MEASUREMENT"
@@ -3313,6 +3313,22 @@
           ],
           "fixes": [
             "plan v2 @ 5a038daa"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "fresh gate-auditor subagent (plan round 2)",
+          "reviewed": "plan diff c326df8e..5a038daa (v2 fixes only)",
+          "gate_findings": 2,
+          "findings": [
+            "R2-1 main writes |b3 cache keys the tag never reads; per-run live copy = cold cache recorded as unchanged",
+            "R2-2 IBKR listener check pinned to 127.0.0.1; tag calls localhost (::1 first), gateway on 0.0.0.0/:: missed"
+          ],
+          "fixes": [
+            "plan v3 @ 9158ac0a"
           ],
           "outstanding": [],
           "clean": false
