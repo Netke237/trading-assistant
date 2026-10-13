@@ -2920,7 +2920,7 @@
     {
       "id": "BROKER-PATH-RESIDUALS",
       "name": "Truthful durable manual broker outcomes and accurate additional-fill booking",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
@@ -2936,7 +2936,7 @@
         "pattern": "class BrokerAttempt",
         "note": "Presence only: durable attempt model; behavior requires independent audit and tests."
       },
-      "note": "PLAN STAGE CLEAN after 2 independent rounds, one F1 numeric finding fixed by exclusive durable prepared-row ownership. Reviewed fix head697647a2, /root/plan_audit_2 zero gate findings. Eight build tickets next; implementation/code audit not started. Overall audit_clean false. Disposable local PostgreSQL16.15 verified for database concurrency/migrations in addition to SQLite. User decisions recorded in BROKER-PATH-RESIDUALS-POLICY-2026-10-13. Native sub-issues #267–#274 cut after clean plan audit. Fresh /root/implement_t1 building #267; other tickets not started. Overall code audit not started.",
+      "note": "PLAN STAGE CLEAN after 2 independent rounds, one F1 numeric finding fixed by exclusive durable prepared-row ownership. Reviewed fix head697647a2, /root/plan_audit_2 zero gate findings. Eight build tickets next; implementation/code audit not started. Overall audit_clean false. Disposable local PostgreSQL16.15 verified for database concurrency/migrations in addition to SQLite. User decisions recorded in BROKER-PATH-RESIDUALS-POLICY-2026-10-13. Native sub-issues #267–#274 cut after clean plan audit. Fresh /root/implement_t1 building #267; other tickets not started. Overall code audit not started. Integration clarification pending scoped plan round3: lost HTTP success cannot turn ID-less retry into new order after3s; production identity resolver must always supply retained explicit ID. Existing plan rounds2, no counter reset; T1 generic scaffold verification continues, T2 cannot start until amendment independent review. Status built means initial T1 code scaffold exists only: implementation is INCOMPLETE, T1 checks underway and T2–T8 unbuilt; overall audit_clean remains false.",
       "plan_audit_rounds": 2,
       "audit_records": [
         {
@@ -2965,7 +2965,7 @@
           "record": "docs/superpowers/audits/broker-path-residuals/plan-round-2.md"
         }
       ],
-      "plan_audit_clean": true,
+      "plan_audit_clean": false,
       "tickets": {
         "T1": {
           "issue": 267,
