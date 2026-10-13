@@ -4,6 +4,7 @@ import Page from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import type { PositionCardData } from '@/types/stockDomain';
+jest.mock('@/lib/api',()=>({api:{getLatestScanReport:jest.fn().mockImplementation(()=>{const result=useScanStore.getState().stockScanResult;return Promise.resolve({category:'stocks',latest_attempt:{category:'stocks',run_id:'durable-stock',generation:1,status:'complete',trigger:'manual',started_at:'t',ended_at:'t',persistence:'saved',inputs:{},diagnostics_available:true,diagnostics:{pipeline:result?.pipeline,rejected:result?.rejected,accepted_symbols:result?.candidates.map(c=>c.symbol)},result},previous_report:null});})}}));
 const mockPush = jest.fn();
 const mockCard = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }));
@@ -18,7 +19,7 @@ function candidate(symbol: string, days: number, score: number): PositionCardDat
 beforeEach(() => {
  mockPush.mockClear(); mockCard.mockClear();
  useScanParamsStore.setState({ eventFilter: 'include', btMinWinRate: .9 });
- useScanStore.setState({ stockScanResult: { scan_id: 'scan', timestamp: 't', candidates: [candidate('AAPL', 2, 80), candidate('MSFT', 30, 70)], rejected: [{ symbol: 'BAD', reason: 'backtest gate: insufficient trades' }, { symbol: 'CAP', reason: 'Shortlist cap: rank below limit' }] }, stockScanRequest: { strategy: 'pullback_ema', bt_min_trades: 20, bt_min_win_rate: .4 } as never, stockScanFeedback: { error: null, notice: 'After-scan save failed' }, selectedSymbol: null, stockBasket: [] });
+ useScanStore.setState({ stockScanResult: { scan_id: 'scan', timestamp: 't', pipeline:{scanned:4,failed_history:0,failed_score:0,failed_direction:0,failed_regime:0,failed_signal:0,failed_backtest:1,failed_shortlist:1,candidates:2}, candidates: [candidate('AAPL', 2, 80), candidate('MSFT', 30, 70)], rejected: [{ symbol: 'BAD', reason: 'backtest gate: insufficient trades' }, { symbol: 'CAP', reason: 'Shortlist cap: rank below limit' }] }, stockScanRequest: { strategy: 'pullback_ema', bt_min_trades: 20, bt_min_win_rate: .4 } as never, stockScanFeedback: { error: null, notice: 'After-scan save failed' }, selectedSymbol: null, stockBasket: [] });
 });
 it('keeps one union table and separates expand/watch controls from Position navigation', () => {
  render(<Page />);
@@ -40,16 +41,17 @@ it('uses paired scan thresholds and reports unavailable provenance for legacy ev
  act(() => useScanStore.setState({ stockScanRequest: null }));
  expect(screen.getAllByTitle('Threshold provenance unavailable for this scan').length).toBeGreaterThan(0);
 });
-it('filters events with an explicit hidden count without removing rejection explanations', () => {
+it('filters events with an explicit hidden count without removing rejection explanations', async () => {
  render(<Page />);
  act(() => useScanParamsStore.setState({ eventFilter: 'avoid' }));
  expect(screen.queryByText('AAPL')).not.toBeInTheDocument();
  expect(screen.getByText('1 of 2 hidden by the event filter.')).toBeInTheDocument();
  fireEvent.click(screen.getByRole('button', { name: 'Filter Breakdown (2 Not Ranked)' }));
- const inspector = screen.getByRole('dialog', { name: 'Pipeline Root-Cause Inspector' });
+ const inspector = screen.getByRole('dialog', { name: 'Saved scan report' });
+ await within(inspector).findByText('Pipeline Root-Cause Inspector');
  expect(within(inspector).getByText('2 Survivors')).toBeInTheDocument();
  fireEvent.change(within(inspector).getByRole('textbox'), { target: { value: 'BAD' } });
- expect(within(within(inspector).getByRole('status')).getByText('backtest gate: insufficient trades')).toBeInTheDocument();
+ expect(within(within(inspector).getByRole('region',{name:'Pipeline Root-Cause Inspector'})).getByRole('status')).toHaveTextContent('backtest gate: insufficient trades');
  fireEvent.change(within(inspector).getByRole('textbox'), { target: { value: 'AAPL' } });
  expect(within(inspector).getByText('SURVIVOR')).toBeInTheDocument();
  fireEvent.click(within(inspector).getByRole('button', { name: 'Close inspector' }));
@@ -60,14 +62,15 @@ it('filters events with an explicit hidden count without removing rejection expl
  expect(screen.getByText(/No candidates to display/)).toBeInTheDocument();
 });
 
-it('inspects shortlist trims separately and restores focus when dismissed', () => {
+it('inspects shortlist trims separately and restores focus when dismissed', async () => {
  render(<Page />);
  const opener = screen.getByRole('button', { name: 'Filter Breakdown (2 Not Ranked)' });
  opener.focus();
  fireEvent.click(opener);
- const inspector = screen.getByRole('dialog', { name: 'Pipeline Root-Cause Inspector' });
+ const inspector = screen.getByRole('dialog', { name: 'Saved scan report' });
+ await within(inspector).findByText('Pipeline Root-Cause Inspector');
  const search = within(inspector).getByRole('textbox');
- expect(search).toHaveFocus();
+ expect(within(inspector).getByRole('button',{name:'Close inspector'})).toHaveFocus();
  fireEvent.change(search, { target: { value: 'CAP' } });
  expect(within(inspector).getByText('TRIMMED')).toBeInTheDocument();
  expect(within(inspector).getByText('Shortlist cap: rank below limit')).toBeInTheDocument();
@@ -76,7 +79,7 @@ it('inspects shortlist trims separately and restores focus when dismissed', () =
  expect(opener).toHaveFocus();
 });
 
-it('shows the screenshot scan as a stock hierarchy even when no candidates survive', () => {
+it('shows the screenshot scan as a stock hierarchy even when no candidates survive', async () => {
  useScanStore.setState({ stockScanResult: {
    scan_id: 'zero', timestamp: 't', candidates: [],
    rejected: [{ symbol: 'DAY', reason: 'backtest gate: Only 1 trades — need 5' }],
@@ -85,17 +88,18 @@ it('shows the screenshot scan as a stock hierarchy even when no candidates survi
  render(<Page />);
  expect(screen.queryByText('Pipeline log')).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole('button', { name: 'Filter Breakdown (518 Not Ranked)' }));
- const inspector = screen.getByRole('dialog', { name: 'Pipeline Root-Cause Inspector' });
+ const inspector = screen.getByRole('dialog', { name: 'Saved scan report' });
+ await within(inspector).findByText('Pipeline Root-Cause Inspector');
  expect(within(inspector).getByText('518 Scanned')).toBeInTheDocument();
  expect(within(inspector).getByText('0 Survivors')).toBeInTheDocument();
  expect(within(inspector).queryByText(/Option chain/)).not.toBeInTheDocument();
  fireEvent.change(within(inspector).getByRole('textbox'), { target: { value: 'DAY' } });
  expect(within(inspector).getByText('backtest gate: Only 1 trades — need 5')).toBeInTheDocument();
  fireEvent.click(within(inspector).getByRole('button', { name: 'Plaintext Tree' }));
- expect(inspector.querySelector('pre')).toHaveTextContent('Left: 502');
- expect(inspector.querySelector('pre')).toHaveTextContent('Left: 307');
- expect(inspector.querySelector('pre')).toHaveTextContent('Left: 281');
- expect(inspector.querySelector('pre')).toHaveTextContent('Left: 1');
+ expect(Array.from(inspector.querySelectorAll('pre')).find(p=>p.textContent?.includes('Left:'))).toHaveTextContent('Left: 502');
+ expect(Array.from(inspector.querySelectorAll('pre')).find(p=>p.textContent?.includes('Left:'))).toHaveTextContent('Left: 307');
+ expect(Array.from(inspector.querySelectorAll('pre')).find(p=>p.textContent?.includes('Left:'))).toHaveTextContent('Left: 281');
+ expect(Array.from(inspector.querySelectorAll('pre')).find(p=>p.textContent?.includes('Left:'))).toHaveTextContent('Left: 1');
 });
 
 it('cycles health sorting descending, ascending, then original order', () => {

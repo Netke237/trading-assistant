@@ -158,12 +158,17 @@ async def test_create_position_stores_the_hold(Session, monkeypatch):
 
 
 def test_a_migration_adds_the_nullable_hold_column():
+    """The hold migration stays on the single upgrade chain as later revisions land."""
     from alembic.config import Config
     from alembic.script import ScriptDirectory
     cfg = Config(str(_BACKEND_DIR / "migrations" / "alembic.ini"))
     cfg.set_main_option("script_location", str(_BACKEND_DIR / "migrations"))
     script = ScriptDirectory.from_config(cfg)
-    (head,) = script.get_heads()
-    src = Path(script.get_revision(head).path).read_text(encoding="utf-8")
+    heads = script.get_heads()
+    assert len(heads) == 1
+    hold_revision = "e7b2d4a91c58"
+    ancestry = {revision.revision for revision in script.iterate_revisions(heads[0], "base")}
+    assert hold_revision in ancestry
+    src = Path(script.get_revision(hold_revision).path).read_text(encoding="utf-8")
     assert "'portfolio_positions'" in src and "'hold_max_days'" in src
     assert "nullable=True" in src

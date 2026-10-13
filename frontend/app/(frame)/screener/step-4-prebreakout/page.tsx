@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
@@ -23,6 +24,7 @@ import { _horizonEnum } from '@/lib/analysisStore';
 import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
 import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
+import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
 
 type ScanRowMetrics = {
@@ -90,6 +92,7 @@ export default function Step4PreBreakoutPage() {
   const customRaw    = useUniverseStore((s) => s.customRaw);
 
   const [symbolOverride, setSymbolOverride] = useState('');
+  const [tableRunIds, setTableRunIds] = useState<Partial<Record<ScanMode,string | null>>>({});
   const [scanMode, setScanMode]             = useState<ScanMode>('prebreakout');
   const [params, setParams]                 = useState<PreBreakoutParams>({ ...PREBREAKOUT_DEFAULTS });
   const [fibParams, setFibParams]           = useState<FibPullbackParams>({ ...FIB_PULLBACK_DEFAULTS });
@@ -107,6 +110,7 @@ export default function Step4PreBreakoutPage() {
       isFirstRender.current = false;
       return;
     }
+    setTableRunIds({});
     setResults([]);
     setFibResults([]);
     setPullbackResults([]);
@@ -152,6 +156,7 @@ export default function Step4PreBreakoutPage() {
         // camelCase result. Throws ScanSizingError on 0%; the catch shows it.
         const sizing = scanSizingFromRisk();
         const result = await api.postStockScan({
+          category: 'pullback',
           universe: universe ?? symbols,
           direction,
           horizon: _horizonEnum(context?.horizon),
@@ -161,6 +166,7 @@ export default function Step4PreBreakoutPage() {
           account_size: sizing.accountSize,
           risk_pct: sizing.riskPct,
         });
+        setTableRunIds(ids=>({...ids,pullback:result.report_run_id}));
         setPullbackResults(result.candidates);
       } else if (scanMode === 'fib') {
         const results = await api.fibPullbackScan(
@@ -173,6 +179,7 @@ export default function Step4PreBreakoutPage() {
             ema_filter_period: fibParams.emaFilterPeriod,
           },
           universe,
+          metadata => setTableRunIds(ids=>({...ids,fib:metadata.run_id})),
         );
         setFibResults(results);
       } else {
@@ -185,7 +192,7 @@ export default function Step4PreBreakoutPage() {
           resistance_proximity_pct: params.resistanceProximityPct,
           swing_lookback:           params.swingLookback,
         };
-        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
+        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe, metadata => setTableRunIds(ids=>({...ids,prebreakout:metadata.run_id})));
         setResults(results);
       }
     } catch (e) {
@@ -195,6 +202,12 @@ export default function Step4PreBreakoutPage() {
     }
   }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, context?.horizon, pullbackEmaParams.emaPeriod, pullbackEmaParams.trendEma, setResults, setFibResults]);
 
+  const inspectionRisk = useRiskStore(s=>s.limits);
+  const inspectionWatchlist = useWatchlistStore(s=>s.added);
+  const manualSymbols = parseSymbols(symbolOverride);
+  const inspectionSymbols = manualSymbols.length ? manualSymbols : universePick === 'Custom' ? parseSymbols(customRaw) : universePick === 'Watchlist' ? inspectionWatchlist : [];
+  const inspectionUniverse = inspectionSymbols.length || universePick === 'Custom' || universePick === 'Watchlist' ? null : [universePick];
+  const inspectionInputs = scanMode === 'pullback' ? {universe:inspectionUniverse??inspectionSymbols,direction,horizon:_horizonEnum(context?.horizon),strategy:'pullback_ema',pullback_ema_period:pullbackEmaParams.emaPeriod,pullback_trend_ema:pullbackEmaParams.trendEma,account_size:inspectionRisk.portfolioValue,risk_pct:inspectionRisk.maxLossPerTradePct} : {symbols:inspectionSymbols,universe:inspectionUniverse,direction,params_override:scanMode==='fib'?{fib_swing_lookback:fibParams.fibSwingLookback,fib_levels:fibParams.fibLevels,fib_tolerance_pct:fibParams.fibTolerancePct,ema_filter_period:fibParams.emaFilterPeriod}:{atr_compression_ratio:params.atrCompressionRatio,atr_avg_lookback:params.atrAvgLookback,range_atr_mult:params.rangeAtrMult,range_lookback_bars:params.rangeLookbackBars,vol_compression_ratio:params.volCompressionRatio,resistance_proximity_pct:params.resistanceProximityPct,swing_lookback:params.swingLookback}};
   const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
 
   const universeLabel =
@@ -239,6 +252,8 @@ export default function Step4PreBreakoutPage() {
           Fib Pullback
         </button>
       </div>
+
+      <details><summary>Analysis log</summary><SavedScanReportInspector category={scanMode} currentInputs={inspectionInputs} tableRunId={tableRunIds[scanMode]} /></details>
 
       {scanMode === 'pullback' ? (
         <>
