@@ -180,12 +180,18 @@ async def get_legacy(db: AsyncSession) -> list[dict]:
                          started_at=row.created_at.isoformat() if row.created_at else None,
                          ended_at=row.updated_at.isoformat() if row.updated_at else None,
                          diagnostics_available=False, inputs=None, result=None,
-                         unavailable_fields=[])
+                         unavailable_fields=[], unavailable_field_paths={})
             for field, raw in [('inputs', row.last_request_json), ('result', row.last_result_json)]:
                 try:
                     value = json.loads(raw) if raw else None
                     _encode(value)
-                    entry[field] = value
+                    from app.services.scan_report_lifecycle import project
+                    unavailable = []
+                    safe = project(value, path=field, unavailable=unavailable)
+                    if unavailable:
+                        entry['unavailable_fields'].append(field)
+                        entry['unavailable_field_paths'][field] = unavailable
+                    entry[field] = safe if isinstance(safe, (dict, list, str, int, float, bool)) or safe is None else None
                 except (ValueError, TypeError):
                     entry['unavailable_fields'].append(field)
             output.append(entry)

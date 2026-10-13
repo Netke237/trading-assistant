@@ -9,6 +9,7 @@ Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_revers
 
 
 class StockScanRequest(BaseModel):
+    category: Literal["stocks", "pullback"] = "stocks"
     # NUMERIC-API-INPUTS T2: every float is finite or a 422. Inherited by
     # StockAnalysisRequest (pydantic merges a parent's config into a subclass).
     model_config = ConfigDict(allow_inf_nan=False)
@@ -322,6 +323,9 @@ class StockPipeline(BaseModel):
 
 
 class StockScanResult(BaseModel):
+    report_run_id: Optional[str] = None
+    report_generation: Optional[int] = None
+    report_persistence: Optional[Literal["saved", "unavailable"]] = None
     scan_id:              str
     timestamp:            str
     candidates:           list[PositionCardOut]

@@ -168,6 +168,9 @@ async def lifespan(app: FastAPI):
     except Exception as _exc:
         logger.warning("settings.yaml migration failed: %s", _exc)
 
+    from app.services.scan_report_lifecycle import recover_interrupted
+    await recover_interrupted()
+
     from app.routers.scan import restore_from_db
     from app.routers.stock_scan import restore_stock_from_db
     status = await restore_from_db()
@@ -399,6 +402,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Scan-Report-Run-Id", "X-Scan-Report-Generation", "X-Scan-Report-Persistence"],
     )
 
     app.include_router(health_router)
