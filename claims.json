@@ -7,6 +7,14 @@
       "expires_at": "2026-10-13T08:01:17Z",
       "note": "Resume broker error and position risk race reproductions",
       "task": "BROKER-PATH-RESIDUALS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/options-presentation-v2-45bd8065",
+      "claimed_at": "2026-10-13T05:28:35Z",
+      "expires_at": "2026-10-13T08:28:35Z",
+      "note": "Resume approved Options UI tickets #242-249",
+      "task": "OPTIONS-PRESENTATION-V2"
     }
   ]
 }
