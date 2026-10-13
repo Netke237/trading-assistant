@@ -2921,7 +2921,7 @@
       "id": "BROKER-PATH-RESIDUALS",
       "name": "Truthful durable manual broker outcomes and accurate additional-fill booking",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -2936,7 +2936,26 @@
         "pattern": "class BrokerAttempt",
         "note": "Presence only: durable attempt model; behavior requires independent audit and tests."
       },
-      "note": "2026-10-13 evidence-only discovery complete on source 5f98b791. Python3.11.16 probes reproduce uncertain duplicate dispatch, post-submit parsing, approval orphan and concurrent PATCH exposure breach. Implementation plan drafting; no plan/code audit rounds run. User chat chose durable uncertain attempt hold until manual verification, added fills with required fill price and weighted-average entry, full filled quantity recorded even above exposure caps with breach warning. Existing approval cleanup policy preserved. Work unfinished, not ready to merge. Draft plan complete; plan round 1 will review exact plan commit against current source. No implementation started."
+      "note": "PLAN ROUND 1 not clean, 1 gate finding F1; fix now requires exclusive durable prepared-row ownership. No build/code audit started; plan stage 1 of 3. Exact reviewed head 71a23f61; fresh follow-up review of fix and interactions next. User-approved full fill recording/weighted average/breach warning and durable manual uncertainty policy recorded.",
+      "plan_audit_rounds": 1,
+      "audit_records": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/plan_audit_1",
+          "reviewed_head": "71a23f610cb20f9f48b568233c02ddf9751a7e93",
+          "findings": [
+            "F1: existing inventory/one saved row may offset multiple distinct new orders"
+          ],
+          "fixes": [
+            "Require server-prepared row and exclusive durable attempt ownership; count other orders additively"
+          ],
+          "outstanding": [
+            "F1 fix pending fresh independent review"
+          ],
+          "record": "docs/superpowers/audits/broker-path-residuals/plan-round-1.md"
+        }
+      ]
     }
   ],
   "already_shipped": [
