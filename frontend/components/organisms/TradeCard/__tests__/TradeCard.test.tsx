@@ -302,7 +302,7 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps handling controls and the latest result visible before the method cards', () => {
+  it('keeps handling controls before evidence and the latest result after method cards', () => {
     render(<TradeCard data={mockTradeCard} />);
     const order = screen.getByRole('region', { name: 'Order Entry' });
     const exit = screen.getByRole('region', { name: 'Exit Plan' });
@@ -310,7 +310,7 @@ describe('TradeCard', () => {
     const arithmetic = screen.getByText('Arithmetic Profit Target');
     expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(latest.compareDocumentPosition(arithmetic) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(arithmetic.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
       expect(screen.getAllByLabelText(label)).toHaveLength(1);
     }
@@ -898,7 +898,7 @@ describe('TradeCard', () => {
     // P2-03 (decision Q8): the exit the alert actually makes, read-only.
     expect(screen.queryByLabelText('Edit Time exit')).not.toBeInTheDocument();
     expect(screen.getByText('Time exit')).toBeInTheDocument();
-    expect(screen.getByText('3 DTE')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 DTE')).toBeInTheDocument();
     expect(screen.queryByText('Time stop')).not.toBeInTheDocument();
     expect(screen.queryByText(`${mockTradeCard.exit.timeStopDays}d`)).not.toBeInTheDocument();
   });
