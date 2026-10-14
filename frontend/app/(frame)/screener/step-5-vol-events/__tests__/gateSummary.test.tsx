@@ -217,7 +217,10 @@ describe('a row can be driven by more than one thing', () => {
       }),
     ]);
     render(<Step5Page />);
-    expect(banner().textContent).toMatch(/Driven by \(a row can have more than one\)/);
+    expect(banner().textContent).toMatch(/Driven by measured checks \(a row can have more than one\)/);
+    expect(banner().textContent).toContain(
+      "Driven by measured checks (a row can have more than one): 1 on IV rank above its threshold; 1 on an event inside this horizon's window.",
+    );
   });
 
   it('distinguishes a rank failure from an absolute-IV failure', () => {
@@ -264,7 +267,10 @@ describe('a row can be driven by more than one thing', () => {
     ]);
     render(<Step5Page />);
     const t = banner().textContent ?? '';
-    expect(t).toMatch(/Driven by \(a row can have more than one\)/);
+    expect(t).toMatch(/Driven by measured checks \(a row can have more than one\)/);
+    expect(t).toContain(
+      "Driven by measured checks (a row can have more than one): 1 on IV rank above its threshold; 1 on an event inside this horizon's window.",
+    );
     // And the counts it qualifies are still the real ones.
     expect(t).toMatch(/3 shown — 0 PASS, 2 CAUTION, 1 REJECT/);
     expect(t).toMatch(/2 of them have no volatility reading at all/);
@@ -1076,8 +1082,65 @@ describe('the banner speaks a closed vocabulary, pinned whole', () => {
 
   it('renders the causes sentence, word for word, with and without the overlap cue', () => {
     expect(causesSentence([{ n: 3, key: 'ivRank' }, { n: 1, key: 'event' }], false))
-      .toBe("Driven by: 3 on IV rank above its threshold; 1 on an event inside this horizon's window.");
+      .toBe("Driven by measured checks: 3 on IV rank above its threshold; 1 on an event inside this horizon's window.");
     expect(causesSentence([{ n: 2, key: 'ivAbs' }], true))
-      .toBe('Driven by (a row can have more than one): 2 on IV above its threshold.');
+      .toBe('Driven by measured checks (a row can have more than one): 2 on IV above its threshold.');
+  });
+});
+
+const MISSING_READING_SENTENCE =
+  '1 of them has no volatility reading at all — graded CAUTION on the volatility side alone, '
+  + 'never PASS there. The gate verdict above is the worse of that and the event window, '
+  + 'so it can be lower still.';
+
+function rowTooltip(symbol: string): string {
+  const text = document.querySelector(`[data-row="${symbol}"] [role="tooltip"]`)?.textContent;
+  if (text == null) throw new Error(`no tooltip for ${symbol}`);
+  return text;
+}
+
+describe('measured checks are not a missing volatility reading', () => {
+  it('CAUTION, no IV, event inside the caution window names only the event', () => {
+    setup([noIvCandidate('PROV', { nextEventDays: 30 })]);
+    render(<Step5Page />);
+    const causes = banner().querySelector('[data-part="causes"]');
+    expect(causes?.getAttribute('data-causes')).toBe(JSON.stringify([{ n: 1, key: 'event' }]));
+    expect(causes?.textContent).toBe(
+      "Driven by measured checks: 1 on an event inside this horizon's window.",
+    );
+    expect(banner().textContent).toContain(MISSING_READING_SENTENCE);
+    const tip = rowTooltip('PROV');
+    expect(tip).toContain(
+      'Driven by: measured checks: event proximity. Missing volatility reading is not a measured driver.',
+    );
+    expect(tip).not.toContain('Driven by: no volatility reading and event proximity');
+  });
+
+  it('REJECT on the event, no IV, names event proximity and discloses the gap', () => {
+    setup([noIvCandidate('EVREJ', { nextEventDays: 3 })]);
+    render(<Step5Page />);
+    const causes = banner().querySelector('[data-part="causes"]');
+    expect(causes?.getAttribute('data-causes')).toBe(JSON.stringify([{ n: 1, key: 'event' }]));
+    expect(causes?.textContent).toBe(
+      "Driven by measured checks: 1 on an event inside this horizon's window.",
+    );
+    expect(banner().textContent).toContain(MISSING_READING_SENTENCE);
+    const tip = rowTooltip('EVREJ');
+    expect(tip).toContain(
+      'Driven by: measured checks: event proximity. Missing volatility reading is not a measured driver.',
+    );
+    expect(tip).not.toContain('no volatility reading and event proximity');
+    expect(tip).not.toContain('measured checks: no volatility reading');
+  });
+
+  it('CAUTION from a missing reading only has no measured-cause sentence', () => {
+    setup([noIvCandidate('ONLY')]);
+    render(<Step5Page />);
+    expect(banner().querySelector('[data-part="causes"]')).toBeNull();
+    expect(banner().textContent ?? '').not.toContain('Driven by');
+    expect(banner().textContent).toContain(MISSING_READING_SENTENCE);
+    expect(rowTooltip('ONLY')).toContain(
+      'Driven by: no measured check. Missing volatility reading is not a measured driver.',
+    );
   });
 });

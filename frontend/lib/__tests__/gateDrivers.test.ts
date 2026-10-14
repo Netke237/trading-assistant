@@ -27,24 +27,38 @@ describe('gateDrivers', () => {
   it('separates a MISSING reading from a reading that failed', () => {
     const missing = gateDrivers({ ivStatus: 'CAUTION', proxStatus: 'PASS', gate: 'CAUTION', hasIv: false, ivGated: true });
     expect(missing).toEqual({ iv: true, event: false, ivMissing: true, hasIv: false, ivGated: true });
-    expect(gateDriverPhrase(missing, 'IV')).toBe('no volatility reading');
+    expect(gateDriverPhrase(missing, 'IV')).toBe(
+      'no measured check. Missing volatility reading is not a measured driver',
+    );
 
     const failed = gateDrivers({ ivStatus: 'CAUTION', proxStatus: 'PASS', gate: 'CAUTION', hasIv: true, ivGated: true });
     expect(failed).toEqual({ iv: true, event: false, ivMissing: false, hasIv: true, ivGated: true });
-    expect(gateDriverPhrase(failed, 'IV rank')).toBe('IV rank');
+    expect(gateDriverPhrase(failed, 'IV rank')).toBe('measured checks: IV rank');
   });
 
   it('reports BOTH when both sides are at the gate, without losing the missing-reading fact', () => {
     // The old enum collapsed this to a bare 'both' and dropped `ivMissing`.
     const d = gateDrivers({ ivStatus: 'CAUTION', proxStatus: 'CAUTION', gate: 'CAUTION', hasIv: false, ivGated: true });
     expect(d).toEqual({ iv: true, event: true, ivMissing: true, hasIv: false, ivGated: true });
-    expect(gateDriverPhrase(d, 'IV')).toBe('no volatility reading and event proximity');
+    expect(gateDriverPhrase(d, 'IV')).toBe(
+      'measured checks: event proximity. Missing volatility reading is not a measured driver',
+    );
+    expect(gateDriverPhrase(d, 'IV')).not.toBe('no volatility reading and event proximity');
   });
 
   it('attributes to the event alone when only the event is at the gate', () => {
     const d = gateDrivers({ ivStatus: 'PASS', proxStatus: 'REJECT', gate: 'REJECT', hasIv: true, ivGated: true });
     expect(d).toEqual({ iv: false, event: true, ivMissing: false, hasIv: true, ivGated: true });
-    expect(gateDriverPhrase(d, 'IV rank')).toBe('event proximity');
+    expect(gateDriverPhrase(d, 'IV rank')).toBe('measured checks: event proximity');
+  });
+
+  it('an event-REJECT with no IV reading names only event proximity and discloses the gap', () => {
+    const d = gateDrivers({ ivStatus: 'CAUTION', proxStatus: 'REJECT', gate: 'REJECT', hasIv: false, ivGated: true });
+    expect(d).toEqual({ iv: false, event: true, ivMissing: false, hasIv: false, ivGated: true });
+    expect(gateDriverPhrase(d, 'IV')).toBe(
+      'measured checks: event proximity. Missing volatility reading is not a measured driver',
+    );
+    expect(gateDriverPhrase(d, 'IV')).not.toContain('no volatility reading and');
   });
 
   it('does NOT blame the event when it is merely bad, but not AT the gate', () => {
@@ -55,7 +69,7 @@ describe('gateDrivers', () => {
     // a CAUTION and the REJECT came from the IV side alone.
     const d = gateDrivers({ ivStatus: 'REJECT', proxStatus: 'CAUTION', gate: 'REJECT', hasIv: true, ivGated: true });
     expect(d).toEqual({ iv: true, event: false, ivMissing: false, hasIv: true, ivGated: true });
-    expect(gateDriverPhrase(d, 'IV rank')).toBe('IV rank');
+    expect(gateDriverPhrase(d, 'IV rank')).toBe('measured checks: IV rank');
   });
 
   it('a PASSING row with no reading is not told it is "clear on both"', () => {
@@ -104,7 +118,11 @@ describe('eventVolGateTooltip speaks the same vocabulary as the banner', () => {
       ivRank: null, ivBasis: 'none', ivStatus: 'CAUTION',
       nextEventDays: null, proxStatus: 'PASS', evReject: 21, evCaution: 45, gate: 'CAUTION', drivers,
     });
-    expect(t).toMatch(/Driven by: no volatility reading\./);
+    expect(t).toBe(
+      'Gate shows the worse of IV and event proximity. IV: no data; no known upcoming event. '
+      + 'Driven by: no measured check. Missing volatility reading is not a measured driver.',
+    );
+    expect(t).not.toContain('Driven by: no volatility reading.');
     expect(t).not.toMatch(/Driven by: IV\./);
   });
 

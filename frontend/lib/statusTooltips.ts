@@ -185,9 +185,15 @@ export function gateDrivers(args: {
  *  name ("IV rank" or "IV") the column heading and threshold sentence use. */
 export function gateDriverPhrase(d: GateDrivers, ivNoun: string): string {
   const parts: string[] = [];
-  if (d.iv) parts.push(d.ivMissing ? 'no volatility reading' : ivNoun);
+  if (d.iv && !d.ivMissing) parts.push(ivNoun);
   if (d.event) parts.push('event proximity');
-  if (parts.length > 0) return parts.join(' and ');
+  if (d.iv || d.event) {
+    let phrase = parts.length > 0
+      ? `measured checks: ${parts.join(' and ')}`
+      : 'no measured check';
+    if (!d.hasIv) phrase += '. Missing volatility reading is not a measured driver';
+    return phrase;
+  }
 
   // Everything below is a PASS row, and the question is what its clean badge
   // is CLAIMING. Round 2 wrote two sentences here and chose between them on
