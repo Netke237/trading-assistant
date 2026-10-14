@@ -3388,7 +3388,7 @@
     {
       "id": "STATE-MULTI-PLAN-STAGE",
       "name": "Explicit additional authorized plan stages with independent per-stage caps",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
@@ -3442,7 +3442,11 @@
           "verification": "Independent second pass confirmed unpaired acknowledgement cannot close final plan; valid authorized two-stage and final clean transition preserved."
         }
       ],
-      "notes": "2026-10-14: explicit user assignment to this session; other three agent packages untouched. No original phase/decision or cap reset."
+      "notes": "2026-10-14: explicit user assignment to this session; other three agent packages untouched. No original phase/decision or cap reset. T1 #300 in progress: original authorized-TRADIER regression confirmed RED; _plan_stages implementation now exists. Full checks and integrated independent code audit pending; audit_clean remains false.",
+      "tickets": [
+        300,
+        301
+      ]
     }
   ],
   "already_shipped": [
