@@ -19,3 +19,10 @@ Tasks #296–#297, final integration checks and independent code audit remain pe
 ## Mixed-error acceptance follow-up
 
 An isolated ASGI probe through the production validation handler returned422/147bytes for a raw depth900 `ScanRequest.overrides` with required fields, but500/21bytes for the identical payload missing `universe`. No handler ran. Another error input retained the entire deep body. PlanTask4 now covers this case; fresh independent plan round3 reviewed its narrow conditional sanitization and returned0 gate findings. Plan counters3/3 retained; code audit not started.
+
+## Completed build checks
+
+- Task2 #296: commit `f9c8273e`, fresh implementer `implement_t2`. Initial rollback tests30failed/3passed, then43 new tests passed. Full pre-Task4 backend8543 passed/9 skipped (1214.94s); frontend241 suites/5158 tests and typecheck passed (421.833s).
+- Task3 #297: commit `edd267f2`, fresh implementer `implement_t3`. Initial9expected restore failures/1valid control; focused40 passed, including10new tests. Its separate full backend run was interrupted and is not counted as passed; the final combined run below covers these unchanged files. Its frontend241/5158 and typecheck passed.
+- Task4 #302: commit `bef523cb`, fresh implementer `implement_t4`. Real scan/arm mixed-depth requests returned500 before the fix; focused285 passed afterward. Final stable combined source full backend8548 passed/9 skipped (963.73s); frontend241 suites/5158 tests and typecheck passed (269.786s). Ordinary error metadata/numeric normalization controls pass.
+- Coordinator recorded the unchanged independently implemented source after the earlier run ended. No implementing agent self-review is counted as an independent audit. Code stage0/3 remains pending, audit_cleanfalse, unready to merge.
