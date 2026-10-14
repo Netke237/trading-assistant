@@ -3346,7 +3346,7 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "2026-10-14 #258\u2013264 built/pushed on board/prebreakout-presentation-v2-f78dd25f; #265 news next, then #266 integrated verification/code audit. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258\u2013265 built/pushed on board/prebreakout-presentation-v2-f78dd25f; #266 integrated verification (merge origin/main, crosswalk, presence marker, full checks) then independent code audit. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3382,6 +3382,11 @@
           "issue": 264,
           "commit": "44ece365ce25d209a180cf0878a394bcbe3dd732",
           "validation": "Fresh implementer (Claude subagent): 13 new tests RED for expected reasons (missing Terminal outcomes region / candidates headings / Filter breakdown button), then GREEN; coordinator re-verified typecheck clean, frontend 250 suites/5227 tests. Filter breakdown beside each mode's candidates heading opens the existing saved-report inspector (former Analysis log, all disclosures preserved); terminal counts only from the saved report's counts+unknown_symbols, null input/evaluated unavailable, partial/conflict/resolution labels, saved-run vs table-run identity, searchable per-symbol reasons with backend-verified units (win_rate/min_win_rate fraction 0-1), generic no-setup names no rule; Options/Stocks inspector unchanged. Not an audit."
+        },
+        {
+          "issue": 265,
+          "commit": "253c43f166063ac606a3bf11c86e6c0f7fd07996",
+          "validation": "Fresh implementer (Claude subagent): backend 8 url tests RED (KeyError/missing attr), frontend compile RED then 15 RED (section missing); GREEN implementer full backend Python 3.11.17 8060 passed/9 skipped/0 failed (Telegram env vars unset), frontend 251/5242. Coordinator re-verified typecheck clean, frontend 251 suites/5242 tests, news-focused backend files 154 passed (Python 3.11). Optional NewsItem.url only from provider-supplied absolute http(s) links (key added only when valid; existing pinned item shapes unchanged; /api/news returns url null when absent); selected-symbol news section with stale-reply guard, isolated loading/error/empty, publisher/date/link fallbacks, per-item tagged symbol, no sentiment shown, industry news explicitly unavailable. Not an audit."
         }
       ],
       "implementation_interruption": {
