@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import field_validator, BaseModel
 
 from app.services.credential_store import credential_store
 
@@ -18,6 +20,8 @@ class CredentialUpdate(BaseModel):
         "tastytrade_paper", "tastytrade_live",
     ]
     values: dict
+
+    _validate_payload_depth = field_validator('values', mode="before")(validate_payload_depth)
 
 
 @router.post("/credentials")

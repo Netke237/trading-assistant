@@ -372,9 +372,16 @@ async def request_validation_handler(request: Request, exc: RequestValidationErr
     client as a 500. Same status, same `detail` list, same loc/msg/type
     (lib/api.ts apiError reads loc and msg); only a non-finite value becomes
     its string."""
+    # Depth refusals must not traverse or echo the rejected container: even
+    # error normalization/encoding can recurse on a decoder-accepted body.
+    errors = [
+        {key: value for key, value in error.items() if key != "input"}
+        if error.get("type") == "payload_depth" else error
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
-        content={"detail": jsonable_encoder(_finite_or_str(exc.errors()))},
+        content={"detail": jsonable_encoder(_finite_or_str(errors))},
     )
 
 
