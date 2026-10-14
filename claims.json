@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/candidate-backtest-chart-40fc1ac9",
       "claimed_at": "2026-10-14T21:13:07Z",
-      "expires_at": "2026-10-15T00:13:22Z",
+      "expires_at": "2026-10-15T00:13:55Z",
       "note": "Implement approved original backtest curves and fills",
       "task": "CANDIDATE-BACKTEST-CHART"
     }
