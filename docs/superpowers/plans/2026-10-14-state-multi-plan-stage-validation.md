@@ -59,3 +59,7 @@ proof directly exercises observable exit statuses. Legacy singular metadata,
 subject-only evidence, ownership/introduction scoping and accepted historical
 identity-reset holes remain unchanged. A green CLI result does not certify
 independent reviewer behavior or approve another phase's merge.
+
+## Post-fix integrated verification
+
+Fresh implementer `/root/multi_stage_fix_c1`, commit `7a91533cca130f0ee054f8ae4b3780122ffa496f`: all three real-git wrong-cap cases were RED, then complete opening suffix and target ownership guards passed 371 focused tests (254 legacy +117 plural). Frozen source/tests fingerprints remained unchanged through Python3.11.16 full backend: **8,431 passed,9 skipped**,890.40s. Frontend **252 suites /5,254 tests** and typecheck passed. An initial post-fix run was explicitly stopped before a mixed-case interaction correction; this final refrozen run is the full proof. Prior merged-source pre-fix baseline was8,402/9 and is not substituted for this result. Independent code round2 is pending; nothing merged.

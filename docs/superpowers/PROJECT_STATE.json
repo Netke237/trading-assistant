@@ -3678,7 +3678,9 @@
             "C1-G1: suffix after numeric range can be conditional/negative but accepted, hiding exhausted cap",
             "C1-G2: q target mention can wrongly bind explicit answer opening a different target"
           ],
-          "fixes": [],
+          "fixes": [
+            "7a91533c by fresh /root/multi_stage_fix_c1: both gate findings corrected, independent fix review pending"
+          ],
           "outstanding": [
             "C1-G1",
             "C1-G2"
@@ -3687,7 +3689,7 @@
           "verification": "Auditor reproduced each with real git and four non-clean plan subjects; all88newcases passed; independent second pass scope verified."
         }
       ],
-      "notes": "Code round1/continuous3: two numeric gate findings open. Fresh #307 implementer reproduces and fixes suffix authorization/explicit target binding. Pre-fix integrated backend completed8402/9, superseded for final post-fix proof. Plan2clean and code1history preserved; no counter reset.",
+      "notes": "Both C1 gate fixes built/tested at7a91533c; independent code round2 pending. Full post-fix backend8431/9, frontend252/5254/typecheck, focused371. No counter resets; plan2clean, code1notclean history preserved.",
       "tickets": [
         300,
         301
@@ -3706,6 +3708,18 @@
           "files": "Tracking documentation + validation artifact only; no source/tests changes.",
           "green": "Merged-source frontend252suites5254tests; typecheck; real-git CLI exit0/1/1; Python3.11.16; diffcheck.",
           "audit": "Independent integrated code audit pending"
+        },
+        "307": {
+          "commit": "7a91533cca130f0ee054f8ae4b3780122ffa496f",
+          "implementer": "/root/multi_stage_fix_c1",
+          "fixes": [
+            "C1-G1 complete bounded opening qualifiers",
+            "C1-G2 explicit target ownership and ambiguous/mixed-case qualification"
+          ],
+          "red": "Three real-git wrong-cap cases failed before correction.",
+          "green": "Python3.11.16 focused371, backend8431passed9skipped in890.40s; frontend252suites5254tests/typecheck; final frozen source/test checksums unchanged.",
+          "deviation": "First post-fix full run stopped before narrow mixed-case interaction correction; final refrozen full run passed.",
+          "audit": "Fresh independent code round2 pending"
         }
       },
       "implementation_interruption": {
