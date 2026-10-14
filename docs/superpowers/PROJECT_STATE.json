@@ -3389,7 +3389,7 @@
       "id": "SCREEN-LABELS-19-20",
       "name": "Banner, tooltip and regime duration show the same, correct thing",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -3407,13 +3407,26 @@
         "note": "Presence only. Absent until the duration formatter lands. Driver-label work is pinned by tests, not by this probe."
       },
       "plan_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": null,
-        "closure_evidence": null
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan round 1 (fresh gate-auditor subagent) on plan v1 @ 7f0d7d92: zero gate findings."
       },
-      "audit_history": [],
-      "notes": "Resumed from discovery af780c6d. Kenneth accepted 1=B and 2=A. No product code yet. Counters preserved at zero. Plan audit not started."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "fresh gate-auditor subagent (plan round 1)",
+          "reviewed": "plan v1 @ 7f0d7d92 against the code the plan names",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "gateDrivers is status equality and ivMissing is iv && !hasIv. The banner already counts only iv && !ivMissing plus event. The missing-reading sentence counts !hasIv. Overlap is sum > driven. Task 1 changes only the causesSentence prefix and the non-PASS gateDriverPhrase. _regime_age is one label per input bar. avg_regime_duration is 1/(1-p_stay) on stride samples, already one decimal and capped at 9999. Daily compute_omm gets the query lookback. Intraday gets 26. Scan and analysis copy those two fields and do not send the lookback. The formatter shows an echoed integer size only. Math.round is removed on the Step 1 and analysis averages. The new schema field defaults to None. JSON names stay. regimeSentiment is not in scanStore partialize. No order, score, or compute_omm number changes."
+        }
+      ],
+      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). Counters: plan 1 of 3, clean. Code audit not started. Kenneth accepted 1=B and 2=A. No product code yet."
     }
   ],
   "already_shipped": [
