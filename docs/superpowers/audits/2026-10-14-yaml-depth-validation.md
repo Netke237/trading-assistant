@@ -26,3 +26,11 @@ An isolated ASGI probe through the production validation handler returned422/147
 - Task3 #297: commit `edd267f2`, fresh implementer `implement_t3`. Initial9expected restore failures/1valid control; focused40 passed, including10new tests. Its separate full backend run was interrupted and is not counted as passed; the final combined run below covers these unchanged files. Its frontend241/5158 and typecheck passed.
 - Task4 #302: commit `bef523cb`, fresh implementer `implement_t4`. Real scan/arm mixed-depth requests returned500 before the fix; focused285 passed afterward. Final stable combined source full backend8548 passed/9 skipped (963.73s); frontend241 suites/5158 tests and typecheck passed (269.786s). Ordinary error metadata/numeric normalization controls pass.
 - Coordinator recorded the unchanged independently implemented source after the earlier run ended. No implementing agent self-review is counted as an independent audit. Code stage0/3 remains pending, audit_cleanfalse, unready to merge.
+
+## Continuation current-main checks
+
+Fresh continuation `board/yaml-depth-bound-2f908248` starts from pushed checkpoint `4e5f254a`; current main `0d8a62e5` is already included. Application source is unchanged. Python3.11.16 verified.
+
+- Frontend typecheck passed. Full Jest **252 suites / 5254 tests passed** (387.855s). Exit0 recorded.
+- Full backend **8652 passed / 9 skipped** (957.17s), Python3.11.16, exit0. Existing warnings retained. Earlier stopped integration runs remain interrupted, never passing records.
+- Fresh independent complete code round1 is clean; see `2026-10-14-yaml-depth-code-round1-completed.md`. Reviewer independently passed338 focused tests. Current-main validation and code audit are complete; PR/CI/self-merge gates remain separate.
