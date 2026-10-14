@@ -23,6 +23,14 @@
       "expires_at": "2026-10-14T10:10:21Z",
       "note": "resume #163 from discovery af780c6d; decisions 1=B 2=A",
       "task": "SCREEN-LABELS-19-20"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/state-multi-plan-stage-0c428d82",
+      "claimed_at": "2026-10-14T07:11:13Z",
+      "expires_at": "2026-10-14T10:11:13Z",
+      "note": "Work #214: authorized multi-plan-stage audit accounting",
+      "task": "STATE-MULTI-PLAN-STAGE"
     }
   ]
 }
