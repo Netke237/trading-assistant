@@ -3668,7 +3668,7 @@
           "verification": "Independent second pass confirmed unpaired acknowledgement cannot close final plan; valid authorized two-stage and final clean transition preserved."
         }
       ],
-      "notes": "T1 #300 built and tested at 5594f99d. T2 documentation/CLI evidence pending; independent integrated code audit not started, code rounds0. Original phase/decision and cap histories preserved.",
+      "notes": "Build tickets #300/#301 complete. Current main f655b7e2 merged (only state conflict, peer histories preserved); merged frontend252/5254 and typecheck, cached-font build and real-git CLI checks pass. Integrated backend running; independent code audit pending.",
       "tickets": [
         300,
         301
@@ -3680,6 +3680,13 @@
           "red": "Original authorized second-stage regression failed; four affirmative-opening controls failed before correction. Initial test fixtures corrected, obsolete runs stopped.",
           "green": "Python3.11.16: focused342 (254legacy88new), backend8298passed9skipped; frontend241suites5158tests; typecheck. Rootcached-font build and three CLI exit checks passed.",
           "audit": "Integrated independent code audit pending"
+        },
+        "301": {
+          "commit": "cb94b37f7b052335b7fdcb9c9b1307f9c147c7f9",
+          "implementer": "/root/multi_stage_t2",
+          "files": "Tracking documentation + validation artifact only; no source/tests changes.",
+          "green": "Merged-source frontend252suites5254tests; typecheck; real-git CLI exit0/1/1; Python3.11.16; diffcheck.",
+          "audit": "Independent integrated code audit pending"
         }
       },
       "implementation_interruption": {
