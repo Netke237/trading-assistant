@@ -79,3 +79,28 @@ Coordinator synthetic real-git CLI proof: canonical/historical approvals exit0; 
 User explicitly approved a new bounded code stage, cap3, preserving previous5 rounds and original code stage3notclean. Fresh `/root/fix_c3_clause` commit `c6ae59d84d68f6709d82fd8f618e0f211ab2928a` validates the entire excluded policy tail against complete recognized wording. Unknown suffixes, punctuation-chained denials/conditions, conflicting owners and round ranges fail closed; actual historical Tradier wording remains accepted. Only scripts/state.py and plural-stage tests changed. RED32 real-git false openings. GREENPython3.11 focused460/41.77s; backend8858passed9skip/1032.22s; frontend252suites5254tests/255.577s and typecheck. Source/test SHA256:f4dca7fa7ce06f29f9304f4512f21f94458595fba88131252e28a04ee50b7151 /2b2db3ebe3d9a9dee13417ab282a95289cb40b095a7ca2011257183fe8106f66 unchanged through full checks. Coordinator26synthetic real-git CLI proof:20unauthorizedexit1 with drift,6validexit0 inclhistoricalapproval.
 
 Original singular checker cannot model the explicitly authorized additional code stage; its historical cap alarm remains explained, no counters reset or acknowledgement flag used. Fresh independent stage2 round1 pending; audit_cleanfalse, no PR/merge.
+
+## Shallow CI correction and current main integration — #317
+
+Resumed from published PR #316 head `3c7d8b78` in a replacement workspace. Unpublished checkpoint `86e71ca8` and its portable handoff were unavailable. No claim is made to have recovered or published that payload.
+
+Test-only commit `9f79bfe2` replaces both historical `git show origin/main` JSON reads with checked-in UTF-8 file reads and removes the unused subprocess import. Historical approval selection and assertions remain unchanged; no parser or workflow change. A depth-1, single-branch checkout without `origin/main` reproduced all four affected failures before correction. Corrected shallow state suites: **460 passed in 37.58s**, Python 3.11.16.
+
+Current main `625d8f77` integrated at frozen head `e5a4b737d5f154f6964a14784890e090f25a04f5`. The conflict only involved the active phase pointer; #214 remains active. All existing decisions, all six prior audit records and the original capped stage were preserved. Imported frontend files and unrelated phases match main.
+
+Fresh independent `/root/state214_stage2_round2` reviewed the test correction and its interactions with the parser, historical decision and main integration, twice: **zero gate findings**. Independent changed-case verification: integrated 4 passed in 2.91s; depth-1 checkout without `origin/main` 4 passed in 3.27s. State checker exit 0, no drift. This is continuous round 7, overall code round 5, authorized stage 2 local round 2. One round remains under the original follow-up cap; no history reset.
+
+Final integrated validation on unchanged reviewed source:
+
+| Check | Result |
+| --- | --- |
+| Backend, Python 3.11.16 | 8,858 passed, nine skipped; 851.45s |
+| Frontend Jest | 255 suites / 5,273 tests passed; 286.315s |
+| Frontend typecheck | Passed |
+| Production build | Passed, including font loading |
+| Shallow focused state suites | 460 passed; 37.58s |
+| State checker / diff check | Passed |
+
+Backend emitted 1,136 warnings, including aiosqlite worker callbacks after event-loop closure; the run exited 0. These unrelated test-runtime warnings were not fixed in this test-only scope. The independent reviewer did not rerun the full suites; the coordinator did.
+
+Frozen parser/test SHA256: `f4dca7fa7ce06f29f9304f4512f21f94458595fba88131252e28a04ee50b7151` / `89e05797a6509309a7fa1ea7ac365464f54ba8f3eb69e871e74ed24179e09909`. Only audit/validation records changed afterward. Publication approval and exact-head CI remain pending. Nothing merged.
