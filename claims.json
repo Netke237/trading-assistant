@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/prebreakout-presentation-v2-f78dd25f",
       "claimed_at": "2026-10-14T06:53:17Z",
-      "expires_at": "2026-10-14T11:42:48Z",
+      "expires_at": "2026-10-14T11:45:37Z",
       "note": "takeover #235: reconcile #263, build #264-#266",
       "task": "PREBREAKOUT-PRESENTATION-V2"
     },
