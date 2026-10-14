@@ -898,9 +898,15 @@ def _plan_stages(target, key, declared, state, subjects):
             return 'opening answer must contain exactly one bounded opening declaration'
         match = declarations[0]
         boundary = max(answer.rfind(c, 0, match.start()) for c in '.;!?') + 1
-        # Include qualifications after the range. A following colon/dash starts
-        # policy detail, as in the original answer's overdraft redesign prose.
+        # Only recognized fire-call policy prose may follow a colon/dash outside
+        # the approval clause. Unknown suffixes fail closed, including indirect
+        # approval qualifications and chained separators.
         following = re.search(r'[.;!?:]|\s--\s', answer[match.end():])
+        if following and (following[0] == ':' or '--' in following[0]):
+            suffix_start = match.end() + following.end()
+            if not re.match(r'\s*(?:fire\s+calls|deadline-bound\s+auto-trade\s+'
+                            r'fire-path\s+Tradier\s+calls)\b', answer[suffix_start:], re.I):
+                return 'opening declaration has an unsupported colon/dash qualification'
         end = match.end() + following.start() if following else len(answer)
         local = answer[boundary:end]
         if (re.search(r'\b(?:should|could|would|might|may|whether|if)\b', local, re.I)
@@ -916,9 +922,13 @@ def _plan_stages(target, key, declared, state, subjects):
         bare = re.fullmatch(r'\s*([\w-]+)\s*:\s*', prefix)
         if bare:
             qualifiers.append(bare[1])
+        # Identifier ownership is case-insensitive even before trailing prose.
+        # Article-led policy descriptions such as "for the overdraft redesign"
+        # do not name a bare owner identifier.
         qualifiers += re.findall(
-            r'\bfor\s+([A-Z][A-Z0-9_-]*(?:\s+(?:or|and)\s+[A-Z][A-Z0-9_-]*)*)\b',
-            answer[match.start():end])
+            r'\bfor\s+(?!(?:the|a|an)\b)'
+            r'([\w-]+(?:\s+(?:or|and)\s+[\w-]+)*)\b',
+            answer[match.start():end], re.I)
         question = d.get('q') if isinstance(d.get('q'), str) else ''
         alternatives = re.findall(
             token.pattern + r'\s+(?:or|and)\s+([\w-]+)', question, re.I)

@@ -264,3 +264,64 @@ def test_c1_competing_question_targets_need_explicit_ownership(repo, answer):
     s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
                          {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
     assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('separator', [': ', ' -- '])
+@pytest.mark.parametrize('qualification', ['if approved', 'only if approved', 'is not authorized'])
+def test_c2_separated_qualification_cannot_reopen_capped_stage(repo, separator, qualification):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += separator + qualification
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('owner', ['other', 'Other', 'other-target', 'Other-Target'])
+@pytest.mark.parametrize('placement', ['stage', 'range'])
+def test_c2_suffix_owner_cannot_borrow_question_target(repo, owner, placement):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] = (f'Open one new plan stage for {owner}: plan rounds 4-6'
+              if placement == 'stage' else d['a'] + f' for {owner}')
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('separator', [': ', ' -- '])
+def test_c2_separate_policy_prose_preserves_approval(repo, separator):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += separator + 'fire calls never wait. Not a merge approval.'
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert _mod.audit_bookkeeping_drift(s) is None
+
+
+@pytest.mark.parametrize('suffix', [
+    ': this is not authorized',
+    ' -- opening is conditional',
+    ': -- if approved',
+    ' -- : is not authorized',
+    ' for other: fire calls never wait',
+    ' for Other-Target -- fire calls never wait',
+])
+def test_c2_qualified_suffix_interactions(repo, suffix):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += suffix
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('owner', ['other', 'Other', 'other-target', 'Other-Target'])
+@pytest.mark.parametrize('tail', [' overall', ' (up to 3 rounds)'])
+def test_c2_suffix_owner_with_trailing_prose(repo, owner, tail):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += f' for {owner}' + tail
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
