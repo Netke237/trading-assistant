@@ -3437,7 +3437,13 @@
           "clean": true
         }
       ],
-      "note": "2026-10-14 resumed original evidence-only branch c58843bf on fresh continuation; no prior rounds/tickets/PR. No exact YAML-DEPTH-BOUND entry existed in phases/backlog; parent TOOLING-ROBUSTNESS record preserved. Approved #167 comments split A/API and persistence from B/shared YAML loader. B not implemented here; no revisit of isdigit/isdecimal. Python3.11.16. Bootstrap state check no drift. Plan round1 found1 gate finding, corrected in plan v2; plan round2 next. Evidence reproduced bounded depth/cycle/shared aliases; no application code changed. PLAN CLEAN after2 rounds; code stage not started (0 of3). Three build tickets next, fresh implementers."
+      "note": "2026-10-14 resumed original evidence-only branch c58843bf on fresh continuation; no prior rounds/tickets/PR. No exact YAML-DEPTH-BOUND entry existed in phases/backlog; parent TOOLING-ROBUSTNESS record preserved. Approved #167 comments split A/API and persistence from B/shared YAML loader. B not implemented here; no revisit of isdigit/isdecimal. Python3.11.16. Bootstrap state check no drift. Plan round1 found1 gate finding, corrected in plan v2; plan round2 next. Evidence reproduced bounded depth/cycle/shared aliases; no application code changed. PLAN CLEAN after2 rounds; code stage not started (0 of3). Three build tickets next, fresh implementers. Baseline full backend8210PASS/9skip, frontend5158PASS/241suites/typecheckPASS. T1#295 implementation focused280PASS and exact request/output JSON-schema parity; full implementation suites pending. T2#296 andT3#297 depend on#295.",
+      "tickets": [
+        295,
+        296,
+        297
+      ],
+      "validation": "docs/superpowers/audits/2026-10-14-yaml-depth-validation.md"
     }
   ],
   "already_shipped": [
