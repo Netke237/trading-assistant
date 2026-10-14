@@ -181,3 +181,12 @@
 .contextDisclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
 @media (max-width: 1100px) { .scoreContextGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .contextGrid, .scoreContextGrid { grid-template-columns: 1fr; } }
+.resultsHeading { display: flex; flex-direction: column; gap: 4px; }
+.resultsHeadingRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.breakdownBtn {
+  padding: 4px 12px; border: 1px solid var(--border-subtle); border-radius: 4px;
+  background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px;
+}
+.breakdownBtn:hover, .breakdownBtn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.breakdownPanel { display: flex; flex-direction: column; gap: 8px; }
+.breakdownPanel[hidden] { display: none; }

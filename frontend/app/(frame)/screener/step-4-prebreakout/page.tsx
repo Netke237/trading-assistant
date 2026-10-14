@@ -32,6 +32,7 @@ import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
 
 type ScanMode = 'prebreakout' | 'pullback' | 'fib';
+const MODE_LABELS: Record<ScanMode, string> = { prebreakout: 'Pre-Breakout', pullback: 'Pullback', fib: 'Fib Pullback' };
 const SECTOR_LABELS: Record<string, string> = {
   'SECTOR:XLK': 'Technology',
   'SECTOR:XLC': 'Communication Services',
@@ -85,6 +86,7 @@ export default function Step4PreBreakoutPage() {
   const [error, setError]                   = useState<string | null>(null);
   const [alertTarget, setAlertTarget] = useState<{symbol: string; direction: string} | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const requestToken = useRef(0);
   const isFirstRender                       = useRef(true);
 
@@ -242,6 +244,23 @@ export default function Step4PreBreakoutPage() {
     {selected && <Text size={11} tone="dim">{applied ? `${applied.scope.direction} · ${applied.scope.horizon ?? 'Horizon unavailable'} · ${applied.scope.mode}` : 'Scan snapshot unavailable'}</Text>}
   </section>;
 
+  // Filter breakdown beside each mode's candidates heading. It opens the saved run report
+  // for the current sub-mode's category (the former "Analysis log"); toggling only shows or
+  // hides it, so scan controls, rows and selection are untouched. Kept mounted while hidden.
+  const tableRunId = tableRunIds[scanMode] ?? null;
+  const resultsHeading = <div className={styles.resultsHeading}>
+    <div className={styles.resultsHeadingRow}>
+      <Title as="h2" size={20}>{MODE_LABELS[scanMode]} candidates</Title>
+      <button type="button" className={styles.breakdownBtn} aria-expanded={breakdownOpen} aria-controls="prebreakout-filter-breakdown" onClick={() => setBreakdownOpen(open => !open)}>Filter breakdown</button>
+    </div>
+    <Text size={11} tone="dim">{tableRunId ? `Displayed rows: run ${tableRunId}` : 'Displayed rows: run identity unavailable for the rows shown'}</Text>
+    <section id="prebreakout-filter-breakdown" className={styles.breakdownPanel} aria-label="Filter breakdown and analysis log" hidden={!breakdownOpen}>
+      <Text size={12} tone="secondary">The candidates table applies no client-side filtering: it lists the rows returned to this page, sorted only. Scan exclusions and every other terminal outcome below come from the saved run report, not from the table.</Text>
+      <SavedScanReportInspector category={scanMode} currentInputs={inspectionInputs} tableRunId={tableRunIds[scanMode]} />
+      <Text size={11} tone="dim">Each category keeps its latest report until its next run. Changing mode or parameters leaves saved reports accessible.</Text>
+    </section>
+  </div>;
+
   const universeLabel =
     symbolOverride.trim()          ? 'manual symbols'
     : universePick === 'Custom'    ? 'custom symbols'
@@ -284,8 +303,6 @@ export default function Step4PreBreakoutPage() {
           Fib Pullback
         </button>
       </div>
-
-      <details><summary>Analysis log</summary><SavedScanReportInspector category={scanMode} currentInputs={inspectionInputs} tableRunId={tableRunIds[scanMode]} /></details>
 
       {scanMode === 'pullback' ? (
         <>
@@ -361,6 +378,7 @@ export default function Step4PreBreakoutPage() {
           {error && <Text size={12} tone="reject">{error}</Text>}
           <SelectedSentimentFundamentals context={selectedContext}/>
 
+          {resultsHeading}
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={`${styles.tableHeader} ${styles.pullbackTable}`}>
@@ -444,6 +462,7 @@ export default function Step4PreBreakoutPage() {
           {error && <Text size={12} tone="reject">{error}</Text>}
           <SelectedSentimentFundamentals context={selectedContext}/>
 
+          {resultsHeading}
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.fibTableHeader}>
@@ -535,6 +554,7 @@ export default function Step4PreBreakoutPage() {
           {error && <Text size={12} tone="reject">{error}</Text>}
           <SelectedSentimentFundamentals context={selectedContext}/>
 
+          {resultsHeading}
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.tableHeader}>
