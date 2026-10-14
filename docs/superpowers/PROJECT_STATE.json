@@ -3740,7 +3740,8 @@
       "tickets": [
         300,
         301,
-        308
+        308,
+        314
       ],
       "implementation_tickets": {
         "300": {
@@ -3779,6 +3780,12 @@
           "green": "Python3.11.16 focused401; backend8799passed9skip1077.58s; frontend252suites5254tests227.389s/typecheck; frozen fingerprints unchanged.",
           "cli": "Canonical/historical approvals exit0; four original unauthorized forms exit1 with STATE DRIFT on synthetic real-git CLI cases.",
           "deviation": "Initial frontend six timeout failures; isolated31passed then full252/5254 rerun passed. Initial backend run stopped before final interaction adjustment; final full run above."
+        },
+        "314": {
+          "implementer": "/root/fix_c3_clause",
+          "status": "in_progress",
+          "scope": "C3-G1 complete excluded policy-clause validation and interactions only",
+          "audit": "New explicitly authorized code stage2, max3 rounds, pending"
         }
       },
       "implementation_interruption": {
@@ -3810,7 +3817,8 @@
           "cap": 3,
           "scope": "C3-G1 complete policy-clause fixes and interactions only"
         }
-      ]
+      ],
+      "current_code_stage": 2
     },
     {
       "id": "YAML-DEPTH-BOUND",
