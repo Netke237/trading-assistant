@@ -95,7 +95,8 @@ async def begin_run(db: AsyncSession, *, category: str, trigger: str, inputs: di
 
 async def finish_run(db: AsyncSession, run_id: str, *, status: str,
                      diagnostics: dict | None = None, result: dict | None = None,
-                     error_code: str | None = None, inputs: dict | None = None) -> dict:
+                     error_code: str | None = None, inputs: dict | None = None,
+                     promote_usable: bool = True) -> dict:
     if status not in TERMINAL_STATES or (error_code is not None and error_code not in ERROR_CODES):
         raise ValueError('Invalid terminal status or unsafe error code')
     # Validate before opening the transaction so invalid data never partially writes.
@@ -126,7 +127,9 @@ async def finish_run(db: AsyncSession, run_id: str, *, status: str,
                 raise ValueError('Run is already terminal')
             # Only the newest started attempt can replace usable evidence. A
             # failed run with usable diagnostics is inspectable in its own right.
-            if diagnostics is not None:
+            # promote_usable=False keeps partial diagnostics on this run's own
+            # envelope without replacing (and so pruning) the usable report.
+            if diagnostics is not None and promote_usable:
                 await db.execute(update(ScanReportHead).where(
                     ScanReportHead.category == row.category,
                     ScanReportHead.latest_id == run_id,

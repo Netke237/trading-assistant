@@ -104,6 +104,7 @@ export interface SentimentData {
   stability: string;
   regime_age_days: number;
   avg_regime_duration: number;
+  duration_stride_bars?: number | null;
   conviction_pct: number;
   conviction_label: string;
   interpretation: string;
@@ -988,7 +989,8 @@ export interface OmmData {
   p_stay:               number;   // 0–1
   stability:            'Stable' | 'Fragile';
   regime_age_days:      number;
-  avg_regime_duration:  number;   // days
+  avg_regime_duration:  number;   // transition strides, not days
+  duration_stride_bars?: number | null;
   transition_row:       number[]; // [P(Bull), P(Bear), P(Choppy)]
   state_order:          string[]; // ['Bull', 'Bear', 'Choppy']
   conviction_pct?: number | null;
@@ -1053,6 +1055,8 @@ export interface NewsItem {
   source:    string;
   timestamp: string;
   sentiment: NewsSentiment;
+  /** Provider-supplied original article link (absolute http/https) or null when the provider gave none/an invalid one. Additive (#265). */
+  url?:      string | null;
 }
 
 // --- Alerting & monitoring ---

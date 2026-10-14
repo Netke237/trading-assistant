@@ -17,7 +17,7 @@
 .tableWrap { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
 .tableHeader, .tableRow {
   display: grid;
-  grid-template-columns: 52px 80px 32px 80px 80px 72px 90px 80px;
+  grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 72px 90px 60px;
   gap: 8px; align-items: center; padding: 6px 12px;
 }
 .tableHeader { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
@@ -65,7 +65,7 @@
 .fibTableHeader,
 .fibTableRow {
   display: grid;
-  grid-template-columns: 52px 80px 32px 80px 72px 72px 72px 32px;
+  grid-template-columns: minmax(180px, 1fr) 32px 80px 72px 72px 72px 60px;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -152,3 +152,46 @@
   cursor: pointer;
 }
 .resetBtn:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+.resultsGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+.tableWrap { min-width: 0; overflow-x: auto; }
+.chartShell { display: flex; flex-direction: column; gap: 12px; min-height: 260px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); }
+.tableRow[aria-pressed="true"], .fibTableRow[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.tableRow:focus-visible, .fibTableRow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1100px) { .resultsGrid { grid-template-columns: 1fr; } }
+
+.identity { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.identityText { display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+.evidence { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.evidence summary { cursor: pointer; color: var(--text-primary); }
+.evidence h3 { font-size: 12px; font-weight: 500; }
+.evidenceFields { display: flex; flex-direction: column; gap: 8px; }
+.evidenceFields dt { color: var(--text-primary); }
+.evidenceFields dd { margin: 2px 0 0; white-space: pre-wrap; font-family: var(--font-mono); }
+
+.pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 90px 60px; }
+.selectedChart { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chartMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.contextSection { display: flex; flex-direction: column; gap: 12px; padding: 16px 0; }
+.contextGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.scoreContextGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.contextCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; }
+.contextDisclosure { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.contextDisclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
+@media (max-width: 1100px) { .scoreContextGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .contextGrid, .scoreContextGrid { grid-template-columns: 1fr; } }
+.resultsHeading { display: flex; flex-direction: column; gap: 4px; }
+.resultsHeadingRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.breakdownBtn {
+  padding: 4px 12px; border: 1px solid var(--border-subtle); border-radius: 4px;
+  background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px;
+}
+.breakdownBtn:hover, .breakdownBtn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.breakdownPanel { display: flex; flex-direction: column; gap: 8px; }
+.breakdownPanel[hidden] { display: none; }
+.newsHeader { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.newsList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.newsItem { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; overflow-wrap: anywhere; }
+.newsLink { font-size: 11px; color: var(--accent); text-decoration: none; align-self: flex-start; }
+.newsLink:hover, .newsLink:focus-visible { text-decoration: underline; }

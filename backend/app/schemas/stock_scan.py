@@ -279,6 +279,7 @@ class StockAnalysisOut(BaseModel):
     direction: str
     stock_score: int
     stock_status: str
+    stock_explanation: Optional[StockExplanation] = None
     is_index: bool = False
     # Signal-dependent payloads — None when no strategy setup exists (bypass path)
     strategy: Optional[StrategySignalOut] = None

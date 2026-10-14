@@ -393,7 +393,8 @@ class OmmData(BaseModel):
     p_stay: float                    # P(current state persists next bar)
     stability: Literal['Stable', 'Fragile']
     regime_age_days: int             # consecutive bars in current state
-    avg_regime_duration: float       # 1 / (1 − p_stay), in days
+    avg_regime_duration: float       # 1 / (1 − p_stay), transition strides
+    duration_stride_bars: Optional[int] = None
     transition_row: list[float]      # [P(Bull), P(Bear), P(Choppy)] for current state
     state_order: list[str]           # ['Bull', 'Bear', 'Choppy'] — index key
     conviction_pct: Optional[int] = None
@@ -538,6 +539,9 @@ class NewsItem(BaseModel):
     source:    str
     timestamp: str
     sentiment: Literal['bull', 'bear', 'neutral'] = 'neutral'
+    # Provider-supplied original article link (absolute http/https only), or
+    # None when the provider gave none or an invalid one. Additive (#265).
+    url:       str | None = None
 
 
 # ── Pricing method enum ──────────────────────────────────────────────────────
