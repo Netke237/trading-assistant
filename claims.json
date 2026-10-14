@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/state-multi-plan-stage-28408885",
       "claimed_at": "2026-10-14T17:32:27Z",
-      "expires_at": "2026-10-14T20:32:30Z",
+      "expires_at": "2026-10-14T20:33:29Z",
       "note": "Authorized bounded C3-G1 follow-up and new code stage; preserve prior5 rounds",
       "task": "STATE-MULTI-PLAN-STAGE"
     }
