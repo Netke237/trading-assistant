@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/prebreakout-presentation-v2-c89f5fa0",
       "claimed_at": "2026-10-14T04:31:06Z",
-      "expires_at": "2026-10-14T07:31:06Z",
+      "expires_at": "2026-10-14T07:32:03Z",
       "note": "Resume interrupted #261 chart/actions validation",
       "task": "PREBREAKOUT-PRESENTATION-V2"
     }
