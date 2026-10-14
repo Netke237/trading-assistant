@@ -52,7 +52,7 @@ Time exits (D14, merged `ea9c67ce`, pinned by `timeExits.test.tsx`): `n_time_exi
 
 `union.test.tsx` pins all of the following and must stay green with no edits: the column labels it lists (it does not list `HEALTH`), Expand opening the full card without navigating, Open Position navigating, the hidden-count sentence exactly once, the string `Pipeline log` **absent**, and rejection reasons readable only inside the Filter Breakdown dialog.
 
-Score factors already arrive as `card.stock_explanation` (P1, optional). `PositionEvidence` on the full card already prints each component's `name` and, when `measured`, `raw_score` to 0 decimals, else `Unavailable`. Absent explanation → `Scorer factors unavailable`. `explanation.status` is the scorer's verdict **before** later caps. The verdict on this page is `stock_status`. Sharpe is `backtest.sharpe` (already on the card, not in the table). Earnings veto copy already used by the position card is exactly `Earnings inside the reject window — no send`, and only when `earnings_veto` is true.
+Score factors already arrive as `card.stock_explanation` (P1, optional). `PositionEvidence` on the full card already prints each component's `name` and, when `measured`, `raw_score` to 0 decimals, else `Unavailable`. Absent explanation → `Scorer factors unavailable`. `explanation.status` is the scorer's verdict **before** later caps. The verdict on this page is `stock_status`. Sharpe is `backtest.sharpe` (already on the card, not in the table). The earnings sentence `Earnings inside the reject window — no send` is `EARNINGS_VETO_MESSAGE`. The expanded card does not read `earnings_veto` by itself. `StockPositionCard` sets `earningsVeto` from `stockEarningsGate(card, stockScanResult.timestamp, stockScanResult.veto_days).veto` (`frontend/lib/earningsGate.ts`). That helper ages `earnings_days` by whole calendar days since the scan and judges the result against `veto_days`. A stored `earnings_veto: false` can become a veto on a later day, and a stored `true` stops being a veto once the aged distance drops below zero. (Plan round 1 finding P3-A1.)
 
 The 17-column grid is `20px 70px minmax(120px, 1fr) repeat(12, minmax(55px, auto)) 65px 105px` with `min-width: 1320px` and `.results { overflow-x: auto }`. Keeping every column means that horizontal scroll stays. The item forbids removing or merging columns, so this phase does not restack the table to kill the scroll.
 
@@ -199,7 +199,7 @@ Threshold line under those values: when both mins are numbers, `Scan thresholds:
 **Flags.**
 
 - `Backtest gate PASS` or `Backtest gate REJECT` from `passes_gate` only. A stored `false` stays REJECT even when win rate, trades, and expectancy would pass the numeric rule.
-- The sentence `Earnings inside the reject window — no send` only when `earnings_veto === true`. `false`, null, or absent: that sentence is not on the row. Do not derive it from `earnings_days`.
+- The sentence `Earnings inside the reject window — no send` only when `stockEarningsGate(c, result?.timestamp, result?.veto_days).veto` is true. Call that existing helper with those three arguments, the same call the card makes. Do not pass a custom `now`. Do not reimplement the ageing math. Do not key the sentence off `earnings_veto` alone, and do not edit `frontend/lib/earningsGate.ts`. When the helper's `veto` is false, the sentence is absent.
 - `Fundamentals {score}` when `fundamentals.score` is a finite number, using the score as stored (the same number as the HEALTH cell). Otherwise `Fundamentals unavailable`.
 - Each `gate_flags` entry, in order: `{gate}: {status} · {detail}`. Missing or empty array: `Recorded gates unavailable`. Do not invent a flag.
 
@@ -214,7 +214,7 @@ Threshold line under those values: when both mins are numbers, `Scan thresholds:
 - No `stock_explanation`: `Scorer factors unavailable`.
 - `win_rate: 0.584` shows `58%`. `total_return_pct: -1.84` shows `-1.8%`. `max_drawdown_pct: -6.14` shows `6.1%`. `sharpe: 1.1` shows `1.10`. `expectancy: -0.2` shows `-0.20`.
 - `passes_gate: false` with win rate 0.9, 100 trades, expectancy 1 shows `Backtest gate REJECT`.
-- `earnings_veto: true` shows the veto sentence. `earnings_veto: false` and `earnings_days: 1` does not.
+- Freeze the clock at `new Date(2026, 9, 8, 10, 0, 0)` and set the result `timestamp` to `2026-10-05T14:30:00` and `veto_days` to 60. `earnings_days: 61` with `earnings_veto: false` shows the veto sentence (the stored flag is false; the aged distance is inside the window). `earnings_days: 2` with `earnings_veto: true` does not show it (the print aged below zero). Restore the real clock after the test. These are the two cases in `frontend/lib/__tests__/earningsGate.test.ts` under `stockEarningsGate`.
 - One gate flag `{ gate: 'liquidity', status: 'CAUTION', detail: 'wide spread' }` shows `liquidity: CAUTION · wide spread`.
 - `bt_min_trades` and `bt_min_win_rate` null: the section contains `Threshold provenance unavailable for this scan` and not `Scan thresholds:`.
 
