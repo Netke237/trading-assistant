@@ -8,7 +8,7 @@ Continuation based on original c58843bf evidence and current main65b58bb5, merge
 - Full backend8210 passed/9 skipped (926.92s); no failures. Tests were collected before request-boundary changes. Existing warnings retained.
 - State checker reported no drift; inherited unaudited STATE-PROBE entries remain unchanged.
 - `exec_command` needs the sandbox network grant for TestClient and git/gh in this environment. An initial default-sandbox run was interrupted; it is not a successful check.
-- Existing scan endpoint tests can pause for minutes: bounded coroutine inspection traced their unmocked historical-store fallback through Tiingo's production governor (1 token per72s). A bounded endpoint-only probe timed out while waiting there. The unrestricted full baseline nevertheless completed green; no application/test changes were made for this behavior.
+- Existing scan endpoint tests can pause for minutes: bounded coroutine inspection traced their unmocked historical-store fallback through Tiingo's production governor (1 token per72s). A bounded endpoint-only probe timed out while waiting there. The network-enabled full baseline nevertheless completed green; no application/test changes were made for this behavior.
 
 ## Implementation checks
 

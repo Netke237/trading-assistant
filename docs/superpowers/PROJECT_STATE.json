@@ -3399,9 +3399,9 @@
       "branch": "board/yaml-depth-bound-b1dd948c",
       "verify": {
         "kind": "present",
-        "path": "backend/app/schemas/payload_depth.py",
-        "pattern": "def validate_payload_depth",
-        "note": "PRESENCE ONLY: payload depth helper; tests and independent audits establish behavior."
+        "path": "backend/tests/test_scan_request_depth_restore.py",
+        "pattern": "def test_",
+        "note": "PRESENCE ONLY: final ticket restore regressions exist after request boundaries and store transactions; actual tests and independent code audit establish behavior."
       },
       "plan_stage": {
         "rounds": 2,
