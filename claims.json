@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/prebreakout-presentation-v2-f78dd25f",
-      "claimed_at": "2026-10-14T06:53:17Z",
-      "expires_at": "2026-10-14T12:08:48Z",
-      "note": "takeover #235: reconcile #263, build #264-#266",
-      "task": "PREBREAKOUT-PRESENTATION-V2"
-    },
-    {
-      "agent": "claude",
       "branch": "board/yaml-depth-bound-b1dd948c",
       "claimed_at": "2026-10-14T06:58:59Z",
       "expires_at": "2026-10-14T10:47:30Z",
