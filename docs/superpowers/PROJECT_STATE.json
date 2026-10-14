@@ -4052,18 +4052,18 @@
         "docs/adr/0001-stocks-parameters-per-horizon.md"
       ],
       "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery.",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
-      "notes": "Plan clean in 2 rounds, code audit not started. #321 committed/pushed/closed 4516fa10; #322 integrating T1. Frontend full baseline255suites/5273tests passed. Cloud has only fixture bars; mini-PC historical run required before evidence/adoption claims.",
+      "notes": "Built, NOT ready to merge: plan clean2rounds; codeauditnotstarted. #321 4516fa10 + #322 44ede687. Final backendfull and864caseparityrunning. Frontendfull255suites/5273testsPASS; explicitsetupCLIprobePASSonfixtures. Historical evidence/adoption not performed; mini-PC stored-history run required.",
       "name": "Pre-Breakout/Fibonacci backtests and per-horizon tuning",
       "verify": {
         "kind": "present",
-        "path": "backend/app/services/horizon_tuning/signals.py",
-        "pattern": "setup_signal_series",
-        "note": "Presence only: setup entry event integration; behaviour pinned by deterministic tests and independent audit."
+        "path": "backend/scripts/tune_horizons.py",
+        "pattern": "RESEARCH_STRATEGIES = .*fibonacci_pullback",
+        "note": "PRESENCE ONLY of explicit setup-cell CLI selection. Correctness requires deterministic tests and independent phase audit."
       },
       "audit_history": [
         {
@@ -4101,7 +4101,9 @@
         },
         {
           "issue": 322,
-          "status": "in_progress"
+          "status": "closed",
+          "commit": "44ede687",
+          "validation": "243 focused backend cases passed; final45setup-tuningcases passed; frontendtypecheckpassed."
         }
       ]
     }
