@@ -3280,8 +3280,8 @@
       "id": "PREBREAKOUT-PRESENTATION-V2",
       "name": "Approved Pre-Breakout/Pullback/Fib ranking layout, preserved evidence and same-run diagnostics",
       "status": "built",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "depends_on": [
         "STOCKS-PRESENTATION-V2",
         "SCAN-REPORT-ISOLATION"
@@ -3341,12 +3341,25 @@
           "findings": [
             "R3-1 (persisted data): scan_report_lifecycle.run_reported_scan now passes _partial_diagnostics(c) to _finish on failed/cancelled prebreakout/fib/pullback runs; scan_reports.finish_run promotes any non-None diagnostics to ScanReportHead.usable_id and _prune then deletes the category's previous complete report (reproduced on Python 3.11: prior run row gone, previous_report None). Triggers: cancelled long SP500 scans, pullback HTTP 500 config guards or 422 params after exclusions recorded."
           ],
-          "fixes": [],
-          "outstanding": [
-            "R3-1"
+          "fixes": [
+            "R3-1 fixed by fresh implementer at 11d1549: scan_reports.finish_run promote_usable keyword (default True); run_reported_scan CancelledError/Exception branches pass False so partial diagnostics stay on the failed attempt without moving usable_id; 6 parametrised regression cases (prebreakout/fib/pullback x failed/cancelled) RED before, GREEN after; full backend Python 3.11.17 8313 passed/9 skipped/0 failed"
           ],
+          "outstanding": [],
           "clean": false,
           "verification": "Coordinator confirmed mechanism in scan_reports.finish_run (usable_id update when diagnostics is not None) and _prune. Auditor checked candidate parity/order/list shape, terminal exclusivity, units, Fib lines, stale guards, actions and persistence keys without further gate findings."
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh independent Claude general-purpose subagent applying bmad-review-adversarial-general (code round 2)",
+          "reviewed": "git diff c2315dd..11d1549 (R3-1 fix only) and interactions: scan_reports finish_run/_prune/get_latest/begin_run/recover_interrupted, every finish_run caller, scan-report routes, SavedScanReportInspector/TerminalOutcomes rendering of latest_attempt/previous_report",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Auditor confirmed no other usable_id/prune deletion path, failed attempt shown as latest_attempt with partial label and previous complete report retained, Options/Stocks unchanged (terminal disabled -> diagnostics None on exception paths), regression test exercises real finish_run on aiosqlite and fails when the fix is mutated away; ran 70 backend (Python 3.11.17) and 25 inspector tests."
         }
       ],
       "layout_revision_evidence": {
@@ -3360,10 +3373,12 @@
       },
       "reconciliation": "docs/superpowers/plans/2026-10-13-prebreakout-presentation-v2-preservation.md",
       "code_stage": {
-        "rounds": 1,
-        "clean": false
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code round 2 (phase round 4) fresh independent auditor, git diff c2315dd..11d1549 (R3-1 fix and interactions), zero gate findings; audited head 11d1549"
       },
-      "note": "2026-10-14 #258\u2013266 built; code round 1 (phase round 3) found R3-1 (failed/cancelled partial diagnostics promote usable_id and prune the previous complete report); fresh implementer fix next, then code round 2 on the fix only. Plan2 clean; original plan1 and layout revision1 preserved. audit_clean false, no merge. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258\u2013266 built; code audit clean after code round 2 (phase rounds: plan 1-2 clean, code 3 one finding fixed, code 4 clean). Audited head 11d1549. Plan2 clean; original plan1 and separate layout revision1 preserved. PR and self-merge gate next. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3415,6 +3430,13 @@
         "issue": 261,
         "reason": "Account usage limit interrupted implementer before final verification/commit; WIP retained",
         "resolved": "2026-10-14 same implementer resumed; focused19/full5194/typecheck pass and b8379697 committed; claim reacquired after expiry with recorded branch/label verified"
+      },
+      "integrated_verification": {
+        "head": "11d1549 (origin/main 65b58bb merged at 9740611)",
+        "backend": "Python 3.11.17 full suite 8313 passed / 9 skipped / 0 failed at 11d1549 (BAMENDJOU_TELEGRAM_* unset; with them exported the single env-dependent Telegram skip test fails)",
+        "frontend": "typecheck clean; Jest 251 suites / 5243 tests at 97406115 (11d1549 changes backend only)",
+        "playwright": "CI smoke command (chromium, @smoke): 5 passed / 2 skipped",
+        "state": "state.py no drift"
       }
     },
     {
