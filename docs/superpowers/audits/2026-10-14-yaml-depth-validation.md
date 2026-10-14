@@ -12,4 +12,6 @@ Continuation based on original c58843bf evidence and current main65b58bb5, merge
 
 ## Implementation checks
 
-Pending completion of build tickets #295–#297, required integration checks and independent code audit. This document does not clear any audit or merge gate.
+Task 1 (#295), commit `6d0bec3d`: red confirmed depth33 was accepted by ScanRequest. Focused280 tests passed; full backend8490 passed/9 skipped (880.81s); frontend typecheck and241 suites/5158 tests passed (276.37s). Exact JSON-schema parity against original code passed for all11 request models plus PortfolioPositionSchema output.
+
+Tasks #296–#297, final integration checks and independent code audit remain pending. This document does not clear an audit or merge gate.
