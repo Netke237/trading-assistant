@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/screen-labels-19-20-merge-record-2f552935",
-      "claimed_at": "2026-10-14T13:55:55Z",
-      "expires_at": "2026-10-14T16:55:55Z",
-      "note": "docs shipped record for merged #303",
-      "task": "SCREEN-LABELS-19-20"
-    }
-  ]
+  "claims": []
 }
