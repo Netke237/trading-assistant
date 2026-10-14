@@ -3389,7 +3389,7 @@
       "id": "STATE-MULTI-PLAN-STAGE",
       "name": "Explicit additional authorized plan stages with independent per-stage caps",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -3404,8 +3404,10 @@
         "note": "Presence only: plural stage validation helper; not behavioral or audit proof."
       },
       "plan_stage": {
-        "rounds": 1,
-        "clean": false
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/multi_stage_plan_r2 reviewed f4a54d04..d02ab7ac R1-G1 fix and interactions, two passes, zero gate findings."
       },
       "code_stage": {
         "rounds": 0,
@@ -3426,6 +3428,18 @@
           ],
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/multi_stage_plan_r2",
+          "reviewed": "Plan diff f4a54d04..d02ab7ac only R1-G1 fixes/interactions",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Independent second pass confirmed unpaired acknowledgement cannot close final plan; valid authorized two-stage and final clean transition preserved."
         }
       ],
       "notes": "2026-10-14: explicit user assignment to this session; other three agent packages untouched. No original phase/decision or cap reset."
