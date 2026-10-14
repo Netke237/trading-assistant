@@ -3687,7 +3687,7 @@
           "verification": "Auditor reproduced each with real git and four non-clean plan subjects; all88newcases passed; independent second pass scope verified."
         }
       ],
-      "notes": "Code round1/continuous3: two numeric gate findings open; fresh implementer #307 fixes suffix authorization and explicit target binding. Prior-source integrated backend is still finishing and is superseded for post-fix proof; a fresh frozen post-fix full run is required. Plan2clean preserved; no counter reset.",
+      "notes": "Code round1/continuous3: two numeric gate findings open. Fresh #307 implementer reproduces and fixes suffix authorization/explicit target binding. Pre-fix integrated backend completed8402/9, superseded for final post-fix proof. Plan2clean and code1history preserved; no counter reset.",
       "tickets": [
         300,
         301
@@ -3712,6 +3712,12 @@
         "ticket": 300,
         "reason": "Implementer usage limit before commit; tests continued to completion",
         "resolved": "Same original implementer resumed, verified final full result and committed scoped code."
+      },
+      "pre_fix_integrated_validation": {
+        "head": "3fe29695e38d45c0278dd9139f89ca74647e1f8e",
+        "backend": "8402 passed,9skipped in882.65s on merged source; before C1 fixes, not final post-fix evidence",
+        "frontend": "252suites5254tests/typecheck/build passed",
+        "cli": "real-git exit0/1/1 passed"
       }
     }
   ],
