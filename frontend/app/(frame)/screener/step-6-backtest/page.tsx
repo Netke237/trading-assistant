@@ -18,6 +18,8 @@ import { splitStockRejected } from '@/lib/stockShortlist';
 import { computeStockDeltas } from '@/lib/stockDelta';
 import { stockScanGateTooltip, fundamentalScoreTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import { toneForScore, FUNDAMENTAL_BAND } from '@/lib/status';
+import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
+import type { PositionCardData } from '@/types/stockDomain';
 import styles from './page.module.css';
 
 const TIME_EXIT_TOOLTIP = "trades closed at the next open after being held the horizon's hold, neither stop nor target reached";
@@ -35,6 +37,75 @@ function _labelWithDate(iso: string): string {
   if (diffDays === 1) return `Yesterday · ${timeStr}`;
   const sameYear = scan.getFullYear() === now.getFullYear();
   return sameYear ? `${mon} ${day} · ${timeStr}` : `${mon} ${day} ${scan.getFullYear()} · ${timeStr}`;
+}
+
+function QuickSummary({ card, minTrades, minWinRate, scanTimestamp, vetoDays }: {
+  card: PositionCardData;
+  minTrades: number | null | undefined;
+  minWinRate: number | null | undefined;
+  scanTimestamp: string | null | undefined;
+  vetoDays: number | null | undefined;
+}) {
+  const bt = card.backtest;
+  const earningsVeto = stockEarningsGate(card, scanTimestamp, vetoDays).veto;
+  const thresholds = typeof minTrades === 'number' && typeof minWinRate === 'number'
+    ? `Scan thresholds: ≥ ${minTrades} trades · ≥ ${(minWinRate * 100).toFixed(0)}% win rate · expectancy ≥ 0`
+    : 'Threshold provenance unavailable for this scan';
+  const fundamentals = card.fundamentals != null && Number.isFinite(card.fundamentals.score)
+    ? `Fundamentals ${card.fundamentals.score}`
+    : 'Fundamentals unavailable';
+  return (
+    <section aria-label={`Quick summary ${card.symbol}`}>
+      <Text size={12}>Why this score</Text>
+      <Data size={12}>{card.stock_score}</Data>
+      {card.stock_explanation == null ? (
+        <Text size={12}>Scorer factors unavailable</Text>
+      ) : (
+        Object.entries(card.stock_explanation.components).map(([key, component]) => (
+          <div key={key}>
+            <Text size={12}>{component.name}</Text>
+            <Data size={12}>
+              {component.measured && Number.isFinite(component.raw_score) ? component.raw_score.toFixed(0) : 'Unavailable'}
+            </Data>
+          </div>
+        ))
+      )}
+      <Text size={12}>Backtest vs this scan's gate</Text>
+      <div>
+        <Text size={11} tone="dim">Win rate</Text>
+        <Data size={12}>{(bt.win_rate * 100).toFixed(0)}%</Data>
+      </div>
+      <div>
+        <Text size={11} tone="dim">Trades</Text>
+        <Data size={12}>{bt.n_trades}</Data>
+      </div>
+      <div>
+        <Text size={11} tone="dim">Expectancy</Text>
+        <Data size={12}>{bt.expectancy.toFixed(2)}</Data>
+      </div>
+      <div>
+        <Text size={11} tone="dim">Return</Text>
+        <Data size={12}>{bt.total_return_pct.toFixed(1)}%</Data>
+      </div>
+      <div>
+        <Text size={11} tone="dim">Max DD</Text>
+        <Data size={12}>{Math.abs(bt.max_drawdown_pct).toFixed(1)}%</Data>
+      </div>
+      <div>
+        <Text size={11} tone="dim">Sharpe</Text>
+        <Data size={12}>{Number.isFinite(bt.sharpe) ? bt.sharpe.toFixed(2) : 'Unavailable'}</Data>
+      </div>
+      <Text size={12}>{thresholds}</Text>
+      <Text size={12}>{bt.passes_gate ? 'Backtest gate PASS' : 'Backtest gate REJECT'}</Text>
+      {earningsVeto && <Text size={12}>{EARNINGS_VETO_MESSAGE}</Text>}
+      <Text size={12}>{fundamentals}</Text>
+      {card.gate_flags?.length
+        ? card.gate_flags.map((flag, index) => (
+          <Text key={`${flag.gate}-${index}`} size={12}>{`${flag.gate}: ${flag.status} · ${flag.detail}`}</Text>
+        ))
+        : <Text size={12}>Recorded gates unavailable</Text>}
+    </section>
+  );
 }
 
 export default function Step6BacktestPage() {
@@ -86,6 +157,10 @@ export default function Step6BacktestPage() {
       <Text size={12} tone="caution">Unvalidated · Research only. Strategy validation is unavailable; automatic arming and broker sending are blocked. Score is a filter. The backtest gate below is historical per-symbol scan evidence, not strategy validation approval.</Text>
       {stockBasket.length > 0 && <button type="button" className={styles.actionBtn} onClick={() => setShowSendDialog(true)}>Send basket ({stockBasket.length})</button>}
     </div>
+    <details className={styles.pageExplanation}>
+      <summary>How this page works</summary>
+      One row per candidate. Expand a row for a short summary and the full position card. Open Position to review on Step 6.
+    </details>
     {/* react-jsx drops whitespace between elements; the label keeps the space so the region reads "Candidates 2". */}
     <section className={styles.summaryStrip} aria-label="Scan summary">
       <div className={styles.summaryItem}>
@@ -223,6 +298,15 @@ export default function Step6BacktestPage() {
                     <button type="button" className={styles.actionBtn} aria-expanded={open} aria-label={`Expand ${c.symbol}`} onClick={() => setOpenSymbol(open ? null : c.symbol)}>{open ? 'Collapse' : 'Expand'}</button>
                     <button type="button" className={styles.actionBtn} onClick={() => proceedWith(c.symbol)}>Open Position</button>
                   </div>
+                  {open && (
+                    <QuickSummary
+                      card={c}
+                      minTrades={minTrades}
+                      minWinRate={minWinRate}
+                      scanTimestamp={result?.timestamp}
+                      vetoDays={result?.veto_days}
+                    />
+                  )}
                   {open && (
                     <StockPositionCard
                       // See stockPositionCardKey's doc comment: an adversarial audit
