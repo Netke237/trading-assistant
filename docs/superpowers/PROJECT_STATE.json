@@ -3687,7 +3687,7 @@
           "verification": "Auditor reproduced each with real git and four non-clean plan subjects; all88newcases passed; independent second pass scope verified."
         }
       ],
-      "notes": "Code round1/continuous3: two numeric gate findings open; fresh implementer must fix suffix authorization and explicit target binding. Integrated old-source backend run stopped before source correction, not for slow endpoint behavior. Plan2clean preserved; no counter reset.",
+      "notes": "Code round1/continuous3: two numeric gate findings open; fresh implementer #307 fixes suffix authorization and explicit target binding. Prior-source integrated backend is still finishing and is superseded for post-fix proof; a fresh frozen post-fix full run is required. Plan2clean preserved; no counter reset.",
       "tickets": [
         300,
         301
