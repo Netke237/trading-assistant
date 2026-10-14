@@ -846,6 +846,167 @@ def _plan_stage(
     return rounds, None
 
 
+def _plan_stages(target, key, declared, state, subjects):
+    """Validate cumulative plan intervals; return a precise drift reason or None.
+
+    This path never changes persisted counters and never falls back to singular
+    metadata. Only recorded answers authorize each following interval.
+    """
+    stages = target['plan_stages']
+    if 'plan_stage' in target:
+        return 'simultaneous plan_stage and plan_stages are ambiguous'
+    if not isinstance(stages, list) or not stages:
+        return 'plan_stages must be a nonempty ordered array'
+    if declared is None:
+        return 'audit_rounds must be a valid whole number'
+    endpoints = []
+    total = 0
+    for stage in stages:
+        if not isinstance(stage, dict):
+            return 'each plan_stages entry must be an object'
+        n = stage.get('rounds')
+        if type(n) is not int or not 1 <= n <= UNPHASED_FAIL_ROUND:
+            return 'plan stage rounds must be an integer from 1 to 3'
+        total += n
+        endpoints.append(total)
+    if total > declared:
+        return 'plan stages sum exceeds declared audit_rounds'
+    if not isinstance(key, str) or not key.split():
+        return 'plan stages have no target token'
+    token = re.compile(r'(?<![\w-])' + re.escape(key.split()[0]) + r'(?![\w-])')
+    decisions = state.get('decisions')
+    openings = [None]
+    # Bound the declaration before unrelated later prose (including negation).
+    opening = re.compile(
+        r'\bopen(?:s|ed)?\b[^.;!?]*?\bnew\s+plan\s+stage\b'
+        r'[^.;!?]*?\bplan\s+rounds\s+(\d+)\s*[-–]\s*(\d+)\b', re.I)
+    negative = re.compile(r"\b(?:not|never|no|cannot|can\s+not|decline\w*|reject\w*|without)\b|n't\b", re.I)
+    for i in range(1, len(stages)):
+        ident = stages[i].get('opened_by')
+        matches = [d for d in decisions if isinstance(d, dict) and isinstance(ident, str)
+                   and d.get('id') == ident] if isinstance(decisions, list) else []
+        if len(matches) != 1:
+            return 'opened_by must identify a unique decision in decisions[]'
+        d = matches[0]
+        if not token.search(json.dumps(d, ensure_ascii=False)):
+            return 'opening decision does not name the target token'
+        answer = d.get('a')
+        if not isinstance(answer, str):
+            return 'opening declaration must be in decision a'
+        declarations = list(opening.finditer(answer))
+        if len(declarations) != 1:
+            return 'opening answer must contain exactly one bounded opening declaration'
+        match = declarations[0]
+        boundary = max(answer.rfind(c, 0, match.start()) for c in '.;!?') + 1
+        # Only recognized fire-call policy prose may follow a colon/dash outside
+        # the approval clause. Unknown suffixes fail closed, including indirect
+        # approval qualifications and chained separators.
+        following = re.search(r'[.;!?:]|\s--\s', answer[match.end():])
+        if following and (following[0] == ':' or '--' in following[0]):
+            suffix_start = match.end() + following.end()
+            # Validate the entire excluded tail, including chained punctuation.
+            # Only complete known policy controls qualify; a calls prefix cannot
+            # hide opening conditions, denials, owners or different round ranges.
+            policy = ' '.join(answer[suffix_start:].split()).casefold()
+            controls = ('fire calls never wait',
+                        'deadline-bound auto-trade fire-path tradier calls never wait')
+            accepted = {control + tail for control in controls
+                        for tail in ('', '.', '. not a merge approval.')}
+            accepted.add(
+                'deadline-bound auto-trade fire-path tradier calls '
+                '(regime fetch incl. intraday, earnings veto, market-open price check) '
+                'never wait and never fail on the limiter -- they take a slot if free, '
+                'otherwise go anyway and book an overdraft '
+                '(bucket negative, floored at -capacity 15); bulk traffic '
+                '(scans, prewarm, monitors, probes) waits until it is repaid, '
+                "so the average stays 120/min; the stock scan's earnings lookup "
+                'waits for its slot before its 5 s deadline starts. q3 yes: a burst '
+                'of at most 15 extra requests is accepted. q2 not needed. no counter '
+                'reset: plan rounds 1-3 stay recorded; the scan-slowdown merge question '
+                "stays pre-accepted ('ok go ahead', 2026-10-10). not a merge approval."
+            )
+            if policy not in accepted:
+                return 'opening declaration has an unsupported colon/dash qualification'
+        end = match.end() + following.start() if following else len(answer)
+        local = answer[boundary:end]
+        if (re.search(r'\b(?:should|could|would|might|may|whether|if)\b', local, re.I)
+                or (following and following[0] == '?')):
+            return 'opening declaration is conditional or interrogative, not affirmative'
+        if negative.search(local):
+            return 'opening declaration is locally negated'
+        # A question's target mention cannot override an explicitly qualified
+        # answer. Prefix qualifiers are bounded by the opening verb; suffix
+        # qualifiers name identifier tokens, not later prose about the redesign.
+        prefix = answer[boundary:match.start()]
+        qualifiers = re.findall(r'\bfor\s+([^,:]+)', prefix, re.I)
+        bare = re.fullmatch(r'\s*([\w-]+)\s*:\s*', prefix)
+        if bare:
+            qualifiers.append(bare[1])
+        # Identifier ownership is case-insensitive even before trailing prose.
+        # Article-led policy descriptions such as "for the overdraft redesign"
+        # do not name a bare owner identifier.
+        qualifiers += re.findall(
+            r'\bfor\s+(?!(?:the|a|an)\b)'
+            r'([\w-]+(?:\s+(?:or|and)\s+[\w-]+)*)\b',
+            answer[match.start():end], re.I)
+        question = d.get('q') if isinstance(d.get('q'), str) else ''
+        alternatives = re.findall(
+            token.pattern + r'\s+(?:or|and)\s+([\w-]+)', question, re.I)
+        alternatives += re.findall(
+            r'([\w-]+)\s+(?:or|and)\s+' + token.pattern, question, re.I)
+        # Also recognize the question's competing identifier in lower-case
+        # answer qualifiers, without treating ordinary redesign prose as an ID.
+        for name in [key.split()[0], *alternatives]:
+            if re.search(r'\bfor\s+(?:[\w-]+\s+(?:or|and)\s+)*'
+                         + re.escape(name) + r'(?![\w-])',
+                         answer[match.start():end], re.I):
+                qualifiers.append(name)
+        if any(q.strip().casefold() != key.split()[0].casefold() for q in qualifiers):
+            return 'opening declaration qualifies a conflicting or ambiguous target'
+        if alternatives and not qualifiers:
+            return 'opening declaration leaves competing question targets ambiguous'
+        start = endpoints[i - 1] + 1
+        if (int(match[1]), int(match[2])) != (start, start + 2):
+            return f'opening decision must authorize plan rounds {start}-{start + 2}'
+        openings.append(ident)
+    for i, stage in enumerate(stages):
+        closure = stage.get('closed_by')
+        if closure == 'clean':
+            proof = _clean_plan_round_re(endpoints[i])
+            evidence = [s for s in subjects if proof.search(s)]
+            # Opposing clean claims at this endpoint cannot certify closure.
+            relevant = [s for s in subjects if (endpoints[i], 'plan') in _staged_hits(s, total)]
+            if not any(not _NEGATION_RE.search(s) for s in evidence) or any(
+                    _NEGATION_RE.search(s) and re.search(r'\bclean\b', s, re.I) for s in relevant):
+                return f'no uncontradicted clean proof for plan round {endpoints[i]}'
+        elif i < len(stages) - 1:
+            if closure != openings[i + 1]:
+                return 'earlier stage must close clean or by the verified next opening decision'
+        elif 'closed_by' in stage:
+            return 'final plan stage cannot close by an unpaired acknowledgment decision'
+    closed = stages[-1].get('closed_by') == 'clean'
+    for subject in subjects:
+        for n, kind in _staged_hits(subject, total):
+            if kind == 'plan' and (n < 1 or n > total):
+                return f'explicit plan round {n} is outside recorded intervals'
+            if not closed and kind == 'code':
+                return 'code evidence is premature while final plan stage is open'
+            if not closed and kind is None and n > total:
+                return 'untagged continuous evidence exceeds open final plan endpoint'
+    if not closed:
+        previous = endpoints[-2] if len(stages) > 1 else 0
+        plan_max = max((n for s in subjects for n, kind in _staged_hits(s, total)
+                        if kind != 'code'), default=0)
+        if plan_max - previous >= UNPHASED_FAIL_ROUND:
+            return 'HARD CAP: open final plan stage reaches its third non-clean round'
+    else:
+        code_max = _stage_round_max(subjects, total)
+        if code_max > UNPHASED_FAIL_ROUND or (
+                code_max == UNPHASED_FAIL_ROUND and target.get('audit_clean') is not True):
+            return f'HARD CAP: code round {code_max}'
+    return None
+
+
 def _stage_round_max(subjects: list[str], plan_rounds: int) -> int:
     """The highest CODE-stage round these subjects reach, once the plan stage
     closed at `plan_rounds`, with stages as `_staged_hits` reads them: a code
@@ -985,6 +1146,10 @@ def audit_bookkeeping_drift(state: dict) -> tuple[str, str] | None:
             f"{label} -- the active target -- declares {declared}. "
             f"A round ran and was never written down — subjects: {shown}"
         )
+
+    if 'plan_stages' in target:
+        reason = _plan_stages(target, _target_identity(state)[1], declared, state, subjects)
+        return ('drift', f'Audit bookkeeping: {label}: invalid plan_stages: {reason}. Subjects: {shown}') if reason else None
 
     # THE HARD CAP ON THE RESOLVED PATH. It used to live only in the `target is
     # None` branch above, which made it effectively OPT-OUT: once a pointer
