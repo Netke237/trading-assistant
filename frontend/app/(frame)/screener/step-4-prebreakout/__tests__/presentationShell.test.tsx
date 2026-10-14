@@ -64,3 +64,12 @@ test('late metadata and rows never relabel a newer table snapshot',async()=>{
  expect(useScanStore.getState().preBreakoutResults[0].symbol).toBe('NEW');
  expect(scanSnapshot(useScanStore.getState().preBreakoutResults)?.scope.runId).toBe('NEW');
 });
+test('root container carries the integrated presentation v2 marker in every sub-mode',()=>{
+ const {container}=render(<Page/>);const root=container.firstElementChild;
+ for(const name of ['Pre-Breakout',/^Pullback to EMA/,'Fib Pullback']){
+  fireEvent.click(screen.getByRole('button',{name}));
+  expect(screen.getByRole('button',{name})).toHaveAttribute('aria-pressed','true');
+  expect(container.firstElementChild).toBe(root);
+  expect(root).toHaveAttribute('data-presentation','prebreakout-v2');
+ }
+});

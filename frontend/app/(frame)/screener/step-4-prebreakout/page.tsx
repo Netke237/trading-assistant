@@ -269,7 +269,7 @@ export default function Step4PreBreakoutPage() {
     : universeDisplayName(universePick);
 
   return (
-    <div className={styles.main}>
+    <div className={styles.main} data-presentation="prebreakout-v2">
       <div className={styles.header}>
         <Title as="h2" size={20}>Setup Scanner</Title>
         <Text size={13} tone="secondary">
