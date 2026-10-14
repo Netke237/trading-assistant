@@ -53,6 +53,7 @@ from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
 from app.routers.journal         import router as journal_router
+from app.routers.scan_reports    import router as scan_reports_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -138,6 +139,13 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task
+    # SQLite development bootstraps new additive tables; PostgreSQL uses Alembic.
+    # A bootstrap failure aborts startup visibly, never advertises a working log.
+    from app.database import engine
+    if engine.dialect.name == 'sqlite':
+        from app.models.scan_report import ScanReportBase
+        async with engine.begin() as conn:
+            await conn.run_sync(ScanReportBase.metadata.create_all)
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -159,6 +167,9 @@ async def lifespan(app: FastAPI):
         )
     except Exception as _exc:
         logger.warning("settings.yaml migration failed: %s", _exc)
+
+    from app.services.scan_report_lifecycle import recover_interrupted
+    await recover_interrupted()
 
     from app.routers.scan import restore_from_db
     from app.routers.stock_scan import restore_stock_from_db
@@ -361,9 +372,17 @@ async def request_validation_handler(request: Request, exc: RequestValidationErr
     client as a 500. Same status, same `detail` list, same loc/msg/type
     (lib/api.ts apiError reads loc and msg); only a non-finite value becomes
     its string."""
+    # Other errors (such as missing fields) can retain the whole rejected body.
+    # Strip every input before normalization/encoding when depth was refused.
+    errors = exc.errors()
+    if any(error.get("type") == "payload_depth" for error in errors):
+        errors = [
+            {key: value for key, value in error.items() if key != "input"}
+            for error in errors
+        ]
     return JSONResponse(
         status_code=422,
-        content={"detail": jsonable_encoder(_finite_or_str(exc.errors()))},
+        content={"detail": jsonable_encoder(_finite_or_str(errors))},
     )
 
 
@@ -391,6 +410,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Scan-Report-Run-Id", "X-Scan-Report-Generation", "X-Scan-Report-Persistence"],
     )
 
     app.include_router(health_router)
@@ -430,6 +450,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(scan_schedule_router)
     app.include_router(journal_router)
+    app.include_router(scan_reports_router)
 
     return app
 

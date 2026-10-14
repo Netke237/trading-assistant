@@ -503,8 +503,8 @@ def validate_contract(
     Args:
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
-                     Contracts are only recommended when stock_score >= 55
-                     (matches the stock `pass` bar in scoring_rules.yaml).
+                     The configured options floor defaults to 45, independently
+                     of the stock `pass` bar (55) in scoring_rules.yaml.
         overrides:   Optional dict of hard-reject and soft-rank overrides; the
                      keys read are _CONTRACT_OVERRIDES' (others are ignored).
         quote_mode:  What a row whose quote is not live does (NO-LIVE-QUOTE,

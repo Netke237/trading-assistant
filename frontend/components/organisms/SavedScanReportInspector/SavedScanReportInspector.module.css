@@ -1,0 +1,13 @@
+.container, .drawer { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); padding: 16px; }
+.container h2, .drawer h2 { font-size: 16px; margin: 0; }
+.actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.container pre, .drawer pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.container details, .drawer details { margin-top: 12px; }
+.backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg-surface) 70%, transparent); z-index: 100; }
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(680px, 95vw); overflow: auto; z-index: 101; }
+.terminal { border: 1px solid var(--border-subtle); padding: 12px; margin-top: 12px; }
+.terminal h4 { font-size: 14px; margin: 0 0 8px; }
+.terminal table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.terminal th, .terminal td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
+.counts { display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; margin: 8px 0; padding: 0; font-size: 12px; }
+.values { list-style: none; margin: 0; padding: 0; }

@@ -111,6 +111,9 @@ export interface OptionsPipeline {
 }
 
 export interface ScanResult {
+  report_run_id?: string | null;
+  report_generation?: number | null;
+  report_persistence?: 'saved' | 'unavailable' | null;
   scan_id: string;
   timestamp: string;
   candidates: TradeCardData[];
@@ -710,7 +713,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 18,
+       version: 19,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -872,6 +875,16 @@ export const useScanStore = create<ScanStoreState>()(
             scanResult: discardPreFullPremiumScanResult(s.scanResult),
             previousRun: discardPreFullPremiumScanResult(s.previousRun),
           };
+        }
+        if (version < 19) {
+          // Durable report linkage is additive. Preserve legacy evidence and
+          // mark unknown identities explicitly; never infer one from scan_id.
+          const withReportIdentity = (result: unknown): unknown => {
+            if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+            const value = result as Record<string, unknown>;
+            return {...value,report_run_id:value.report_run_id??null,report_generation:value.report_generation??null,report_persistence:value.report_persistence??null};
+          };
+          s = {...s,scanResult:withReportIdentity(s.scanResult),previousRun:withReportIdentity(s.previousRun),stockScanResult:withReportIdentity(s.stockScanResult),previousStockScanResult:withReportIdentity(s.previousStockScanResult)};
         }
         return s;
       },

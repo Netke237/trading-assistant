@@ -16,6 +16,17 @@ from fastapi.testclient import TestClient
 from app.schemas import ScanResult
 
 
+@pytest.fixture(autouse=True)
+def _quiet_stock_benchmark_for_state_tests(monkeypatch):
+    # This module verifies globals, dispatch and persistence, with an empty
+    # stock universe. It does not measure SPY data or benchmark arithmetic.
+    from unittest.mock import AsyncMock
+    import app.routers.stock_scan as stock
+    monkeypatch.setattr(stock, "get_historical_bars", AsyncMock(return_value=[]))
+    monkeypatch.setattr(stock, "fetch_quotes", lambda symbols: {})
+    monkeypatch.setattr(stock, "_rs_benchmark_candles", AsyncMock(return_value=None))
+
+
 @pytest.fixture
 def stock_client():
     """Minimal TestClient wiring only the stock-scan router — mirrors the

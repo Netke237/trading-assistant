@@ -266,6 +266,9 @@ async def test_persisted_request_is_the_one_this_scan_ran(monkeypatch):
                        iv_abs_threshold=62.5)
     theirs = ScanRequest(universe=["MSFT"], direction="Bearish", horizon="Swing",
                          iv_abs_threshold=30.0)
+    async def reported_callback(request, *, callback, **kwargs):
+        return await callback()
+    monkeypatch.setattr(scan_module, "run_reported_scan", reported_callback)
     my_result = SimpleNamespace(scan_id="REC-MINE",
                                 candidates=[SimpleNamespace(finalStatus="PASS")])
 

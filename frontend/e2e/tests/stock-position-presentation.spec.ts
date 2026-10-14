@@ -58,9 +58,9 @@ function makePlan(overrides: Partial<StockExitPlan> = {}): StockExitPlan {
 
 
 
-const candidate = (symbol = 'AAPL') => ({
-  symbol, company: symbol === 'AAPL' ? 'Apple Inc.' : 'Microsoft Corporation', price: 150, direction: 'Bullish',
-  strategy: { strategy: 'pullback_ema', entry_price: 150, stop_price: 145, target_price: 160, targets: [160, 165, 170], rr_ratio: 2, atr: 3, detail: {} },
+const candidate = (symbol = 'AAPL', direction: 'Bullish' | 'Bearish' = 'Bullish') => ({
+  symbol, company: symbol === 'AAPL' ? 'Apple Inc.' : 'Microsoft Corporation', price: 150, direction,
+  strategy: { strategy: 'pullback_ema', entry_price: 150, stop_price: direction === 'Bullish' ? 145 : 155, target_price: direction === 'Bullish' ? 160 : 140, targets: direction === 'Bullish' ? [160, 165, 170] : [140, 135, 130], rr_ratio: 2, atr: 3, detail: {} },
   backtest: { n_trades: 20, win_rate: .6, total_return_pct: 12, max_drawdown_pct: 5, expectancy: .4, sharpe: 1.2, confidence: 70, passes_gate: true, summary_text: 'Recorded backtest' },
   sentiment: { horizon: 'Swing', timeframe: 'daily', state: 'Bullish', p_stay: .8, stability: 'Stable', regime_age_days: 3, avg_regime_duration: 8, conviction_pct: 25, conviction_label: 'Bullish', interpretation: 'Recorded sentiment', alignment: 'Aligned' },
   fundamentals: { score: 72, quality_label: 'Strong', risk_label: 'Low', growth_score: 70, quality_score: 75, risk_score: 68, safety_flags: [], detail: {} },
@@ -68,7 +68,17 @@ const candidate = (symbol = 'AAPL') => ({
   stock_explanation: { status: 'PASS', components: Object.fromEntries(['trend', 'pullback', 'trigger', 'event', 'volatility'].map(name => [name, { name, raw_score: 80, measured: true, weight: .2, contribution: 16 }])) },
 });
 
-for (const width of [1200, 1920]) test(`Position workspace preserves save payload at ${width}px`, async ({ page }, testInfo) => {
+for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const) for (const direction of ['Bullish', 'Bearish'] as const) test(`Position workspace preserves ${direction} save payload at ${width}px in ${theme}`, async ({ page }, testInfo) => {
+  const bullish = direction === 'Bullish';
+  const stockTarget = bullish ? 160 : 140;
+  const executionStop = bullish ? 145 : 155;
+  const plan = makePlan();
+  if (!bullish) {
+    plan.stop = { ...plan.stop, price: 156, structuralSource: 'swing_high', structuralPrice: 153, atrFloorPrice: 156 };
+    plan.targets = plan.targets.map((row, i) => ({ ...row, price: i === 0 ? 138 : 130, arithmeticPrice: i === 0 ? 138 : 132, structuralPrice: 130 }));
+    plan.race = plan.race ? { ...plan.race, stopPrice: 156, outcomes: plan.race.outcomes.map((row, i) => ({ ...row, targetPrice: i === 0 ? 138 : 130, terminalMean: 148 })) } : null;
+  }
+  plan.targets[0].expectedDays = 7.5;
   test.setTimeout(90_000);
   await page.setViewportSize({ width, height: 1080 });
   const saves: Record<string, unknown>[] = [];
@@ -82,43 +92,64 @@ for (const width of [1200, 1920]) test(`Position workspace preserves save payloa
     const url = route.request().url();
     if (url.endsWith('/api/portfolio')) return route.fallback();
     if (url.includes('/quote')) return route.fulfill({ json: { price: 151 } });
-    if (url.includes('exit-plan')) return route.fulfill({ json: makePlan() });
-    if (url.includes('first-passage')) return route.fulfill({ json: { targets: [{ price: 160, probability: .62, expectedDays: 4 }], invalidation: { probability: .28, expectedDays: 6 }, horizonDays: 10, modelCaveat: 'Mock model evidence' } });
+    if (url.includes('exit-plan')) return route.fulfill({ json: plan });
+    if (url.includes('first-passage')) return route.fulfill({ json: { targets: [{ price: stockTarget, probability: .62, expectedDays: 4.5 }], invalidation: { probability: .28, expectedDays: 6 }, horizonDays: 10, modelCaveat: 'Mock model evidence' } });
+    if (route.request().method() !== 'GET') return route.fulfill({ status: 500, json: { detail: 'Unexpected test mutation' } });
     return route.fallback();
   });
-  await page.addInitScript(({ cards }) => {
-    localStorage.setItem('bamendjou-scan-store', JSON.stringify({ version: 18, state: {
+  await page.addInitScript(({ cards, theme, direction }) => {
+    localStorage.setItem('bamendjou:theme', JSON.stringify({ version: 0, state: { theme } }));
+    localStorage.setItem('bamendjou-scan-store', JSON.stringify({ version: 19, state: {
       screenerMode: 'stocks', selectedSymbol: 'AAPL', stockScanResult: { scan_id: 'position-browser', timestamp: new Date().toISOString(), candidates: cards, rejected: [] },
-      stockScanRequest: { bt_min_trades: 20, bt_min_win_rate: .5 }, context: { direction: 'Bullish', horizon: 'Swing (5–15d)', holdMin: 5, holdMax: 15 }, scanState: 'COMPLETED',
+      stockScanRequest: { bt_min_trades: 20, bt_min_win_rate: .5, horizon: 'Swing' }, context: { direction, horizon: 'Swing (5–15d)', holdMin: 5, holdMax: 15 }, scanState: 'COMPLETED',
     } }));
-  }, { cards: [candidate(), candidate('MSFT')] });
+  }, { cards: [candidate('AAPL', direction), candidate('MSFT', direction)], theme, direction });
   await page.goto('/screener/step-7-position-card');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
   await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible();
   await expect(page.getByText('Final verdict: CAUTION')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Backtest evidence' }).getByText('70%', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('Microsoft Corporation')).toBeVisible();
   await page.getByRole('button', { name: 'Prev', exact: true }).click();
-  await page.getByText('How this page works', { exact: true }).click();
-  await page.getByText('Auto-trade execution', { exact: true }).click();
+  await page.getByText('How this page works', { exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByText('Auto-trade execution', { exact: true }).focus();
+  await page.keyboard.press('Enter');
   await expect(page.getByText('Auto-trade mode', { exact: true })).toBeVisible();
-  await page.getByText('Auto-trade execution', { exact: true }).click();
+  await page.getByText('Auto-trade execution', { exact: true }).focus();
+  await page.keyboard.press('Enter');
   await page.getByRole('link', { name: 'Calculations', exact: true }).click();
   await page.getByRole('button', { name: 'Estimate', exact: true }).click();
   await expect(page.getByText('Latest: Monte Carlo')).toBeVisible();
   await page.getByRole('button', { name: 'Arithmetic plan', exact: true }).click();
   await expect(page.getByText('Latest: Arithmetic')).toBeVisible();
-  await page.getByRole('radio', { name: 'Ladder', exact: true }).check();
+  const summary = page.getByRole('region', { name: 'Selected stock plan' });
+  await page.getByRole('radio', { name: 'Arithmetic', exact: true }).click();
+  await page.getByRole('radio', { name: '2R', exact: true }).click();
+  await expect(summary).toContainText('$360.00');
+  await expect(summary).toContainText('7.5 trading days');
+  await expect(summary).toContainText('Arithmetic final stop');
+  await expect(page.getByRole('region', { name: 'Entered execution stop' })).toContainText(`$${executionStop.toFixed(2)}`);
+  await page.getByRole('radio', { name: 'Ladder', exact: true }).click();
+  await expect(summary).toContainText('Choose a target');
+  await page.getByRole('radio', { name: 'T1', exact: true }).click();
+  await expect(summary).toContainText(`$${stockTarget.toFixed(2)}`);
+  await expect(summary).toContainText('$300.00');
+  await summary.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-decision.png`) });
+  await page.getByRole('region', { name: 'Structure & Stops' }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-stops.png`) });
   await page.getByRole('button', { name: 'Add to Portfolio', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Added to Portfolio' })).toBeVisible();
   expect(saves).toHaveLength(1);
-  expect(saves[0]).toMatchObject({ symbol: 'AAPL', qty: 30, entryPrice: 150, stop: 145, pickedMethod: 'ladder' });
-  expect(saves[0].targets).toEqual([160, 165, 170].map((price, i) => ({ id: `T${i + 1}`, stockPrice: price, targetPrice: price, contractsToSell: 10, status: 'PENDING' })));
+  expect(saves[0]).toMatchObject({ symbol: 'AAPL', qty: 30, entryPrice: 150, stop: executionStop, pickedMethod: 'ladder', pickedRowStockPrice: stockTarget });
+  expect(saves[0].targets).toEqual((bullish ? [160, 165, 170] : [140, 135, 130]).map((price, i) => ({ id: `T${i + 1}`, stockPrice: price, targetPrice: price, contractsToSell: 10, status: 'PENDING' })));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => document.querySelectorAll('*').forEach(el => { el.scrollTop = 0; }));
-  await page.screenshot({ path: testInfo.outputPath(`position-${width}.png`), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}.png`), fullPage: true });
   await page.getByRole('link', { name: 'Which comes first', exact: true }).click();
-  await page.screenshot({ path: testInfo.outputPath(`position-${width}-calculations.png`), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-calculations.png`), fullPage: true });
   await page.getByRole('link', { name: 'Qualification', exact: true }).click();
-  await page.screenshot({ path: testInfo.outputPath(`position-${width}-qualification.png`), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-qualification.png`), fullPage: true });
 });

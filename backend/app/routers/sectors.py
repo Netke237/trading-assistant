@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter
 from app.schemas import IndexChangeTile, SectorTile
-from app.data.market import get_tradier_creds, _fetch_daily_yf
+from app.data.market import get_tradier_creds, _fetch_daily_yf, _tradier_get_async
 from app.data.sector_names import NORMALIZE
 # The ONE curated ETF set (app/data/etfs.py) owns these lists, so the D4
 # earnings rule and the sector/index tiles cannot drift apart.
@@ -103,7 +103,8 @@ async def _fetch_etf_change(client: httpx.AsyncClient, etf: str) -> tuple[str, f
     try:
         end = date.today()
         start = end - timedelta(days=14)  # 14 calendar days → ~10 trading days
-        resp = await client.get(
+        resp = await _tradier_get_async(
+            client,
             f"{get_tradier_creds()[1]}/v1/markets/history",
             params={
                 "symbol": etf,

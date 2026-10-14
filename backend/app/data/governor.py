@@ -6,13 +6,22 @@ import threading
 
 
 class TokenBucket:
-    """Async token-bucket rate limiter.
+    """Token-bucket rate limiter shared by async and sync callers.
 
-    Refills `rate` tokens every `per` seconds, up to `capacity`. `acquire()`
-    blocks until a token is available, so callers are admitted at most as fast
-    as the configured rate. Admission is serialized by an internal lock, which
-    is what makes strict per-provider pacing possible.
+    Refills `rate` tokens every `per` seconds, up to `capacity`. Waiting
+    callers (async `acquire`, sync `acquire_blocking`) are admitted strictly
+    first-come-first-served through one ticket queue guarded by the internal
+    lock: a caller takes tokens only when its ticket is at the head of the
+    queue and enough tokens are available, so neither kind of waiter can
+    starve the other. `try_acquire` never waits and succeeds only when nobody
+    is queued. `overdraft` never waits either: it books a token even on an
+    empty bucket, flooring the balance at `-capacity`, and the queue then
+    repays the debt from the normal refill (the head needs `_tokens >= n`).
     """
+
+    # Floor on a waiter's poll interval, so a waiter behind a head that is
+    # about to be admitted re-checks without spinning.
+    _MIN_POLL = 0.002
 
     def __init__(self, rate: float, per: float = 1.0, capacity: float | None = None) -> None:
         self.rate = float(rate)
@@ -21,30 +30,106 @@ class TokenBucket:
         self._tokens = self.capacity
         self._updated = time.monotonic()
         self._lock = threading.Lock()
+        # FIFO ticket queue (all fields guarded by _lock).
+        self._next_ticket = 0
+        self._serving = 0
+        self._abandoned: set[int] = set()
 
     def _refill(self) -> None:
         now = time.monotonic()
         self._tokens = min(self.capacity, self._tokens + (now - self._updated) * (self.rate / self.per))
         self._updated = now
 
-    def try_acquire(self, tokens: float = 1.0) -> bool:
-        """Non-blocking admission sharing the async callers' token budget."""
+    # -- queue helpers (caller holds _lock) ------------------------------
+    def _skip_abandoned(self) -> None:
+        while self._serving in self._abandoned:
+            self._abandoned.discard(self._serving)
+            self._serving += 1
+
+    def _take_ticket(self) -> int:
+        with self._lock:
+            ticket = self._next_ticket
+            self._next_ticket += 1
+            return ticket
+
+    def _try_admit(self, ticket: int, tokens: float) -> tuple[bool, float]:
+        """Admit `ticket` if it is the head and enough tokens are free.
+        Otherwise return how long to sleep before re-checking."""
         with self._lock:
             self._refill()
-            if self._tokens < tokens:
+            self._skip_abandoned()
+            if ticket == self._serving and self._tokens >= tokens:
+                self._tokens -= tokens
+                self._serving += 1
+                self._skip_abandoned()
+                return True, 0.0
+            ahead = ticket - self._serving - sum(
+                1 for t in self._abandoned if self._serving < t < ticket
+            )
+            delay = (ahead + tokens - self._tokens) * (self.per / self.rate)
+            return False, max(delay, self._MIN_POLL)
+
+    def _abandon(self, ticket: int) -> None:
+        with self._lock:
+            if ticket == self._serving:
+                self._serving += 1
+                self._skip_abandoned()
+            elif ticket > self._serving:
+                self._abandoned.add(ticket)
+
+    # -- admission -------------------------------------------------------
+    def try_acquire(self, tokens: float = 1.0) -> bool:
+        """Non-blocking admission sharing the waiting callers' token budget.
+        Refuses while anyone is queued, so it never jumps the queue."""
+        with self._lock:
+            self._refill()
+            self._skip_abandoned()
+            if self._serving != self._next_ticket or self._tokens < tokens:
                 return False
             self._tokens -= tokens
             return True
 
+    def overdraft(self, tokens: float = 1.0) -> None:
+        """Book `tokens` without waiting, even on an empty bucket. The balance
+        never goes below `-capacity`. Bypasses the queue by design."""
+        with self._lock:
+            self._refill()
+            self._tokens = max(self._tokens - tokens, -self.capacity)
+
     async def acquire(self, tokens: float = 1.0) -> None:
-        while True:
-            with self._lock:
-                self._refill()
-                if self._tokens >= tokens:
-                    self._tokens -= tokens
+        ticket = self._take_ticket()
+        admitted = False
+        try:
+            while True:
+                admitted, delay = self._try_admit(ticket, tokens)
+                if admitted:
                     return
-                delay = (tokens - self._tokens) * (self.per / self.rate)
-            await asyncio.sleep(delay)
+                await asyncio.sleep(delay)
+        finally:
+            if not admitted:
+                self._abandon(ticket)
+
+    def acquire_blocking(self, tokens: float = 1.0, *, admit_timeout: float | None) -> bool:
+        """Sync counterpart of `acquire`: sleeps the thread in the same FIFO
+        queue until admitted (True) or until `admit_timeout` seconds elapse
+        (False). `admit_timeout=None` waits without limit."""
+        deadline = None if admit_timeout is None else time.monotonic() + admit_timeout
+        ticket = self._take_ticket()
+        admitted = False
+        try:
+            while True:
+                admitted, delay = self._try_admit(ticket, tokens)
+                if admitted:
+                    return True
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        return False
+                    delay = min(delay, remaining)
+                time.sleep(delay)
+        finally:
+            if not admitted:
+                self._abandon(ticket)
 
 
 class CircuitBreaker:
@@ -201,6 +286,83 @@ class Governor:
         ps.breaker.record_failure()
         ps.status = "degraded"
 
+    def note_rate_limited(self, provider: str, retry_after: float | None) -> None:
+        """Record a 429: every caller (sync or async) honours the cooldown."""
+        ps = self._providers.get(provider)
+        if ps is None:
+            return
+        delay = retry_after or backoff_delay(0)
+        ps.retry_at = max(ps.retry_at, time.monotonic() + delay)
+        ps.status = "degraded"
+
+    def admit_sync(
+        self, provider: str, *, admit_timeout: float | None, overdraft: bool = False,
+    ) -> bool:
+        """Blocking admission for sync callers.
+
+        `admit_timeout` is an admission budget in seconds (or None = no
+        limit), never an HTTP timeout. With `overdraft=True` the caller never
+        waits: it is refused at once during a 429 cooldown, otherwise it books
+        a token (the bucket may go negative) and is admitted."""
+        ps = self._providers.get(provider)
+        if ps is None or ps.breaker.is_open:
+            return False
+        if overdraft:
+            if ps.retry_at > time.monotonic():
+                return False
+            ps.bucket.overdraft()
+            return True
+
+        deadline = None if admit_timeout is None else time.monotonic() + admit_timeout
+
+        def _wait_out_cooldown() -> bool:
+            while True:
+                now = time.monotonic()
+                wait = ps.retry_at - now
+                if wait <= 0:
+                    return True
+                if deadline is not None and now + wait > deadline:
+                    return False
+                time.sleep(wait)
+
+        if not _wait_out_cooldown():
+            return False
+        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+        if not ps.bucket.acquire_blocking(admit_timeout=remaining):
+            return False
+        # A 429 may have landed while this caller was queued.
+        if not _wait_out_cooldown():
+            return False
+        return not ps.breaker.is_open
+
+    async def call_overdraft(self, provider: str, coro_factory: Callable[[], Awaitable[T]]) -> T:
+        """Async fire-path call: never waits on the bucket. Refused at once
+        (RateLimited, nothing sent) during a 429 cooldown; otherwise books an
+        overdraft token and makes exactly one attempt, never retrying."""
+        ps = self._providers.get(provider)
+        if ps is None:
+            raise ProviderUnavailable(f"provider '{provider}' not registered")
+        if ps.breaker.is_open:
+            ps.status = "degraded"
+            raise ProviderUnavailable(f"{provider} circuit open")
+        remaining = ps.retry_at - time.monotonic()
+        if remaining > 0:
+            raise RateLimited(f"{provider} rate-limit cooldown active", retry_after=remaining)
+        ps.bucket.overdraft()
+        try:
+            result = await coro_factory()
+        except RateLimited as exc:
+            self.note_rate_limited(provider, exc.retry_after)
+            ps.breaker.record_failure()
+            raise
+        except Exception:
+            ps.breaker.record_failure()
+            ps.status = "down"
+            raise
+        ps.breaker.record_success()
+        ps.status = "connected"
+        return result
+
     async def call(
         self,
         provider: str,
@@ -234,10 +396,9 @@ class Governor:
                 ps.status = "connected"
                 return result
             except RateLimited as exc:
-                ps.status = "degraded"
                 ps.breaker.record_failure()
                 delay = exc.retry_after if exc.retry_after is not None else backoff_delay(attempt)
-                ps.retry_at = max(ps.retry_at, time.monotonic() + delay)
+                self.note_rate_limited(provider, delay)
                 if attempt >= retries:
                     logger.warning("%s rate-limited, retries exhausted", provider)
                     raise
@@ -261,7 +422,14 @@ def build_default_governor() -> Governor:
 
     providers = {
         "alpaca":   _state("alpaca",   rate=200 / 60, capacity=20),
-        "tradier":  _state("tradier",  rate=120 / 60, capacity=15),
+        # fail=10**9: the breaker never trips for Tradier (TRADIER-GOVERNOR
+        # D2). A trip would fail every Tradier call fast for 60 s after a few
+        # failures, dropping scan symbols for a whole minute; pacing, the
+        # overdraft and the shared 429 cooldown are the whole protection.
+        "tradier":  _state("tradier",  rate=120 / 60, capacity=15, fail=10**9),
+        # The paper sandbox account is rate-limited separately from live.
+        # 60/min is a conservative assumption (plan §5); same no-trip breaker.
+        "tradier_paper": _state("tradier_paper", rate=60 / 60, capacity=5, fail=10**9),
         "tiingo":   _state("tiingo",   rate=1 / 72,  capacity=2,
                            budget=SymbolBudget(max_symbols=50, window=3600.0)),
         "yfinance": _state("yfinance", rate=2,        capacity=2),

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { Title, Text, Data } from '@/components/primitives';
 import { WatchStar } from '@/components/atoms/WatchStar';
 import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api } from '@/lib/api';
-import type { PositionCardData } from '@/types/stockDomain';
+import type { PositionCardData, PreBreakoutResultRow } from '@/types/stockDomain';
 import { CompositeAlertDialog } from '@/components/organisms/CompositeAlertDialog';
 import {
   PreBreakoutParamsPanel,
@@ -23,32 +24,16 @@ import { _horizonEnum } from '@/lib/analysisStore';
 import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
 import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
+import { SelectedRowEvidence, fibLabel, confidenceWeights } from './PreBreakoutRowDetails';
+import { SelectedSetupChart } from './SelectedSetupChart';
+import {useSelectedStockContext, SelectedSentimentFundamentals, SelectedStockScores} from './SelectedStockContext';
+import {SelectedStockNews} from './SelectedStockNews';
+import { fmtThreshold, truncPreBreakoutInts, truncFibInts, rememberScan, scanSnapshot, type ScanSnapshot } from './scanThresholds';
+import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
 
-type ScanRowMetrics = {
-  atr_ratio?: number;
-  range_ratio?: number;
-  vol_ratio?: number;
-  proximity_pct?: number;
-  swing_level?: number;
-  current_atr?: number;
-  fib_at_level?: boolean;
-  fib_level_hit?: string | null;
-  fib_dist_pct?: number | null;
-  [key: string]: number | boolean | string | null | undefined;
-};
-type ScanRow = { symbol: string; confidence: number; direction: string; metrics: ScanRowMetrics };
 type ScanMode = 'prebreakout' | 'pullback' | 'fib';
-
-type FibScanRow = {
-  symbol: string;
-  direction: string;
-  fib_level_hit: string;
-  fib_dist_pct: number | null;
-  at_level: boolean;
-  confidence: number;
-};
-
+const MODE_LABELS: Record<ScanMode, string> = { prebreakout: 'Pre-Breakout', pullback: 'Pullback', fib: 'Fib Pullback' };
 const SECTOR_LABELS: Record<string, string> = {
   'SECTOR:XLK': 'Technology',
   'SECTOR:XLC': 'Communication Services',
@@ -90,6 +75,7 @@ export default function Step4PreBreakoutPage() {
   const customRaw    = useUniverseStore((s) => s.customRaw);
 
   const [symbolOverride, setSymbolOverride] = useState('');
+  const [tableRunIds, setTableRunIds] = useState<Partial<Record<ScanMode,string | null>>>({});
   const [scanMode, setScanMode]             = useState<ScanMode>('prebreakout');
   const [params, setParams]                 = useState<PreBreakoutParams>({ ...PREBREAKOUT_DEFAULTS });
   const [fibParams, setFibParams]           = useState<FibPullbackParams>({ ...FIB_PULLBACK_DEFAULTS });
@@ -99,7 +85,10 @@ export default function Step4PreBreakoutPage() {
   const [pullbackResults, setPullbackResults] = useState<PositionCardData[]>([]);
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
-  const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
+  const [alertTarget, setAlertTarget] = useState<{symbol: string; direction: string} | null>(null);
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const requestToken = useRef(0);
   const isFirstRender                       = useRef(true);
 
   useEffect(() => {
@@ -107,10 +96,16 @@ export default function Step4PreBreakoutPage() {
       isFirstRender.current = false;
       return;
     }
+    requestToken.current += 1;
+    setScanning(false);
+    setTableRunIds({});
     setResults([]);
     setFibResults([]);
     setPullbackResults([]);
   }, [params, fibParams, pullbackEmaParams, universePick, direction, setResults, setFibResults]);
+
+  useEffect(() => { requestToken.current += 1; setScanning(false); }, [scanMode, symbolOverride, customRaw, context?.horizon]);
+  useEffect(() => () => { requestToken.current += 1; }, []);
 
   const runScan = useCallback(async () => {
     const manualSymbols = parseSymbols(symbolOverride);
@@ -142,6 +137,14 @@ export default function Step4PreBreakoutPage() {
       return;
     }
 
+    const token = ++requestToken.current;
+    let runId: string | null = null;
+    const snapshot: ScanSnapshot = {
+      scope: Object.freeze({mode: scanMode, direction, horizon: context?.horizon, symbols: Object.freeze([...symbols]), universe: universe ? Object.freeze([...universe]) : undefined, runId: null}),
+      pre: truncPreBreakoutInts(params), fib: truncFibInts(fibParams),
+      pullback: {emaPeriod: Math.trunc(pullbackEmaParams.emaPeriod), trendEma: Math.trunc(pullbackEmaParams.trendEma)},
+    };
+    const remember = (rows: object) => rememberScan(rows, {...snapshot, scope: Object.freeze({...snapshot.scope, runId})});
     setError(null);
     setScanning(true);
     try {
@@ -152,6 +155,7 @@ export default function Step4PreBreakoutPage() {
         // camelCase result. Throws ScanSizingError on 0%; the catch shows it.
         const sizing = scanSizingFromRisk();
         const result = await api.postStockScan({
+          category: 'pullback',
           universe: universe ?? symbols,
           direction,
           horizon: _horizonEnum(context?.horizon),
@@ -161,6 +165,10 @@ export default function Step4PreBreakoutPage() {
           account_size: sizing.accountSize,
           risk_pct: sizing.riskPct,
         });
+        if (token !== requestToken.current) return;
+        runId = result.report_run_id ?? null;
+        remember(result.candidates);
+        setTableRunIds(ids=>({...ids,pullback:result.report_run_id}));
         setPullbackResults(result.candidates);
       } else if (scanMode === 'fib') {
         const results = await api.fibPullbackScan(
@@ -168,12 +176,16 @@ export default function Step4PreBreakoutPage() {
           direction,
           {
             fib_swing_lookback: fibParams.fibSwingLookback,
-            fib_levels: fibParams.fibLevels,
+            fib_levels: [...fibParams.fibLevels],
             fib_tolerance_pct: fibParams.fibTolerancePct,
             ema_filter_period: fibParams.emaFilterPeriod,
           },
           universe,
+          metadata => { runId = metadata.run_id; },
         );
+        if (token !== requestToken.current) return;
+        remember(results);
+        setTableRunIds(ids=>({...ids,fib:runId}));
         setFibResults(results);
       } else {
         const paramsOverride: Record<string, unknown> = {
@@ -185,17 +197,70 @@ export default function Step4PreBreakoutPage() {
           resistance_proximity_pct: params.resistanceProximityPct,
           swing_lookback:           params.swingLookback,
         };
-        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe);
+        const results = await api.prebreakoutScan(symbols, direction, paramsOverride, universe, metadata => { runId = metadata.run_id; });
+        if (token !== requestToken.current) return;
+        remember(results);
+        setTableRunIds(ids=>({...ids,prebreakout:runId}));
         setResults(results);
       }
     } catch (e) {
-      setError((e as Error).message);
+      if (token === requestToken.current) setError((e as Error).message);
     } finally {
-      setScanning(false);
+      if (token === requestToken.current) setScanning(false);
     }
   }, [scanMode, symbolOverride, universePick, customRaw, direction, params, fibParams, context?.horizon, pullbackEmaParams.emaPeriod, pullbackEmaParams.trendEma, setResults, setFibResults]);
 
-  const sorted: ScanRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
+  const inspectionRisk = useRiskStore(s=>s.limits);
+  const inspectionWatchlist = useWatchlistStore(s=>s.added);
+  const manualSymbols = parseSymbols(symbolOverride);
+  const inspectionSymbols = manualSymbols.length ? manualSymbols : universePick === 'Custom' ? parseSymbols(customRaw) : universePick === 'Watchlist' ? inspectionWatchlist : [];
+  const inspectionUniverse = inspectionSymbols.length || universePick === 'Custom' || universePick === 'Watchlist' ? null : [universePick];
+  const inspectionInputs = scanMode === 'pullback' ? {universe:inspectionUniverse??inspectionSymbols,direction,horizon:_horizonEnum(context?.horizon),strategy:'pullback_ema',pullback_ema_period:pullbackEmaParams.emaPeriod,pullback_trend_ema:pullbackEmaParams.trendEma,account_size:inspectionRisk.portfolioValue,risk_pct:inspectionRisk.maxLossPerTradePct} : {symbols:inspectionSymbols,universe:inspectionUniverse,direction,params_override:scanMode==='fib'?{fib_swing_lookback:fibParams.fibSwingLookback,fib_levels:fibParams.fibLevels,fib_tolerance_pct:fibParams.fibTolerancePct,ema_filter_period:fibParams.emaFilterPeriod}:{atr_compression_ratio:params.atrCompressionRatio,atr_avg_lookback:params.atrAvgLookback,range_atr_mult:params.rangeAtrMult,range_lookback_bars:params.rangeLookbackBars,vol_compression_ratio:params.volCompressionRatio,resistance_proximity_pct:params.resistanceProximityPct,swing_lookback:params.swingLookback}};
+  const sorted: PreBreakoutResultRow[] = [...preResults].sort((a, b) => b.confidence - a.confidence);
+
+  const activeRows = scanMode === 'prebreakout' ? sorted : scanMode === 'fib' ? fibResults : pullbackResults;
+  const sourceRows = scanMode === 'prebreakout' ? preResults : scanMode === 'fib' ? fibResults : pullbackResults;
+  const applied = scanSnapshot(sourceRows);
+  const preApplied = scanSnapshot(preResults)?.pre;
+  const fibApplied = scanSnapshot(fibResults)?.fib;
+  const selected = activeRows.find(row => row.symbol === selectedSymbol) ?? null;
+  const selectedContext = useSelectedStockContext(selected, scanMode, sourceRows, applied);
+  useEffect(() => { setSelectedSymbol(null); }, [scanMode]);
+  useEffect(() => { if (!activeRows.some(row => row.symbol === selectedSymbol)) setSelectedSymbol(null); }, [activeRows, selectedSymbol]);
+  const selectionProps = (symbol: string) => ({
+    role: 'button' as const, tabIndex: 0, 'aria-label': `Select ${symbol}`, 'aria-pressed': selectedSymbol === symbol,
+    onClick: (event: React.MouseEvent) => { if (!(event.target as HTMLElement).closest('button')) setSelectedSymbol(symbol); },
+    onKeyDown: (event: React.KeyboardEvent) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSymbol(symbol); } },
+  });
+  const identity = (row: {symbol: string; company?: string}) => <div className={styles.identity} aria-label={`Identity for ${row.symbol}`} onClick={event => event.stopPropagation()}>
+    <WatchStar symbol={row.symbol} size="sm" />
+    <button type="button" className={styles.chartBtn} title="Open in Chart" aria-label={`Open ${row.symbol} chart in a new tab`} onClick={() => window.open(`/chart?symbol=${encodeURIComponent(row.symbol)}`, '_blank')}>↗</button>
+    <div className={styles.identityText} onClick={() => setSelectedSymbol(row.symbol)}><Text size={13} weight={500}>{row.symbol}</Text><Text size={11} tone="dim">{row.company || (selectedContext.live?.data.symbol===row.symbol ? selectedContext.live.data.company : null) || 'Company unavailable'}</Text></div>
+  </div>;
+  const chartShell = <section className={styles.chartShell} role="region" aria-label="Selected setup chart">
+    <Title as="h2" size={20}>Selected setup</Title>
+    <div aria-label="Selected setup"><Text size={13} tone="secondary">{selected?.symbol ?? 'Select a candidate'}</Text></div>
+    {selected ? <SelectedSetupChart row={selected} mode={scanMode} scope={sourceRows} snapshot={applied}/> : <Text size={12} tone="dim">Select a row to inspect its chart.</Text>}
+    {selected && <SelectedRowEvidence row={selected} mode={scanMode} scanned={applied} />}
+    {selected && <Text size={11} tone="dim">{applied ? `${applied.scope.direction} · ${applied.scope.horizon ?? 'Horizon unavailable'} · ${applied.scope.mode}` : 'Scan snapshot unavailable'}</Text>}
+  </section>;
+
+  // Filter breakdown beside each mode's candidates heading. It opens the saved run report
+  // for the current sub-mode's category (the former "Analysis log"); toggling only shows or
+  // hides it, so scan controls, rows and selection are untouched. Kept mounted while hidden.
+  const tableRunId = tableRunIds[scanMode] ?? null;
+  const resultsHeading = <div className={styles.resultsHeading}>
+    <div className={styles.resultsHeadingRow}>
+      <Title as="h2" size={20}>{MODE_LABELS[scanMode]} candidates</Title>
+      <button type="button" className={styles.breakdownBtn} aria-expanded={breakdownOpen} aria-controls="prebreakout-filter-breakdown" onClick={() => setBreakdownOpen(open => !open)}>Filter breakdown</button>
+    </div>
+    <Text size={11} tone="dim">{tableRunId ? `Displayed rows: run ${tableRunId}` : 'Displayed rows: run identity unavailable for the rows shown'}</Text>
+    <section id="prebreakout-filter-breakdown" className={styles.breakdownPanel} aria-label="Filter breakdown and analysis log" hidden={!breakdownOpen}>
+      <Text size={12} tone="secondary">The candidates table applies no client-side filtering: it lists the rows returned to this page, sorted only. Scan exclusions and every other terminal outcome below come from the saved run report, not from the table.</Text>
+      <SavedScanReportInspector category={scanMode} currentInputs={inspectionInputs} tableRunId={tableRunIds[scanMode]} />
+      <Text size={11} tone="dim">Each category keeps its latest report until its next run. Changing mode or parameters leaves saved reports accessible.</Text>
+    </section>
+  </div>;
 
   const universeLabel =
     symbolOverride.trim()          ? 'manual symbols'
@@ -204,11 +269,11 @@ export default function Step4PreBreakoutPage() {
     : universeDisplayName(universePick);
 
   return (
-    <div className={styles.main}>
+    <div className={styles.main} data-presentation="prebreakout-v2">
       <div className={styles.header}>
         <Title as="h2" size={20}>Setup Scanner</Title>
         <Text size={13} tone="secondary">
-          Scanning {universeLabel} · {direction}
+          Scanning {universeLabel} · {direction} · {context?.horizon ?? 'Horizon unavailable'}
         </Text>
       </div>
 
@@ -312,13 +377,13 @@ export default function Step4PreBreakoutPage() {
           </div>
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
-          {pullbackResults.length > 0 && (
-            <div className={styles.tableWrap}>
-              <div className={styles.tableHeader}>
-                <span />
-                <Text size={11} tone="dim" weight={500}>Symbol</Text>
-                <Text size={11} tone="dim" weight={500}>Company</Text>
+          {resultsHeading}
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
+              <div className={`${styles.tableHeader} ${styles.pullbackTable}`}>
+                <Text size={11} tone="dim" weight={500}>Symbol / Company</Text>
                 <Text size={11} tone="dim" weight={500}>Dir</Text>
                 <Text size={11} tone="dim" weight={500}>Score</Text>
                 <Text size={11} tone="dim" weight={500}>Price</Text>
@@ -326,10 +391,8 @@ export default function Step4PreBreakoutPage() {
                 <span />
               </div>
               {pullbackResults.map((row) => (
-                <div key={row.symbol} className={styles.tableRow}>
-                  <WatchStar symbol={row.symbol} size="sm" />
-                  <Text size={13} weight={500}>{row.symbol}</Text>
-                  <Text size={12} tone="secondary">{row.company}</Text>
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={`${styles.tableRow} ${styles.pullbackTable}`}>
+                  {identity(row)}
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
@@ -353,13 +416,13 @@ export default function Step4PreBreakoutPage() {
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                   >
-                    <Text size={11} weight={500}>Set Alert</Text>
+                    <Text size={11} weight={500}>Alert</Text>
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {pullbackResults.length === 0 && !scanning && !error && (
@@ -369,7 +432,7 @@ export default function Step4PreBreakoutPage() {
       ) : scanMode === 'fib' ? (
         <>
           <Text size={12} tone="dim">
-            Stocks retracing to a key Fibonacci level (38.2%, 61.8%) after a significant swing move.
+            Stocks retracing to a key Fibonacci level ({fibApplied ? fibApplied.fibLevels.map(level => `${level}%`).join(', ') : 'scanned levels unavailable'}) after a significant swing move.
             At-level hits are sorted first. Set a regime alert to be notified when conditions align.
           </Text>
 
@@ -398,12 +461,13 @@ export default function Step4PreBreakoutPage() {
           />
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
-          {fibResults.length > 0 && (
-            <div className={styles.tableWrap}>
+          {resultsHeading}
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.fibTableHeader}>
-                <span />
-                <Text size={11} tone="dim" weight={500}>Symbol</Text>
+                <Text size={11} tone="dim" weight={500}>Symbol / Company</Text>
                 <Text size={11} tone="dim" weight={500}>Dir</Text>
                 <Text size={11} tone="dim" weight={500}>Fib Level</Text>
                 <Text size={11} tone="dim" weight={500}>Distance</Text>
@@ -411,56 +475,45 @@ export default function Step4PreBreakoutPage() {
                 <Text size={11} tone="dim" weight={500}>Confidence</Text>
                 <span />
               </div>
-              {(fibResults as FibScanRow[]).map((row) => (
-                <div key={row.symbol} className={styles.fibTableRow}>
-                  <div className={styles.iconCell}>
-                    <WatchStar symbol={row.symbol} size="sm" />
-                    <button
-                      type="button"
-                      className={styles.chartBtn}
-                      title="Open in Chart"
-                      onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
-                    >
-                      📈
-                    </button>
-                  </div>
-                  <Text size={13} weight={500}>{row.symbol}</Text>
+              {fibResults.map((row) => (
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={styles.fibTableRow}>
+                  {identity(row)}
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
-                  <Data size={12} tone="secondary">{row.fib_level_hit}%</Data>
+                  <Data size={12} tone="secondary">{fibLabel(row.fib_level_hit)}</Data>
                   <Data
                     size={12}
-                    tone={row.fib_dist_pct != null && row.fib_dist_pct <= fibParams.fibTolerancePct * 100 ? 'pass' : 'caution'}
-                    title={`Distance from current price to the nearest Fibonacci level. ≤${(fibParams.fibTolerancePct * 100).toFixed(1)}% (the tolerance band, adjustable above) = within range.`}
+                    tone={fibApplied && row.fib_dist_pct != null ? row.fib_dist_pct <= fibApplied.fibTolerancePct * 100 ? 'pass' : 'caution' : 'secondary'}
+                    title={fibApplied ? `Distance from current price to the nearest Fibonacci level. ≤${fmtThreshold(fibApplied.fibTolerancePct * 100, 1)}% scanned tolerance = within range.` : 'Scanned tolerance unavailable'}
                   >
                     {row.fib_dist_pct != null ? `${row.fib_dist_pct.toFixed(1)}%` : '—'}
                   </Data>
                   <Data
                     size={12}
                     tone={row.at_level ? 'pass' : 'dim'}
-                    title={row.at_level ? 'Price is currently within the tolerance band of the Fib level.' : 'Price is outside the tolerance band right now.'}
+                    title={row.at_level == null ? 'At-level evidence unavailable.' : row.at_level ? 'Price is currently within the tolerance band of the Fib level.' : 'Price is outside the tolerance band right now.'}
                   >
-                    {row.at_level ? 'YES' : 'no'}
+                    {row.at_level == null ? '—' : row.at_level ? 'YES' : 'no'}
                   </Data>
                   <Data
                     size={13}
                     tone={confidenceTone(confidenceTier(row.confidence))}
-                    title={`Fib proximity confidence: ${row.confidence}%.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the tolerance band (default 1.5%). Falls below 60% once price is outside that band. This score only measures distance to the fib level — it does NOT check volatility, volume, or trend.`}
+                    title={`Fib proximity confidence: ${row.confidence != null ? `${row.confidence}%` : '—'}.\nHow it's calculated: 100% = exactly at the Fibonacci level. Drops toward 60% the further price is within the applied tolerance band. Falls below 60% once price is outside that band. This score only measures distance to the fib level and does not assert volatility, volume, or trend qualification. EMA filtering applies separately.`}
                   >
-                    {row.confidence}%
+                    {row.confidence != null ? `${row.confidence}%` : '—'}
                   </Data>
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                     title="Set alert"
                   >
-                    +
+                    Alert
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {fibResults.length === 0 && !scanning && !error && (
@@ -470,8 +523,8 @@ export default function Step4PreBreakoutPage() {
       ) : (
         <>
           <Text size={12} tone="dim">
-            Stocks coiling near a key resistance level — ATR compressed, volume dry, close
-            within {(params.resistanceProximityPct * 100).toFixed(1)}% of swing high.
+            Stocks coiling near a key swing level — ATR compressed, volume dry, close
+            within {preApplied ? fmtThreshold(preApplied.resistanceProximityPct * 100, 1) + '%' : 'an unavailable scanned distance'} of the {direction === 'Bullish' ? 'swing high' : 'swing low'}.
             Set a regime alert to be notified when conditions align.
           </Text>
 
@@ -500,12 +553,13 @@ export default function Step4PreBreakoutPage() {
           />
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
-          {sorted.length > 0 && (
-            <div className={styles.tableWrap}>
+          {resultsHeading}
+          {(
+            <div className={styles.resultsGrid}><div className={styles.tableWrap}>
               <div className={styles.tableHeader}>
-                <span />
-                <Text size={11} tone="dim" weight={500}>Symbol</Text>
+                <Text size={11} tone="dim" weight={500}>Symbol / Company</Text>
                 <Text size={11} tone="dim" weight={500}>Dir</Text>
                 <Text size={11} tone="dim" weight={500}>Confidence</Text>
                 <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
@@ -514,34 +568,23 @@ export default function Step4PreBreakoutPage() {
                 <span />
               </div>
               {sorted.map((row) => (
-                <div key={row.symbol} className={styles.tableRow}>
-                  <div className={styles.iconCell}>
-                    <WatchStar symbol={row.symbol} size="sm" />
-                    <button
-                      type="button"
-                      className={styles.chartBtn}
-                      title="Open in Chart"
-                      onClick={() => window.open(`/chart?symbol=${row.symbol}`, '_blank')}
-                    >
-                      📈
-                    </button>
-                  </div>
-                  <Text size={13} weight={500}>{row.symbol}</Text>
+                <div key={row.symbol} {...selectionProps(row.symbol)} className={styles.tableRow}>
+                  {identity(row)}
                   <Text size={12} tone={row.direction === 'Bullish' ? 'pass' : 'reject'}>
                     {row.direction === 'Bullish' ? '↑' : '↓'}
                   </Text>
                   <Data
                     size={13}
                     tone={confidenceTone(confidenceTier(row.confidence))}
-                    title={`Setup quality confidence: ${row.confidence}%.\nHow it's calculated: weighted composite of three factors — ATR compression (30%), volume quiet (25%), proximity to key level (45%). Each factor scores 0–100 based on how extreme the reading is. Example: ATR ratio 0.60 on a 0.85 threshold scores ~29/100 on that factor. All four hard gates must pass first (ATR compressed, range tight, volume quiet, price near resistance) — the score then reflects how good each factor is within the gates.`}
+                    title={`Setup quality confidence: ${row.confidence != null ? `${row.confidence}%` : '—'}. ${confidenceWeights(row)} Range is a gate, not a score component; trend filtering also applies. The returned score is not profit probability.`}
                   >
-                    {row.confidence}%
+                    {row.confidence != null ? `${row.confidence}%` : '—'}
                   </Data>
                   <Data
                     size={12}
                     tone="secondary"
                     title={row.metrics.atr_ratio != null
-                      ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ 20-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${params.atrCompressionRatio.toFixed(2)} to pass. Contributes 30% of the confidence score.`
+                      ? `ATR Ratio: ${row.metrics.atr_ratio.toFixed(3)}\nCurrent ATR ÷ ${preApplied ? preApplied.atrAvgLookback : 'unknown'}-bar average ATR. Lower = more compressed volatility = tighter coil. Must be below ${preApplied ? fmtThreshold(preApplied.atrCompressionRatio, 2) : 'unavailable (scan snapshot unknown)'} to pass. ${confidenceWeights(row)}`
                       : undefined}
                   >
                     {row.metrics.atr_ratio != null ? row.metrics.atr_ratio.toFixed(2) : '—'}
@@ -550,7 +593,7 @@ export default function Step4PreBreakoutPage() {
                     size={12}
                     tone="secondary"
                     title={row.metrics.vol_ratio != null
-                      ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${params.volCompressionRatio.toFixed(2)} to pass. Contributes 25% of the confidence score.`
+                      ? `Volume Ratio: ${row.metrics.vol_ratio.toFixed(3)}\nLast bar volume ÷ preceding 20-bar average volume. Lower = quieter volume = stock coiling without distribution. Must be below ${preApplied ? fmtThreshold(preApplied.volCompressionRatio, 2) : 'unavailable (scan snapshot unknown)'} to pass. ${confidenceWeights(row)}`
                       : undefined}
                   >
                     {row.metrics.vol_ratio != null ? row.metrics.vol_ratio.toFixed(2) : '—'}
@@ -559,7 +602,7 @@ export default function Step4PreBreakoutPage() {
                     size={12}
                     tone="secondary"
                     title={row.metrics.proximity_pct != null
-                      ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage. Lower = closer to the level = better setup. Must be within ${(params.resistanceProximityPct * 100).toFixed(1)}% to pass. Contributes 45% of the confidence score — the heaviest weight.`
+                      ? `Proximity: ${row.metrics.proximity_pct.toFixed(2)}% from key level\nHow far price is from the ${row.direction === 'Bullish' ? 'swing high (resistance)' : 'swing low (support)'} as a percentage of the swing level. Lower = closer to the level = better setup. Must be within ${preApplied ? fmtThreshold(preApplied.resistanceProximityPct * 100, 1) : 'unavailable (scan snapshot unknown)'}% to pass. ${confidenceWeights(row)}`
                       : undefined}
                   >
                     {row.metrics.proximity_pct != null ? row.metrics.proximity_pct.toFixed(1) : '—'}
@@ -567,13 +610,13 @@ export default function Step4PreBreakoutPage() {
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                   >
-                    <Text size={11} weight={500}>Set Alert</Text>
+                    <Text size={11} weight={500}>Alert</Text>
                   </button>
                 </div>
               ))}
-            </div>
+            </div>{chartShell}</div>
           )}
 
           {sorted.length === 0 && !scanning && (
@@ -582,11 +625,15 @@ export default function Step4PreBreakoutPage() {
         </>
       )}
 
-      {alertSymbol && (
+      <SelectedStockScores context={selectedContext}/>
+      <SelectedStockNews symbol={selected?.symbol ?? null}/>
+
+      {alertTarget && (
         <CompositeAlertDialog
-          symbol={alertSymbol}
-          direction={direction}
-          onClose={() => setAlertSymbol(null)}
+          key={`${alertTarget.symbol}-${alertTarget.direction}`}
+          symbol={alertTarget.symbol}
+          direction={alertTarget.direction}
+          onClose={() => setAlertTarget(null)}
         />
       )}
     </div>

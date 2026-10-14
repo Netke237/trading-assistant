@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.models.base import Base
 from app.database import Base as DatabaseBase
 from app.models.scan_session import ScanSessionBase
+from app.models.scan_report import ScanReportBase
 from app.models.ohlcv_daily import OhlcvBase
 from app.models.scheduled_scan_run import ScheduledScanRunBase
 
@@ -37,7 +38,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = [Base.metadata, DatabaseBase.metadata, ScanSessionBase.metadata, OhlcvBase.metadata, ScheduledScanRunBase.metadata]
+target_metadata = [Base.metadata, DatabaseBase.metadata, ScanSessionBase.metadata, OhlcvBase.metadata, ScheduledScanRunBase.metadata, ScanReportBase.metadata]
 
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 

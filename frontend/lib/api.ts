@@ -1,7 +1,8 @@
+import { useScanReportUpdates, type LatestScanReport, type ScanReport, type ScanReportCategory, type ScanReportMetadata } from './scanReports';
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
-              ContractGrading } from '@/types/domain';
+              ContractGrading, StockExplanation } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -125,15 +126,30 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function post<T>(path: string, body: unknown, signal?: AbortSignal, onReport?: (metadata: ScanReportMetadata) => void): Promise<T> {
+  const category: ScanReportCategory | null = path === '/api/scan' ? 'options' : path === '/api/stock-scan' ? ((body as {category?: 'stocks' | 'pullback'}).category ?? 'stocks') : path === '/api/scan/prebreakout' ? 'prebreakout' : path === '/api/scan/fib-pullback' ? 'fib' : null;
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok) return apiError(path, res);
-  return res.json() as Promise<T>;
+  const runId = res.headers?.get('X-Scan-Report-Run-Id');
+  const generationHeader = res.headers?.get('X-Scan-Report-Generation');
+  const generation = generationHeader == null ? NaN : Number(generationHeader);
+  if (!res.ok) {
+    if (category && runId && Number.isSafeInteger(generation) && generation > 0) useScanReportUpdates.getState().record(category, {run_id:runId,generation,persistence:res.headers.get('X-Scan-Report-Persistence') ?? 'unavailable',failed:true});
+    return apiError(path, res);
+  }
+  const value = await res.json();
+  const id = value?.report_run_id ?? runId;
+  const gen = value?.report_generation ?? generation;
+  if (category && id && Number.isSafeInteger(gen) && gen > 0) {
+    const metadata = {run_id:id,generation:gen,persistence:value?.report_persistence ?? res.headers?.get('X-Scan-Report-Persistence') ?? 'unavailable',accepted_symbols:(Array.isArray(value) ? value : value?.candidates ?? []).map((row: {symbol?:unknown})=>row.symbol).filter((symbol:unknown): symbol is string => typeof symbol==='string' && /^[A-Z][A-Z0-9.\-]{0,10}$/.test(symbol)),pipeline_counts:value?.pipeline ? Object.fromEntries(Object.entries(value.pipeline).filter((entry): entry is [string,number] => ['scanned','candidates','failed_data','failed_pre_screen','no_chain','failed_score','failed_contracts','other_rejected','failed_direction','failed_shortlist','failed_direction_unmeasured','direction_min_trend','failed_history','failed_regime','failed_signal','failed_backtest'].includes(entry[0]) && typeof entry[1]==='number' && Number.isFinite(entry[1]))) : undefined};
+    useScanReportUpdates.getState().record(category, metadata);
+    onReport?.(metadata);
+  }
+  return value as T;
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -349,6 +365,7 @@ export interface StockAnalysis {
   price: number;
   direction: string;
   stock_score: number;
+  stock_explanation?: StockExplanation | null;
   stock_status: 'PASS' | 'CAUTION' | 'REJECT';
   is_index: boolean;
   strategy: AnalysisStrategySignal | null;
@@ -656,9 +673,13 @@ export const api = {
 
   postStockScan: (
     req: import('./resolveStockScanRequest').StockScanRequestBody & {
-      symbols?: string[]; risk_fixed_usd?: number; min_price?: number; max_price?: number;
+      category?: 'stocks' | 'pullback'; symbols?: string[]; risk_fixed_usd?: number; min_price?: number; max_price?: number;
     },
   ) => post<StockScanResult>('/api/stock-scan', req),
+
+  getLatestScanReport: (category: ScanReportCategory, signal?: AbortSignal) => get<LatestScanReport>(`/api/scan-reports/latest/${category}`, signal),
+  getScanReport: (runId: string, signal?: AbortSignal) => get<ScanReport>(`/api/scan-reports/runs/${encodeURIComponent(runId)}`, signal),
+  getLegacyScanReports: (signal?: AbortSignal) => get<Record<string, unknown>[]>('/api/scan-reports/legacy', signal),
 
   getLastScan: () => get<ScanResult | null>('/api/scan/last'),
   getLastStockScan: () => get<StockScanResult | null>('/api/stock-scan/last'),
@@ -891,10 +912,11 @@ export const api = {
     direction: string,
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
+    onReport?: (metadata: ScanReportMetadata) => void,
   ) =>
     post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
-      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }, undefined, onReport
     ),
 
   // ── Fibonacci pullback scan ──────────────────────────────────────────────────
@@ -903,10 +925,11 @@ export const api = {
     direction: string,
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
+    onReport?: (metadata: ScanReportMetadata) => void,
   ) =>
     post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
-      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }, undefined, onReport
     ),
 
   // ── Regime series (for chart overlay) ────────────────────────────────────────

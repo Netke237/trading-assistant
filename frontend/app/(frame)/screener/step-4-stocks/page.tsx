@@ -1,5 +1,6 @@
 'use client';
 
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
@@ -258,6 +259,8 @@ export default function Step4StocksPage() {
           Scanning full {context?.universe ?? 'SP500'} universe for stock setups
         </Text>
       </div>
+
+      <details><summary>Analysis log</summary><SavedScanReportInspector category="stocks" tableRunId={result?.report_run_id} /></details>
 
       <details className={styles.pageExplanation}>
         <summary>How this page works</summary>

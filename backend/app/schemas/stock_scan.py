@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from app.schemas.payload_depth import validate_payload_depth
 from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas import SentimentData, FundamentalsOut, StockExplanation
@@ -9,6 +11,7 @@ Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_revers
 
 
 class StockScanRequest(BaseModel):
+    category: Literal["stocks", "pullback"] = "stocks"
     # NUMERIC-API-INPUTS T2: every float is finite or a 422. Inherited by
     # StockAnalysisRequest (pydantic merges a parent's config into a subclass).
     model_config = ConfigDict(allow_inf_nan=False)
@@ -117,6 +120,8 @@ class StockScanRequest(BaseModel):
     mean_reversion_min_confirmations: Optional[int] = Field(None, ge=1, le=3)
     vwap_lookback:       Optional[int]   = Field(None, gt=0)
     vwap_deviation_pct:  Optional[float] = Field(None, gt=0)
+
+    _validate_payload_depth = field_validator('overrides', mode="before")(validate_payload_depth)
 
 
 class StrategySignalOut(BaseModel):
@@ -274,6 +279,7 @@ class StockAnalysisOut(BaseModel):
     direction: str
     stock_score: int
     stock_status: str
+    stock_explanation: Optional[StockExplanation] = None
     is_index: bool = False
     # Signal-dependent payloads — None when no strategy setup exists (bypass path)
     strategy: Optional[StrategySignalOut] = None
@@ -322,6 +328,9 @@ class StockPipeline(BaseModel):
 
 
 class StockScanResult(BaseModel):
+    report_run_id: Optional[str] = None
+    report_generation: Optional[int] = None
+    report_persistence: Optional[Literal["saved", "unavailable"]] = None
     scan_id:              str
     timestamp:            str
     candidates:           list[PositionCardOut]

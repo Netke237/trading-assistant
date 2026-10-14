@@ -69,6 +69,9 @@ export interface StockPipeline {
 }
 
 export interface StockScanResult {
+  report_run_id?: string | null;
+  report_generation?: number | null;
+  report_persistence?: 'saved' | 'unavailable' | null;
   scan_id: string; timestamp: string;
   candidates: PositionCardData[]; rejected: Array<{symbol: string; reason: string}>;
   pipeline?: StockPipeline;

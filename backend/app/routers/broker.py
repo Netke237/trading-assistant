@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.data.ibkr_paper import BrokerOrder
+from app.data.order_errors import OrderAdmissionRefusedError
 from app.data.option_symbol import option_right
 from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.broker_router import build_router_from_credentials
@@ -56,6 +57,10 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
             raise HTTPException(status_code=422, detail=f"Daily risk budget refused opening order: {exc}") from exc
     try:
         result = adapter.place_order(order)
+    except OrderAdmissionRefusedError:
+        if order.effect == "OPEN":
+            hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+        raise
     except Exception:
         if order.effect == "OPEN":
             hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")

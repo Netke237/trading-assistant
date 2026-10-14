@@ -96,7 +96,9 @@ it('preserves selection on reorder and recovers from removal, failed gate, empty
 it('falls back from an absent symbol and renders full Position information and broker controls', async () => {
   useScanStore.getState().setSelectedSymbol('REMOVED'); render(<Step7PositionCardPage />); expectSelected('AAPL');
   expect(screen.getByText('AAPL Inc.')).toBeInTheDocument(); expect(screen.getByText('Bullish · pullback ema')).toBeInTheDocument();
-  for (const label of ['ENTRY', 'STOP', 'T1 TARGET', 'SHARES', 'RISK $', 'SIZE $', 'WIN %', 'R:R AT T1', 'SELL-TO-CLOSE PLAN']) expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+  for (const label of ['ENTRY', 'STOP', 'T1 TARGET', 'SHARES', 'Execution risk / share', 'Execution risk / position', 'Position value', 'WIN %', 'SELL-TO-CLOSE PLAN']) expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+  const targetRow = screen.getByText('T1 TARGET').closest('div')!.parentElement!;
+  expect(within(targetRow).getByText('2.0×')).toBeInTheDocument();
   expect(screen.getByText('60%')).toHaveAttribute('title');
   for (const broker of ['Recommendation', 'IBKR Paper', 'Tradier Paper', 'Alpaca Paper', 'Tastytrade Paper']) expect(screen.getByRole('button', { name: broker })).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Ladder' })).toBeInTheDocument();

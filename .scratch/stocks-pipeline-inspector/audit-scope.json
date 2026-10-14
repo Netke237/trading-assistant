@@ -1,0 +1,13 @@
+{
+  "base": "d97bc0e5da8d0741d692fdcd78ebed77f73f6615",
+  "files": {
+    "frontend/components/organisms/PipelineInspector/index.tsx": "ec4e9f4cc8e0831f1b93631fc2df544ce9020d57e8201a92651e896c31e2d801",
+    "frontend/lib/parsePipelineDiagnostics.ts": "1641d799aecd658290f21a20d91612668818fca7e2e04c4862b269f242e4069b",
+    "frontend/lib/parseStockPipelineDiagnostics.ts": "5fd382a73131c03354a80ea979260eeb00cd6ef145fd932c886b3ba6343ff7d1",
+    "frontend/lib/__tests__/parseStockPipelineDiagnostics.test.ts": "4bfaa9d5375d536c07cad46cfd5a8d1c447ffecc6b4c2a4aa69e78fb1df72300",
+    "frontend/app/(frame)/screener/step-6-backtest/page.tsx": "8dd2c6e7cf322b4e75374ec798dab1029538520bdb4be72ba490efff2038579f",
+    "frontend/app/(frame)/screener/step-6-backtest/page.module.css": "563ede829db27b14c3bf5292f81a4765b85e57f8bde4c57ba972544a0de04013",
+    "frontend/app/(frame)/screener/step-6-backtest/__tests__/union.test.tsx": "62696ce49d6f3a26ade2b03a79150700fdc085706cad090bc793d26c84121bf0",
+    "frontend/e2e/tests/stocks-pipeline-inspector.spec.ts": "8fd70db3d067ca047b8cc89c62e2901a0cbaa5f80c10a375beb3cf96ea1c5bc1"
+  }
+}

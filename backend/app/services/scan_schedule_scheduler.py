@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
+from app.services.scan_report_lifecycle import run_reported_scan, persisted_result
 import logging
 from datetime import datetime, timezone
 
@@ -172,8 +174,9 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                         ScanResult.model_validate_json(previous_row.result_json)
                         if previous_row and previous_row.result_json else None
                     )
-                    result = await _execute_scan_core(req, db, previous_result=previous_result)
-                    result_json = result.model_dump_json()
+                    result = await run_reported_scan(req, category="options", trigger="scheduled",
+                        callback=lambda: _execute_scan_core(req, db, previous_result=previous_result))
+                    result_json = json.dumps(persisted_result(result), allow_nan=False)
                     candidate_count = len(result.candidates)
                     no_live_quotes = _ran_without_live_quotes(
                         candidate_count, len(result.rejected), result.noLiveQuoteNames,
@@ -187,18 +190,19 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                         StockScanResult.model_validate_json(previous_row.result_json)
                         if previous_row and previous_row.result_json else None
                     )
-                    result = await _execute_stock_scan_core(req, db, previous_result=previous_result)
-                    result_json = result.model_dump_json()
+                    result = await run_reported_scan(req, category=req.category, trigger="scheduled",
+                        callback=lambda: _execute_stock_scan_core(req, db, previous_result=previous_result))
+                    result_json = json.dumps(persisted_result(result), allow_nan=False)
                     candidate_count = len(result.candidates)
                 else:
                     raise ValueError(f"unknown schedule entry mode {mode!r}")
             except Exception as exc:
-                logger.error("scan_schedule: entry %s (%s) failed", entry_id, label, exc_info=True)
+                logger.error("scan_schedule: entry %s (%s) failed: scan_failed", entry_id, label)
                 await record_scheduled_scan_run(
                     db, schedule_entry_id=entry_id, mode=mode or "unknown",
-                    status="error", error=str(exc),
+                    status="error", error="scan_failed",
                 )
-                await _notify_scan_schedule_error(label, str(exc))
+                await _notify_scan_schedule_error(label, "scan_failed")
                 return
 
             await record_scheduled_scan_run(
