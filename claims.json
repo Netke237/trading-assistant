@@ -2,27 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/yaml-depth-bound-b1dd948c",
-      "claimed_at": "2026-10-14T06:58:59Z",
-      "expires_at": "2026-10-14T10:47:30Z",
-      "note": "Resume #167 from preserved evidence; independent plan/build/code audits",
-      "task": "YAML-DEPTH-BOUND"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/screen-labels-19-20-b7802f40",
-      "claimed_at": "2026-10-14T07:00:17Z",
-      "expires_at": "2026-10-14T11:51:08Z",
-      "note": "resume #163 from discovery af780c6d; decisions 1=B 2=A",
+      "branch": "board/screen-labels-19-20-merge-record-2f552935",
+      "claimed_at": "2026-10-14T13:55:55Z",
+      "expires_at": "2026-10-14T16:55:55Z",
+      "note": "docs shipped record for merged #303",
       "task": "SCREEN-LABELS-19-20"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/state-multi-plan-stage-0c428d82",
-      "claimed_at": "2026-10-14T07:11:13Z",
-      "expires_at": "2026-10-14T10:21:43Z",
-      "note": "Work #214: authorized multi-plan-stage audit accounting",
-      "task": "STATE-MULTI-PLAN-STAGE"
     }
   ]
 }
