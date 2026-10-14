@@ -1500,10 +1500,23 @@
       "branch": "board/meas-market-data-measurement-11d464ec",
       "day2_reading_audit": {
         "scope": "Day-2 reading only (docs/data): scans/2026-10-09 evidence, plan section 7 rows (iv-basis-samples.jsonl, scan-funnel.jsonl), RESULTS-SHEET day-2 section, two-day reading and proposal table with Kenneth's answers. Separate from the kit audit (rounds 1-9, clean), as the day-1 reading was (decision MEAS-DAY1-MERGE-AFTER-ROUND-4-2026-10-03).",
-        "rounds": 0,
-        "clean": false,
+        "rounds": 1,
+        "clean": true,
         "cap": 3,
-        "status": "NOT AUDITED YET: independent adversarial round pending. Recomputation f808df49 is not an audit."
+        "status": "CLEAN after reading round 1 (2026-10-14).",
+        "history": [
+          {
+            "round": 1,
+            "reviewer": "fresh independent Claude general-purpose subagent applying bmad-review-adversarial-general",
+            "reviewed": "git diff dae5b438730e837458cb4c585f657fec3df99e4b..ef87badde05387dcc369537139fe5c5050cb0410 (origin/main = merge base; 45 files, docs only)",
+            "gate_findings": 0,
+            "findings": [],
+            "fixes": [],
+            "outstanding": [],
+            "clean": true,
+            "verification": "Independently recomputed from scans/2026-10-09 (and 2026-10-01 where pooled): plan s5 validity (core_complete, no flags/day_invalid/truncation, tag 61a03e49, pooling hashes, config-start CRLF sha256 match, request bodies identical to day 1); regime -14 vs +20; S-scan rates/candidates/gaps and s6 keep outcomes; C1/C1b/C5/C5b/C6 attribution and quality bar (C5 median 47 -> 45); min_mult table; IV rows replayed via iv_basis_analysis collect (Swing 6 / Position 10 pooled); all 13 funnel rows; Kenneth column vs decision; main contract_rules min_stock_score 45, scoring_rules PASS 55; no file outside docs changed. Limitation noted by auditor: collect replay ran on Python 3.13 (pure JSON transform, byte-identical output)."
+          }
+        ]
       }
     },
     {
