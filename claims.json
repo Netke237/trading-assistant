@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/state-multi-plan-stage-0c428d82",
       "claimed_at": "2026-10-14T14:00:43Z",
-      "expires_at": "2026-10-14T17:49:36Z",
+      "expires_at": "2026-10-14T17:50:34Z",
       "note": "Resume #214 after usage interruption; full backend 8298 tests green",
       "task": "STATE-MULTI-PLAN-STAGE"
     }
