@@ -47,7 +47,7 @@ from app.services.horizon_tuning import gates as _gates  # noqa: E402
 from app.services.horizon_tuning import report as _report  # noqa: E402
 from app.services.horizon_tuning import walk_forward_cell as wfc  # noqa: E402
 from app.services.horizon_tuning.cache import (  # noqa: E402
-    DEFAULT_CACHE_DIR, SIGNAL_CACHE_VERSION, TuningCache, _gate_sources, ohlcv_hash,
+    DEFAULT_CACHE_DIR, SIGNAL_CACHE_VERSION, TuningCache, _gate_sources, ohlcv_hash, signal_sources,
 )
 from app.services.horizon_tuning.signals import MIN_SIGNAL_BARS, signal_series  # noqa: E402
 from app.services.horizon_tuning.simulate import bar_dates  # noqa: E402
@@ -56,6 +56,7 @@ from app.services.walk_forward import param_combos  # noqa: E402
 
 TUNED_STRATEGIES = ("pullback_ema", "breakout_base", "ma_crossover",
                     "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_multi")
+RESEARCH_STRATEGIES = ("breakout_setup", "fibonacci_pullback")
 DIRECTIONS = ("Bullish", "Bearish")
 N_SECTORS = 11
 # ~2009-10 .. 2026-10 at 252 trading days a year (STOCKS-HORIZON-HISTORY's span).
@@ -153,7 +154,8 @@ def _synthetic_folds(bars_per_symbol: int) -> dict[str, int]:
     return {h: len(wfc.cell_folds(cal, h, cfg)[0]) for h in TUNED_HORIZONS}
 
 
-def probe(symbols: list[str], bars_dir: Path, workers: int, bars_per_symbol: int) -> None:
+def probe(symbols: list[str], bars_dir: Path, workers: int, bars_per_symbol: int,
+          cells: list[wfc.Cell] | None = None) -> None:
     cfg = sps.get_tuning_config()
     basket_n = cfg["basket"]["per_sector"] * N_SECTORS
     series = {s: json.loads((bars_dir / f"{s}_candles.json").read_text(encoding="utf-8")) for s in symbols}
@@ -165,28 +167,29 @@ def probe(symbols: list[str], bars_dir: Path, workers: int, bars_per_symbol: int
     print(f"{'strategy':<22}{'direction':<10}{'ms/call':>9}{'combos':>8}{'projected h':>13}")
     total_s = 0.0
     sig_ms: dict[str, float] = {}
-    for strategy in TUNED_STRATEGIES:
-        for direction in DIRECTIONS:
-            params = _baseline_params(strategy, direction)
-            calls, t0 = 0, time.perf_counter()
-            for bars in series.values():
-                signal_series(bars, strategy, direction, params)
-                calls += max(0, len(bars) - (MIN_SIGNAL_BARS - 1))
-            ms = (time.perf_counter() - t0) * 1000.0 / max(calls, 1)
-            sig_ms[strategy] = max(sig_ms.get(strategy, 0.0), ms)
-            combos = _unique_combos(strategy, direction)
-            secs = combos * basket_n * calls_per_symbol * ms / 1000.0 / max(workers, 1)
-            total_s += secs
-            print(f"{strategy:<22}{direction:<10}{ms:>9.3f}{combos:>8}{secs / 3600:>13.2f}")
+    cells = cells if cells is not None else select_cells(None, None)
+    pairs = sorted({(c.strategy, c.direction) for c in cells})
+    for strategy, direction in pairs:
+        params = _baseline_params(strategy, direction)
+        calls, t0 = 0, time.perf_counter()
+        for bars in series.values():
+            signal_series(bars, strategy, direction, params)
+            calls += max(0, len(bars) - (MIN_SIGNAL_BARS - 1))
+        ms = (time.perf_counter() - t0) * 1000.0 / max(calls, 1)
+        sig_ms[strategy] = max(sig_ms.get(strategy, 0.0), ms)
+        combos = _unique_combos(strategy, direction,
+                                tuple(c.horizon for c in cells if c.strategy == strategy and c.direction == direction))
+        secs = combos * basket_n * calls_per_symbol * ms / 1000.0 / max(workers, 1)
+        total_s += secs
+        print(f"{strategy:<22}{direction:<10}{ms:>9.3f}{combos:>8}{secs / 3600:>13.2f}")
     print(f"projected signal time (sample grids): {total_s / 3600:.2f} h at {workers} workers")
 
     first = next(iter(series.values()))
     gate_ms = _time_gate_ms(first, "Bullish")
-    sim_ms = _time_sim_ms(first, "ma_crossover", "Bullish", "Swing")
+    sim_ms = _time_sim_ms(first, cells[0].strategy, cells[0].direction, cells[0].horizon)
     print(f"gate mask: {gate_ms:.3f} ms/bar; simulation: {sim_ms:.3f} ms per window "
           f"({len(first)}-bar series)")
     folds = _synthetic_folds(bars_per_symbol)
-    cells = [wfc.Cell(s, d, h) for s in TUNED_STRATEGIES for d in DIRECTIONS for h in TUNED_HORIZONS]
     valid = {c: len(param_combos(sps.get_search_by_horizon(c.strategy, c.direction, c.horizon)))
              for c in cells}
     universe_n = len(_basket.universe_union())
@@ -203,7 +206,7 @@ def probe(symbols: list[str], bars_dir: Path, workers: int, bars_per_symbol: int
     proj["total_h"] += total_s / 3600
     print(f"folds per horizon on {bars_per_symbol} bars: "
           + ", ".join(f"{h} {n}" for h, n in folds.items()))
-    print(f"simulated windows: {work['sim_windows']:,} (all 60 cells, sample {basket_n}, "
+    print(f"simulated windows: {work['sim_windows']:,} ({len(cells)} cells, sample {basket_n}, "
           f"universe {universe_n}; grids before invalid combinations are skipped)")
     _print_projection(proj, workers)
     if max(windows) < SIGNAL_WINDOW_BARS:
@@ -266,17 +269,29 @@ def select_cells(cells_arg: str | None, directions_arg: str | None) -> list[wfc.
     tokens = [t.strip() for t in (cells_arg or "").split(",") if t.strip()]
     for t in tokens:
         parts = t.split(":")
-        if len(parts) > 2 or not all(p in TUNED_STRATEGIES or p in TUNED_HORIZONS for p in parts):
+        if len(parts) > 2 or not all(p in (*TUNED_STRATEGIES, *RESEARCH_STRATEGIES) or p in TUNED_HORIZONS for p in parts):
             raise SystemExit(f"unknown --cells token {t!r}")
 
     def match(c: wfc.Cell) -> bool:
         return not tokens or any(all(p in (c.strategy, c.horizon) for p in t.split(":")) for t in tokens)
-    return [c for s in TUNED_STRATEGIES for d in directions for h in TUNED_HORIZONS
+    selected_strategies = (*TUNED_STRATEGIES, *(s for s in RESEARCH_STRATEGIES
+                           if any(s in t.split(":") for t in tokens)))
+    return [c for s in selected_strategies for d in directions for h in TUNED_HORIZONS
             if match(c := wfc.Cell(s, d, h))]
 
 
 def _sha(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def run_identity(cell: wfc.Cell, config: dict, grid: dict, data_hash: str) -> str:
+    """Identity for resumable results, including signal/order implementation."""
+    return _sha({"cell": [cell.strategy, cell.direction, cell.horizon],
+                 "tuning": config, "grid": grid,
+                 "baseline": wfc.combo_params(cell.strategy, cell.direction, {}),
+                 "exit": sps.get_exit(cell.strategy), "signal_version": SIGNAL_CACHE_VERSION,
+                 "signal_sources": signal_sources(), "window": SIGNAL_WINDOW_BARS,
+                 "gate_sources": _gate_sources(), "data": data_hash})
 
 
 def _git_commit() -> str:
@@ -326,9 +341,7 @@ def run(args) -> int:
     grids = {c: sps.get_search_by_horizon(c.strategy, c.direction, c.horizon) for c in cells}
 
     def run_key(c: wfc.Cell) -> str:
-        return _sha({"tuning": cfg, "grid": grids[c], "baseline": wfc.combo_params(c.strategy, c.direction, {}),
-                     "exit": sps.get_exit(c.strategy), "signal_version": SIGNAL_CACHE_VERSION,
-                     "window": SIGNAL_WINDOW_BARS, "gate_sources": _gate_sources(), "data": data_hash})
+        return run_identity(c, cfg, grids[c], data_hash)
 
     keys = {c: run_key(c) for c in cells}
     finished = {c: _report.load_finished(args.data, c, keys[c]) for c in cells} if args.resume else {}
@@ -418,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.probe:
         probe([s.strip().upper() for s in (args.symbols or "AAPL,MSFT,NVDA").split(",") if s.strip()],
-              args.bars_dir or FIXTURES, args.workers, args.bars_per_symbol)
+              args.bars_dir or FIXTURES, args.workers, args.bars_per_symbol, select_cells(args.cells, args.directions))
         return 0
     return run(args)
 
