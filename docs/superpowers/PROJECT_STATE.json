@@ -4053,11 +4053,11 @@
       ],
       "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery.",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
-      "notes": "Issue #118. Preparing plan against closed exit-design #170. No application implementation yet.",
+      "notes": "Plan clean after two independent rounds (1 finding fixed). Code audit not started; implementation tickets next.",
       "name": "Pre-Breakout/Fibonacci backtests and per-horizon tuning",
       "verify": {
         "kind": "present",
@@ -4079,8 +4079,19 @@
           ],
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/t4_plan_audit_2",
+          "scope": "efff82b8..80c9fa35 plan equity-window amendment and interactions with strategy_backtest.py:317-326/_window_stats",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
-      ]
+      ],
+      "plan_audit_clean": true
     }
   ],
   "already_shipped": [
