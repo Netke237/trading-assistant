@@ -29,6 +29,7 @@ import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem, SentimentData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
+import { formatRegimeAge, formatRegimeAverage } from '@/lib/regimeDuration';
 import { regimeStatusTooltip, regimeMetricTooltip, regimeNoDataTooltip } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -75,6 +76,9 @@ function sentimentFromRegime(r: MarketRegime, horizon: string): SentimentData | 
     stability: r.omm.stability,
     regime_age_days: r.omm.regime_age_days,
     avg_regime_duration: r.omm.avg_regime_duration,
+    ...(r.omm.duration_stride_bars != null
+      ? { duration_stride_bars: r.omm.duration_stride_bars }
+      : {}),
     conviction_pct: r.conviction_pct ?? 0,
     conviction_label: r.conviction_label ?? 'Neutral',
     interpretation: `Market conviction: ${r.conviction_label ?? 'Neutral'}`,
@@ -333,7 +337,7 @@ export default function Step1RegimePage() {
                     {ommStateIcon(intraOmm.state)} {intraOmm.state}
                   </Data>
                   <Text size={12} tone="secondary">
-                    Day {intraOmm.regime_age_days} · avg ~{Math.round(intraOmm.avg_regime_duration)} days · {intraOmm.stability}
+                    {formatRegimeAge(intraOmm.regime_age_days)} · avg {formatRegimeAverage(intraOmm.avg_regime_duration, intraOmm.duration_stride_bars)} · {intraOmm.stability}
                   </Text>
                   <Text size={12} tone="secondary">{pct(intraOmm.p_stay)} chance of staying in this regime</Text>
                   {intraOmm.state_order.map((s, i) => {
@@ -367,7 +371,7 @@ export default function Step1RegimePage() {
                     {ommStateIcon(omm.state)} {omm.state}
                   </Data>
                   <Text size={12} tone="secondary">
-                    Day {omm.regime_age_days} · avg ~{Math.round(omm.avg_regime_duration)} days · {omm.stability}
+                    {formatRegimeAge(omm.regime_age_days)} · avg {formatRegimeAverage(omm.avg_regime_duration, omm.duration_stride_bars)} · {omm.stability}
                   </Text>
                   <Text size={12} tone="secondary">{pct(omm.p_stay)} chance of staying in this regime</Text>
                   {omm.state_order.map((s, i) => {
@@ -397,7 +401,7 @@ export default function Step1RegimePage() {
                     {ommStateIcon(omm.state)} {omm.state}
                   </Data>
                   <Text size={12} tone="secondary">
-                    Day {omm.regime_age_days} · avg ~{Math.round(omm.avg_regime_duration)} days · {omm.stability}
+                    {formatRegimeAge(omm.regime_age_days)} · avg {formatRegimeAverage(omm.avg_regime_duration, omm.duration_stride_bars)} · {omm.stability}
                   </Text>
                   <Text size={12} tone="secondary">{pct(omm.p_stay)} chance of staying in this regime</Text>
                   {omm.state_order.map((s, i) => {
