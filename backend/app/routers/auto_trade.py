@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
 import asyncio
 import concurrent.futures
 import functools
@@ -7,7 +9,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import field_validator, BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -237,8 +239,8 @@ class ArmRequest(BaseModel):
     # schema on these bounds. A client must send null, never 0, for an absent
     # price, and [] (not null) for no targets.
     #
-    # The four dicts are untyped and uncapped, exactly as on the create path:
-    # the card path is the reference and step 3 does not tighten it.
+    # Free-form containers share the create path's 32-level bound at arm
+    # time: booking validation happens after the broker has filled the order.
     stop:                Optional[float] = Field(default=None, gt=0)
     stop_is_user_set:    Optional[bool]  = None
     scan_stock_price:    Optional[float] = Field(default=None, gt=0)
@@ -249,6 +251,8 @@ class ArmRequest(BaseModel):
     premium_stop_dollar: Optional[float] = Field(default=None, gt=0)
     max_loss_override:   Optional[dict]  = None
     trade_card_snapshot: Optional[dict]  = None
+
+    _validate_payload_depth = field_validator('exit_plan', 'targets', 'max_loss_override', 'trade_card_snapshot', mode="before")(validate_payload_depth)
 
 
 @router.post("/arm")

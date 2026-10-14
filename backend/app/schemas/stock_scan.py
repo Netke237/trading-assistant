@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from app.schemas.payload_depth import validate_payload_depth
 from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas import SentimentData, FundamentalsOut, StockExplanation
@@ -118,6 +120,8 @@ class StockScanRequest(BaseModel):
     mean_reversion_min_confirmations: Optional[int] = Field(None, ge=1, le=3)
     vwap_lookback:       Optional[int]   = Field(None, gt=0)
     vwap_deviation_pct:  Optional[float] = Field(None, gt=0)
+
+    _validate_payload_depth = field_validator('overrides', mode="before")(validate_payload_depth)
 
 
 class StrategySignalOut(BaseModel):
