@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/state-multi-plan-stage-ef27feff",
       "claimed_at": "2026-10-14T15:36:40Z",
-      "expires_at": "2026-10-14T18:42:23Z",
+      "expires_at": "2026-10-14T18:54:53Z",
       "note": "User requested takeover of pasted session; recover unpushed #308 fix and final code audit",
       "previous": [
         {
