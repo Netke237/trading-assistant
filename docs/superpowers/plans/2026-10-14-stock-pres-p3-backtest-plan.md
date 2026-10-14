@@ -22,7 +22,7 @@ A finding blocks only if it can put a **wrong number in front of a user or on a 
 - new tests under `frontend/app/(frame)/screener/step-6-backtest/__tests__/`
 - this plan and `docs/superpowers/PROJECT_STATE.json` (coordinator only)
 
-**Out:** backend, `frontend/types/`, `StockPositionCard` and `PositionEvidence`, `scanStore`, `scanParamsStore`, `statusTooltips.ts`, `api.ts`, the saved-scan inspector, persistence (no store version bump, no new persisted key). No gate, threshold, filter, or sort-of-record change. Existing tests in this folder stay unedited and green.
+**Out:** backend, `frontend/types/`, `StockPositionCard` and `PositionEvidence`, `scanStore`, `scanParamsStore`, `statusTooltips.ts`, `api.ts`, the saved-scan inspector, persistence (no store version bump, no new persisted key). No gate, threshold, filter, or sort-of-record change. Existing tests in this folder stay green. They stay unedited except the three health-sort clicks in `union.test.tsx`, which follow the moved button (Task 2).
 
 ## Mechanism today (verified on `472bb1b0`)
 
@@ -50,7 +50,7 @@ The gate rule, stated in `stockScanGateTooltip` / `backtestGateTooltip` and mirr
 
 Time exits (D14, merged `ea9c67ce`, pinned by `timeExits.test.tsx`): `n_time_exits == null` or the field absent → `—` and no hold label; a number with `hold_max_days == null` → `no hold`; otherwise `{n} of {trades} on time (hold {days}d)` with the existing tooltip. Never show a stored unknown as `0`.
 
-`union.test.tsx` pins all of the following and must stay green with no edits: the column labels it lists (it does not list `HEALTH`), Expand opening the full card without navigating, Open Position navigating, the hidden-count sentence exactly once, the string `Pipeline log` **absent**, and rejection reasons readable only inside the Filter Breakdown dialog.
+`union.test.tsx` pins all of the following and must stay green. The only edit is the three health-sort clicks in Task 2: the column labels it lists (it does not list `HEALTH`), Expand opening the full card without navigating, Open Position navigating, the hidden-count sentence exactly once, the string `Pipeline log` **absent**, and rejection reasons readable only inside the Filter Breakdown dialog.
 
 Score factors already arrive as `card.stock_explanation` (P1, optional). `PositionEvidence` on the full card already prints each component's `name` and, when `measured`, `raw_score` to 0 decimals, else `Unavailable`. Absent explanation → `Scorer factors unavailable`. `explanation.status` is the scorer's verdict **before** later caps. The verdict on this page is `stock_status`. Sharpe is `backtest.sharpe` (already on the card, not in the table). The earnings sentence `Earnings inside the reject window — no send` is `EARNINGS_VETO_MESSAGE`. The expanded card does not read `earnings_veto` by itself. `StockPositionCard` sets `earningsVeto` from `stockEarningsGate(card, stockScanResult.timestamp, stockScanResult.veto_days).veto` (`frontend/lib/earningsGate.ts`). That helper ages `earnings_days` by whole calendar days since the scan and judges the result against `veto_days`. A stored `earnings_veto: false` can become a veto on a later day, and a stored `true` stops being a veto once the aged distance drops below zero. (Plan round 1 finding P3-A1.)
 
@@ -97,7 +97,7 @@ Cards and the strip use existing tokens only: `border: 1px solid var(--border-su
 | B12 | — | Quick summary above the full card | NEW |
 | B13 | — | How this page works | NEW |
 
-Plus: `timeExits.test.tsx` and `union.test.tsx` green with no edits; typecheck + full Jest green; plan audit and code audit clean.
+Plus: `timeExits.test.tsx` green with no edits; `union.test.tsx` green, with only the three health-sort clicks moved to the new button; typecheck + full Jest green; plan audit and code audit clean.
 
 ## Tasks (test-first; one ticket each; T1 → T2 → T3, serial — all three edit `page.tsx`)
 
@@ -149,6 +149,8 @@ Three buttons, in a row above the column headers:
 - `Sort by confidence`
 
 The `HEALTH` column header becomes plain text `HEALTH`, not a second button. `SCORE` and `CONF` stay plain text, exactly those strings, so `union.test.tsx`'s `getByText` still matches.
+
+`union.test.tsx` also has `cycles health sorting descending, ascending, then original order`. That test clicks a button named `/HEALTH/`. The plan's earlier line that this file does not mention HEALTH was wrong about that test. It still does not use `getByText('HEALTH')`. Change only those three clicks to the button named `Sort by fundamental health score`. Leave the three order assertions as they are. No other line in that file changes.
 
 Click a sort that is off: it becomes the only active sort, direction descending. Click the active sort: descending → ascending → off. Off means the comparator returns 0.
 
