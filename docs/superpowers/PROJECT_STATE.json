@@ -3389,7 +3389,7 @@
       "id": "CANDIDATE-BACKTEST-CHART",
       "name": "Original candidate backtest candles, trade markers and indexed equity comparison",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "PREBREAKOUT-PRESENTATION-V2"
@@ -3406,14 +3406,29 @@
         "note": "Presence only: completed comparison integration marker; absent while planning."
       },
       "plan_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent /root/backtest_chart_plan_r1 reviewed exact plan at 72dc64f6d5752033e48e6553d1de25308fc70760 against actual sources; two passes; zero numeric/persistence gate findings."
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/backtest_chart_plan_r1",
+          "reviewed": "Whole plan at 72dc64f6d5752033e48e6553d1de25308fc70760, SHA256 c385e6866e409c40b4f694b483edd60ea8acb33c4d901466b1e1283c22735b8f, against current engine/scan/cache/chart/report sources",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Auditor applied bmad adversarial; independently re-read committed whole plan and checked adjacent cache consumers, all setup modes, normalization, provenance; plan only."
+        }
+      ],
       "notes": "User approved all grilling proposals 2026-10-14. Planning/tickets only; original unavailable when no actual matching backtest; waiting for #235 before builds."
     }
   ],
