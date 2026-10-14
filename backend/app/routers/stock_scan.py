@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.scan_report_lifecycle import (run_reported_scan, observe_resolution, observe_configuration, observe_data_failure, observe_no_data)
+from app.services.scan_report_lifecycle import (run_reported_scan, observe_resolution, observe_configuration, observe_data_failure, observe_no_data, observe_evaluation, observe_terminal)
 from fastapi import Response
 from app.services.config_health import config_health
 from app.database import AsyncSessionLocal, get_db
@@ -365,10 +365,12 @@ def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
     # post-gather floor then reads `stockBreakdown.trend` as a real reading.
     _trend = next((r for r in card.rules if r.name == "trend"), None)
     if _trend is None or not getattr(_trend, "measured", True):
+        observe_terminal(symbol, "no_data", "trend_unmeasured", observations={"direction": direction}, thresholds={"min_trend": min_trend})
         return {"symbol": symbol,
                 "reason": f"direction_conviction_unmeasured: no trend measurement for {direction} {horizon}"}
     _trend_score = _trend.score
     if _trend_score < min_trend:
+        observe_terminal(symbol, "filtered", "direction_conviction", observations={"trend_score": _trend_score, "direction": direction}, thresholds={"min_trend": min_trend})
         return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {min_trend:g} for {direction} {horizon}"}
     return None
 
@@ -1294,6 +1296,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     return StockAnalysisOut(
         symbol=symbol, company=core.company, price=core.price, direction=req.direction,
         stock_score=card.score, stock_status=card.status, is_index=is_index,
+        stock_explanation=_stock_explanation_out(symbol, card),
         strategy=strategy_out, backtest=backtest_out,
         confidence=core.conf_val, confidence_text=core.conf_txt,
         sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,
@@ -1326,6 +1329,11 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     return shares, round(dollar_risk, 2)
 
 
+def _unique_setup_symbols(symbols):
+    """Normalize before exclusions/evaluation, preserving first-occurrence tie order."""
+    return list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
+
+
 async def _process_stock(
     symbol: str,
     req: StockScanRequest,
@@ -1344,6 +1352,7 @@ async def _process_stock(
     # before the first symbol is touched; the call is kept here so that direct
     # callers (the test suite) screen on the real gate rather than silently
     # running with it disabled.
+    observe_evaluation(symbol)
     _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     # The scan resolves the earnings veto window once and passes it in; a
     # direct caller (the test suite) gets the same resolution here.
@@ -1361,6 +1370,7 @@ async def _process_stock(
             _bars_gen = conf_generation()
             bars = await get_historical_bars(symbol, start, end)
             if not bars or len(bars) < 60:
+                observe_terminal(symbol, "no_data", "insufficient_history")
                 return {"symbol": symbol, "reason": "insufficient history"}
 
             # ONE 15-min fetch, when either consumer needs it (P3a item 12, plan
@@ -1385,6 +1395,7 @@ async def _process_stock(
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
                     _intraday_fetch_exc = exc
                 if (_drop := _intraday_history_drop(symbol, req.strategy, intraday_bars)):
+                    observe_terminal(symbol, "no_data", "insufficient_intraday_history")
                     return _drop
 
             # Price fallback chain mirrors the options scan: Tradier batch quote →
@@ -1399,12 +1410,15 @@ async def _process_stock(
                 if not price:
                     price = await fetch_price_async(client, symbol)
                 if not price:
+                    observe_terminal(symbol, "no_data", "missing_price")
                     return {"symbol": symbol, "reason": "no price data"}
                 company = await fetch_company_name_async(client, symbol)
 
             if req.min_price is not None and price < req.min_price:
+                observe_terminal(symbol, "filtered", "price_min", observations={"price": price}, thresholds={"min_price": req.min_price})
                 return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
             if req.max_price is not None and price > req.max_price:
+                observe_terminal(symbol, "filtered", "price_max", observations={"price": price}, thresholds={"max_price": req.max_price})
                 return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
 
             # --- regime sentiment ---
@@ -1469,6 +1483,7 @@ async def _process_stock(
             # P3a item 12: drop where the auto-trader's fire would refuse.
             if (_drop := _regime_data_drop(symbol, req, full_cfg, _regime_gate, rcfg,
                                            regime_bars, _intraday_fetch_exc)):
+                observe_terminal(symbol, "error" if _intraday_fetch_exc is not None else "no_data", "regime_fetch_failed" if _intraday_fetch_exc is not None else "regime_data_unavailable")
                 return _drop
 
             card = score_stock(
@@ -1485,8 +1500,10 @@ async def _process_stock(
                 benchmark_candles=_aligned_benchmark(rs_benchmark_candles, bars[-120:]),
             )
             if card.status == "REJECT":
+                observe_terminal(symbol, "filtered", "score_status", observations={"score": card.score, "status": card.status})
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
             if (_drop := _min_score_drop(symbol, card, req.min_stock_score)):
+                observe_terminal(symbol, "filtered", "score_min", observations={"score": card.score}, thresholds={"min_stock_score": req.min_stock_score})
                 return _drop
 
             # Direction-conviction floor (shared with _analyze_core — A5c).
@@ -1495,6 +1512,7 @@ async def _process_stock(
                 return _drop
 
             if req.regime_filter and _regime_headwind(regime_signal, _regime_gate):
+                observe_terminal(symbol, "filtered", "regime_headwind")
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             if req.strategy == "mean_reversion_multi":
@@ -1502,6 +1520,7 @@ async def _process_stock(
                 observe_configuration("stocks.multi_params", _multi_shape, symbol=symbol)
                 signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
                 if _drop:
+                    observe_terminal(symbol, "no_setup", "setup_not_returned", observations={"strategy": req.strategy})
                     return _drop
                 # The backtest runs the same vote on the same shape object.
                 _bt_strategy = "mean_reversion_multi"
@@ -1510,6 +1529,7 @@ async def _process_stock(
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
+                    observe_terminal(symbol, "error", "unsupported_strategy")
                     return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
                 signal_kwargs = _merge_strategy_params(
                     req.strategy, req.direction,
@@ -1523,6 +1543,7 @@ async def _process_stock(
                 signal = signal_fn(signal_bars, direction=req.direction,
                                    current_price=_live_price, **signal_kwargs)
                 if signal is None:
+                    observe_terminal(symbol, "no_setup", "setup_not_returned", observations={"strategy": req.strategy})
                     return _no_setup_drop(symbol, req.strategy)
                 _bt_strategy = req.strategy
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
@@ -1550,6 +1571,7 @@ async def _process_stock(
                 if not conf_invalidated_since(symbol, _bars_gen):
                     _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
             if (_drop := _backtest_drop(symbol, bt_result)):
+                observe_terminal(symbol, "filtered", "backtest_gate", observations={"passes_gate": bt_result.passes_gate, "win_rate": getattr(bt_result, "win_rate", None), "n_trades": getattr(bt_result, "n_trades", None)}, thresholds={"min_trades": req.bt_min_trades, "min_win_rate": req.bt_min_win_rate})
                 return _drop
 
             # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
@@ -1579,6 +1601,7 @@ async def _process_stock(
 
             if conf_val is not None and req.confidence_reject_below is not None:
                 if conf_val < req.confidence_reject_below:
+                    observe_terminal(symbol, "filtered", "confidence_gate", observations={"confidence": conf_val}, thresholds={"confidence_reject_below": req.confidence_reject_below})
                     return {
                         "symbol": symbol,
                         "reason": (
@@ -1696,6 +1719,7 @@ async def _process_stock(
                 stock_explanation=_stock_explanation_out(symbol, card),
             )
         except Exception as exc:
+            observe_terminal(symbol, "error", "data_processing_failed")
             observe_data_failure(symbol)
             logger.exception("Error processing %s", symbol)
             return {"symbol": symbol, "reason": str(exc)}
@@ -1806,6 +1830,8 @@ async def _execute_stock_scan_core(
             raise HTTPException(status_code=400, detail=str(e))
     # Excluded symbols go into `rejected` below and count in `scanned` and
     # `failed_history`, so scanned == sum of buckets still holds.
+    if req.category == "pullback":
+        symbols = _unique_setup_symbols(symbols)
     symbols, _excluded = _drop_excluded_symbols(symbols, f"STOCK SCAN {scan_id}")
     _scanned = len(symbols) + len(_excluded)
 
@@ -1912,6 +1938,7 @@ async def _execute_stock_scan_core(
     # gather keeps input order, so each raised exception is named by its symbol.
     for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
+            observe_terminal(sym, "error", "data_processing_failed")
             observe_data_failure(sym)
             rejected.append({"symbol": sym, "reason": str(r)})
         elif isinstance(r, PositionCardOut):
@@ -1943,6 +1970,7 @@ async def _execute_stock_scan_core(
     # (not an f-string on _SHORTLIST_REASON_PREFIX) keeps it visible to
     # test_every_stock_reason_producer_is_classified's source scan.
     for _k, _c in enumerate(candidates[_cap:], start=_cap + 1):
+        observe_terminal(_c.symbol, "filtered", "shortlist_cap", observations={"rank": _k, "original_count": original_count}, thresholds={"cap": _cap})
         _conf = f"{_c.confidence}%" if _c.confidence is not None else "n/a"
         rejected.append({
             "symbol": _c.symbol,
@@ -1950,6 +1978,8 @@ async def _execute_stock_scan_core(
                       f"confidence {_conf} ranked {_k} of {original_count} (cap {_cap})",
         })
     candidates = candidates[:_cap]
+    for candidate in candidates:
+        observe_terminal(candidate.symbol, "accepted", "candidate_returned")
 
     _direction_banner: str | None = None
     # The pipeline's `failed_direction`: a measured trend below the floor only
@@ -2064,6 +2094,7 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
     else:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
+    symbols_to_scan = _unique_setup_symbols(symbols_to_scan)
     if not symbols_to_scan:
         observe_resolution([], [], [])
         return []
@@ -2121,13 +2152,16 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
         sym = sym.strip().upper()
         if not sym:
             continue
+        observe_evaluation(sym)
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_terminal(sym, "error", "history_fetch_failed")
             observe_data_failure(sym)
             logger.warning("fib-pullback scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            observe_terminal(sym, "no_data", "missing_history")
             missing_data_count += 1
             continue
         try:
@@ -2142,10 +2176,12 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
             )
             at_level, dist_pct, level_hit = fib["at_level"], fib["dist_pct"], fib["label"]
         except Exception as exc:
+            observe_terminal(sym, "error", "signal_processing_failed")
             observe_data_failure(sym)
             logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)
             continue
         if level_hit is None:
+            observe_terminal(sym, "no_setup", "fib_level_not_returned")
             # Insufficient bars or no swing found — skip
             continue
 
@@ -2160,8 +2196,10 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
                 ema_val = c * k + ema_val * (1 - k)
             current_close = closes[-1]
             if body.direction == "Bullish" and current_close < ema_val:
+                observe_terminal(sym, "filtered", "ema_side", observations={"current_close": current_close, "ema_value": ema_val, "direction": body.direction}, thresholds={"ema_period": ema_period})
                 continue
             if body.direction == "Bearish" and current_close > ema_val:
+                observe_terminal(sym, "filtered", "ema_side", observations={"current_close": current_close, "ema_value": ema_val, "direction": body.direction}, thresholds={"ema_period": ema_period})
                 continue
 
         # Confidence: 100 if at level, scaled by proximity otherwise
@@ -2190,6 +2228,8 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
     ))
     if symbols_to_scan and missing_data_count == len(symbols_to_scan):
         observe_no_data()
+    for row in results:
+        observe_terminal(row["symbol"], "accepted", "candidate_returned")
     return results
 
 
@@ -2213,6 +2253,7 @@ async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
     else:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
+    symbols_to_scan = _unique_setup_symbols(symbols_to_scan)
     if not symbols_to_scan:
         observe_resolution([], [], [])
         return []
@@ -2254,22 +2295,27 @@ async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
         sym = sym.strip().upper()
         if not sym:
             continue
+        observe_evaluation(sym)
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_terminal(sym, "error", "history_fetch_failed")
             observe_data_failure(sym)
             logger.warning("prebreakout scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            observe_terminal(sym, "no_data", "missing_history")
             missing_data_count += 1
             continue
         try:
             signal = breakout_setup_signal(bars, sym, direction=body.direction, **base_params)
         except Exception as exc:
+            observe_terminal(sym, "error", "signal_processing_failed")
             observe_data_failure(sym)
             logger.warning("prebreakout scan: signal failed for %s — %s", sym, exc)
             continue
         if signal is None:
+            observe_terminal(sym, "no_setup", "setup_not_returned")
             continue
         results.append({
             "symbol": sym,
@@ -2284,6 +2330,8 @@ async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
     results.sort(key=lambda r: r["confidence"], reverse=True)
     if symbols_to_scan and missing_data_count == len(symbols_to_scan):
         observe_no_data()
+    for row in results:
+        observe_terminal(row["symbol"], "accepted", "candidate_returned")
     return results
 
 
