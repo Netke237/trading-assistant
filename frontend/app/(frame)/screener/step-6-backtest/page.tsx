@@ -66,6 +66,10 @@ export default function Step6BacktestPage() {
   const { rejected: gateRejected, overCap } = splitStockRejected(result?.rejected);
   const candidateSymbols = candidates.map(c => c.symbol);
   const notRanked = Math.max(0, (result?.pipeline?.scanned ?? (result?.rejected.length ?? 0) + candidates.length) - candidates.length);
+  const gateThisScan = typeof minTrades === 'number' && typeof minWinRate === 'number'
+    ? `win ≥${(minWinRate * 100).toFixed(0)}% · trades ≥${minTrades} · expectancy ≥ 0`
+    : 'Threshold provenance unavailable for this scan';
+  const eventFilterLabel = eventFilter === 'include' ? 'Include' : eventFilter === 'avoid' ? 'Avoid' : eventFilter === 'only_pre_event' ? 'Events only' : eventFilter;
   function onAfterScanToggle(symbol: string, armed: boolean) { useScanStore.getState().setStockAfterScanIntent(symbol, armed); }
   function proceedWith(symbol: string) { setSelectedSymbol(symbol); router.push('/screener/step-7-position-card'); }
   return <div className={styles.main}>
@@ -73,8 +77,40 @@ export default function Step6BacktestPage() {
       <Text size={11} tone="dim">STEP 5 OF 6</Text><Title as="h1" size={24}>Backtest Results</Title>
       <Text size={13} tone="secondary">{filteredCandidates.length} candidates · {gateRejected.length} rejected{overCap.length > 0 && ` · ${overCap.length} over cap`}</Text>
       <Text size={12} tone="caution">Unvalidated · Research only. Strategy validation is unavailable; automatic arming and broker sending are blocked. Score is a filter. The backtest gate below is historical per-symbol scan evidence, not strategy validation approval.</Text>
-      {stockScanAt && mounted && <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>}
+      {stockBasket.length > 0 && <button type="button" className={styles.actionBtn} onClick={() => setShowSendDialog(true)}>Send basket ({stockBasket.length})</button>}
     </div>
+    {/* react-jsx drops whitespace between elements; the label keeps the space so the region reads "Candidates 2". */}
+    <section className={styles.summaryStrip} aria-label="Scan summary">
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Candidates </Text>
+        <Data size={13}>{filteredCandidates.length}{' '}</Data>
+      </div>
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Rejected </Text>
+        <Data size={13}>{gateRejected.length}{' '}</Data>
+      </div>
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Over cap </Text>
+        <Data size={13}>{overCap.length}{' '}</Data>
+      </div>
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Gate this scan used </Text>
+        <Text size={12}>{gateThisScan}{' '}</Text>
+      </div>
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Event filter </Text>
+        <Text size={12}>{eventFilterLabel}{' '}</Text>
+      </div>
+      <div className={styles.summaryItem}>
+        <Text size={11} tone="dim">Hidden </Text>
+        <Data size={13}>{candidates.length - filteredCandidates.length}{' '}</Data>
+      </div>
+      {stockScanAt && mounted && (
+        <div className={styles.summaryItem}>
+          <Text size={11} tone="dim">Last stock scan: {_labelWithDate(stockScanAt)}</Text>
+        </div>
+      )}
+    </section>
     {feedback.error && <Text size={12} tone="reject">{feedback.error}</Text>}
     {feedback.notice && <Text size={12} tone="caution">{feedback.notice}</Text>}
     <DirectSendNotesPanel />
@@ -195,7 +231,6 @@ export default function Step6BacktestPage() {
             })}
       </div>
     </div>}
-    {stockBasket.length > 0 && <button type="button" className={styles.actionBtn} onClick={() => setShowSendDialog(true)}>Send basket ({stockBasket.length})</button>}
     {showSendDialog && <StockSendDialog cards={stockBasket} onClose={() => setShowSendDialog(false)} onSubmit={() => setShowSendDialog(false)} />}
     <SavedScanReportInspector category="stocks" tableRunId={result?.report_run_id} isDrawer isOpen={inspectorOpen} onClose={() => setInspectorOpen(false)} />
   </div>;
