@@ -355,3 +355,58 @@ def test_unsafe_resolved_symbols_cannot_claim_complete_zero_and_integer_threshol
         assert scan_reports._encode(snapshot)
     finally:
         lc._collector.reset(token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cancel', [False, True])
+@pytest.mark.parametrize('category', ['prebreakout', 'fib', 'pullback'])
+async def test_partial_failed_or_cancelled_run_keeps_previous_usable_report(lifecycle, category, cancel):
+    """#266 R3-1: partial terminal outcomes stay on the failed/cancelled attempt,
+    but that attempt never replaces (and so never prunes) the last usable report."""
+    from app.models.scan_report import ScanReportHead
+    lc, factory = lifecycle
+    async def good(symbol):
+        lc.observe_resolution([symbol], [symbol], [])
+        lc.observe_evaluation(symbol)
+        lc.observe_terminal(symbol, 'accepted', 'candidate_returned')
+        return [{'symbol': symbol}]
+    response = Response()
+    await lc.run_reported_scan({}, category=category, trigger='manual', response=response, callback=lambda: good('OLD'))
+    old_id = response.headers[lc.HEADERS[0]]
+    async def fail():
+        lc.observe_resolution(['AAA', 'BBB', 'EXCL'], ['AAA', 'BBB'], [{'symbol': 'EXCL'}])
+        lc.observe_evaluation('AAA')
+        lc.observe_terminal('AAA', 'accepted', 'candidate_returned')
+        raise asyncio.CancelledError if cancel else RuntimeError('secret')
+    with pytest.raises(asyncio.CancelledError if cancel else HTTPException):
+        await lc.run_reported_scan({}, category=category, trigger='manual', callback=fail)
+    async with factory() as db:
+        old = await get_run(db, old_id)
+        latest = await get_latest(db, category)
+        head = await db.get(ScanReportHead, category, populate_existing=True)
+    assert old is not None and old['status'] == 'complete', 'prior complete report deleted'
+    assert latest['previous_report'] is not None, 'previous_report lost'
+    assert latest['previous_report']['run_id'] == old_id
+    assert head.usable_id == old_id
+    attempt = latest['latest_attempt']
+    assert attempt['run_id'] != old_id and head.latest_id == attempt['run_id']
+    assert attempt['status'] == ('cancelled' if cancel else 'failed')
+    assert attempt['diagnostics_available'] is True
+    terminal = attempt['diagnostics']['terminal_outcomes']
+    assert terminal['complete'] is False
+    assert terminal['counts']['accepted'] == 0
+    assert terminal['counts']['excluded'] == 1
+    assert terminal['unknown_symbols'] == ['AAA', 'BBB']
+    failed_id = attempt['run_id']
+    # A later complete run still promotes itself and prunes as before.
+    response = Response()
+    await lc.run_reported_scan({}, category=category, trigger='manual', response=response, callback=lambda: good('NEW'))
+    new_id = response.headers[lc.HEADERS[0]]
+    async with factory() as db:
+        latest = await get_latest(db, category)
+        head = await db.get(ScanReportHead, category, populate_existing=True)
+        assert await get_run(db, old_id) is None
+        assert await get_run(db, failed_id) is None
+    assert head.latest_id == head.usable_id == new_id
+    assert latest['latest_attempt']['run_id'] == new_id
+    assert latest['previous_report'] is None

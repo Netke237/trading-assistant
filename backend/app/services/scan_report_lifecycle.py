@@ -361,14 +361,14 @@ async def run_reported_scan(request, *, category, trigger, callback, response=No
             result = await callback()
         except asyncio.CancelledError:
             try:
-                await asyncio.shield(_finish(run, status='cancelled', error_code='cancelled', inputs=c.inputs(), diagnostics=_partial_diagnostics(c)))
+                await asyncio.shield(_finish(run, status='cancelled', error_code='cancelled', inputs=c.inputs(), diagnostics=_partial_diagnostics(c), promote_usable=False))
             except (scan_reports.ScanReportStorageError, ValueError, TypeError):
                 log.error('scan report cancellation save unavailable')
             raise
         except Exception as exc:
             persistence = 'saved'
             try:
-                await _finish(run, status='failed', error_code='scan_failed', inputs=c.inputs(), diagnostics=_partial_diagnostics(c))
+                await _finish(run, status='failed', error_code='scan_failed', inputs=c.inputs(), diagnostics=_partial_diagnostics(c), promote_usable=False)
             except (scan_reports.ScanReportStorageError, ValueError, TypeError):
                 persistence = 'unavailable'
                 log.error('scan report failure save unavailable')
