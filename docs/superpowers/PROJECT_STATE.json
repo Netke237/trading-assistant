@@ -3444,7 +3444,7 @@
     {
       "id": "MEAS-LIVE-DB-ISOLATION",
       "name": "Frozen MEAS runs on an isolated DB copy, separate checkout and port; live DB refused",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 5,
       "audit_clean": true,
       "depends_on": [
@@ -3548,7 +3548,7 @@
           "verification": "Second same-day run and interrupted-run cases refused with no isolation.json; first run cannot be refused by clock skew (same machine, aware UTC, runner stamps after mkdir) or ET date (both computed in the 13:00-13:15 ET window); stop path unchanged; single copy_evidence call site behind the check; meas tests 336 passed."
         }
       ],
-      "notes": "SELF-MERGE PENDING, PR #286, audited head 5ed6ada7 (code round 2 clean); later commits are state records only. Not merged until gh reports MERGED. || 2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
+      "notes": "MERGED 2026-10-14: PR #286 merged by the board self-merge step at 65b58bb56dd22b66ba1fec26472e2718963cd993 (head 3e504b72 = audited 5ed6ada7 + state records; CI backend/frontend/test green on that head; gh state MERGED verified). Follow-ups: real-container setup needs Kenneth's explicit yes; then #114 recovery, then #189 days via scripts/meas/isolated_day.py only. || 2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
     },
     {
       "id": "SCREEN-LABELS-19-20",
@@ -3977,6 +3977,36 @@
         "merge_commit": "d23b1588cecc19769100ffd6499948fd70732429"
       },
       "merged_commit": "d23b1588cecc19769100ffd6499948fd70732429"
+    },
+    {
+      "id": "STOCK-PRES-P3-BACKTEST",
+      "name": "Stocks Backtest page (Step 5 of 6) in the Options layout: summary strip, Score and Confidence sorts, quick summary above the kept full card",
+      "status": "shipped",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "closed_by": "clean"
+      },
+      "depends_on": [
+        "STOCK-PRES-P1-BACKEND-EVIDENCE",
+        "STOCK-PRES-P2-POSITION"
+      ],
+      "covers": [
+        "decision STOCK-PRESENTATION-2026-10-10",
+        "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
+        "board item / tracking issue #148",
+        "programme #144"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-14-stock-pres-p3-backtest-plan.md",
+      "branch": "board/stock-pres-p3-backtest-88bae253",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+        "pattern": "How this page works",
+        "note": "Task 3 adds the disclosure. PRESENCE ONLY; behaviour is pinned by the plan's tests. The sentence is on the page, which is what built expects."
+      },
+      "note": "2026-10-14 PR #315 verified MERGED at dae5b438. Status shipped only after that result was observed. || 2026-10-14 SELF-MERGE PENDING, PR #315, audited head 8fc4e295. || 2026-10-14 ROUND 4 (code round 2): CLEAN. Fresh auditor. Scope git diff 81573f6d..8fc4e295. 0 GATE FINDINGS. The heading text is unchanged. || 2026-10-14 Frontend build failed on PR #315. The new heading had a raw apostrophe. The words on screen stay the same. Code audit is open again until that line is reviewed. || 2026-10-14 SELF-MERGE PENDING, PR #315, audited head 82d30712. || 2026-10-14 ROUND 3 (code round 1): CLEAN. Fresh auditor. Scope git diff origin/main..82d30712. 0 GATE FINDINGS. || 2026-10-14 #313 quick summary landed at 030bfb96. All three build tickets are on the branch. || 2026-10-14 #312 sorts landed at 4001947b. The health-cycle clicks in union.test.tsx follow the new button. || 2026-10-14 #311 summary strip landed at 670a3616. Code stage started. || 2026-10-14 ROUND 2 (plan round 2 of 3): CLEAN. Fresh independent auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 52b66480..87faaa8d of the plan (the P3-A1 fix) and its interaction with the earnings helper: the summary calls stockEarningsGate(c, result.timestamp, result.veto_days) with no custom clock, matching StockPositionCard. The two pinned cases hold (61 days ages to a veto; 2 days ages below zero and clears). 0 GATE FINDINGS. Plan stage closed. Code stage has not started. || 2026-10-14 ROUND 1 (plan round 1 of 3): 1 GATE FINDING, not clean. Fresh independent auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan at 52b66480 against the Backtest page on 472bb1b0. P3-A1: the quick summary keyed the earnings sentence off stored earnings_veto, while StockPositionCard uses stockEarningsGate(card, result.timestamp, result.veto_days).veto. A stored false becomes a veto after the scan ages into the window (earnings_days 61, veto_days 60, scan 2026-10-05, viewed 2026-10-08); a stored true clears once the aged distance drops below zero (earnings_days 2 on those same dates). Fixed in the plan: call that helper with the same three arguments, do not reimplement it, pin both cases. Plan round 2 next. || 2026-10-14 taken from the Board (#148) on board/stock-pres-p3-backtest-88bae253, cut from origin/main 472bb1b0. Blockers #146 and #147 are closed. No application code yet."
     }
   ],
   "already_shipped": [
@@ -7265,21 +7295,6 @@
           "docs/adr/0001-stocks-parameters-per-horizon.md"
         ],
         "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery."
-      },
-      {
-        "id": "STOCK-PRES-P3-BACKTEST",
-        "owner": "agent",
-        "status": "not_started",
-        "depends_on": [
-          "STOCK-PRES-P1-BACKEND-EVIDENCE",
-          "STOCK-PRES-P2-POSITION"
-        ],
-        "covers": [
-          "decision STOCK-PRESENTATION-2026-10-10",
-          "docs/superpowers/specs/2026-10-10-stock-presentation/README.md",
-          "tracking issue #144"
-        ],
-        "summary": "Backtest page: summary strip, Score/Confidence sort, quick summary above the kept full-card Expand; all 17 columns kept. Keep the time-exit display added by STOCKS-T1-FOLLOWUPS (ea9c67ce)."
       },
       {
         "id": "STOCK-PRES-P5-PREBREAKOUT",
