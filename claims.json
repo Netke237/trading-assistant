@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/yaml-depth-bound-b1dd948c",
       "claimed_at": "2026-10-14T14:39:52Z",
-      "expires_at": "2026-10-14T17:42:06Z",
+      "expires_at": "2026-10-14T17:47:25Z",
       "note": "Resume #167 final audits and PR after interrupted checks",
       "task": "YAML-DEPTH-BOUND"
     }
