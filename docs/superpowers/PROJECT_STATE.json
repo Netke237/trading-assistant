@@ -3719,10 +3719,11 @@
           "verification": "Fresh auditor reproduced all cases on Python3.11.16 real git with4noncleanplanrounds; unauthorized overall4 incorrectly becomes local1. Secondpass confirmed changed guards/interactions; no edits."
         }
       ],
-      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round.",
+      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged.",
       "tickets": [
         300,
-        301
+        301,
+        308
       ],
       "implementation_tickets": {
         "300": {
@@ -3750,6 +3751,12 @@
           "green": "Python3.11.16 focused371, backend8431passed9skipped in890.40s; frontend252suites5254tests/typecheck; final frozen source/test checksums unchanged.",
           "deviation": "First post-fix full run stopped before narrow mixed-case interaction correction; final refrozen full run passed.",
           "audit": "Fresh independent code round2 pending"
+        },
+        "308": {
+          "implementer": "/root/recover_308",
+          "status": "in_progress",
+          "scope": "C2-G1/C2-G2 and interactions only; prior session fix unpushed and unavailable; recovered from frozen checkpoint581cbedd.",
+          "audit": "Final code3 pending; no counter reset."
         }
       },
       "implementation_interruption": {
