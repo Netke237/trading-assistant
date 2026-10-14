@@ -3728,7 +3728,9 @@
           "findings": [
             "C3-G1 scripts/state.py:907-910: prefix-only fire-call policy exception discards explicit opening denial/conditional suffix, accepting unauthorized overall4 as local1."
           ],
-          "fixes": [],
+          "fixes": [
+            "#314 c6ae59d84d68f6709d82fd8f618e0f211ab2928a by fresh /root/fix_c3_clause: entire excluded-tail recognized wording, no prefix or punctuation-truncation escape; new independent stage2 review pending."
+          ],
           "outstanding": [
             "C3-G1"
           ],
@@ -3736,7 +3738,7 @@
           "verification": "Fresh independent Python3.11 real-git four-nonclean-plan-round probes: colon and dash fire calls aside, this opening is not authorized both return no drift and actual main exit0. Second pass confirmed changed exception reaches cap subtraction. Prior C2 original cases reject; unrelated phases match main472bb1b0."
         }
       ],
-      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged. || #308 fixed at7099cd77, required checks green. Final independent code3/continuous5 pending; counters unchanged. || FINAL CODE3/continuous5 NOT CLEAN: /root/final_code3 found C3-G1, policy prefix exception still hides explicit denial/conditional reopening; real-git CLI colon/dash cases exit0 incorrectly. Three-round code cap reached. STOPPED: no fourth round, no code fix, no PR/merge. #214 blocked; requires explicit new bounded follow-up authorization. Required checks green do not clear independent gate. || User explicitly authorized bounded C3-G1 follow-up and second code-audit stage via STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14. Historical5 rounds and original code_stage3notclean preserved. New stage2 cap3; no checker accounting redesign. Singular checker cannot model second code stage: its historical cap alarm remains explained until independent clean verdict, never silenced by editing history.",
+      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged. || #308 fixed at7099cd77, required checks green. Final independent code3/continuous5 pending; counters unchanged. || FINAL CODE3/continuous5 NOT CLEAN: /root/final_code3 found C3-G1, policy prefix exception still hides explicit denial/conditional reopening; real-git CLI colon/dash cases exit0 incorrectly. Three-round code cap reached. STOPPED: no fourth round, no code fix, no PR/merge. #214 blocked; requires explicit new bounded follow-up authorization. Required checks green do not clear independent gate. || User explicitly authorized bounded C3-G1 follow-up and second code-audit stage via STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14. Historical5 rounds and original code_stage3notclean preserved. New stage2 cap3; no checker accounting redesign. Singular checker cannot model second code stage: its historical cap alarm remains explained until independent clean verdict, never silenced by editing history. || C3-G1 bounded fixc6ae59d8 via fresh #314 implementer; required full checks green8858backend/9skip,5254frontend/typecheck,460focused; new authorized stage2 round1 pending, all5 prior rounds retained.",
       "tickets": [
         300,
         301,
@@ -3783,9 +3785,13 @@
         },
         "314": {
           "implementer": "/root/fix_c3_clause",
-          "status": "in_progress",
+          "status": "done",
           "scope": "C3-G1 complete excluded policy-clause validation and interactions only",
-          "audit": "New explicitly authorized code stage2, max3 rounds, pending"
+          "audit": "Fresh independent code-stage2 round1 pending.",
+          "commit": "c6ae59d84d68f6709d82fd8f618e0f211ab2928a",
+          "red": "32 real-git unauthorized complete-tail cases returned no drift before fix.",
+          "green": "Python3.11 focused460passed41.77s; backend8858passed9skip1032.22s; frontend252suites5254tests255.577s/typecheck; frozen fingerprints unchanged.",
+          "cli": "26 real-git CLI cases:20unauthorizedexit1 with drift,6validexit0 including historical approval."
         }
       },
       "implementation_interruption": {
