@@ -537,6 +537,9 @@ class NewsItem(BaseModel):
     source:    str
     timestamp: str
     sentiment: Literal['bull', 'bear', 'neutral'] = 'neutral'
+    # Provider-supplied original article link (absolute http/https only), or
+    # None when the provider gave none or an invalid one. Additive (#265).
+    url:       str | None = None
 
 
 # ── Pricing method enum ──────────────────────────────────────────────────────
