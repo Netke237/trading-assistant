@@ -3615,7 +3615,7 @@
       "id": "STATE-MULTI-PLAN-STAGE",
       "name": "Explicit additional authorized plan stages with independent per-stage caps",
       "status": "built",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -3636,7 +3636,7 @@
         "closure_evidence": "Fresh /root/multi_stage_plan_r2 reviewed f4a54d04..d02ab7ac R1-G1 fix and interactions, two passes, zero gate findings."
       },
       "code_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "audit_history": [
@@ -3666,9 +3666,28 @@
           "outstanding": [],
           "clean": true,
           "verification": "Independent second pass confirmed unpaired acknowledgement cannot close final plan; valid authorized two-stage and final clean transition preserved."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "code_round": 1,
+          "reviewer": "/root/multi_stage_code_r1",
+          "reviewed": "Whole integrated f655b7e2de717e6975688469ca6eb92a2aafe81c..3fe29695e38d45c0278dd9139f89ca74647e1f8e; all six changed files",
+          "gate_findings": 2,
+          "findings": [
+            "C1-G1: suffix after numeric range can be conditional/negative but accepted, hiding exhausted cap",
+            "C1-G2: q target mention can wrongly bind explicit answer opening a different target"
+          ],
+          "fixes": [],
+          "outstanding": [
+            "C1-G1",
+            "C1-G2"
+          ],
+          "clean": false,
+          "verification": "Auditor reproduced each with real git and four non-clean plan subjects; all88newcases passed; independent second pass scope verified."
         }
       ],
-      "notes": "Build tickets #300/#301 complete. Current main f655b7e2 merged (only state conflict, peer histories preserved); merged frontend252/5254 and typecheck, cached-font build and real-git CLI checks pass. Integrated backend running; independent code audit pending.",
+      "notes": "Code round1/continuous3: two numeric gate findings open; fresh implementer must fix suffix authorization and explicit target binding. Integrated old-source backend run stopped before source correction, not for slow endpoint behavior. Plan2clean preserved; no counter reset.",
       "tickets": [
         300,
         301
