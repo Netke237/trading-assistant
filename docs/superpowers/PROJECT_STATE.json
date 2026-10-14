@@ -3437,7 +3437,9 @@
         "frontend": "typecheck clean; Jest 251 suites / 5243 tests at 97406115 (11d1549 changes backend only)",
         "playwright": "CI smoke command (chromium, @smoke): 5 passed / 2 skipped",
         "state": "state.py no drift"
-      }
+      },
+      "pr": 304,
+      "self_merge": "SELF-MERGE PENDING, PR #304, audited head 11d1549 (code round 2 clean). Pending attempt only, not merged; main record unchanged until a verified merge."
     },
     {
       "id": "MEAS-LIVE-DB-ISOLATION",
