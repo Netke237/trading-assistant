@@ -70,7 +70,7 @@ function QuickSummary({ card, minTrades, minWinRate, scanTimestamp, vetoDays }: 
           </div>
         ))
       )}
-      <Text size={12}>Backtest vs this scan's gate</Text>
+      <Text size={12}>{"Backtest vs this scan's gate"}</Text>
       <div>
         <Text size={11} tone="dim">Win rate</Text>
         <Data size={12}>{(bt.win_rate * 100).toFixed(0)}%</Data>
