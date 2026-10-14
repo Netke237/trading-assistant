@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/state-multi-plan-stage-28408885",
       "claimed_at": "2026-10-14T20:43:43Z",
-      "expires_at": "2026-10-14T23:54:04Z",
+      "expires_at": "2026-10-14T23:55:44Z",
       "note": "Publish audited #317 correction, verify exact-head CI and merge #316 as instructed",
       "task": "STATE-MULTI-PLAN-STAGE"
     }
