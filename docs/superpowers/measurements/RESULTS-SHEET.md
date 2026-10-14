@@ -11,19 +11,21 @@ a finding.
 
 ## Proposal table (fill in after the last day)
 
-Draft filled 2026-10-09 from the two valid days (see "Two-day reading" below). Kenneth's column reads
-"pending" until he answers; nothing has been changed.
+Draft filled 2026-10-09 from the two valid days (see "Two-day reading" below). Kenneth answered every
+row in chat on 2026-10-11 (recorded on #121 and as decision `MEAS-DAY2-ANSWERS-2026-10-11`). The only
+change, `min_stock_score` 55 → 45, was made on main by OPTIONS-UNDERLYING-FLOOR-45; this sheet changes
+no setting. The stock scanner's own PASS threshold (`scoring_rules.yaml`, 55) is unchanged.
 
 | Threshold | Seed | Proposed | Rule that fired | Rows / days cited | Kenneth |
 |---|---|---|---|---|---|
-| `bearish_min_trend` Swing | 30 | keep 30 | keep (no step down: rate < 50%; no step up: day 1 2.03% is not < 2%, S1 0 candidates both days) | S1 2026-10-01 / 2026-10-09 | pending |
-| `bearish_min_trend` Position | 40 | keep 40 | keep (rates 3.50% / 5.36%) | S3 2026-10-01 / 2026-10-09 | pending |
-| `confidence_reject_below` (both directions) | 35 | keep 35 | keep (C1 quality addition on 1 of 2 days: NKE 10-09) | C1/C1b 2026-10-01 / 2026-10-09 | pending |
-| `min_stock_score` (both directions) | 55 | **45** | C5 ≥ 1 quality addition on 2 valid days; median stockScore 47 → 45. New question: C5b's names give 40 | C5 2026-10-01 (CSCO 53, NFLX 38), 2026-10-09 (NFLX 50, TSLA 47, WDC 46); C5b shown | pending |
-| `iv_rank_pass_max` Swing / Position | | not enough data | rank rows Swing 6 / Position 10 < 30 | O1–O4 both days | pending |
-| `iv_rank_caution_max` Swing / Position | | not enough data | as above | O1–O4 both days | pending |
-| `preferred_iv_rank_max` (one key, horizons pooled) | 55 | not enough data | per-horizon floor not met | O1–O4 both days | pending |
-| `regime_sizing.min_mult` | 0.3 | keep 0.3 (table only) | regimes differ (conviction +20 / −14), table shown | base scans both days | pending |
+| `bearish_min_trend` Swing | 30 | keep 30 | keep (no step down: rate < 50%; no step up: day 1 2.03% is not < 2%, S1 0 candidates both days) | S1 2026-10-01 / 2026-10-09 | keep 30 (2026-10-11) |
+| `bearish_min_trend` Position | 40 | keep 40 | keep (rates 3.50% / 5.36%) | S3 2026-10-01 / 2026-10-09 | keep 40 (2026-10-11) |
+| `confidence_reject_below` (both directions) | 35 | keep 35 | keep (C1 quality addition on 1 of 2 days: NKE 10-09) | C1/C1b 2026-10-01 / 2026-10-09 | keep 35 (2026-10-11) |
+| `min_stock_score` (both directions) | 55 | **45** | C5 ≥ 1 quality addition on 2 valid days; median stockScore 47 → 45. New question: C5b's names give 40 | C5 2026-10-01 (CSCO 53, NFLX 38), 2026-10-09 (NFLX 50, TSLA 47, WDC 46); C5b shown | **yes, 45 for both directions** (2026-10-11): the single key `contract_rules.yaml` `min_stock_score`, no per-direction key; applied on main by OPTIONS-UNDERLYING-FLOOR-45, not by this sheet |
+| `iv_rank_pass_max` Swing / Position | | not enough data | rank rows Swing 6 / Position 10 < 30 | O1–O4 both days | not enough data: stays at its seed until #189 has ≥ 30 rows per horizon (2026-10-11) |
+| `iv_rank_caution_max` Swing / Position | | not enough data | as above | O1–O4 both days | not enough data: stays at its seed until #189 (2026-10-11) |
+| `preferred_iv_rank_max` (one key, horizons pooled) | 55 | not enough data | per-horizon floor not met | O1–O4 both days | not enough data: stays at 55 until #189 (2026-10-11) |
+| `regime_sizing.min_mult` | 0.3 | keep 0.3 (table only) | regimes differ (conviction +20 / −14), table shown | base scans both days | keep 0.3 (2026-10-11) |
 | `min_volume` / `min_open_interest` | 50 / 200 | report only | C6: 4 + 2 attributed, 1 + 1 quality, all volume < 50 | C6 both days | — |
 | `max_iv_rank` | 70 | report only | `iv_rank_too_high` O1–O4: 3/11/0/3 and 6/11/2/4 | O1–O4 both days | — |
 | `iv_rank_threshold` / `ivAbsThreshold` | 50 / 50 | report only | no bearish name ≥ 40; no spread built | O1–O4 both days, A1/A2 day 1 | — |
@@ -31,6 +33,8 @@ Draft filled 2026-10-09 from the two valid days (see "Two-day reading" below). K
 When **every** row has Kenneth's answer, and each is recorded as a decision, add a line reading
 exactly `MEAS-ALL-PROPOSALS-ANSWERED` directly below this paragraph. The MEAS verify probe reads that
 line: until it exists, the phase is in progress.
+
+MEAS-ALL-PROPOSALS-ANSWERED
 
 "not enough data" is a valid answer for any row, and so is "new question for Kenneth" (plan §6,
 direction scope).
