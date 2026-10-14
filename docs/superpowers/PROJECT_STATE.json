@@ -3280,7 +3280,7 @@
       "id": "PREBREAKOUT-PRESENTATION-V2",
       "name": "Approved Pre-Breakout/Pullback/Fib ranking layout, preserved evidence and same-run diagnostics",
       "status": "built",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "depends_on": [
         "STOCKS-PRESENTATION-V2",
@@ -3330,6 +3330,23 @@
           "outstanding": [],
           "clean": true,
           "verification": "Second pass verified same-run terminal counts/dedup/cap parity, decision-site outcomes, partial unknown, projection/category isolation, direction/thresholds, live-context distinct source identity and no historical snapshot claim."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent Claude general-purpose subagent applying bmad-review-adversarial-general (code round 1)",
+          "reviewed": "git diff 65b58bb56dd22b66ba1fec26472e2718963cd993..97406115e7808bce427e11e4437aa7a9f653b6b4 (origin/main..branch after merging main; 39 files) against prebreakout-presentation-tickets.md, layout amendment and preservation crosswalk",
+          "gate_findings": 1,
+          "findings": [
+            "R3-1 (persisted data): scan_report_lifecycle.run_reported_scan now passes _partial_diagnostics(c) to _finish on failed/cancelled prebreakout/fib/pullback runs; scan_reports.finish_run promotes any non-None diagnostics to ScanReportHead.usable_id and _prune then deletes the category's previous complete report (reproduced on Python 3.11: prior run row gone, previous_report None). Triggers: cancelled long SP500 scans, pullback HTTP 500 config guards or 422 params after exclusions recorded."
+          ],
+          "fixes": [],
+          "outstanding": [
+            "R3-1"
+          ],
+          "clean": false,
+          "verification": "Coordinator confirmed mechanism in scan_reports.finish_run (usable_id update when diagnostics is not None) and _prune. Auditor checked candidate parity/order/list shape, terminal exclusivity, units, Fib lines, stale guards, actions and persistence keys without further gate findings."
         }
       ],
       "layout_revision_evidence": {
@@ -3343,10 +3360,10 @@
       },
       "reconciliation": "docs/superpowers/plans/2026-10-13-prebreakout-presentation-v2-preservation.md",
       "code_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
-      "note": "2026-10-14 #258\u2013266 built on board/prebreakout-presentation-v2-f78dd25f; status built (code exists, unmerged). Next: merge origin/main, integrated verification, independent code audit round 1 (phase round 3). Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258\u2013266 built; code round 1 (phase round 3) found R3-1 (failed/cancelled partial diagnostics promote usable_id and prune the previous complete report); fresh implementer fix next, then code round 2 on the fix only. Plan2 clean; original plan1 and layout revision1 preserved. audit_clean false, no merge. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
