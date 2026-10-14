@@ -3750,10 +3750,11 @@
       "id": "STOCK-PRES-P3-BACKTEST",
       "name": "Stocks Backtest page (Step 5 of 6) in the Options layout: summary strip, Score and Confidence sorts, quick summary above the kept full card",
       "status": "not_started",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 1
+        "rounds": 2,
+        "closed_by": "clean"
       },
       "depends_on": [
         "STOCK-PRES-P1-BACKEND-EVIDENCE",
@@ -3773,7 +3774,7 @@
         "pattern": "How this page works",
         "note": "Task 3 adds the disclosure. PRESENCE ONLY; behaviour is pinned by the plan's tests. Absent until that task lands, which is what not_started expects."
       },
-      "note": "2026-10-14 ROUND 1 (plan round 1 of 3): 1 GATE FINDING, not clean. Fresh independent auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan at 52b66480 against the Backtest page on 472bb1b0. P3-A1: the quick summary keyed the earnings sentence off stored earnings_veto, while StockPositionCard uses stockEarningsGate(card, result.timestamp, result.veto_days).veto. A stored false becomes a veto after the scan ages into the window (earnings_days 61, veto_days 60, scan 2026-10-05, viewed 2026-10-08); a stored true clears once the aged distance drops below zero (earnings_days 2 on those same dates). Fixed in the plan: call that helper with the same three arguments, do not reimplement it, pin both cases. Plan round 2 next. || 2026-10-14 taken from the Board (#148) on board/stock-pres-p3-backtest-88bae253, cut from origin/main 472bb1b0. Blockers #146 and #147 are closed. No application code yet."
+      "note": "2026-10-14 ROUND 2 (plan round 2 of 3): CLEAN. Fresh independent auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff 52b66480..87faaa8d of the plan (the P3-A1 fix) and its interaction with the earnings helper: the summary calls stockEarningsGate(c, result.timestamp, result.veto_days) with no custom clock, matching StockPositionCard. The two pinned cases hold (61 days ages to a veto; 2 days ages below zero and clears). 0 GATE FINDINGS. Plan stage closed. Code stage has not started. || 2026-10-14 ROUND 1 (plan round 1 of 3): 1 GATE FINDING, not clean. Fresh independent auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = the plan at 52b66480 against the Backtest page on 472bb1b0. P3-A1: the quick summary keyed the earnings sentence off stored earnings_veto, while StockPositionCard uses stockEarningsGate(card, result.timestamp, result.veto_days).veto. A stored false becomes a veto after the scan ages into the window (earnings_days 61, veto_days 60, scan 2026-10-05, viewed 2026-10-08); a stored true clears once the aged distance drops below zero (earnings_days 2 on those same dates). Fixed in the plan: call that helper with the same three arguments, do not reimplement it, pin both cases. Plan round 2 next. || 2026-10-14 taken from the Board (#148) on board/stock-pres-p3-backtest-88bae253, cut from origin/main 472bb1b0. Blockers #146 and #147 are closed. No application code yet."
     }
   ],
   "already_shipped": [
