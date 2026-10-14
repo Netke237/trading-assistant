@@ -1344,9 +1344,11 @@ class PortfolioPositionUpdate(BaseModel):
     `exclude_unset=True` still means an omitted `qty` key never touches this
     field at all.
 
-    `portfolioValue` is retained for wire compatibility and ignored. Quantity
-    increases re-run the exposure gate against server account configuration;
-    decreases and edits without a quantity increase bypass that gate.
+    `portfolioValue` is retained for wire compatibility and ignored. A quantity
+    increase is an added fill: it requires a finite positive `addedFillPrice`
+    and `expectedQty` equal to the locked quantity, and the exposure check
+    warns instead of shrinking or refusing that fill. Decreases and edits
+    without a quantity increase bypass that gate.
 
     `exitPlan`, `maxLossOverride`, `activeTpMethod`, `resolvedTpPrice`/
     `resolvedTpUpdatedAt`, and `alertOverrides` are Phase 0 scaffolding for
@@ -1363,6 +1365,9 @@ class PortfolioPositionUpdate(BaseModel):
     structuralStop: Optional[float] = Field(alias="structural_stop", default=None)
     targets: Optional[list[dict]] = None
     qty: Optional[int] = None
+    # No gt=0: a non-positive price is a late 422 so companion fields still save.
+    addedFillPrice: Optional[float] = Field(alias="added_fill_price", default=None)
+    expectedQty: Optional[int] = Field(alias="expected_qty", default=None)
     portfolioValue: Optional[float] = Field(alias="portfolio_value", default=None)
     exitPlan: Optional[dict] = Field(alias="exit_plan", default=None)
     maxLossOverride: Optional[dict] = Field(alias="max_loss_override", default=None)
@@ -1392,6 +1397,9 @@ class PortfolioPositionSchema(BaseModel):
     # already reflects the adjusted value; this tells the caller it differs
     # from what was requested, rather than silently applying a different size.
     adjustedQty: Optional[int] = None
+    # Set on a PATCH that stored a reported fill the exposure check would have
+    # resized or refused. Not a column.
+    exposureBreach: Optional[str] = None
     entryDate: str
     stop: Optional[float] = None
     structuralStop: Optional[float] = None
