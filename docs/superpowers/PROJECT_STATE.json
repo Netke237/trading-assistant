@@ -3549,6 +3549,67 @@
         }
       ],
       "notes": "SELF-MERGE PENDING, PR #286, audited head 5ed6ada7 (code round 2 clean); later commits are state records only. Not merged until gh reports MERGED. || 2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
+    },
+    {
+      "id": "SCREEN-LABELS-19-20",
+      "name": "Banner, tooltip and regime duration show the same, correct thing",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item #163",
+        "task_backlog UI-LABEL-TRUTH",
+        "open_questions: BANNER vs TOOLTIP 'Driven by'",
+        "open_questions: A4 MarketSentiment avg_regime_duration strides shown as days"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-14-screen-labels-19-20-plan.md",
+      "branch": "board/screen-labels-19-20-b7802f40",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/lib/regimeDuration.ts",
+        "pattern": "export function formatRegimeAverage",
+        "note": "Presence only. The duration formatter is present. Driver-label work is pinned by tests, not by this probe."
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan round 1 (fresh gate-auditor subagent) on plan v1 @ 7f0d7d92: zero gate findings."
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code round 1 (fresh gate-auditor subagent) on origin/main..f12d0c8d: zero gate findings."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "fresh gate-auditor subagent (plan round 1)",
+          "reviewed": "plan v1 @ 7f0d7d92 against the code the plan names",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "gateDrivers is status equality and ivMissing is iv && !hasIv. The banner already counts only iv && !ivMissing plus event. The missing-reading sentence counts !hasIv. Overlap is sum > driven. Task 1 changes only the causesSentence prefix and the non-PASS gateDriverPhrase. _regime_age is one label per input bar. avg_regime_duration is 1/(1-p_stay) on stride samples, already one decimal and capped at 9999. Daily compute_omm gets the query lookback. Intraday gets 26. Scan and analysis copy those two fields and do not send the lookback. The formatter shows an echoed integer size only. Math.round is removed on the Step 1 and analysis averages. The new schema field defaults to None. JSON names stay. regimeSentiment is not in scanStore partialize. No order, score, or compute_omm number changes."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "fresh gate-auditor subagent (code round 1)",
+          "reviewed": "origin/main..f12d0c8d against the plan",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "gateDrivers unchanged. Banner counts unchanged. gateDriverPhrase measured parts are iv && !ivMissing and event only. PASS strings unchanged. Daily duration_stride_bars is the lookback passed to compute_omm. Intraday uses one constant, 26, for the lookback and the echo. Formatter shows an integer size only. Math.round removed. 5.4 stays 5.4. JSON names unchanged. New field defaults to None. compute_omm not in the diff. No score, gate, or order change."
+        }
+      ],
+      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. SELF-MERGE PENDING, PR #303, audited head f12d0c8d. Status stays built."
     }
   ],
   "already_shipped": [
@@ -5972,16 +6033,6 @@
           "open_questions: P1B2 save-unconfirmed note 'Not found yet' forever"
         ],
         "summary": "Adapter post-submit parse errors -> RuntimeError, 502 detail says 4xx vs transport, log_approval skips a missing position, optional Dismiss.",
-        "weight": "low-med"
-      },
-      {
-        "id": "UI-LABEL-TRUTH",
-        "owner": "agent",
-        "covers": [
-          "open_questions: BANNER vs TOOLTIP 'Driven by'",
-          "open_questions: A4 MarketSentiment avg_regime_duration strides shown as days"
-        ],
-        "summary": "Two labels that state something false on screen.",
         "weight": "low-med"
       },
       {
