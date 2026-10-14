@@ -3346,7 +3346,7 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "2026-10-14 #258\u2013261 built/pushed; #262 next. Plan2 clean, original plan1 and separate layout revision1 preserved. Code stage0/audit_clean false; no Pre-Breakout merge. #150/PR224 open/untouched.",
+      "note": "2026-10-14 #258\u2013262 built/pushed; #263 same-run diagnostics next. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. Browser1280 preview no overflow/page errors; direction-aligned conviction corrected before commit. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3367,6 +3367,11 @@
           "issue": 261,
           "commit": "b8379697",
           "validation": "Expected direction/chart/feature-absent RED captured; focused3 suites19 tests/full247 suites5194 tests/typecheck pass; chart races/errors, exact Fib lines, cleanup, all-mode clicked-row direction/actions and keyboard"
+        },
+        {
+          "issue": 262,
+          "commit": "ea9237964359e85d189ecee857e7ed05bb2b9bdc",
+          "validation": "Backend source19 RED then focused67/full7982pass9skip; UI6 RED plus pre-commit preview caught double direction alignment (2 regression RED); focused20/full248 suites5214 tests/typecheck pass. Original and live evidence distinct; no scoring changes."
         }
       ],
       "implementation_interruption": {
