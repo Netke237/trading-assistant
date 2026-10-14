@@ -159,13 +159,13 @@ const drivers = (over: Partial<GateDrivers>): GateDrivers => ({
 
 describe('gateDriverPhrase — every arm, whole', () => {
   it.each([
-    ['IV side at the gate, a reading',      drivers({ iv: true }),                                   'IV rank', 'IV rank'],
-    ['IV side at the gate, absolute basis', drivers({ iv: true }),                                   'IV',      'IV'],
-    ['IV side at the gate, no reading',     drivers({ iv: true, ivMissing: true, hasIv: false }),    'IV',      'no volatility reading'],
-    ['event only',                          drivers({ event: true }),                                'IV rank', 'event proximity'],
-    ['both, a reading',                     drivers({ iv: true, event: true }),                      'IV rank', 'IV rank and event proximity'],
-    ['both, a reading, absolute basis',     drivers({ iv: true, event: true }),                      'IV',      'IV and event proximity'],
-    ['both, no reading',                    drivers({ iv: true, event: true, ivMissing: true, hasIv: false }), 'IV', 'no volatility reading and event proximity'],
+    ['IV side at the gate, a reading',      drivers({ iv: true }),                                   'IV rank', 'measured checks: IV rank'],
+    ['IV side at the gate, absolute basis', drivers({ iv: true }),                                   'IV',      'measured checks: IV'],
+    ['IV side at the gate, no reading',     drivers({ iv: true, ivMissing: true, hasIv: false }),    'IV',      'no measured check. Missing volatility reading is not a measured driver'],
+    ['event only',                          drivers({ event: true }),                                'IV rank', 'measured checks: event proximity'],
+    ['both, a reading',                     drivers({ iv: true, event: true }),                      'IV rank', 'measured checks: IV rank and event proximity'],
+    ['both, a reading, absolute basis',     drivers({ iv: true, event: true }),                      'IV',      'measured checks: IV and event proximity'],
+    ['both, no reading',                    drivers({ iv: true, event: true, ivMissing: true, hasIv: false }), 'IV', 'measured checks: event proximity. Missing volatility reading is not a measured driver'],
     ['PASS, gated, a reading',              drivers({}),                                             'IV rank', 'nothing — this row is clear on both'],
     ['PASS, gated, no reading',             drivers({ hasIv: false }),                               'IV',      'nothing — the event window is clear, and the volatility side had no reading to judge'],
     ['PASS, ungated, a reading',            drivers({ ivGated: false }),                             'IV rank', 'nothing — the event window is clear, and this horizon does not gate on volatility'],
@@ -185,7 +185,7 @@ describe('eventVolGateTooltip — round 7 F2: the window cannot be stated backwa
     })).toBe(
       'Gate shows the worse of IV rank and event proximity. IV rank 45 (CAUTION); '
       + "next event in 30d vs. this horizon's reject <21d / caution <45d window (CAUTION). "
-      + 'Driven by: IV rank and event proximity.',
+      + 'Driven by: measured checks: IV rank and event proximity.',
     );
   });
 
@@ -198,7 +198,7 @@ describe('eventVolGateTooltip — round 7 F2: the window cannot be stated backwa
     })).toBe(
       'Gate shows the worse of IV rank and event proximity. IV rank 12 (PASS); '
       + "next event in 8d vs. this horizon's reject <30d / caution <60d window (REJECT). "
-      + 'Driven by: event proximity.',
+      + 'Driven by: measured checks: event proximity.',
     );
   });
 
@@ -211,7 +211,7 @@ describe('eventVolGateTooltip — round 7 F2: the window cannot be stated backwa
     })).toBe(
       'Gate shows the worse of IV and event proximity. '
       + 'IV 61.8% — an absolute level, no rank source available (REJECT); '
-      + 'no known upcoming event. Driven by: IV.',
+      + 'no known upcoming event. Driven by: measured checks: IV.',
     );
   });
 
@@ -224,7 +224,7 @@ describe('eventVolGateTooltip — round 7 F2: the window cannot be stated backwa
     })).toBe(
       'Gate shows the worse of IV and event proximity. IV: no data; '
       + "next event in 50d vs. this horizon's reject <21d / caution <45d window (PASS). "
-      + 'Driven by: no volatility reading.',
+      + 'Driven by: no measured check. Missing volatility reading is not a measured driver.',
     );
   });
 

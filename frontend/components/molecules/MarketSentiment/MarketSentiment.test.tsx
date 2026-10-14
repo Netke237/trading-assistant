@@ -24,8 +24,14 @@ test('compact preserves the complete default content and default false preserves
   expect(screen.getByText('Position · daily')).toBeVisible();
   expect(screen.getByText('+27.4%')).toHaveClass('tonePass');
   expect(screen.getByText('Strong conviction — The regime favours this trade.')).toBeVisible();
-  expect(screen.getByText('State Bull · sticky 88% · ~31.5d')).toBeVisible();
+  expect(screen.getByText('State Bull · sticky 88% · ≈31.5 strides')).toBeVisible();
   expect(screen.getByText('OMM/HMM Aligned')).toHaveClass('aligned');
+});
+
+test('a carried stride size is shown beside the average', () => {
+  const withStride = { ...sentiment, duration_stride_bars: 20 };
+  render(<MarketSentiment s={withStride} />);
+  expect(screen.getByText('State Bull · sticky 88% · ≈31.5 strides of 20 bars')).toBeVisible();
 });
 
 test.each([
@@ -68,14 +74,14 @@ test('candidate data changes replace all compact sentiment values', () => {
   expect(screen.queryByText('+27.4%')).not.toBeInTheDocument();
   expect(screen.getByText('-30%')).toHaveClass('toneReject');
   expect(screen.getByText('Opposed — Against this trade.')).toBeVisible();
-  expect(screen.getByText('State Bear · sticky 0% · ~0d')).toBeVisible();
+  expect(screen.getByText('State Bear · sticky 0% · ≈0 strides')).toBeVisible();
 });
 
 test('compact context names conviction, state and alignment independently without a new qualification verdict', () => {
   render(<MarketSentiment s={{ ...sentiment, state: 'Bull', conviction_pct: -30, alignment: 'Diverging' }} compact />);
   expect(screen.getByText('Conviction')).toBeVisible();
   expect(screen.getByText('-30%')).toHaveClass('toneReject');
-  expect(screen.getByText('State Bull · sticky 88% · ~31.5d')).toBeVisible();
+  expect(screen.getByText('State Bull · sticky 88% · ≈31.5 strides')).toBeVisible();
   expect(screen.getByText('Alignment')).toBeVisible();
   expect(screen.getByText('OMM/HMM Diverging')).toHaveClass('diverging');
   expect(screen.queryByText('PASS')).not.toBeInTheDocument();

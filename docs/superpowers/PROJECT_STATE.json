@@ -3384,6 +3384,67 @@
         }
       ],
       "notes": "SELF-MERGE PENDING, PR #286, audited head 5ed6ada7 (code round 2 clean); later commits are state records only. Not merged until gh reports MERGED. || 2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
+    },
+    {
+      "id": "SCREEN-LABELS-19-20",
+      "name": "Banner, tooltip and regime duration show the same, correct thing",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item #163",
+        "task_backlog UI-LABEL-TRUTH",
+        "open_questions: BANNER vs TOOLTIP 'Driven by'",
+        "open_questions: A4 MarketSentiment avg_regime_duration strides shown as days"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-14-screen-labels-19-20-plan.md",
+      "branch": "board/screen-labels-19-20-b7802f40",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/lib/regimeDuration.ts",
+        "pattern": "export function formatRegimeAverage",
+        "note": "Presence only. The duration formatter is present. Driver-label work is pinned by tests, not by this probe."
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan round 1 (fresh gate-auditor subagent) on plan v1 @ 7f0d7d92: zero gate findings."
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code round 1 (fresh gate-auditor subagent) on origin/main..f12d0c8d: zero gate findings."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "fresh gate-auditor subagent (plan round 1)",
+          "reviewed": "plan v1 @ 7f0d7d92 against the code the plan names",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "gateDrivers is status equality and ivMissing is iv && !hasIv. The banner already counts only iv && !ivMissing plus event. The missing-reading sentence counts !hasIv. Overlap is sum > driven. Task 1 changes only the causesSentence prefix and the non-PASS gateDriverPhrase. _regime_age is one label per input bar. avg_regime_duration is 1/(1-p_stay) on stride samples, already one decimal and capped at 9999. Daily compute_omm gets the query lookback. Intraday gets 26. Scan and analysis copy those two fields and do not send the lookback. The formatter shows an echoed integer size only. Math.round is removed on the Step 1 and analysis averages. The new schema field defaults to None. JSON names stay. regimeSentiment is not in scanStore partialize. No order, score, or compute_omm number changes."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "fresh gate-auditor subagent (code round 1)",
+          "reviewed": "origin/main..f12d0c8d against the plan",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "gateDrivers unchanged. Banner counts unchanged. gateDriverPhrase measured parts are iv && !ivMissing and event only. PASS strings unchanged. Daily duration_stride_bars is the lookback passed to compute_omm. Intraday uses one constant, 26, for the lookback and the echo. Formatter shows an integer size only. Math.round removed. 5.4 stays 5.4. JSON names unchanged. New field defaults to None. compute_omm not in the diff. No score, gate, or order change."
+        }
+      ],
+      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. SELF-MERGE PENDING, PR #303, audited head f12d0c8d. Status stays built."
     }
   ],
   "already_shipped": [
@@ -5397,8 +5458,8 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "MEAS-LIVE-DB-ISOLATION",
-  "active_phase_note": "Stocks presentation shipped after verified PR279 merge; documentation-only state reconciliation.",
+  "active_phase": "SCREEN-LABELS-19-20",
+  "active_phase_note": "This branch only. SCREEN-LABELS-19-20 is built and unmerged. Plan round 1 and code round 1 are clean. MEAS-LIVE-DB-ISOLATION remains the built record already on main.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
@@ -5807,16 +5868,6 @@
           "open_questions: P1B2 save-unconfirmed note 'Not found yet' forever"
         ],
         "summary": "Adapter post-submit parse errors -> RuntimeError, 502 detail says 4xx vs transport, log_approval skips a missing position, optional Dismiss.",
-        "weight": "low-med"
-      },
-      {
-        "id": "UI-LABEL-TRUTH",
-        "owner": "agent",
-        "covers": [
-          "open_questions: BANNER vs TOOLTIP 'Driven by'",
-          "open_questions: A4 MarketSentiment avg_regime_duration strides shown as days"
-        ],
-        "summary": "Two labels that state something false on screen.",
         "weight": "low-med"
       },
       {
