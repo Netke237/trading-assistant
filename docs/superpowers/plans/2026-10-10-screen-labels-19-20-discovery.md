@@ -1,8 +1,10 @@
 # SCREEN-LABELS-19-20 discovery
 
 Board item: #163. Baseline: origin/main 13c8b52c.
-Status: reproduction complete; presentation decisions pending. No plan or code
-audit has run. This document does not authorize implementation.
+Status: reproduction complete. Kenneth's untagged reply on #163 accepts
+1 = B and 2 = A from the 2026-10-11 question comment. The plan is
+docs/superpowers/plans/2026-10-14-screen-labels-19-20-plan.md.
+No plan or code audit has run yet. The record below is the reproduction.
 
 ## Deciding drivers
 
