@@ -7,6 +7,14 @@
       "expires_at": "2026-10-15T00:13:55Z",
       "note": "Implement approved original backtest curves and fills",
       "task": "CANDIDATE-BACKTEST-CHART"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/broker-path-residuals-3f35b8cf",
+      "claimed_at": "2026-10-14T21:14:30Z",
+      "expires_at": "2026-10-15T00:14:30Z",
+      "note": "Resume #165 at #270 portfolio exposure serialization",
+      "task": "BROKER-PATH-RESIDUALS"
     }
   ]
 }
