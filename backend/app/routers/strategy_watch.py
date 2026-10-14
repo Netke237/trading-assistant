@@ -2,10 +2,12 @@
 """REST API for strategy-watch entries + schedule + manual evaluation."""
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
 from dataclasses import asdict, is_dataclass
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import field_validator, BaseModel, Field
 
 from app.schemas import Direction
 from app.services.horizon_profiles import TunedHorizon
@@ -24,6 +26,8 @@ class AddWatch(BaseModel):
     # STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
     # whose hold time-stops it; None = the direction baseline, no time stop.
     params_horizon: TunedHorizon | None = None
+
+    _validate_payload_depth = field_validator('params_override', mode="before")(validate_payload_depth)
 
 
 class BulkAdd(BaseModel):
