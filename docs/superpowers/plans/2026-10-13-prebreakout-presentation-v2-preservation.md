@@ -110,3 +110,28 @@ This allocation implements existing ticket requirements; it adds no scoring or e
 Typecheck result for this documentation commit: `npm --prefix frontend run typecheck` passed (exit 0).
 
 The PB-PRES-04 requirement to verify snapshot compatibility means live analysis cannot masquerade as matched scan evidence. Any supplementary live analysis must be explicitly labeled separately fetched with fetch time, source, requested strategy and direction/horizon, validated same-symbol, and remain distinct from original setup-run evidence (which is unavailable from that response). `_analyze_core` calls `score_stock` independently of requested strategy; later strategy/backtest results are separate. A global last Stocks request is not a compatible request source. The reconciliation auditor should verify that this separate-context interpretation satisfies the frozen plan; otherwise retain unavailable matched-snapshot cards until a supported source contract exists.
+
+## Implementation record (PB-PRES-08 / #266, coordinator)
+
+Maintained by the takeover coordinator on `board/prebreakout-presentation-v2-f78dd25f`, 14 October 2026. This maps each allocation row above to the commit that implemented it. It records builds and per-ticket verification only. It is **not** an audit: the integrated independent code audit over `origin/main..<branch>` is still required, and plan rounds 2 / code rounds 0 are carried forward unchanged.
+
+| Ticket | Commit | Destination delivered (per allocation) |
+|---|---|---|
+| #258 PB-BASE-01 | `c6b140ff` | This crosswalk |
+| #259 PB-PRES-01 | `a35da6c7` | Selected-setup shell, request token/stale-reply guards, scoped applied-threshold snapshots (`scanThresholds.ts`), exact percentage display in both parameter panels; report callbacks/`tableRunIds` retained |
+| #260 PB-PRES-02 | `1b840255` | Mode-specific tables with existing orders/units, complete selected evidence disclosure (`PreBreakoutRowDetails.tsx`), legacy rows without evidence shown unavailable |
+| #261 PB-PRES-03 | `b8379697` | Selected mini chart (`SelectedSetupChart.tsx`, additive CandlestickChart `priceLines`), identity column watch/chart/symbol/company in all modes, row Alert with clicked-row symbol and direction |
+| #262 PB-PRES-04 | `ea923796` | Separately labelled live stock context (`SelectedStockContext.tsx`) with request identity; sentiment/fundamentals after controls, five component cards below results; no Options/Stocks borrowing |
+| #263 PB-PRES-05 | `ca7addbf` | Additive `diagnostics.terminal_outcomes` v1 (same evaluated run, dedup before evaluation and counting, mutually exclusive terminals, unknown/partial, list transport unchanged) for prebreakout/fib/pullback |
+| #264 PB-PRES-06 | `44ece365` | "Filter breakdown" beside each mode's candidates heading. It opens the existing saved-report inspector, whose former "Analysis log" content is fully kept. Terminal counts come only from the saved report. Saved-run vs table-run identity is shown, with units verified against the backend |
+| #265 PB-PRES-07 | `253c43f1` | Optional provider-only `NewsItem.url`; selected-symbol news below stock cards with stale guard, isolated states, no sentiment, industry feed explicitly unavailable |
+| #266 PB-PRES-08 | `26d71cb` + this record | Integrated presence marker `data-presentation="prebreakout-v2"` on the page root; this crosswalk record; integrated checks below |
+
+Preservation checks against the tables above:
+- The shared Options / Stocks / Pre-Breakout switch is unchanged in `screener/layout.tsx` (this branch has no diff to that file).
+- Step 4 remains self-contained, with no steps 5–7 and no broker handoff.
+- No persisted store shape or storage key changed (this branch has no diff to `scanStore.ts` / `watchlistStore.ts` persistence).
+- Pre/Fib list responses and Pullback `report_run_id` are retained.
+- Saved reports are not deleted on parameter or mode change.
+
+Integrated verification results are recorded in the `PROJECT_STATE.json` phase entry (`integrated_verification`).

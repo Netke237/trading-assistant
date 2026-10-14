@@ -3279,7 +3279,7 @@
     {
       "id": "PREBREAKOUT-PRESENTATION-V2",
       "name": "Approved Pre-Breakout/Pullback/Fib ranking layout, preserved evidence and same-run diagnostics",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [
@@ -3346,7 +3346,7 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "2026-10-14 #258\u2013265 built/pushed on board/prebreakout-presentation-v2-f78dd25f; #266 integrated verification (merge origin/main, crosswalk, presence marker, full checks) then independent code audit. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258\u2013266 built on board/prebreakout-presentation-v2-f78dd25f; status built (code exists, unmerged). Next: merge origin/main, integrated verification, independent code audit round 1 (phase round 3). Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3387,6 +3387,11 @@
           "issue": 265,
           "commit": "253c43f166063ac606a3bf11c86e6c0f7fd07996",
           "validation": "Fresh implementer (Claude subagent): backend 8 url tests RED (KeyError/missing attr), frontend compile RED then 15 RED (section missing); GREEN implementer full backend Python 3.11.17 8060 passed/9 skipped/0 failed (Telegram env vars unset), frontend 251/5242. Coordinator re-verified typecheck clean, frontend 251 suites/5242 tests, news-focused backend files 154 passed (Python 3.11). Optional NewsItem.url only from provider-supplied absolute http(s) links (key added only when valid; existing pinned item shapes unchanged; /api/news returns url null when absent); selected-symbol news section with stale-reply guard, isolated loading/error/empty, publisher/date/link fallbacks, per-item tagged symbol, no sentiment shown, industry news explicitly unavailable. Not an audit."
+        },
+        {
+          "issue": 266,
+          "commit": "26d71cb",
+          "validation": "Fresh implementer: presence-marker test RED (attribute null) then GREEN; typecheck ok, frontend 251/5243. Coordinator crosswalk implementation record appended to the preservation doc. Integrated verification after merging origin/main pending; code audit not started."
         }
       ],
       "implementation_interruption": {
