@@ -15,3 +15,7 @@ Continuation based on original c58843bf evidence and current main65b58bb5, merge
 Task 1 (#295), commit `6d0bec3d`: red confirmed depth33 was accepted by ScanRequest. Focused280 tests passed; full backend8490 passed/9 skipped (880.81s); frontend typecheck and241 suites/5158 tests passed (276.37s). Exact JSON-schema parity against original code passed for all11 request models plus PortfolioPositionSchema output.
 
 Tasks #296–#297, final integration checks and independent code audit remain pending. This document does not clear an audit or merge gate.
+
+## Mixed-error acceptance follow-up
+
+An isolated ASGI probe through the production validation handler returned422/147bytes for a raw depth900 `ScanRequest.overrides` with required fields, but500/21bytes for the identical payload missing `universe`. No handler ran. Another error input retained the entire deep body. PlanTask4 now covers this case; fresh independent plan round3 reviewed its narrow conditional sanitization and returned0 gate findings. Plan counters3/3 retained; code audit not started.
