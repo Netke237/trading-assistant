@@ -3553,7 +3553,7 @@
     {
       "id": "SCREEN-LABELS-19-20",
       "name": "Banner, tooltip and regime duration show the same, correct thing",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "depends_on": [],
@@ -3609,7 +3609,18 @@
           "verification": "gateDrivers unchanged. Banner counts unchanged. gateDriverPhrase measured parts are iv && !ivMissing and event only. PASS strings unchanged. Daily duration_stride_bars is the lookback passed to compute_omm. Intraday uses one constant, 26, for the lookback and the echo. Formatter shows an integer size only. Math.round removed. 5.4 stays 5.4. JSON names unchanged. New field defaults to None. compute_omm not in the diff. No score, gate, or order change."
         }
       ],
-      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. SELF-MERGE PENDING, PR #303, audited head f12d0c8d. Status stays built."
+      "merge_record": {
+        "state": "MERGED",
+        "pr": 303,
+        "merge_commit": "074d2ed14456bc3ced6e6fa505277afaacd852ff",
+        "head_sha": "23fbe6514275fbe846fb21a674f3e6442e35b7fa",
+        "audited_head": "f12d0c8d3c552b7fe700f5220c8174ab828eb11e",
+        "ci": "All three checks success on exact head 23fbe6514275fbe846fb21a674f3e6442e35b7fa: backend, frontend, and Playwright test.",
+        "ci_run": 38536098369,
+        "smoke_run": 38536098348,
+        "authorization": "Board self-merge step 7. Own claim, clean plan and code audits, docs-only commits after the audited head, exact-head CI green, pending record already on that head. gh pr merge --merge --match-head-commit."
+      },
+      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. MERGED PR #303 at 074d2ed14456bc3ced6e6fa505277afaacd852ff. Head 23fbe6514275fbe846fb21a674f3e6442e35b7fa. Audited head f12d0c8d3c552b7fe700f5220c8174ab828eb11e. Status shipped only after GitHub reported MERGED."
     }
   ],
   "already_shipped": [
