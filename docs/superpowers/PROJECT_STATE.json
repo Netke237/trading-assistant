@@ -3389,7 +3389,7 @@
       "id": "STATE-MULTI-PLAN-STAGE",
       "name": "Explicit additional authorized plan stages with independent per-stage caps",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [],
       "covers": [
@@ -3404,14 +3404,30 @@
         "note": "Presence only: plural stage validation helper; not behavioral or audit proof."
       },
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/multi_stage_plan_r1",
+          "reviewed": "Whole plan f4a54d0416a63877b760b8bf8825f2e8bf85a6ca against checker/tests/root decisions",
+          "gate_findings": 1,
+          "findings": [
+            "R1-G1: final unpaired acknowledgment decision closure could hide capped non-clean plan stage by transitioning to code zero"
+          ],
+          "fixes": [
+            "Require final stage open or positive clean close; decision closure only paired to the following stage verified opening; add exact regressions with/without code evidence"
+          ],
+          "outstanding": [],
+          "clean": false
+        }
+      ],
       "notes": "2026-10-14: explicit user assignment to this session; other three agent packages untouched. No original phase/decision or cap reset."
     }
   ],
