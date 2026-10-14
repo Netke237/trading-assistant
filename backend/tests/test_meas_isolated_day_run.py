@@ -101,6 +101,9 @@ class World:
     # runner
     runner_exit: int = 0
     runner_writes_day: bool = True
+    # what the fake runner stamps as manifest.json "started_at.utc" (None: the clock at its start);
+    # "absent" writes a manifest without started_at
+    manifest_started_at: Any = None
     hooks: dict[str, Callable[["World"], None]] = field(default_factory=dict)
     # recorded calls
     launch_calls: list[dict] = field(default_factory=list)
@@ -266,10 +269,18 @@ class World:
         self.events.append("runner")
         self.runner_calls.append({"argv": list(argv), "cwd": Path(cwd), "env": dict(env),
                                   "log_path": Path(log_path), "now": self.now})
+        day = self.meas / "docs" / "superpowers" / "measurements" / "scans" / ET_DATE
+        if day.exists():
+            # the tag runner's cmd_core: "<folder> already exists -- never overwritten", exit 2
+            self._hook("runner")
+            return 2
         if self.runner_writes_day:
-            day = self.meas / "docs" / "superpowers" / "measurements" / "scans" / ET_DATE
-            day.mkdir(parents=True, exist_ok=True)
-            (day / "manifest.json").write_text(json.dumps({"status": "done"}), encoding="utf-8")
+            day.mkdir(parents=True)
+            manifest: dict[str, Any] = {"status": "done"}
+            if self.manifest_started_at != "absent":
+                started = self.manifest_started_at or self.now
+                manifest["started_at"] = {"utc": started.isoformat(), "et": "unused"}
+            (day / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         self._hook("runner")
         return self.runner_exit
 
@@ -539,7 +550,7 @@ def test_happy_path_evidence_and_isolation_json(world):
     res = _run(world)
     dest = world.repo / "docs" / "superpowers" / "measurements" / "scans" / ET_DATE
     assert res.evidence_dir == dest
-    assert json.loads((dest / "manifest.json").read_text()) == {"status": "done"}
+    assert json.loads((dest / "manifest.json").read_text())["status"] == "done"
     data = _isolation(res)
     assert data["meas_db"] == "bamendjou_meas"
     assert data["tag_commit"] == TAG_SHA
@@ -813,6 +824,68 @@ def test_runner_wrote_no_day_folder_fails(world):
     assert res.exit_code == iso.EXIT_FAILED
     assert res.evidence_dir is None
     assert world.kill_calls == [LAUNCHED]
+
+
+# ── only a day folder this run's runner created is copied ───────────────────
+
+def _repo_scans(world: World) -> Path:
+    return world.repo / "docs" / "superpowers" / "measurements" / "scans"
+
+
+def _meas_day(world: World) -> Path:
+    return world.meas / "docs" / "superpowers" / "measurements" / "scans" / ET_DATE
+
+
+def test_second_run_same_et_date_copies_nothing(world):
+    first = _run(world)
+    assert first.exit_code == iso.EXIT_OK, (first.error, world.logs)
+    first_iso = (first.evidence_dir / "isolation.json").read_text(encoding="utf-8")
+    world.kill_calls.clear()
+    second = _run(world)
+    assert second.exit_code == iso.EXIT_FAILED
+    assert second.evidence_dir is None
+    assert sorted(p.name for p in _repo_scans(world).iterdir()) == [ET_DATE]
+    assert (first.evidence_dir / "isolation.json").read_text(encoding="utf-8") == first_iso
+    assert len(list(_repo_scans(world).rglob("isolation.json"))) == 1
+    assert "predates this run" in second.error
+    assert "predates this run" in " ".join(second.isolation["failures"])
+    assert any("predates this run" in line for line in world.logs)
+    assert world.kill_calls == [LAUNCHED]
+
+
+def test_interrupted_first_run_folder_is_not_copied_to_primary_date(world):
+    # run 1 was interrupted after its runner wrote the meas day folder, before the copy
+    _make_meas_tree(world.meas)
+    world.worktree_exists = True
+    _meas_day(world).mkdir(parents=True)
+    (_meas_day(world) / "manifest.json").write_text(
+        json.dumps({"status": "running", "started_at": {"utc": START.isoformat()}}), encoding="utf-8")
+    res = _run(world)
+    assert res.exit_code == iso.EXIT_FAILED
+    assert res.evidence_dir is None
+    assert not (_repo_scans(world) / ET_DATE).exists()
+    assert not _repo_scans(world).exists() or not any(_repo_scans(world).iterdir())
+    assert not (_meas_day(world) / "isolation.json").exists()
+    assert "predates this run" in res.error
+    assert world.kill_calls == [LAUNCHED]
+
+
+@pytest.mark.parametrize("started", [START, "absent"])
+def test_day_folder_whose_manifest_starts_before_runner_start_is_refused(world, started):
+    world.manifest_started_at = started
+    res = _run(world)
+    assert res.exit_code == iso.EXIT_FAILED
+    assert res.evidence_dir is None
+    assert not _repo_scans(world).exists() or not any(_repo_scans(world).iterdir())
+    assert "manifest start" in res.error
+    assert world.kill_calls == [LAUNCHED]
+
+
+def test_runner_wrote_no_day_folder_reason_is_recorded(world):
+    world.runner_writes_day = False
+    res = _run(world)
+    assert res.exit_code == iso.EXIT_FAILED and res.evidence_dir is None
+    assert "wrote no day folder" in res.error
 
 
 # ── evidence copy never overwrites ───────────────────────────────────────────

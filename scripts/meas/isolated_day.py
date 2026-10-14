@@ -1667,6 +1667,8 @@ class _IsolatedRun:
         self.health_pid: int | None = None
         self.live_before: int | None = None
         self.runner_started = False
+        self.runner_start_at: dt.datetime | None = None
+        self.day_preexisted: bool | None = None
         self.refusal: str | None = None
         self.failures: list[str] = []
         self.evidence_dir: Path | None = None
@@ -1834,11 +1836,14 @@ class _IsolatedRun:
     def run_runner(self) -> int:
         runner = self.meas / RUNNER_REL
         argv = [str(self.python), str(runner), "core", "--base", MEAS_BASE, "--repo", str(self.meas)]
-        self.et_date = to_et(self.deps.now()).date().isoformat()
+        self.runner_start_at = self.deps.now()
+        self.et_date = to_et(self.runner_start_at).date().isoformat()
         self.rec["et_date"] = self.et_date
         self.rec["runner"] = {"argv": ["<repo venv python>", f"<meas>/{RUNNER_REL.as_posix()}", "core",
                                        "--base", MEAS_BASE, "--repo", "<meas>"], "exit_code": None}
-        self.stamp_now("runner_start_utc")
+        # F1: only a day folder the runner creates in THIS run is evidence of this run
+        self.day_preexisted = (self.meas / SCANS_REL / self.et_date).exists()
+        self.rec["timestamps"]["runner_start_utc"] = _iso(self.runner_start_at)
         self.runner_started = True
         self.say("starting the tag runner (core)")
         code = self.deps.run_runner(argv, cwd=self.meas, env=self.child_env(), log_path=self.runner_log)
@@ -1925,11 +1930,35 @@ class _IsolatedRun:
             self.stop()
 
     # step 8
+    def _not_this_run(self, src: Path) -> str | None:
+        """Why the meas day folder is not this run's evidence, or None if it is: it must
+        not have existed before the tag runner started, must exist now, and its
+        manifest.json ``started_at.utc`` must be at or after the runner start."""
+        day = f"scans/{self.et_date}"
+        if self.day_preexisted is not False or self.runner_start_at is None:
+            return (f"the day folder {day} in the meas checkout predates this run (it existed before the "
+                    "tag runner started); not copied")
+        if not src.is_dir():
+            return f"the runner wrote no day folder {day} in the meas checkout"
+        try:
+            manifest = json.loads((src / "manifest.json").read_text(encoding="utf-8"))
+            started = dt.datetime.fromisoformat(manifest["started_at"]["utc"])
+            if started.tzinfo is None:
+                raise ValueError("naive timestamp")
+        except Exception as exc:
+            return (f"the manifest start in {day}/manifest.json is unreadable ({type(exc).__name__}); "
+                    "not copied")
+        if started < self.runner_start_at:
+            return (f"the manifest start {_iso(started)} in {day}/manifest.json is before the runner start "
+                    f"{_iso(self.runner_start_at)}; not copied")
+        return None
+
     def copy_day(self) -> None:
         src = self.meas / SCANS_REL / str(self.et_date)
-        if not src.is_dir():
-            self.failures.append(f"the runner wrote no day folder scans/{self.et_date} in the meas checkout")
-            self.say("WARNING: " + self.failures[-1])
+        reason = self._not_this_run(src)
+        if reason is not None:
+            self.failures.append(reason)
+            self.say("WARNING: " + reason)
             return
         self.evidence_dir = copy_evidence(src, self.repo / SCANS_REL, str(self.et_date), self.stamp, log=self.say)
         self.rec["paths"]["evidence_dir"] = _rel(self.evidence_dir, self.repo)

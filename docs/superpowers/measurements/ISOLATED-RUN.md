@@ -278,8 +278,11 @@ in the meas checkout (its day folder already exists there). One isolated run per
 `<UTC stamp>` looks like `20261015T163512Z`. Nothing is ever overwritten: if
 `scans\<ET date>\` already exists in the main checkout and is not empty, the copy goes to
 `scans\<ET date>-isolated-<UTC stamp>\` instead (logged), and `isolation.json` is created only
-if it does not exist yet. If the runner wrote no day folder (for example after a refusal), there is
-no `isolation.json`: the launcher log is the record.
+if it does not exist yet. Only a day folder the runner created during this run is copied: if the
+runner wrote no day folder (for example after a refusal), or the meas day folder already existed
+before the runner started (a second run on the same ET date), or its `manifest.json` start is
+earlier than the runner start, nothing is copied, there is no `isolation.json`, the run exits 1 and
+the launcher log is the record.
 
 After the day, commit the copied day folder on a branch and hand it to a Claude session, as in
 `PROTOCOL.md` "After each day".
