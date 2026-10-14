@@ -82,7 +82,10 @@ points remain DAY limit orders with their existing fill-bar deferral. Extend
 simulate_trades only behind the explicit market flag. Existing 864-case T1
 parity product must still pass. Record equity through the simulator, using
 cash and marked open positions (including entry commissions), for setup-only
-BacktestResult return/drawdown/Sharpe via _window_stats; net expectancy and win
+BacktestResult return/drawdown/Sharpe via _window_stats. Before statistics,
+slice dated equity at entry_start, preserving legacy timezone-localized cutoff
+handling. Additional pre-window flat bars must not dilute scored Sharpe;
+test scored-statistic equality with different warmup prefix lengths. Net expectancy and win
 rate use CLOSED trades. Time-exit counts come from trade exit reasons.
 
 strategy_backtest dispatches the two setup IDs to a small adapter using that

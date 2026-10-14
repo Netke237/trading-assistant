@@ -4053,7 +4053,7 @@
       ],
       "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery.",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
@@ -4064,7 +4064,23 @@
         "path": "backend/app/services/horizon_tuning/signals.py",
         "pattern": "setup_signal_series",
         "note": "Presence only: setup entry event integration; behaviour pinned by deterministic tests and independent audit."
-      }
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/t4_plan_audit_1",
+          "scope": "efff82b8 docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md against named source and #170",
+          "findings": [
+            "PA1-01: setup adapter must crop equity at entry_start before statistics; long flat warmup dilutes Sharpe."
+          ],
+          "fixes": [
+            "Explicit dated equity cropping/timezone handling and warmup-prefix statistical invariance test added to plan."
+          ],
+          "outstanding": [],
+          "clean": false
+        }
+      ]
     }
   ],
   "already_shipped": [
