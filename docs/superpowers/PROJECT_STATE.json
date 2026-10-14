@@ -1,7 +1,7 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
   "updated": "2026-10-14",
-  "updated_by": "YAML-DEPTH-BOUND coordinator",
+  "updated_by": "STATE-MULTI-PLAN-STAGE coordinator: independent bounded follow-up clean",
   "main": "YAML-DEPTH-BOUND phase A merged via PR #309 at d23b1588 (2026-10-14): depth32 persisted request bounds, transactional store mutations, guarded options restore. Plan3/code1clean; local backend8652passed/9skip, frontend5254tests/252suites/typecheckpassed; exact-head backend/frontend/browser CIpassed. Phase B deferred. || PREVIOUS: b10db25b \u2014 verified Options presentation PR #277 merge; SCAN-REPORT-ISOLATION merged via PR #275 on 2026-10-13 at 51b4821465e298eaee611be10b18513dc9654e50; verified MERGED, plan3/code1 clean, exact-head backend/frontend/Playwright CI all passed. || PREVIOUS: STOCKS-PIPELINE-INSPECTOR merged via PR #231 (user authorized): Stocks Backtest shared inspector, legacy residual counting and exclusions; plan1/code3 clean, integrated frontend4994PASS/buildPASS/production-browser2PASS/CIallPASS. Origin/main and local main synchronized per user clarification. || PREVIOUS: PR #225 merged STOCK-PRES-P2-POSITION on 2026-10-11 at 28c738bac69a0968ab3316ec0994272d5c338f90; independent audits clean and exact-head backend/frontend/Playwright CI passed. || PREVIOUS: PR #219 merged AGENT-SELF-MERGE on 2026-10-11 at 5bfb7b1107bd045584401198ca8dd23d4955fcae with explicit chat authorization; independent plan/code reviews clean. || PREVIOUS: PR #204 merged seven audited waiting-merge board items with explicit chat approval at b741f6104f68cf252be265af18d32ae5f045215c; all seven frozen source heads verified on main; original PRs merged and board issues closed. Independent integration audit clean in two code rounds, 93 scheduler/cancellation/quote regression tests passed, final combined CI green. || PREVIOUS: STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": "board/prebreakout-presentation-v2-f78dd25f",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
@@ -3623,6 +3623,264 @@
       "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. MERGED PR #303 at 074d2ed14456bc3ced6e6fa505277afaacd852ff. Head 23fbe6514275fbe846fb21a674f3e6442e35b7fa. Audited head f12d0c8d3c552b7fe700f5220c8174ab828eb11e. Status shipped only after GitHub reported MERGED."
     },
     {
+      "id": "STATE-MULTI-PLAN-STAGE",
+      "name": "Explicit additional authorized plan stages with independent per-stage caps",
+      "status": "built",
+      "audit_rounds": 7,
+      "audit_clean": true,
+      "depends_on": [],
+      "covers": [
+        "board item #214"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-14-state-multi-plan-stage-plan.md",
+      "branch": "board/state-multi-plan-stage-28408885",
+      "verify": {
+        "kind": "present",
+        "path": "scripts/state.py",
+        "pattern": "def _plan_stages",
+        "note": "Presence only: plural stage validation helper; not behavioral or audit proof."
+      },
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/multi_stage_plan_r2 reviewed f4a54d04..d02ab7ac R1-G1 fix and interactions, two passes, zero gate findings."
+      },
+      "code_stage": {
+        "rounds": 3,
+        "clean": false
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/multi_stage_plan_r1",
+          "reviewed": "Whole plan f4a54d0416a63877b760b8bf8825f2e8bf85a6ca against checker/tests/root decisions",
+          "gate_findings": 1,
+          "findings": [
+            "R1-G1: final unpaired acknowledgment decision closure could hide capped non-clean plan stage by transitioning to code zero"
+          ],
+          "fixes": [
+            "Require final stage open or positive clean close; decision closure only paired to the following stage verified opening; add exact regressions with/without code evidence"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "/root/multi_stage_plan_r2",
+          "reviewed": "Plan diff f4a54d04..d02ab7ac only R1-G1 fixes/interactions",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Independent second pass confirmed unpaired acknowledgement cannot close final plan; valid authorized two-stage and final clean transition preserved."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "code_round": 1,
+          "reviewer": "/root/multi_stage_code_r1",
+          "reviewed": "Whole integrated f655b7e2de717e6975688469ca6eb92a2aafe81c..3fe29695e38d45c0278dd9139f89ca74647e1f8e; all six changed files",
+          "gate_findings": 2,
+          "findings": [
+            "C1-G1: suffix after numeric range can be conditional/negative but accepted, hiding exhausted cap",
+            "C1-G2: q target mention can wrongly bind explicit answer opening a different target"
+          ],
+          "fixes": [
+            "7a91533c by fresh /root/multi_stage_fix_c1: both gate findings corrected, independent fix review pending"
+          ],
+          "outstanding": [
+            "C1-G1",
+            "C1-G2"
+          ],
+          "clean": false,
+          "verification": "Auditor reproduced each with real git and four non-clean plan subjects; all88newcases passed; independent second pass scope verified."
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "code_round": 2,
+          "reviewer": "/root/multi_stage_code_r2",
+          "reviewed": "Fixes/interactions only 3fe29695e38d45c0278dd9139f89ca74647e1f8e..5c65e5d8d033fc99a662895f911dfcf7c41e9bfa",
+          "gate_findings": 2,
+          "findings": [
+            "C2-G1 scripts/state.py:903-909: suffix after colon/dash boundary (range4-6: if approved / -- is not authorized) grants false reopening",
+            "C2-G2 scripts/state.py:919-933: lower-case suffix for other / other-target passes with q naming only TRADIER-GOVERNOR"
+          ],
+          "fixes": [
+            "#308 7099cd77e22fcdfda0fbea96f5d922bf1de75944 by fresh /root/recover_308: conditional colon/dash suffix and case-insensitive owner fixes/interactions; final review pending."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "verification": "Fresh auditor reproduced all cases on Python3.11.16 real git with4noncleanplanrounds; unauthorized overall4 incorrectly becomes local1. Secondpass confirmed changed guards/interactions; no edits.",
+          "resolution": "Original C2 forms independently reject in code3; replacement policy-prefix exception has C3-G1."
+        },
+        {
+          "round": 5,
+          "stage": "code",
+          "code_round": 3,
+          "reviewer": "/root/final_code3",
+          "reviewed": "Fixes/interactions only 5c65e5d8d033fc99a662895f911dfcf7c41e9bfa..5193ee198789ad22c319f1a6cb8713ea0f52543b; source/test changes plus validation/tracking claims and state merge preservation.",
+          "gate_findings": 1,
+          "findings": [
+            "C3-G1 scripts/state.py:907-910: prefix-only fire-call policy exception discards explicit opening denial/conditional suffix, accepting unauthorized overall4 as local1."
+          ],
+          "fixes": [
+            "#314 c6ae59d84d68f6709d82fd8f618e0f211ab2928a by fresh /root/fix_c3_clause: entire excluded-tail recognized wording, no prefix or punctuation-truncation escape; new independent stage2 review pending."
+          ],
+          "outstanding": [
+            "C3-G1"
+          ],
+          "clean": false,
+          "verification": "Fresh independent Python3.11 real-git four-nonclean-plan-round probes: colon and dash fire calls aside, this opening is not authorized both return no drift and actual main exit0. Second pass confirmed changed exception reaches cap subtraction. Prior C2 original cases reject; unrelated phases match main472bb1b0."
+        },
+        {
+          "round": 6,
+          "stage": "code",
+          "code_round": 4,
+          "code_stage": 2,
+          "stage_round": 1,
+          "reviewer": "/root/c3_followup_audit1",
+          "reviewed": "63f731eb..86f316e9 C3-G1 source/test fixes and interactions; relevant validation/authorization/stage bookkeeping",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Independent Python3.11.16 focused460passed; real-git helper and actualCLI65unauthorizedexit1/15validexit0 inclhistorical; second pass complete-tail consumption and preserved5historicalrounds; fingerprints verified."
+        },
+        {
+          "round": 7,
+          "stage": "code",
+          "code_round": 5,
+          "code_stage": 2,
+          "stage_round": 2,
+          "reviewer": "/root/state214_stage2_round2",
+          "reviewed": "3c7d8b78..e5a4b737; #317 test-only9f79bfe2 historical-data reads, parser/decision interactions and main625d8f77 integration",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Two passes; independent Python3.11.16 changed4cases integrated/shallow passed; no origin/main in shallow; state exit0, diffcheck, unchanged parser SHA256 and all prior decisions/audit history; imported application files match main. Coordinator shallow460passed37.58s; full validation pending at audit completion."
+        }
+      ],
+      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged. || #308 fixed at7099cd77, required checks green. Final independent code3/continuous5 pending; counters unchanged. || FINAL CODE3/continuous5 NOT CLEAN: /root/final_code3 found C3-G1, policy prefix exception still hides explicit denial/conditional reopening; real-git CLI colon/dash cases exit0 incorrectly. Three-round code cap reached. STOPPED: no fourth round, no code fix, no PR/merge. #214 blocked; requires explicit new bounded follow-up authorization. Required checks green do not clear independent gate. || User explicitly authorized bounded C3-G1 follow-up and second code-audit stage via STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14. Historical5 rounds and original code_stage3notclean preserved. New stage2 cap3; no checker accounting redesign. Singular checker cannot model second code stage: its historical cap alarm remains explained until independent clean verdict, never silenced by editing history. || C3-G1 bounded fixc6ae59d8 via fresh #314 implementer; required full checks green8858backend/9skip,5254frontend/typecheck,460focused; new authorized stage2 round1 pending, all5 prior rounds retained. || CLEAN authorized code-stage2 round1 (continuous6/overallcode4): fresh /root/c3_followup_audit1 zero gate findings, exact scope63f731eb..86f316e9, independent460tests and80real-git helper/CLI cases. C3-G1 resolved; historical5rounds/originalcode-stage3notclean preserved. Built/unmerged; PR and exact-headCI next. || SELF-MERGE PENDING, PR #316, audited head86f316e9d64ae22ee5702eb7633af1ae8702160a. Phase remainsbuilt/audit_cleantrue; only documentation after clean scope, exact-headCI next; original main record unchanged. || 2026-10-14 resumed from published3c7d8b78 in replacement workspace; unpublished86e71ca8 and portable handoff unavailable. #317 test-only fix9f79bfe2; main625d8f77 integrated ate5a4b737, historical decisions and complete prior target record preserved. Fresh stage2 round2/continuous7 audit zero gate findings; parser unchanged. Full validation/publication/exact-headCI pending; no merge. || Final local integrated validation ate5a4b737: Python3.11.16 backend8858passed9skipped851.45s; frontend255suites5273tests286.315s; typecheck/buildpassed; shallow460passed37.58s. Source/test fingerprints unchanged. Publication approval and exact-headCI pending; no merge. || 2026-10-14 user instructed in current chat: if audited then merge. SELF-MERGE PENDING, PR #316, audited head e5a4b737d5f154f6964a14784890e090f25a04f5; publication authorized, exact-headCI/mergeability next. Status built until verified merge result.",
+      "tickets": [
+        300,
+        301,
+        308,
+        314,
+        317
+      ],
+      "implementation_tickets": {
+        "300": {
+          "commit": "5594f99dfc6b60596233b2d3d5302975cd40ecb1",
+          "implementer": "/root/multi_stage_t1",
+          "red": "Original authorized second-stage regression failed; four affirmative-opening controls failed before correction. Initial test fixtures corrected, obsolete runs stopped.",
+          "green": "Python3.11.16: focused342 (254legacy88new), backend8298passed9skipped; frontend241suites5158tests; typecheck. Rootcached-font build and three CLI exit checks passed.",
+          "audit": "Integrated independent code audit pending"
+        },
+        "301": {
+          "commit": "cb94b37f7b052335b7fdcb9c9b1307f9c147c7f9",
+          "implementer": "/root/multi_stage_t2",
+          "files": "Tracking documentation + validation artifact only; no source/tests changes.",
+          "green": "Merged-source frontend252suites5254tests; typecheck; real-git CLI exit0/1/1; Python3.11.16; diffcheck.",
+          "audit": "Independent integrated code audit pending"
+        },
+        "307": {
+          "commit": "7a91533cca130f0ee054f8ae4b3780122ffa496f",
+          "implementer": "/root/multi_stage_fix_c1",
+          "fixes": [
+            "C1-G1 complete bounded opening qualifiers",
+            "C1-G2 explicit target ownership and ambiguous/mixed-case qualification"
+          ],
+          "red": "Three real-git wrong-cap cases failed before correction.",
+          "green": "Python3.11.16 focused371, backend8431passed9skipped in890.40s; frontend252suites5254tests/typecheck; final frozen source/test checksums unchanged.",
+          "deviation": "First post-fix full run stopped before narrow mixed-case interaction correction; final refrozen full run passed.",
+          "audit": "Fresh independent code round2 pending"
+        },
+        "308": {
+          "implementer": "/root/recover_308",
+          "status": "done",
+          "scope": "C2-G1/C2-G2 and interactions only; prior session fix unpushed and unavailable; recovered from frozen checkpoint581cbedd.",
+          "audit": "Final code3 reviewed originals as rejecting; one new policy-prefix interaction C3-G1 remains on parent; code cap reached.",
+          "commit": "7099cd77e22fcdfda0fbea96f5d922bf1de75944",
+          "red": "14 original C2,4 indirect/chained suffix,8 trailing owner forms reproduced false authorization before corresponding guards.",
+          "green": "Python3.11.16 focused401; backend8799passed9skip1077.58s; frontend252suites5254tests227.389s/typecheck; frozen fingerprints unchanged.",
+          "cli": "Canonical/historical approvals exit0; four original unauthorized forms exit1 with STATE DRIFT on synthetic real-git CLI cases.",
+          "deviation": "Initial frontend six timeout failures; isolated31passed then full252/5254 rerun passed. Initial backend run stopped before final interaction adjustment; final full run above."
+        },
+        "314": {
+          "implementer": "/root/fix_c3_clause",
+          "status": "done",
+          "scope": "C3-G1 complete excluded policy-clause validation and interactions only",
+          "audit": "Fresh stage2 round1/continuous6 clean at86f316e9,0gate findings.",
+          "commit": "c6ae59d84d68f6709d82fd8f618e0f211ab2928a",
+          "red": "32 real-git unauthorized complete-tail cases returned no drift before fix.",
+          "green": "Python3.11 focused460passed41.77s; backend8858passed9skip1032.22s; frontend252suites5254tests255.577s/typecheck; frozen fingerprints unchanged.",
+          "cli": "26 real-git CLI cases:20unauthorizedexit1 with drift,6validexit0 including historical approval."
+        },
+        "317": {
+          "implementer": "/root",
+          "commit": "9f79bfe2",
+          "status": "done locally; independent audit and required validation passed; publication pending",
+          "scope": "Only historical JSON reads in backend/tests/test_state_multi_plan_stage.py; recorded approval and assertions unchanged; parser unchanged",
+          "red": "Depth1 shallow checkout without origin/main:4regressions failed with invalid object name, exit128",
+          "green": "Python3.11.16 shallow focused460passed37.58s; integrated fullbackend8858passed9skipped851.45s; frontend255suites5273tests286.315s; typecheck and production build passed.",
+          "audit": "Fresh /root/state214_stage2_round2 stage2local2/continuous7 two passes zero gate findings at e5a4b737"
+        }
+      },
+      "implementation_interruption": {
+        "ticket": 300,
+        "reason": "Implementer usage limit before commit; tests continued to completion",
+        "resolved": "Same original implementer resumed, verified final full result and committed scoped code."
+      },
+      "pre_fix_integrated_validation": {
+        "head": "3fe29695e38d45c0278dd9139f89ca74647e1f8e",
+        "backend": "8402 passed,9skipped in882.65s on merged source; before C1 fixes, not final post-fix evidence",
+        "frontend": "252suites5254tests/typecheck/build passed",
+        "cli": "real-git exit0/1/1 passed"
+      },
+      "code_stages": [
+        {
+          "stage": 1,
+          "rounds": 3,
+          "clean": false,
+          "closed_by": "STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14",
+          "outstanding": [
+            "C3-G1"
+          ],
+          "resolution": "C3-G1 independently resolved in later authorized stage2 round1; original stage1 verdict remains notclean."
+        },
+        {
+          "stage": 2,
+          "rounds": 2,
+          "clean": true,
+          "opened_by": "STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14",
+          "cap": 3,
+          "scope": "C3-G1 complete policy-clause fixes and interactions only",
+          "closed_by": "clean",
+          "reviewer": "/root/state214_stage2_round2",
+          "reviewed": "3c7d8b78..e5a4b737 #317 historical-data reads/interactions and main integration",
+          "continuous_round": 7,
+          "overall_code_round": 5
+        }
+      ],
+      "current_code_stage": 2,
+      "pr": 316,
+      "self_merge": {
+        "status": "pending",
+        "pr": 316,
+        "audited_head": "e5a4b737d5f154f6964a14784890e090f25a04f5",
+        "note": "SELF-MERGE PENDING, PR #316, audited head e5a4b737d5f154f6964a14784890e090f25a04f5. User explicitly instructed in this chat: if audited then merge. Local validation and fresh independent stage2 round2 clean; await exact-head CI and mergeability before gh merge with matched head.",
+        "authorization": "2026-10-14 current chat: if audited then merge"
+      }
+    },
+    {
       "id": "YAML-DEPTH-BOUND",
       "name": "Bound persisted payload depth and preserve atomic configuration mutations (#167 phase A)",
       "status": "shipped",
@@ -5565,6 +5823,12 @@
       "q": "TRADIER-GOVERNOR's second plan stage closed clean at plan round 6, but scripts/state.py models one plan stage per target (1..3 rounds), so it reports the phase past the hard cap and exits non-zero on this branch; board.md says stop when the check flags your own item. Build anyway, fix state.py first, or pause?",
       "a": "Kenneth, 2026-10-11 (chat, option chosen): 'Build anyway (Recommended)' -- the red check is a tooling false alarm (the stage was opened by decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10 and closed clean); cut tickets T1-T4 and build now, record the limitation on #169, and file a small board item to teach state.py about a second plan stage. The red check stays on this branch until the code audit goes clean or it merges. Code rounds are numbered from round 7 (code round 1), cap 3.",
       "by": "Kenneth 2026-10-11 (chat)"
+    },
+    {
+      "id": "STATE-MULTI-PLAN-STAGE-C3-FOLLOWUP-CODE-STAGE-2026-10-14",
+      "q": "Recommended bounded follow-up for STATE-MULTI-PLAN-STAGE #214: validate complete excluded policy clause; authorize new code-audit stage capped3; preserve all5 historical rounds; merge only after clean independent audit and CI.",
+      "a": "User in this chat: go ahead. Explicitly authorizes bounded C3-G1 fix and new code-audit stage2 of at most3 rounds; prior plan2/code-stage1 rounds3 and total5 preserved, no reset or unrelated redesign.",
+      "date": "2026-10-14"
     }
   ],
   "pending_kenneth": [
@@ -5788,8 +6052,8 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "STOCK-PRES-P3-BACKTEST",
-  "active_phase_note": "STOCK-PRES-P3-BACKTEST shipped. PR #315 verified MERGED at dae5b438. Issue #148 is closed.",
+  "active_phase": "STATE-MULTI-PLAN-STAGE",
+  "active_phase_note": "#214 plan2clean; originalcode-stage3notclean preserved; authorizedcode-stage2 round2clean, continuous7; #317 done, all local checks passed; user-authorized merge pending exact-headCI, PR #316.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
