@@ -6,6 +6,7 @@ list; POST .../run-now bypasses the schedule for a one-off test fire; GET
 """
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,7 @@ from app.services.scan_schedule_store import (
 )
 from app.services.scan_schedule_scheduler import sync_fixed_time_jobs, _run_scheduled_entry
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/scan-schedule", tags=["scan-schedule"])
 
 
@@ -45,7 +47,23 @@ def _build_entry(entry_id: str, body: ScanScheduleEntryCreate) -> ScanScheduleEn
 
 @router.get("", response_model=list[ScanScheduleEntry])
 async def list_scan_schedule_entries() -> list[ScanScheduleEntry]:
-    return [ScanScheduleEntry.model_validate(e) for e in scan_schedule_store.list()]
+    """Every stored entry that still validates. NUMERIC-API-INPUTS T2: an entry
+    that no longer does (e.g. a resolved_request stored with a non-finite
+    number, which ScanRequest/StockScanRequest now refuse) is SKIPPED with a
+    warning naming its id, rather than turning the whole list into a 500 --
+    the drop-with-warning rule restore_stock_from_db already applies. It stays
+    in the store: DELETE still removes it and the scheduler records its
+    failed runs."""
+    entries: list[ScanScheduleEntry] = []
+    for e in scan_schedule_store.list():
+        try:
+            entries.append(ScanScheduleEntry.model_validate(e))
+        except ValidationError as exc:
+            logger.warning(
+                "scan_schedule: entry %s no longer validates and is left out of "
+                "the list: %s", e.get("id") if isinstance(e, dict) else None, exc,
+            )
+    return entries
 
 
 @router.post("", response_model=ScanScheduleEntry)

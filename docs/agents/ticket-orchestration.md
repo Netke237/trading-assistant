@@ -43,4 +43,8 @@ Every tool authenticates as Kenneth's account, so GitHub shows the same author f
 - `python3 scripts/claim.py renew` every ~2h during the build loop (claims expire after 3h).
 - `python3 .k-session/k_session.py checkpoint -m "…"` after each closed ticket **if** `.k-session/` exists on the branch.
 - Push the branch after each closed ticket so other sessions can see the work.
-- Never merge to `main` without Kenneth's explicit go.
+- Merge to `main` only through the self-merge conditions in `board.md` step 7 (decision `AGENT-SELF-MERGE-2026-10-11`; they apply to every phase, board item or not), or on Kenneth's explicit go in your own session's chat.
+
+## Existing NO-LIVE-QUOTE split exception
+
+User decision `NO-LIVE-QUOTE-SCOPED-AUDITS-2026-10-09` explicitly authorizes the existing NLQ split to keep NLQ-1 closure and audit NLQ-2/3/4 independently, each with at most three code rounds, followed by NLQ-5 integration verification. Historical rounds remain counted. This exception applies only to this existing split; the phase-only rule remains in force elsewhere. The state checker currently has no scoped-cap model, so its phase-level cap warning is retained and explained while this exception is active. Overall audit_clean stays false until all remaining scopes and integration pass.

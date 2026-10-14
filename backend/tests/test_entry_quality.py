@@ -125,3 +125,71 @@ def test_equal_bid_ask_is_not_crossed():
     the crossed-quote reason."""
     ea = assess_entry(bid=2.00, ask=2.00, mid=2.00)
     assert "crossed quote" not in ea.quality_reasons
+
+
+# ── NO-LIVE-QUOTE (plan 3e, test T9): quote_live ────────────────────────────
+
+_NLQ_REASON = "no live quote — entry priced off the last close"
+
+
+def test_quote_live_false_caps_a_pass_entry_at_caution_with_the_reason():
+    ea = assess_entry(bid=1.90, ask=2.10, mid=2.00, quote_live=False)
+    assert ea.quality_status == "CAUTION"
+    assert ea.quality_reasons == [_NLQ_REASON]
+    # The prices are unchanged: only the grade says the quote is not live.
+    assert (ea.limit_price, ea.max_fill, ea.order_type) == (2.00, 2.06, "Limit")
+
+
+def test_quote_live_none_and_true_keep_todays_behaviour():
+    for ql in (None, True):
+        ea = assess_entry(bid=1.90, ask=2.10, mid=2.00, quote_live=ql)
+        assert ea.quality_status == "PASS"
+        assert ea.quality_reasons == []
+    ea = assess_entry(bid=1.75, ask=2.25, mid=2.00, quote_live=None)
+    assert ea.quality_status == "CAUTION"
+    assert ea.quality_reasons == ["elevated spread"]
+
+
+def test_quote_live_false_never_lifts_a_reject():
+    ea = assess_entry(bid=0.50, ask=3.50, mid=2.00, quote_live=False)
+    assert ea.quality_status == "REJECT"
+    assert "wide spread" in ea.quality_reasons
+    assert _NLQ_REASON in ea.quality_reasons
+
+
+def test_recompute_plan_forwards_quote_live_to_assess_entry():
+    import asyncio
+    from unittest.mock import patch
+    from httpx import AsyncClient, ASGITransport
+    from fastapi import FastAPI
+    import app.scoring.trade_plan as trade_plan
+    from app.routers.contracts import router as contracts_router
+
+    app = FastAPI()
+    app.include_router(contracts_router)
+    payload = {
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 185.0,
+        "strike": 190.0, "dte": 30, "premium": 2.50, "delta": 0.45, "spread": 0.10,
+    }
+    seen = []
+    real = trade_plan.assess_entry
+
+    def _spy(*a, **k):
+        res = real(*a, **k)
+        seen.append((k.get("quote_live"), res.quality_status, list(res.quality_reasons)))
+        return res
+
+    async def _post(body):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            r = await ac.post("/api/contracts/recompute-plan", json=body)
+        assert r.status_code == 200, r.text
+
+    with patch.object(trade_plan, "assess_entry", _spy):
+        asyncio.run(_post(payload))
+        asyncio.run(_post({**payload, "quote_live": False}))
+        asyncio.run(_post({**payload, "quote_live": True}))
+    assert seen == [
+        (None, "PASS", []),
+        (False, "CAUTION", [_NLQ_REASON]),
+        (True, "PASS", []),
+    ]

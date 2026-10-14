@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
 import type { Direction, OptionContract, TradeCardData, DteWindow, SentimentData } from '@/types/domain';
-import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+import type { StockScanResult, PositionCardData, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { StockScanRequestBody } from './resolveStockScanRequest';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
@@ -111,6 +111,9 @@ export interface OptionsPipeline {
 }
 
 export interface ScanResult {
+  report_run_id?: string | null;
+  report_generation?: number | null;
+  report_persistence?: 'saved' | 'unavailable' | null;
   scan_id: string;
   timestamp: string;
   candidates: TradeCardData[];
@@ -458,24 +461,10 @@ interface ScanStoreState {
    *  "loads on Step 1" instead. */
   regimeSentiment:    SentimentData | null;
   setRegimeSentiment: (s: SentimentData | null) => void;
-  preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
-  setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
-  fibPullbackResults: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>;
-  setFibPullbackResults: (results: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>) => void;
+  preBreakoutResults: PreBreakoutResultRow[];
+  setPreBreakoutResults: (results: PreBreakoutResultRow[]) => void;
+  fibPullbackResults: FibPullbackResultRow[];
+  setFibPullbackResults: (results: FibPullbackResultRow[]) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -724,7 +713,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 18,
+       version: 19,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -886,6 +875,16 @@ export const useScanStore = create<ScanStoreState>()(
             scanResult: discardPreFullPremiumScanResult(s.scanResult),
             previousRun: discardPreFullPremiumScanResult(s.previousRun),
           };
+        }
+        if (version < 19) {
+          // Durable report linkage is additive. Preserve legacy evidence and
+          // mark unknown identities explicitly; never infer one from scan_id.
+          const withReportIdentity = (result: unknown): unknown => {
+            if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+            const value = result as Record<string, unknown>;
+            return {...value,report_run_id:value.report_run_id??null,report_generation:value.report_generation??null,report_persistence:value.report_persistence??null};
+          };
+          s = {...s,scanResult:withReportIdentity(s.scanResult),previousRun:withReportIdentity(s.previousRun),stockScanResult:withReportIdentity(s.stockScanResult),previousStockScanResult:withReportIdentity(s.previousStockScanResult)};
         }
         return s;
       },

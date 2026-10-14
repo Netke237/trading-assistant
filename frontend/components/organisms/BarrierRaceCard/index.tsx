@@ -15,6 +15,9 @@ import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
 import styles from './BarrierRaceCard.module.css';
 
 export interface BarrierRaceCardProps {
+  /** Entered quantity, used only for a selected-contract full-exit display. */
+  quantity?: number;
+  isSpread?: boolean;
   /** Controlled shortcut; the owner supplies it only while its existing method
    *  availability gate is clear. No method or stop state lives in this card. */
   onSelectTarget?: (targetPct: number) => void;
@@ -43,7 +46,7 @@ export interface BarrierRaceCardProps {
    *  standalone invalidation probability below is a property of that stop, so
    *  it survives a moved PREMIUM stop and must not survive this one. */
   stockStopMoved?: boolean;
-  /** Whether the Arithmetic card's "Max loss if the stop is hit" readout is on
+  /** Whether Structure & Stops' "Max loss if the stop is hit" readout is on
    *  screen. Gates the cross-reference below — see its comment. */
   stopCostShown?: boolean;
   /** The stock stop's STANDALONE measure — "did any path ever reach it",
@@ -92,6 +95,8 @@ function daysLabel(v: number | null): string {
  */
 export default function BarrierRaceCard({
   race,
+  quantity,
+  isSpread = false,
   premiumStopFromField,
   premiumStopField,
   isFresh,
@@ -259,6 +264,15 @@ export default function BarrierRaceCard({
           payload, so the row and its chain cannot disagree. */}
       <div className={styles.block}>
         <Text size={12} weight={600}>Which barrier is reached first</Text>
+        <Text size={10} tone="dim">
+          {quantity != null && Number.isFinite(quantity) && quantity >= 0
+            ? `${quantity} entered contracts × 100 shares`
+            : 'Entered quantity unavailable'}
+          {' '}· selected-contract full exit. Estimated dollar outcome uses the returned target reward
+          per share, in the same cents as the risk / R:R / edge arithmetic, × quantity × 100,
+          before commissions; not a fill or guaranteed profit. Each row is an alternative exit.
+        </Text>
+        {isSpread && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
         <div className={styles.legend}>
           <LegendKey className={styles.swatchTarget} label="Target first" />
           <LegendKey className={styles.swatchStock} label="Stock stop first" />
@@ -310,6 +324,8 @@ export default function BarrierRaceCard({
                       <div className={styles.targetCell}>
                         <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
                         <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
+                        <Text size={10} tone="dim">Estimated dollar outcome</Text>
+                        <Data size={11}>{raceTargetOutcome(o, quantity)}</Data>
                         {onSelectTarget && (
                           <button
                             type="button"
@@ -394,14 +410,14 @@ export default function BarrierRaceCard({
             there first, not over all paths.
           </Text>
 
-          {/* The two cards print two different stop losses for the same stop and
+          {/* The two sections print two different stop losses for the same stop and
               they will not match: this one reprices at the simulation's median
-              day to the barrier, the Arithmetic card's prices at today with no
+              day to the barrier, Structure & Stops prices at today with no
               decay. Both are right; without saying so they read as a
               contradiction, which is exactly how they read to Kenneth. */}
           {/* Only when that readout is actually on screen. The race falls back to
               data.exit.invalidation for its stock stop, so it renders in states
-              the Arithmetic card's gate does not — a failed structural sub-fetch
+              the immediate stop-cost gate does not — a failed structural sub-fetch
               leaves this card pointing a reader at a row that is nowhere on the
               page. */}
           <Text size={10} tone="dim">
@@ -409,8 +425,8 @@ export default function BarrierRaceCard({
             {stopCostShown ? (
               <>
                 {' '}For the immediate figure — what this stop costs if it is hit right now —
-                see &ldquo;Max loss if the stop is hit&rdquo; on the Arithmetic Profit Target
-                card. The two differ by time decay AND by pricing model: that one is a
+                see &ldquo;Max loss if the stop is hit&rdquo; in Structure &amp; Stops.
+                The two differ by time decay AND by pricing model: that one is a
                 delta-linear estimate at today&apos;s price, capped at the premium, while these
                 are repriced by the simulation. Both are correct; naming only the decay sent a
                 hand-checker looking for a difference decay alone cannot account for.
@@ -489,6 +505,17 @@ function raceRRValue(o: BarrierRaceOutcome): string {
   const chain = formatRaceRR(o);
   const at = chain.lastIndexOf(' = ');
   return at < 0 ? '—' : chain.slice(at + 3);
+}
+
+/** Scale the returned reward, never a reconstructed target percentage or a
+ * live/order premium. Use the cents printed by money() before multiplying,
+ * so floating-point tails cannot change the quantity-scaled dollar amount. */
+function raceTargetOutcome(o: BarrierRaceOutcome, quantity: number | undefined): string {
+  if (quantity == null || !Number.isFinite(quantity) || quantity < 0
+      || o.rewardDollar == null || !Number.isFinite(o.rewardDollar)) return 'Unavailable';
+  const rewardCents = Math.round(Number(o.rewardDollar.toFixed(2)) * 100);
+  const amount = rewardCents * quantity;
+  return Number.isFinite(amount) ? money(amount) : 'Unavailable';
 }
 
 /**

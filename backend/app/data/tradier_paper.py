@@ -7,6 +7,7 @@ from typing import Literal, Optional
 import httpx
 
 from app.data.option_symbol import to_occ
+from app.data.order_errors import OrderAdmissionRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,15 @@ class TradierPaperAdapter:
         return params
 
     def place_order(self, order: BrokerOrder) -> OrderResult:
+        from app.data.governor import get_governor
         url = f"{_SANDBOX_BASE}/accounts/{self._account}/orders"
+        # Admitted on the sandbox account's own budget before anything is sent
+        # (TRADIER-GOVERNOR D4). A typed refusal proves no POST was attempted,
+        # allowing dispatch callers to release their durable risk reservation.
+        if not get_governor().admit_sync("tradier_paper", admit_timeout=float(self._timeout)):
+            msg = "Tradier paper order failed: rate-limit budget busy — order not sent"
+            logger.error(msg)
+            raise OrderAdmissionRefusedError(msg)
         try:
             resp = httpx.post(
                 url, data=self._build_params(order),

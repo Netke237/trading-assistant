@@ -119,6 +119,63 @@ describe('TradeCard', () => {
     localStorage.clear();
   });
 
+  it('shows one initial ladder ahead of order inputs and preserves restored collapse preference', () => {
+    const { unmount } = render(<TradeCard data={mockTradeCard} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    const order = screen.getByRole('region', { name: 'Order inputs & risk budget' });
+    expect(ladder.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Edit target stock price for TP1' })).toHaveLength(1);
+    expect(within(ladder).getByText(/Scan-plan targets and stored option estimates/)).toBeInTheDocument();
+    unmount();
+    localStorage.setItem('bamendjou:tradecard-ladder-collapsed', '1');
+    render(<TradeCard data={mockTradeCard} />);
+    expect(screen.queryByRole('region', { name: 'Fixed ladder targets' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it.each([
+    [5.0049, '$750.00', '$250.00'],
+    [1, '$-450.00', '$-150.00'],
+    [2.5, '$0.00', '$0.00'],
+    [0, '$-750.00', '$-250.00'],
+    [undefined, 'Unavailable', 'Unavailable'],
+  ])('keeps full-position and rung outcomes separate for option premium %s', (premium, full, rung) => {
+    const data = { ...mockTradeCard, exit: { ...mockTradeCard.exit, targets: [{
+      ...mockTradeCard.exit.targets[0], estimatedOptionPrice: premium, contractsToSell: 1,
+    }] } };
+    render(<TradeCard data={data} contracts={3} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent(full);
+    expect(within(ladder).getByText('Rung outcome (1 contracts × 100 shares)').parentElement).toHaveTextContent(rung);
+    expect(within(ladder).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
+    expect(within(ladder).getByText(/do not add alternative outcomes/)).toBeInTheDocument();
+  });
+
+  it('does not assume a rung allocation when the restored plan has none', () => {
+    const data = { ...mockTradeCard, exit: { ...mockTradeCard.exit, targets: [{
+      ...mockTradeCard.exit.targets[0], contractsToSell: undefined,
+    }] } };
+    render(<TradeCard data={data} contracts={3} />);
+    expect(screen.getByText('Rung outcome (allocation unavailable)').parentElement).toHaveTextContent('Unavailable');
+  });
+
+  it('keeps the same editable ladder state and local pricing approximation without running a model', () => {
+    const onEditsChange = jest.fn();
+    jest.clearAllMocks();
+    render(<TradeCard data={mockTradeCard} contracts={3} onEditsChange={onEditsChange} />);
+    const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
+    fireEvent.click(within(ladder).getByRole('button', { name: 'Edit target stock price for TP1' }));
+    const input = within(ladder).getByRole('spinbutton', { name: 'Edit target stock price for TP1' });
+    fireEvent.change(input, { target: { value: '201' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(within(ladder).getByText('edited')).toBeInTheDocument();
+    expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ targets: [201] }), expect.anything());
+    // Existing local formula: 2.5 + 0.5 * abs(201 - 185.2) = 10.40.
+    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent('$2370.00');
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+    expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
+  });
+
   it('shows a negative per-target R:R instead of hiding the row (M2 parity)', () => {
     // Mirrors the backend's reward_risk.py M2 fix: a target priced below
     // entry (estimatedOptionPrice=1.0 < entry.limit=2.5, reward=-1.5,
@@ -140,6 +197,63 @@ describe('TradeCard', () => {
     expect(screen.getByText('-0.6x')).toBeInTheDocument();
   });
 
+  it('keeps contract snapshot basis and numeric details together in selected context', () => {
+    render(<TradeCard data={mockTradeCard} liveMid={7.5} liveStockPrice={220} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
+    expect(within(context).getByText('Contract Details')).toBeInTheDocument();
+    expect(within(context).getByText('Contract snapshot')).toBeInTheDocument();
+    expect(within(context).getByText('IV RANK')).toBeInTheDocument();
+    expect(within(context).getByText('45')).toBeInTheDocument();
+    const mid = within(context).getByText('MID').parentElement!;
+    expect(mid).toHaveTextContent('$2.50');
+    expect(mid).not.toHaveTextContent('$7.50');
+    expect(within(context).getByText('CAR').parentElement).toHaveTextContent('$250');
+  });
+
+  it('preserves absolute IV and missing details without substituting rank or live mid', () => {
+    const { rerender } = render(<TradeCard data={{ ...mockTradeCard, contractDetails: {
+      ...mockTradeCard.contractDetails!, ivRank: null, iv: 38,
+    } }} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByText('IV')).toBeInTheDocument();
+    expect(within(context).getByText('38.0%')).toBeInTheDocument();
+    expect(within(context).queryByText('IV RANK')).not.toBeInTheDocument();
+    rerender(<TradeCard data={{ ...mockTradeCard, contractDetails: undefined }} liveMid={7.5} />);
+    expect(within(context).getAllByText(mockTradeCard.contract).length).toBeGreaterThan(0);
+    expect(within(context).queryByText('Contract Details')).not.toBeInTheDocument();
+    expect(within(context).queryByText('CAR')).not.toBeInTheDocument();
+  });
+
+  it('keeps conditional spread values and alternative reasons in the same selected context', () => {
+    const spread: TradeCardData = {
+      ...mockTradeCard, spreadType: 'bear_put',
+      legs: [
+        { action: 'BUY', qty: 1, strike: 190, right: 'P', expiry: '2026-05-15', bid: 5, ask: 5.2 },
+        { action: 'SELL', qty: 1, strike: 180, right: 'P', expiry: '2026-05-15', bid: 2.2, ask: 2.4 },
+      ],
+      netDebitCredit: 0, maxProfit: 725, maxLoss: 275, breakeven: 187.25,
+      alternatives: [{
+        symbol: 'AAPL', strike: 195, right: 'C', expiry: '2026-05-15', dte: 24,
+        mid: 1.75, delta: 0.35, theta: -0.07, ivRank: 0, score: 65,
+        contractConfidence: 'CAUTION', contractBreakdown: mockTradeCard.contractBreakdown,
+        rrRatio: 2.1, rrModel: 'Heston repriced', reason: 'Lower premium with a smaller delta',
+      }],
+    };
+    render(<TradeCard data={spread} />);
+    const context = screen.getByRole('region', { name: 'Selected stock and contract' });
+    expect(within(context).getByText(/Spread Legs/)).toHaveTextContent('Bear Put Spread');
+    for (const value of ['$725.00', '$275.00', '$187.25', '+$0.00']) {
+      expect(within(context).getByText(value)).toBeInTheDocument();
+    }
+    expect(within(context).getByText('BUY')).toBeInTheDocument();
+    expect(within(context).getByText('SELL')).toBeInTheDocument();
+    const alternatives = within(context).getByRole('button', { name: /ALTERNATIVES/ });
+    expect(alternatives).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(alternatives);
+    expect(within(context).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
+    expect(within(context).getByText('0')).toBeInTheDocument();
+  });
   it('renders symbol and company in header', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
@@ -149,6 +263,86 @@ describe('TradeCard', () => {
     render(<TradeCard data={mockTradeCard} />);
     expect(screen.getByText('Stock Scorecard')).toBeInTheDocument();
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
+  });
+
+  it('places the folded score group directly between identity and Fundamental Health', () => {
+    render(<TradeCard data={mockTradeCard} />);
+    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const group = toggle.closest('section')!;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(group.previousElementSibling).toContainElement(screen.getByTestId('symbol-header'));
+    expect(group.nextElementSibling).toHaveTextContent('Fundamental Health');
+    expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
+    expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
+    const panels = within(group).getAllByTestId('score-panel');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(panels[0]).not.toBeVisible();
+    expect(panels[1]).not.toBeVisible();
+    expect(localStorage.getItem('bamendjou:tradecard-scores-collapsed')).toBe('1');
+    fireEvent.click(toggle);
+    expect(within(group).getAllByTestId('score-panel')[0]).toBe(panels[0]);
+  });
+
+  it('keeps real stock and contract evidence independent and mounted across outer toggles', async () => {
+    const panelMock = ScoreCardPanel as jest.Mock;
+    const original = panelMock.getMockImplementation();
+    panelMock.mockImplementation(jest.requireActual('@/components/molecules/ScoreCardPanel').ScoreCardPanel);
+    const captured: TradeCardData = {
+      ...mockTradeCard,
+      stockExplanation: {
+        version: 1, symbol: 'AAPL', direction: 'Bullish', horizon: 'Swing',
+        scoring_mode: 'options', iv_basis: 'rank', evaluated_at: '2026-10-04T00:00:00Z',
+        score: 82, status: 'PASS', raw_status: 'PASS', unrounded_score: 82,
+        rounding: 'python_round_ties_to_even', pass_threshold: 70, caution_threshold: 50,
+        weights: {}, caps: [], gate_config: {}, components: {},
+      },
+    };
+    const before = JSON.stringify(captured);
+    const estimateCalls = (api.getFirstPassageEstimate as jest.Mock).mock.calls.length;
+    const planCalls = (api.getExitPlan as jest.Mock).mock.calls.length;
+    const view = render(<TradeCard data={captured} />);
+    try {
+      await act(async () => { await Promise.resolve(); });
+      const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
+      const group = outer.closest('section')!;
+      expect(outer).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.click(outer);
+      const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
+      const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
+      expect(outer).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const evidence = within(group).getByText(/Captured AAPL evidence/);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(stock);
+      expect(evidence).toBeVisible();
+      expect(contract).toHaveAttribute('aria-expanded', 'false');
+      const summary = within(group).getByText('Effective gate configuration and weights');
+      fireEvent.click(summary);
+      const details = summary.closest('details')!;
+      expect(details.open).toBe(true);
+      fireEvent.click(outer);
+      expect(evidence).not.toBeVisible();
+      fireEvent.click(outer);
+      expect(within(group).getByText(/Captured AAPL evidence/)).toBe(evidence);
+      expect(stock).toHaveAttribute('aria-expanded', 'true');
+      expect(details.open).toBe(true);
+      fireEvent.click(contract);
+      fireEvent.click(stock);
+      expect(contract).toHaveAttribute('aria-expanded', 'true');
+      expect(stock).toHaveAttribute('aria-expanded', 'false');
+      expect(localStorage.getItem('bamendjou:tradecard:stock:scoring-evidence:collapsed')).toBe('1');
+      expect(localStorage.getItem('bamendjou:tradecard:contract:scoring-evidence:collapsed')).toBe('0');
+      expect(within(group).getAllByRole('progressbar')).toHaveLength(10);
+      expect(JSON.stringify(captured)).toBe(before);
+      expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(estimateCalls);
+      expect(api.getExitPlan).toHaveBeenCalledTimes(planCalls);
+    } finally {
+      view.unmount();
+      panelMock.mockImplementation(original);
+    }
   });
 
   it('renders contract details when provided', () => {
@@ -165,7 +359,7 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps handling controls and the latest result visible before the method cards', () => {
+  it('keeps handling controls before evidence and the latest result after method cards', () => {
     render(<TradeCard data={mockTradeCard} />);
     const order = screen.getByRole('region', { name: 'Order Entry' });
     const exit = screen.getByRole('region', { name: 'Exit Plan' });
@@ -173,12 +367,12 @@ describe('TradeCard', () => {
     const arithmetic = screen.getByText('Arithmetic Profit Target');
     expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(latest.compareDocumentPosition(arithmetic) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(arithmetic.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
       expect(screen.getAllByLabelText(label)).toHaveLength(1);
     }
     expect(screen.getByText(/No method explicitly run/)).toBeVisible();
-    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    expect(screen.getByText('Sell-to-Close Plan')).toBeVisible();
     expect(within(exit).getByText('Time exit')).toBeVisible();
   });
 
@@ -751,17 +945,17 @@ describe('TradeCard', () => {
       .toBe(0.5);
   });
 
-  it('renders the exit plan section ALWAYS VISIBLE, above the collapsed ladder group (P2-21)', () => {
+  it('keeps the exit plan ALWAYS VISIBLE beside the expanded initial ladder', () => {
     render(<TradeCard data={mockTradeCard} />);
-    // No expandLadder(): the ladder stays collapsed and the Exit Plan is on screen.
-    expect(screen.queryByText('Sell-to-Close Plan')).not.toBeInTheDocument();
+    // Both initial ladder and execution exit controls are visible without expanding.
+    expect(screen.getByText('Sell-to-Close Plan')).toBeVisible();
     expect(screen.getByText('Exit Plan')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
     // P2-03 (decision Q8): the exit the alert actually makes, read-only.
     expect(screen.queryByLabelText('Edit Time exit')).not.toBeInTheDocument();
     expect(screen.getByText('Time exit')).toBeInTheDocument();
-    expect(screen.getByText('3 DTE')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 DTE')).toBeInTheDocument();
     expect(screen.queryByText('Time stop')).not.toBeInTheDocument();
     expect(screen.queryByText(`${mockTradeCard.exit.timeStopDays}d`)).not.toBeInTheDocument();
   });
@@ -1213,7 +1407,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
     expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
     expect(screen.getByText('72%')).toBeInTheDocument();       // T20% Probability
-    expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time
+    expect(screen.getByText('~5 calendar days')).toBeInTheDocument();       // T20% Expected time
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
     // The invalidation row moved off this card to the Barrier Race card
@@ -1884,7 +2078,7 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     expect(await screen.findByText(/Risk-derived size: 25 contracts/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     const input = screen.getByLabelText('Max loss override value');
     fireEvent.change(input, { target: { value: '1500' } });
@@ -1910,7 +2104,7 @@ describe('TradeCard', () => {
       <TradeCard data={mockTradeCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: '$' }));
     fireEvent.change(screen.getByLabelText('Max loss override value'), { target: { value: '9999' } });
     // Deliberately do NOT click Apply — switch candidates mid-edit instead.
@@ -1919,13 +2113,13 @@ describe('TradeCard', () => {
     rerender(<TradeCard data={nextCard} onMaxLossOverrideChange={onMaxLossOverrideChange} />);
 
     // The editor remounted for the new candidate — back to the closed
-    // "Set override" state, not still showing the $9999 draft mid-edit.
-    expect(screen.getByRole('button', { name: /set override/i })).toBeInTheDocument();
+    // "Set trade loss budget" state, not still showing the $9999 draft mid-edit.
+    expect(screen.getByRole('button', { name: /set trade loss budget/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Max loss override value')).not.toBeInTheDocument();
 
     // Opening and applying fresh on the new candidate must not reuse 9999 —
     // a fresh editor's default draft (0, percent mode) applies instead.
-    fireEvent.click(screen.getByRole('button', { name: /set override/i }));
+    fireEvent.click(screen.getByRole('button', { name: /set trade loss budget/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply max loss override' }));
     expect(onMaxLossOverrideChange).toHaveBeenLastCalledWith({ mode: 'percent', value: 0 });
   });
@@ -2228,13 +2422,12 @@ describe('TradeCard', () => {
   });
 
   describe('Arithmetic Profit Target (Feature 3) — additional coverage', () => {
-    it('renders placeholder rows for both target rows before either button is clicked', () => {
+    it('reports uncomputed targets without assuming the configured ratio sequence', () => {
       // The TARGETS still need a plan -- they are arithmetic multiples of the
       // stop distance repriced against a contract. The stop row no longer
       // does; see the piece 3 block below.
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getByText('2:1 target — not yet computed —')).toBeInTheDocument();
-      expect(screen.getByText('3:1 target — not yet computed —')).toBeInTheDocument();
+      expect(screen.getByText('Target estimates — not yet computed —')).toBeInTheDocument();
     });
 
     describe('the scan\'s own final stop (piece 3)', () => {
@@ -2268,7 +2461,8 @@ describe('TradeCard', () => {
         // which is the case this fixture exists to render -- plus the Exit
         // Plan's Invalidation (169.00 in this fixture), which is always
         // visible since P2-21 moved it out of the collapsed ladder group.
-        expect(screen.getAllByText('$169.00')).toHaveLength(3);
+        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(3);
+        expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$169.00');
         // The LOSING candidate rides along: the row prints both levels and the
         // gap, so a reader can see the floor was what widened the stop.
         expect(screen.getByText('Structural stop — Swing Low')).toBeInTheDocument();
@@ -2492,7 +2686,7 @@ describe('TradeCard', () => {
       render(<TradeCard data={mockTradeCard} />);
       expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
       // mockTradeCard's single target: stockPrice/targetPrice 200.02.
-      expect(screen.getByText('$200.02')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'Final Recommendation' })).getByText('$200.02')).toBeInTheDocument();
       // The targets, and ONLY the targets. This branch used to carry the
       // Ladder's "Projected R/R (+8% stock move)" as well — the copy that
       // survived the readout's removal from the Ladder section itself, and the
@@ -2865,6 +3059,55 @@ describe('TradeCard — stop-vs-premium gate', () => {
 
   const ORDER_BLOCK = { price: 178.5, source: 'order_block' as const, confidence: 75, distancePct: 3.6 };
 
+  it('groups matched stop-cost figures separately from execution, quote and order bases', () => {
+    const matched = stopCost({ premium: 4, valueAtStop: 1.8, lossDollar: 2.2, fraction: 0.55, status: 'PASS' });
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: matched }, 190)} liveMid={9} contracts={2} />);
+    const section = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(section.getByRole('button', { name: 'Check structure' })).toBeVisible();
+    expect(section.getByText('Estimated premium remaining per share').parentElement).toHaveTextContent('$1.80/share');
+    expect(section.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.20/share');
+    expect(section.getByText('Estimated loss per contract').parentElement).toHaveTextContent('$220 per contract');
+    expect(section.getByText('Estimated loss for 2 entered contracts').parentElement).toHaveTextContent('$440');
+    expect(section.getByText(/Selected contract only.*100 shares/)).toBeVisible();
+    expect(section.getByText(/Calculation does not replace/)).toBeVisible();
+    expect(section.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(section.getByText(/\$4.00 premium − \$1.80 at \$178.50/)).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Edit Limit'));
+    fireEvent.change(screen.getByLabelText('Edit Limit'), { target: { value: '8' } });
+    fireEvent.blur(screen.getByLabelText('Edit Limit'));
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    fireEvent.change(screen.getByLabelText('Edit Contracts'), { target: { value: '3' } });
+    fireEvent.blur(screen.getByLabelText('Edit Contracts'));
+    expect(section.getByText('Estimated loss for 3 entered contracts').parentElement).toHaveTextContent('$660');
+    expect(section.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.20/share');
+  });
+
+  it('keeps missing and zero-width stop costs unavailable in the dedicated section', () => {
+    const { rerender } = render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: null }, 190)} />);
+    const section = () => within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(section().getByText(/Not computed — no priced contract/)).toBeVisible();
+    expect(section().queryByText('Premium loss per share')).not.toBeInTheDocument();
+    rerender(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, price: 190, distancePct: 0, stopCost: stopCost({ stopPrice: 190, lossDollar: 0, valueAtStop: 2.5 }) }, 190)} resetKey={1} />);
+    expect(section().getByText('N/A (stop = price)')).toBeVisible();
+    expect(section().queryByText('Premium loss per share')).not.toBeInTheDocument();
+  });
+
+  it('hides priced figures while structure refreshes and after its error', async () => {
+    let reject!: (reason: Error) => void;
+    (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ price: 190 });
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({ price: 9 });
+    (api.getStructuralStop as jest.Mock).mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+    render(<TradeCard data={cardWithStop({ ...ORDER_BLOCK, stopCost: stopCost() }, 190)} />);
+    const section = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    fireEvent.click(section.getByRole('button', { name: 'Check structure' }));
+    await waitFor(() => expect(reject).toBeDefined());
+    expect(section.getByText('Checking…')).toBeVisible();
+    expect(section.queryByText('Premium loss per share')).not.toBeInTheDocument();
+    await act(async () => reject(new Error('unavailable')));
+    expect(section.getByText(/Couldn't check structure/)).toBeVisible();
+    expect(section.queryByText('Premium loss per share')).not.toBeInTheDocument();
+  });
+
   it('flags a stop that costs the whole premium, and shows every input behind it', () => {
     // The contract is worthless at $178.50: nothing of the $2.50 premium
     // survives the stop, so the stop is not a risk control on this contract.
@@ -2971,6 +3214,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
   // existed. After the fix, both should agree on the exit-plan's stop once
   // one has been computed this mount.
   it('gate and structuralRR both use the exit-plan stop, not the raw structural stop, once an Arithmetic Plan is computed', async () => {
+    (api.getContractQuote as jest.Mock).mockResolvedValueOnce({ price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100 });
     // 1) Check structure — raw structural stop at $178.50, fresh stock price $182.00.
     (api.getStockQuote as jest.Mock).mockResolvedValueOnce({ symbol: 'AAPL', price: 182.0 });
     (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
@@ -3034,6 +3278,14 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     expect(screen.getByText(/\$2\.60 premium − \$0\.00 at \$170\.00 = \$2\.60 of \$2\.60 premium/))
       .toBeInTheDocument();
     expect(screen.queryByText('PASS · 63% of premium · $0.92/share left')).not.toBeInTheDocument();
+    const stops = within(screen.getByRole('region', { name: 'Structure & Stops' }));
+    expect(stops.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.60/share');
+    expect(stops.getByText('Estimated premium remaining per share').parentElement).toHaveTextContent('$0.00/share');
+    expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
+    expect(stops.getByText('Arithmetic contract value at stop').parentElement).toHaveTextContent('$1.00/share');
+    expect(stops.getByText('Stop-cost source: Arithmetic calculation stop.')).toBeVisible();
+    expect(stops.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
     // structuralIsFreshRef is already true from step 1, so this does NOT
@@ -3053,6 +3305,9 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     await waitFor(() => {
       expect(screen.getByText('Structural level found')).toBeInTheDocument();
     });
+
+    expect(stops.getByText('Premium loss per share').parentElement).toHaveTextContent('$2.60/share');
+    expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
 
     // The row must quote the EXIT-PLAN stop ($170.00), not the raw structural
     // one ($178.50) — that is Piece 2's whole point, and reading the level

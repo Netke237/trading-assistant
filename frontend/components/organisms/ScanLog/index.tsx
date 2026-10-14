@@ -24,7 +24,8 @@ function resolveHorizonKey(h: string | undefined): string {
 // Category mapping for contract rejection reasons
 // ---------------------------------------------------------------------------
 
-const REASON_CATEGORY: Record<string, 'DATA' | 'GREEKS' | 'PRICE' | 'SOFT'> = {
+export const REASON_CATEGORY: Record<string, 'DATA' | 'GREEKS' | 'PRICE' | 'SOFT'> = {
+  no_live_quote: 'DATA',
   no_greeks_data:          'DATA',
   no_iv_data:              'DATA',
   open_interest_too_low:   'DATA',

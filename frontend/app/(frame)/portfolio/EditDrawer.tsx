@@ -440,8 +440,16 @@ export function EditDrawer({
         />
         <EditField
           label="Current price"
-          hint="Manual override — will refresh from broker in live mode."
+          // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
+          // quote for carries a 0 currentPrice that is not a price. The field
+          // shows it as unknown -- empty, with a placeholder -- exactly as the
+          // table shows "—", never as 0.
+          hint={position.quoteUnavailable
+            ? 'Quote unavailable'
+            : 'Manual override — will refresh from broker in live mode.'}
           value={position.currentPrice}
+          unknown={position.quoteUnavailable === true}
+          placeholder="— (no quote)"
           // 0 is refused here (decision Q6): it would write `currentPrice: 0`
           // and a -100% P&L onto the row. The way to mark a position worthless
           // is to CLOSE it at $0, which the close path supports end to end.
@@ -457,7 +465,11 @@ export function EditDrawer({
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
-            onChange({ currentPrice: n, pnlDollar, pnlPct });
+            // A typed price IS a mark: the row is no longer "no quote" until the
+            // next sync says otherwise (fromBackend rewrites the flag). Without
+            // this the override would be written while the field, the table and
+            // the totals all kept showing it as unknown.
+            onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
             setPriceEditedSinceEstimate(true);
           }}
         />
@@ -918,6 +930,12 @@ function EditField({
   /** P2-01 -- the message a refused 0 shows when `zeroClears` is off. Current
    *  price uses it to point at the real gesture (close the position at $0). */
   zeroMessage = 'Must be greater than 0 — kept the previous value.',
+  /** NO-LIVE-QUOTE NLQ-1 (round-2 G1) -- `value` is not a real value (Current
+   *  price on a row with no quote). The field then holds an EMPTY draft and
+   *  shows `placeholder`; an empty commit reverts to empty and writes nothing,
+   *  silently, since there is no previous value to "keep". */
+  unknown = false,
+  placeholder,
 }: {
   label: string;
   hint?: string;
@@ -926,6 +944,8 @@ function EditField({
   range?: { min: number; max: number } | null;
   zeroClears?: boolean;
   zeroMessage?: string;
+  unknown?: boolean;
+  placeholder?: string;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -965,7 +985,7 @@ function EditField({
   // and an empty draft REVERTS rather than clearing. Typing an explicit 0 is
   // still the way to clear -- it is what the hints already document, and it is
   // the one gesture that cannot be confused with a half-finished number.
-  const stored = String(value);
+  const stored = unknown ? '' : String(value);
   const [draft, setDraft] = useState(stored);
   const [rejected, setRejected] = useState<string | null>(null);
   // A BLUR IS NOT AN EDIT -- the same lesson as PremiumStopEditor below, which
@@ -1025,9 +1045,11 @@ function EditField({
     const raw = draft.trim();
     if (raw === '') {
       revert(
-        zeroClears
-          ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
-          : 'Empty is not a value — kept the previous one.',
+        unknown
+          ? null
+          : zeroClears
+            ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
+            : 'Empty is not a value — kept the previous one.',
       );
       return;
     }
@@ -1073,6 +1095,7 @@ function EditField({
         inputMode="decimal"
         className={styles.editInput}
         value={draft}
+        placeholder={placeholder}
         onChange={(e) => { dirtyRef.current = true; setRejected(null); setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}

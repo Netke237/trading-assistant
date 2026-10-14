@@ -105,3 +105,70 @@
   padding-top: 6px;
   border-top: 1px solid var(--border-subtle);
 }
+
+.workspace { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.workspace h4 { font-size: 14px; font-weight: 500; margin: 0; }
+.workspace h3 { font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+.workspaceColumns { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: var(--space-4); align-items: start; }
+.workspaceMain { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.workspaceCard, .decision, .latest, .help { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.decision { position: sticky; top: var(--space-4); background: var(--bg-surface); }
+.workspaceNotes { display: flex; flex-direction: column; gap: var(--space-2); }
+.sectionLinks { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+.sectionLinks a { color: var(--text-secondary); font-size: 12px; }
+.help summary { font-size: 12px; cursor: pointer; }
+.qualification { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.evidenceGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.evidenceGrid > div { display: flex; flex-direction: column; }
+.evidenceRow { display: grid; grid-template-columns: minmax(0, 1fr) 50px; gap: var(--space-2); }
+.evidenceRow > :last-child { grid-column: 1 / -1; }
+.raceDrawing { display: flex; flex-direction: column; gap: 4px; }
+.raceDrawing label { display: grid; grid-template-columns: 60px minmax(0, 1fr) 45px; align-items: center; gap: 8px; }
+.raceDrawing meter { width: 100%; }
+.workspace section { scroll-margin-top: var(--space-4); }
+.workspace .grid4 { gap: 8px; }
+.autoTrade { border-top: 1px solid var(--border-subtle); padding-top: var(--space-3); }
+@media (max-width: 1400px) { .workspaceColumns { grid-template-columns: minmax(0, 1fr) 280px; } .qualification { grid-template-columns: minmax(0, 1fr); } }
+.workspace .planRace { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3); }
+.workspace .targetsSection { gap: var(--space-3); }
+.workspace .targetsHeading { padding-bottom: var(--space-2); }
+.identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-3); }
+.identity > div:first-child { display: flex; flex-direction: column; gap: var(--space-2); }
+.identityBadges { display: flex; align-items: center; gap: var(--space-2); }
+.factorDetails { grid-column: 1 / -1; font-size: 11px; overflow-wrap: anywhere; }
+.factorDetails summary { cursor: pointer; }
+.factorDetails > span { display: block; }
+.initialTableWrap { overflow-x: auto; }
+.initialTable { width: 100%; border-collapse: collapse; text-align: left; }
+.initialTable th { font-weight: 400; }
+.initialTable th, .initialTable td { padding: var(--space-2); white-space: nowrap; }
+.initialTable tbody tr { border-top: 1px solid var(--border-subtle); }
+
+.workspace .planRow { gap: 8px; grid-template-columns: 65px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr); }
+.workspace .estimateRow { grid-template-columns: 55px repeat(3, minmax(0, 1fr)); gap: 8px; }
+.methodTargetRow { display: grid; grid-template-columns: 55px repeat(4, minmax(0, 1fr)); gap: var(--space-2); align-items: center; }
+.methodTargetRow > div { display: flex; flex-direction: column; gap: var(--space-1); }
+@media (max-width: 700px) {
+  .methodTargetRow { grid-template-columns: 45px repeat(2, minmax(0, 1fr)); }
+}
+.workspace .targetRow { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 8px; }
+.workspace .grid4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workspace { overflow-wrap: anywhere; }
+.raceDrawing meter::-webkit-meter-bar { background: var(--bg-surface); border-color: var(--border-subtle); }
+.raceTarget::-webkit-meter-optimum-value { background: var(--pass); }
+.raceStop::-webkit-meter-optimum-value { background: var(--reject); }
+.raceNeither::-webkit-meter-optimum-value { background: var(--text-dim); }
+.raceTarget::-moz-meter-bar { background: var(--pass); }
+.raceStop::-moz-meter-bar { background: var(--reject); }
+.raceNeither::-moz-meter-bar { background: var(--text-dim); }
+.workspace .planRace .planRow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.workspace .planRace .planRow > :first-child { grid-column: 1 / -1; }
+
+.executionRisk { display: flex; flex-direction: column; gap: var(--space-2); }
+.riskGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.riskGrid > div { display: flex; flex-direction: column; gap: var(--space-2); }
+.exitEditors summary { font-size: 12px; cursor: pointer; margin-bottom: var(--space-3); }
+
+.stopComparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.stopBasis { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3); min-width: 0; }
+.stopBasis > div { display: flex; flex-direction: column; gap: var(--space-2); }

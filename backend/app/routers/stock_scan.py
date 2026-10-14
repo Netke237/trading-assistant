@@ -19,10 +19,12 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.scan_report_lifecycle import (run_reported_scan, observe_resolution, observe_configuration, observe_data_failure, observe_no_data)
+from fastapi import Response
 from app.services.config_health import config_health
 from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
@@ -42,7 +44,7 @@ from app.schemas.stock_scan import (
 )
 from app.data.sector_map import sector_for_symbol
 from app.routers.regime import _ema as _regime_ema, compute_overall_regime
-from app.schemas import SentimentData, ScanSessionStatus
+from app.schemas import SentimentData, ScanSessionStatus, StockExplanation
 from app.data.market import (
     fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles,
     completed_intraday_bars,
@@ -124,6 +126,10 @@ class PreBreakoutResult(BaseModel):
     confidence: int
     direction: str
     metrics: dict
+    # STOCK-PRES-P1: evidence behind `confidence` and the Fib swing low/high
+    # (None when Fib was not used). Send-only, mirrors the route's row dict.
+    confidence_breakdown: dict | None = None
+    fib_swing: dict | None = None
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -275,6 +281,23 @@ def _scan_drop_flag(gate: str, drop: dict) -> dict:
     """The Analysis gate flag for a filter the scan drops on: REJECT, the
     scan's own reason behind a fixed prefix."""
     return {"gate": gate, "status": "REJECT", "detail": f"{_SCAN_DROP_PREFIX}{drop['reason']}"}
+
+
+def _stock_explanation_out(symbol: str, card) -> StockExplanation | None:
+    """STOCK-PRES-P1: the scorer's own evidence, validated for the wire. A
+    failed validation is logged and sent as None -- never drops the candidate.
+    getattr: a card without the attribute (a test double) is "no evidence",
+    not an exception that would drop the symbol from the scan."""
+    explanation = getattr(card, "explanation", None)
+    if explanation is not None:
+        observe_configuration("stocks.scorer_explanation", explanation, symbol=symbol)
+    if explanation is None:
+        return None
+    try:
+        return StockExplanation.model_validate(explanation)
+    except ValidationError:
+        logger.warning("stock scan: %s score evidence failed validation; sent without it", symbol)
+        return None
 
 
 def _intraday_history_drop(symbol: str, strategy: str, intraday_bars: list[dict]) -> dict | None:
@@ -657,7 +680,9 @@ def _drop_excluded_symbols(symbols: list[str], label: str) -> tuple[list[str], l
     broken list is a named 500, logged once here: it must not silently scan
     everything."""
     try:
-        return filter_symbols(symbols, purpose="scan")
+        kept, excluded = filter_symbols(symbols, purpose="scan")
+        observe_resolution(symbols, kept, excluded)
+        return kept, excluded
     except ExclusionListError as e:
         logger.error("%s aborted: universe exclusion list unusable: %s", label, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -1324,6 +1349,7 @@ async def _process_stock(
     # direct caller (the test suite) gets the same resolution here.
     if veto_days is None:
         veto_days = _resolve_stock_veto_days(req)
+    observe_configuration("stocks.earnings_veto", {"veto_days": veto_days})
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -1345,7 +1371,9 @@ async def _process_stock(
             # default of a fetch that never ran. The exception is kept for the
             # item-12 drop below, which is decided only from a fetch that ran.
             full_cfg = _load_full_scoring_cfg()
+            observe_configuration("stocks.worker.scoring", full_cfg, symbol=symbol)
             rcfg = _load_regime_cfg(req.horizon)
+            observe_configuration("stocks.worker.regime", rcfg, symbol=symbol)
             intraday_bars: list[dict] = []
             _intraday_fetch_exc: Exception | None = None
             if req.strategy in _INTRADAY_STRATEGIES or rcfg["timeframe"] == "15min":
@@ -1436,6 +1464,7 @@ async def _process_stock(
                 req.regime_headwind_caution_pct,
                 req.regime_headwind_reject_pct,
             )
+            observe_configuration("stocks.regime_gate", _regime_gate, symbol=symbol)
 
             # P3a item 12: drop where the auto-trader's fire would refuse.
             if (_drop := _regime_data_drop(symbol, req, full_cfg, _regime_gate, rcfg,
@@ -1470,6 +1499,7 @@ async def _process_stock(
 
             if req.strategy == "mean_reversion_multi":
                 _multi_shape = _multi_params(req)
+                observe_configuration("stocks.multi_params", _multi_shape, symbol=symbol)
                 signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
                 if _drop:
                     return _drop
@@ -1486,6 +1516,7 @@ async def _process_stock(
                     _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
                     _params_horizon(req),
                 )
+                observe_configuration("stocks.strategy_params", signal_kwargs, symbol=symbol)
                 # Intraday strategies use intraday bars for both signal and backtest.
                 signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-SIGNAL_WINDOW_BARS:]
                 _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
@@ -1662,8 +1693,10 @@ async def _process_stock(
                 ) if _fh else None,
                 params_horizon=_params_horizon(req),
                 params_source=_params_source(req),
+                stock_explanation=_stock_explanation_out(symbol, card),
             )
         except Exception as exc:
+            observe_data_failure(symbol)
             logger.exception("Error processing %s", symbol)
             return {"symbol": symbol, "reason": str(exc)}
 
@@ -1718,7 +1751,8 @@ async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_d
     await _upsert_stock_session(db, req=req, result=_prev_result, status="running")
 
     try:
-        result = await _execute_stock_scan_core(req, db, previous_result=_prev_result)
+        result = await run_reported_scan(req, category=req.category, trigger="manual",
+            callback=lambda: _execute_stock_scan_core(req, db, previous_result=_prev_result))
         await _upsert_stock_session(db, req, result, status="complete")
         return result
     except Exception:
@@ -1814,6 +1848,7 @@ async def _execute_stock_scan_core(
     # `except SizingConfigError` as a bare 500 with no detail and no log line.
     try:
         _cfg_doc = _load_full_scoring_cfg()
+        observe_configuration("stocks.scoring", _cfg_doc)
     except (OSError, _yaml.YAMLError) as e:
         logger.error("STOCK SCAN %s aborted: scoring_rules.yaml unreadable: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=f"scoring_rules.yaml unreadable: {e}")
@@ -1859,11 +1894,13 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
+    observe_configuration("stocks.fundamentals_gate", fund_gate)
     # Fetched once for the whole universe; None unless the trend method is
     # relative_strength (see _rs_benchmark_candles).
     rs_benchmark_candles = await _rs_benchmark_candles(req)
     # Earnings veto window, max(reject_days, hold), resolved once (B6).
     veto_days = _resolve_stock_veto_days(req)
+    observe_configuration("stocks.earnings_veto", {"veto_days": veto_days})
     tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
                             rs_benchmark_candles=rs_benchmark_candles, veto_days=veto_days)
              for s in symbols]
@@ -1875,6 +1912,7 @@ async def _execute_stock_scan_core(
     # gather keeps input order, so each raised exception is named by its symbol.
     for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
+            observe_data_failure(sym)
             rejected.append({"symbol": sym, "reason": str(r)})
         elif isinstance(r, PositionCardOut):
             candidates.append(r)
@@ -1898,6 +1936,7 @@ async def _execute_stock_scan_core(
     # clamping would silently override an explicit request or a saved schedule.
     original_count = len(candidates)
     _cap = req.shortlist_max_candidates
+    observe_configuration("stocks.shortlist", {"max_candidates": _cap})
     shortlist_truncated = original_count > _cap
     # A trimmed name is recorded, not dropped on the floor: it goes into
     # `rejected` so the user can see what the cap cost them. The literal prefix
@@ -2005,9 +2044,14 @@ class FibPullbackScanRequest(BaseModel):
 
 
 @router.post("/scan/fib-pullback")
-async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
-    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_signal."""
-    from app.services.strategy_engine import fibonacci_pullback_signal
+async def fib_pullback_scan(body: FibPullbackScanRequest, response: Response = None) -> list[dict]:
+    return await run_reported_scan(body, category="fib", trigger="manual",
+        callback=lambda: _fib_pullback_scan_core(body), response=response)
+
+
+async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
+    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_detail."""
+    from app.services.strategy_engine import fibonacci_pullback_detail
 
     end = date.today()
     start = end - timedelta(days=365)
@@ -2021,6 +2065,7 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
     if not symbols_to_scan:
+        observe_resolution([], [], [])
         return []
 
     # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
@@ -2069,7 +2114,9 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                     raise HTTPException(status_code=422, detail="impulse_min_pct must be between 0 and 0.50")
         scan_params.update(coerced)
 
+    observe_configuration("fib.params", scan_params)
     results: list[dict] = []
+    missing_data_count = 0
     for sym in symbols_to_scan:
         sym = sym.strip().upper()
         if not sym:
@@ -2077,12 +2124,14 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_data_failure(sym)
             logger.warning("fib-pullback scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            missing_data_count += 1
             continue
         try:
-            at_level, dist_pct, level_hit = fibonacci_pullback_signal(
+            fib = fibonacci_pullback_detail(
                 bars,
                 body.direction,
                 fib_swing_lookback=scan_params["fib_swing_lookback"],
@@ -2091,7 +2140,9 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                 impulse_min_pct=scan_params["impulse_min_pct"],
                 retracement_recency_bars=scan_params["retracement_recency_bars"],
             )
+            at_level, dist_pct, level_hit = fib["at_level"], fib["dist_pct"], fib["label"]
         except Exception as exc:
+            observe_data_failure(sym)
             logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)
             continue
         if level_hit is None:
@@ -2128,6 +2179,8 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
             "fib_dist_pct": dist_pct,
             "at_level": at_level,
             "confidence": confidence,
+            # STOCK-PRES-P1: the swing low/high the Fib levels were measured from.
+            "fib_swing": {"low": fib["swing_low"], "high": fib["swing_high"]},
         })
 
     # Sort: at-level hits first, then by proximity ascending (closer = better rank).
@@ -2135,11 +2188,18 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         not r["at_level"],  # False (0) = at-level → sorts first
         r["fib_dist_pct"] if r["fib_dist_pct"] is not None else float("inf"),
     ))
+    if symbols_to_scan and missing_data_count == len(symbols_to_scan):
+        observe_no_data()
     return results
 
 
 @router.post("/scan/prebreakout")
-async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
+async def prebreakout_scan(body: PreBreakoutScanRequest, response: Response = None) -> list[dict]:
+    return await run_reported_scan(body, category="prebreakout", trigger="manual",
+        callback=lambda: _prebreakout_scan_core(body), response=response)
+
+
+async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
     """Scan symbols for pre-breakout consolidation setups using breakout_setup_signal."""
     end = date.today()
     start = end - timedelta(days=365)
@@ -2154,6 +2214,7 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
     if not symbols_to_scan:
+        observe_resolution([], [], [])
         return []
 
     # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
@@ -2186,7 +2247,9 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
                 coerced[k] = float(v) if isinstance(v, (int, float)) else v
         base_params.update(coerced)
 
+    observe_configuration("prebreakout.params", base_params)
     results: list[dict] = []
+    missing_data_count = 0
     for sym in symbols_to_scan:
         sym = sym.strip().upper()
         if not sym:
@@ -2194,13 +2257,16 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_data_failure(sym)
             logger.warning("prebreakout scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            missing_data_count += 1
             continue
         try:
             signal = breakout_setup_signal(bars, sym, direction=body.direction, **base_params)
         except Exception as exc:
+            observe_data_failure(sym)
             logger.warning("prebreakout scan: signal failed for %s — %s", sym, exc)
             continue
         if signal is None:
@@ -2210,15 +2276,23 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
             "confidence": signal.confidence,
             "direction": signal.direction,
             "metrics": signal.metrics,
+            # STOCK-PRES-P1: evidence behind `confidence` + Fib swing low/high.
+            "confidence_breakdown": signal.confidence_breakdown,
+            "fib_swing": signal.fib_swing,
         })
 
     results.sort(key=lambda r: r["confidence"], reverse=True)
+    if symbols_to_scan and missing_data_count == len(symbols_to_scan):
+        observe_no_data()
     return results
 
 
 # ── Stock first-passage (Approach B) ──────────────────────────────────────────
 
 class StockFirstPassageRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:       str
     direction:    Literal["Bullish", "Bearish"]
     horizon:      Literal["Intraday", "Swing", "Position"]
@@ -2402,6 +2476,9 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
 
 
 class StockExitPlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     entry_price: float = Field(..., gt=0)

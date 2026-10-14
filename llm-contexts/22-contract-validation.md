@@ -110,7 +110,7 @@ score_thresholds:
 
 # Hard-reject rules (FR-24) — any one triggers REJECT, score = 0
 hard_reject:
-  min_volume: 50                # contracts per day — below this = illiquid
+  min_volume: 0                 # optional hard floor; 0 = off (FR-25 treats volume as soft)
   min_open_interest: 200        # open interest — below this = illiquid
   max_bid_ask_spread_pct: 0.20  # spread / mid-price — above this = too wide
   min_delta: 0.20               # absolute delta — below this = too far OTM
@@ -184,7 +184,15 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    if volume < hr["min_volume"]:
+    # min_volume is an optional hard floor, 0 = off (the default). For an
+    # explicit floor above 0, volume == 0 is exempt when OI is adequate: a 0
+    # (session-to-date count) cannot be told apart from "no trades yet this
+    # session". Off-hours rows are handled by the quote-liveness rule.
+    if (
+        hr["min_volume"] > 0
+        and volume < hr["min_volume"]
+        and not (volume == 0 and oi >= hr["min_open_interest"])
+    ):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
@@ -217,10 +225,10 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, list[str]]:
     oi_score = min(100, int(oi / sr["preferred_oi_min"] * 60))
     score = (vol_score + oi_score) // 2
 
-    if volume < sr["preferred_volume_min"]:
-        flags.append("low_volume")
-    if oi < sr["preferred_oi_min"]:
-        flags.append("low_open_interest")
+    # One soft flag for the liquidity axis: volume and open interest together
+    # count as at most one soft miss toward max_soft_fail_count.
+    if volume < sr["preferred_volume_min"] or oi < sr["preferred_oi_min"]:
+        flags.append("thin_liquidity")
     return score, flags
 
 
@@ -405,7 +413,9 @@ def validate_contract(
 
 ### Acceptance criteria
 
-1. A contract with `volume=0` returns `status="REJECT"` and `"volume_too_low"` in `reject_reasons`.
+1. At the default `min_volume: 0` (off), volume is never a hard reject. With an explicit floor
+   (`overrides={"min_volume": 50}`), a contract with `volume=3` returns `status="REJECT"` and
+   `"volume_too_low"` in `reject_reasons`; `volume=0` with `open_interest >= min_open_interest` is exempt.
 2. A well-formed contract (`volume=500, oi=2000, delta=0.45, dte=35, spread_pct=0.05`) returns `status` in `{"PASS", "CAUTION"}`.
 3. A contract with 4+ soft failures returns `"too_many_soft_failures"` in `reject_reasons`.
 4. `validate_contract({}, 80)` returns `status="REJECT"` — no exception on empty dict.
@@ -418,11 +428,11 @@ cd backend
 python -c "
 from app.scoring.contract_validator import validate_contract
 
-# Hard reject — no volume
+# Hard reject — volume below an explicit floor (the default, 0, is off)
 c1 = {'symbol': 'AAPL', 'strike': 190.0, 'expiry': '2025-08-15',
-      'is_call': True, 'bid': 2.8, 'ask': 3.2, 'volume': 0,
+      'is_call': True, 'bid': 2.8, 'ask': 3.2, 'volume': 3,
       'open_interest': 5000, 'implied_vol': 0.28, 'delta': 0.45, 'theta': -0.08}
-r1 = validate_contract(c1, 75)
+r1 = validate_contract(c1, 75, overrides={'min_volume': 50})
 assert r1.status == 'REJECT', f'Expected REJECT, got {r1.status}'
 assert 'volume_too_low' in r1.reject_reasons
 print('Hard reject OK:', r1.reject_reasons)

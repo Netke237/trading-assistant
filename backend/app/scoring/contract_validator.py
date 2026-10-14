@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import yaml
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from app.services.config_health import config_health
+
+logger = logging.getLogger(__name__)
 
 Status = Literal["PASS", "CAUTION", "REJECT"]
 
@@ -42,6 +45,12 @@ class ContractScoreCard:
     )
     detail: dict = field(default_factory=dict)
     explanation: dict | None = None
+    # NO-LIVE-QUOTE (plan 3b): set when the graded row's quote was not live
+    # (contract["quoteLive"] is False), with the row's quoteState
+    # ('one_sided' | 'session_closed' | 'stale'). A row with no quoteLive key
+    # (fixtures, hand-built dicts) reads as live and leaves both at default.
+    no_live_quote: bool = False
+    quote_state: str | None = None
 
 
 @lru_cache(maxsize=1)
@@ -80,6 +89,37 @@ def contract_caution_threshold() -> float | int:
     return _load_config()["contract_score_thresholds"]["caution"]
 
 
+# NO-LIVE-QUOTE: the fallback when quote_liveness.max_age_minutes is missing or
+# unusable. 30 is the shipped value (Kenneth, Q-A); see contract_rules.yaml.
+DEFAULT_QUOTE_MAX_AGE_MINUTES = 30
+_warned_quote_age: set[str] = set()
+
+
+def max_quote_age_seconds() -> float:
+    """quote_liveness.max_age_minutes from contract_rules.yaml, in SECONDS --
+    the oldest the fresher side of a chain row's quote may be and still count
+    as live (app/data/quote_liveness.classify_quote). Read through the same
+    cached loader as every other contract rule.
+
+    A missing block or key, a non-numeric value (a bool, a string, NaN/inf) or a
+    value <= 0 runs on DEFAULT_QUOTE_MAX_AGE_MINUTES and logs ONE warning per
+    distinct bad value (this is read once per chain fetch, so an unthrottled
+    warning would repeat for every name of every scan)."""
+    block = _load_config().get("quote_liveness")
+    val = block.get("max_age_minutes") if isinstance(block, dict) else None
+    if is_finite_rule_value(val) and val > 0:
+        return float(val) * 60.0
+    key = repr(val)
+    if key not in _warned_quote_age:
+        _warned_quote_age.add(key)
+        logger.warning(
+            "contract_rules.yaml quote_liveness.max_age_minutes is %s -- "
+            "using %d minutes", "missing" if val is None else f"unusable ({val!r})",
+            DEFAULT_QUOTE_MAX_AGE_MINUTES,
+        )
+    return float(DEFAULT_QUOTE_MAX_AGE_MINUTES) * 60.0
+
+
 def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     """Return list of hard-reject reason strings. Empty = no hard reject."""
     hr = cfg["hard_reject"]
@@ -101,9 +141,17 @@ def _hard_reject_reasons(contract: dict, cfg: dict) -> list[str]:
     except (ValueError, TypeError):
         dte = 0
 
-    # volume == 0 is Tradier's off-hours sentinel (resets daily before market open).
-    # When OI is adequate, skip the volume gate — OI is the real liquidity proxy.
-    if volume < hr["min_volume"] and not (volume == 0 and oi >= hr["min_open_interest"]):
+    # min_volume is an optional hard floor, 0 = off (the default; FR-25 treats
+    # volume as soft, scored under the Preferred liquidity floors). For an
+    # explicit floor above 0, volume == 0 is exempt when OI is adequate: a 0 is
+    # Tradier's session-to-date count and cannot be told apart from "no trades
+    # yet this session", so OI is the liquidity proxy there. Off-hours rows are
+    # rejected or labelled by the quote-liveness rule (no_live_quote), not here.
+    if (
+        hr["min_volume"] > 0
+        and volume < hr["min_volume"]
+        and not (volume == 0 and oi >= hr["min_open_interest"])
+    ):
         reasons.append("volume_too_low")
     if oi < hr["min_open_interest"]:
         reasons.append("open_interest_too_low")
@@ -180,10 +228,14 @@ def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
     oi_score = 100 if pref_oi_min <= 0 else min(100, int(oi / pref_oi_min * 60))
     score = (vol_score + oi_score) // 2
 
-    if pref_volume_min > 0 and volume < pref_volume_min:
-        flags.append("low_volume")
-    if pref_oi_min > 0 and oi < pref_oi_min:
-        flags.append("low_open_interest")
+    # ONE soft flag for the liquidity axis (CONTRACT-LIQUIDITY-DTE fix 2):
+    # volume and open interest together count as at most one soft miss toward
+    # max_soft_fail_count. It replaces low_volume / low_open_interest, which
+    # spent two slots on one axis. The score above is unchanged.
+    if (pref_volume_min > 0 and volume < pref_volume_min) or (
+        pref_oi_min > 0 and oi < pref_oi_min
+    ):
+        flags.append("thin_liquidity")
     return score, oi_score, flags
 
 
@@ -442,6 +494,8 @@ def validate_contract(
     contract: dict,
     stock_score: int,
     overrides: dict | None = None,
+    *,
+    quote_mode: Literal["reject", "label"] = "reject",
 ) -> ContractScoreCard:
     """
     Validate and score an option contract.
@@ -449,10 +503,22 @@ def validate_contract(
     Args:
         contract:    Option contract dict (see Section 3 for shape)
         stock_score: Aggregate stock score from StockScoreCard (0–100).
-                     Contracts are only recommended when stock_score >= 55
-                     (matches the stock `pass` bar in scoring_rules.yaml).
+                     The configured options floor defaults to 45, independently
+                     of the stock `pass` bar (55) in scoring_rules.yaml.
         overrides:   Optional dict of hard-reject and soft-rank overrides; the
                      keys read are _CONTRACT_OVERRIDES' (others are ignored).
+        quote_mode:  What a row whose quote is not live does (NO-LIVE-QUOTE,
+                     plan 3b). The rule fires only when contract["quoteLive"]
+                     is False; a missing key reads as live.
+                     "reject" (the default, so a new caller is safe): the row
+                     is REJECT with reject_reasons exactly ["no_live_quote"];
+                     no other hard rule is evaluated for it. The soft scores
+                     are still computed so the breakdown renders.
+                     "label" (Step 6 / the Watchlist refresh): the row is
+                     graded exactly as a live one, then capped at CAUTION and
+                     flagged ("no_live_quote" soft flag, card.no_live_quote,
+                     card.quote_state). A one_sided row still hard-rejects as
+                     spread_too_wide there, from its own numbers.
 
     Returns:
         ContractScoreCard with score, status, hard-reject reasons, soft flags,
@@ -463,9 +529,21 @@ def validate_contract(
         cfg[_CONTRACT_OVERRIDES[key][0]][key] = val
     contract_id = _contract_id(contract)
 
-    reject_reasons = _hard_reject_reasons(contract, cfg)
-    if stock_score < cfg["hard_reject"]["min_stock_score"]:
-        reject_reasons.append("stock_score_below_threshold")
+    if quote_mode not in ("reject", "label"):
+        raise ValueError(f"quote_mode must be 'reject' or 'label', not {quote_mode!r}")
+    # NO-LIVE-QUOTE: `is False`, not falsiness -- an absent key is live.
+    no_live_quote = contract.get("quoteLive") is False
+    quote_state = contract.get("quoteState") if no_live_quote else None
+    quote_rejected = no_live_quote and quote_mode == "reject"
+
+    if quote_rejected:
+        # Short-circuit: the row's numbers are not a live market, so no other
+        # hard rule is judged on them (and none accumulates beside this one).
+        reject_reasons = ["no_live_quote"]
+    else:
+        reject_reasons = _hard_reject_reasons(contract, cfg)
+        if stock_score < cfg["hard_reject"]["min_stock_score"]:
+            reject_reasons.append("stock_score_below_threshold")
 
     liq_score, oi_score_val, liq_flags = _score_liquidity(contract, cfg)
     spread_score, spread_pct, spread_flags = _score_spread(contract, cfg)
@@ -513,8 +591,13 @@ def validate_contract(
     soft_flags = liq_flags + spread_flags + delta_flags + dte_flags + iv_flags
     soft_fail_count = len(soft_flags)
 
-    if soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
+    if not quote_rejected and soft_fail_count >= cfg["hard_reject"]["max_soft_fail_count"]:
         reject_reasons.append("too_many_soft_failures")
+
+    if no_live_quote and quote_mode == "label":
+        # Added AFTER soft_fail_count: the label grades the row exactly as a
+        # live one, so it must not count toward too_many_soft_failures.
+        soft_flags = soft_flags + ["no_live_quote"]
 
     hr = cfg["hard_reject"]
     volume = contract.get("volume") or 0
@@ -530,7 +613,16 @@ def validate_contract(
 
     blockers = []
     for r in reject_reasons:
-        if r == "volume_too_low":
+        if r == "no_live_quote":
+            blockers.append({
+                "code": "no_live_quote",
+                "label": "No live quote",
+                "metric": "quote_state",
+                "observed": quote_state,
+                "threshold": "live",
+                "operator": "!=",
+            })
+        elif r == "volume_too_low":
             blockers.append({
                 "code": "volume_too_low",
                 "label": "Volume too low",
@@ -757,6 +849,10 @@ def validate_contract(
             final_status = "CAUTION"
         else:
             final_status = "REJECT"
+        # NO-LIVE-QUOTE label mode: a row priced off a quote that is not live
+        # never reads PASS. The score is left as graded.
+        if no_live_quote and final_status == "PASS":
+            final_status = "CAUTION"
 
     explanation = {
         "version": 1,
@@ -813,6 +909,8 @@ def validate_contract(
             ),
             detail=detail,
             explanation=explanation,
+            no_live_quote=no_live_quote,
+            quote_state=quote_state,
         )
 
     return ContractScoreCard(
@@ -835,4 +933,6 @@ def validate_contract(
         ),
         detail=detail,
         explanation=explanation,
+        no_live_quote=no_live_quote,
+        quote_state=quote_state,
     )

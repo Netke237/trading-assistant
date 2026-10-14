@@ -17,7 +17,7 @@ import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
-import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import styles from '../screener.module.css';
@@ -160,10 +160,10 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)' },
   { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Max spread as a fraction of mid price. ↑ Higher → illiquid contracts included (more, but costly) · ↓ Lower → tight spread required (fewer, cheaper to trade)' },
-  { key: 'min_volume',             label: 'Min option volume',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
-    hint: 'Minimum daily contracts traded. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (each Preferred floor it misses counts as one), so lower those too.' },
+  { key: 'min_volume',             label: 'Min option volume (0 = off)', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
+    hint: 'Optional hard floor on contracts traded, off (0) by default because volume is scored softly under Preferred Liquidity below. The figure is session-to-date volume, so with a floor set, results change with the time of day. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too.' },
   { key: 'min_open_interest',      label: 'Min open interest',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
-    hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (each Preferred floor it misses counts as one), so lower those too.' },
+    hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too.' },
   { key: 'min_delta',              label: 'Min delta (far OTM)',    type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Rejects contracts too far out of the money. ↑ Higher → keeps contracts closer to the money · ↓ Lower → very cheap deep-OTM contracts included' },
   { key: 'min_dte', label: 'Min DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
@@ -173,16 +173,18 @@ const PARAM_DEFS: ParamDef[] = [
   // OPTIONS — Preferred Liquidity. SOFT-RANK counterparts of the three
   // Contract fields above (max_bid_ask_spread_pct / min_volume /
   // min_open_interest): those REJECT a contract outright; these three only
-  // dock its score, but three or more soft misses on ANY axis (these three,
-  // plus delta/DTE/IV) reject it too, via the fixed max_soft_fail_count. A
+  // dock its score, but three or more soft misses on ANY axis reject it too,
+  // via the fixed max_soft_fail_count. Volume and open interest together count
+  // as at most one soft miss (the single thin_liquidity flag); the spread is
+  // its own; delta/DTE/IV add the rest. A
   // contract that only clears the hard Contract floor above but stays under
   // these can still be rejected on liquidity/spread grounds it looks like it
   // passed — move both together for a change to actually admit or exclude
   // more contracts, not just relabel the ones that already would have.
   { key: 'preferred_volume_min', label: 'Preferred min volume', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
-    hint: 'Daily contract volume below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, which rejects outright rather than scoring.' },
+    hint: 'Daily contract volume below this docks the liquidity score and together with Preferred min open interest counts as at most one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, an optional floor (off, 0, by default) which rejects outright rather than scoring.' },
   { key: 'preferred_oi_min', label: 'Preferred min open interest', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
-    hint: 'Open interest below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
+    hint: 'Open interest below this docks the liquidity score and together with Preferred min volume counts as at most one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
   { key: 'preferred_spread_pct_max', label: 'Preferred spread ceiling', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 1, step: 0.01,
     hint: 'Spread (as a fraction of mid) above this docks the spread score and counts as one soft miss. ↑ Higher → wider spreads tolerated before scoring/rejecting on this axis · ↓ Lower → stricter. Default: 0.08. Independent of the hard "Bid-ask spread ceiling" above, which is far looser (0.20) by default — this preferred ceiling is usually the tighter, binding constraint in practice.' },
   // ALL — Regime Gate
@@ -927,12 +929,12 @@ export default function Step3Page() {
         )}
       </div>
 
-      {screenerMode !== 'stocks' && (totalScanned > 0 || rejectedLog.length > 0) && (
+      {(
         <div className={formStyles.logSection}>
           <div className={formStyles.logHeader}>
-            <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
+            <Text size={11} tone="dim" weight={500}>SCAN LOG · CURRENT TABLE COUNTS</Text>
             <div className={formStyles.logStats}>
-              {totalScanned > 0 && (
+              {screenerMode === 'options' && totalScanned > 0 && (
                 <>
                   <span className={formStyles.logStat}>
                     <Text size={11} tone="dim">Scanned</Text>
@@ -962,15 +964,7 @@ export default function Step3Page() {
               )}
             </div>
           </div>
-          <PipelineInspector
-            isDrawer={false}
-            isOpen={true}
-            pipeline={shownResult?.pipeline}
-            rejected={rejectedLog}
-            survivors={shownResult?.candidates?.map((c) => c.symbol) ?? []}
-            contractRules={shownResult?.contract_rules}
-            dteWindow={shownResult?.dte_window}
-          />
+          <SavedScanReportInspector category={screenerMode} tableRunId={screenerMode === 'options' ? shownResult?.report_run_id : undefined} />
         </div>
       )}
 

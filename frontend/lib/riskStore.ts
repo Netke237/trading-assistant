@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Status } from '@/lib/status';
 import { riskBandStatus, worstStatus } from '@/lib/status';
+import { exposureMark } from '@/lib/portfolioTotals';
 import type {
   PortfolioPosition,
   RiskLimits,
@@ -190,7 +191,8 @@ export const useRiskStore = create<RiskState>()(
           const bySymbol: Record<string, number> = {};
           for (const p of positions) {
             if (p.contract.endsWith('|STOCK') !== stock) continue;
-            const notional = p.currentPrice * (stock ? 1 : 100) * (p.contracts ?? 1);
+            // No live quote -> valued at entry, never 0 (exposureMark, NO-LIVE-QUOTE NLQ-1).
+            const notional = exposureMark(p) * (stock ? 1 : 100) * (p.contracts ?? 1);
             total += notional;
             bySymbol[p.symbol] = (bySymbol[p.symbol] ?? 0) + notional;
           }

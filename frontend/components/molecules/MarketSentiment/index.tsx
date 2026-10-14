@@ -34,13 +34,16 @@ export function MarketSentiment({ s, compact = false }: {
         <Text size={11} tone="dim">
           State {s.state} · sticky {Math.round(s.p_stay * 100)}% · ~{s.avg_regime_duration}d
         </Text>
-        <span className={
-          s.alignment === 'Aligned' ? styles.aligned :
-          s.alignment === 'Diverging' ? styles.diverging :
-          styles.unavail
-        }>
-          {s.alignment === 'Unavailable' ? 'OMM only' : `OMM/HMM ${s.alignment}`}
-        </span>
+        <div className={styles.alignment}>
+          <Text size={11} tone="dim">Alignment</Text>
+          <span className={
+            s.alignment === 'Aligned' ? styles.aligned :
+            s.alignment === 'Diverging' ? styles.diverging :
+            styles.unavail
+          }>
+            {s.alignment === 'Unavailable' ? 'OMM only' : `OMM/HMM ${s.alignment}`}
+          </span>
+        </div>
       </div>
     </div>
   );

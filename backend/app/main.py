@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.request_guards import NonFiniteJsonGuard
 from app.routers.health import router as health_router
 
 from app.routers.watchlist          import router as watchlist_router
@@ -52,6 +53,7 @@ from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
 from app.routers.journal         import router as journal_router
+from app.routers.scan_reports    import router as scan_reports_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -137,6 +139,13 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task
+    # SQLite development bootstraps new additive tables; PostgreSQL uses Alembic.
+    # A bootstrap failure aborts startup visibly, never advertises a working log.
+    from app.database import engine
+    if engine.dialect.name == 'sqlite':
+        from app.models.scan_report import ScanReportBase
+        async with engine.begin() as conn:
+            await conn.run_sync(ScanReportBase.metadata.create_all)
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -158,6 +167,9 @@ async def lifespan(app: FastAPI):
         )
     except Exception as _exc:
         logger.warning("settings.yaml migration failed: %s", _exc)
+
+    from app.services.scan_report_lifecycle import recover_interrupted
+    await recover_interrupted()
 
     from app.routers.scan import restore_from_db
     from app.routers.stock_scan import restore_stock_from_db
@@ -378,12 +390,19 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(RequestValidationError, request_validation_handler)
 
+    # NUMERIC-API-INPUTS T1: refuse NaN/Infinity/overflowing JSON numbers with a
+    # 422 before any endpoint runs. Added BEFORE CORSMiddleware on purpose:
+    # Starlette makes the last-added middleware outermost, so CORS wraps the
+    # guard and its 422 carries the CORS headers.
+    app.add_middleware(NonFiniteJsonGuard)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Scan-Report-Run-Id", "X-Scan-Report-Generation", "X-Scan-Report-Persistence"],
     )
 
     app.include_router(health_router)
@@ -423,6 +442,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(scan_schedule_router)
     app.include_router(journal_router)
+    app.include_router(scan_reports_router)
 
     return app
 

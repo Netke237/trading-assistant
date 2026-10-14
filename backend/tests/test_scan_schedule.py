@@ -148,7 +148,8 @@ async def test_run_scheduled_entry_options_dispatches_to_core_and_records_succes
 
         with_patch_notify = []
 
-        async def _fake_notify(label, count):
+        # no_live_quotes: the NO-LIVE-QUOTE notice clause flag (plan 3f).
+        async def _fake_notify(label, count, *, no_live_quotes=False):
             with_patch_notify.append((label, count))
 
         monkeypatch.setattr(sss, "_notify_scan_schedule_success", _fake_notify)
@@ -259,8 +260,8 @@ async def test_run_scheduled_entry_error_records_error_row(monkeypatch):
             runs = await list_scheduled_scan_runs(db, "err-1")
         assert len(runs) == 1
         assert runs[0].status == "error"
-        assert "boom" in runs[0].error
-        assert notified and "boom" in notified[0][1]
+        assert runs[0].error == "scan_failed"
+        assert notified and notified[0][1] == "scan_failed"
     finally:
         scan_schedule_store.delete("err-1")
 
@@ -638,7 +639,7 @@ async def test_run_scheduled_stocks_multi_entry_profile_confirmations_above_vari
             runs = await list_scheduled_scan_runs(db, "multi-err-1")
         assert len(runs) == 1
         assert runs[0].status == "error"
-        assert "mean_reversion_min_confirmations (3) cannot exceed the number of selected variants (2)" in runs[0].error
+        assert runs[0].error == "scan_failed"
         assert errors and not successes
     finally:
         scan_schedule_store.delete("multi-err-1")
