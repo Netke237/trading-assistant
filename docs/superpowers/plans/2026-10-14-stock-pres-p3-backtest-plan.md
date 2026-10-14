@@ -36,7 +36,7 @@ A finding blocks only if it can put a **wrong number in front of a user or on a 
 - Hidden-row sentence, only when the event filter removed rows: `{n} of {candidates.length} hidden by the event filter.`
 - The 17-column grid. Headers are an unlabeled star column, then `SYMBOL SUMMARY SCORE STATUS Δ WIN % TRADES RETURN MAX DD`, a Health sort button, then `VS SPX EVENT CONF GATE DETAILS POSITION`.
 - Each row: `WatchStar`, symbol plus the in-portfolio dot, the summary text before the first `·`, `stock_score` with title `Score is a filter, not evidence of profitable edge`, `StatusBadge` of `stock_status`, the delta cell, win % as `(win_rate * 100).toFixed(0)` with the existing tone and tooltip, the trades cell (`data-testid={`trades-${symbol}`}`) including the time-exit subline, return `toFixed(1)`, max drawdown `Math.abs(...).toFixed(1)` in reject tone, health score or `—`, sector RS, event, `ConfidenceBadge` of **card** `confidence` (not `backtest.confidence`), gate badge `PASS` or `REJECT` from `backtest.passes_gate` only, Expand/Collapse, Open Position.
-- Expand sets `openSymbol` and renders `StockPositionCard` with `key={stockPositionCardKey(c)}`, `card`, `strategyKey={request.strategy ?? c.strategy.strategy}`, `afterScanArmed`, `onAfterScanToggle`. Collapse unmounts it.
+- Expand sets `openSymbol` and renders `StockPositionCard` with `key={stockPositionCardKey(c)}`, `card`, `strategyKey={scannedRequestStrategy ?? c.strategy.strategy}`, `afterScanArmed`, `onAfterScanToggle`. `scannedRequestStrategy` is `request?.strategy` (a missing request stays undefined; it must not be read as `request.strategy`). Collapse unmounts it.
 - `Send basket (n)` when `stockBasket.length > 0`, opening `StockSendDialog`.
 - Open Position calls `setSelectedSymbol` then `router.push('/screener/step-7-position-card')`.
 
@@ -100,6 +100,8 @@ Cards and the strip use existing tokens only: `border: 1px solid var(--border-su
 Plus: `timeExits.test.tsx` and `union.test.tsx` green with no edits; typecheck + full Jest green; plan audit and code audit clean.
 
 ## Tasks (test-first; one ticket each; T1 → T2 → T3, serial — all three edit `page.tsx`)
+
+Each new test file mocks `next/navigation`, `StockPositionCard`, `StockSendDialog`, `DirectSendNotesPanel`, `WatchStar`, and `SavedScanReportInspector` the way `timeExits.test.tsx` mocks organisms. Do not mock `StatusBadge` or `ConfidenceBadge`.
 
 ### Task 1 — summary strip of numbers the page already shows
 
