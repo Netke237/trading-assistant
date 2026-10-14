@@ -440,10 +440,26 @@ const runEstimate = async (race = true) => {
 };
 
 describe('TC-UI-02 selected recommendation', () => {
-  it('keeps the selector alongside the heading and shows initial ladder defaults with no pick', () => {
+  it('race dollar outcome follows edited entered quantity without another simulation or changing per-contract edge', async () => {
+    render(<TradeCard data={card} contracts={2} />);
+    await runEstimate();
+    const race = within(screen.getByText('Which barrier is reached first').closest('section')!);
+    expect(race.getByText('$950.00')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Edit Contracts'));
+    const input = screen.getByLabelText('Edit Contracts');
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.blur(input);
+    expect(race.getByText('$1425.00')).toBeVisible();
+    expect(race.getByText('$120.00')).toBeVisible();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('places the selector after method evidence and preserves initial ladder defaults with no pick', () => {
     render(<TradeCard data={card} />);
     const heading = screen.getByText('Final Recommendation');
     expect(within(heading.parentElement!).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ }).compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Arithmetic Profit Target' }).compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(recommendation().getByText(/No method explicitly run/)).toBeVisible();
     expect(recommendation().getByText('$200.02')).toBeVisible();
   });
@@ -595,5 +611,129 @@ describe('TC-UI-02 selected recommendation', () => {
     expect(recommendation().getByText(/No method explicitly run/)).toBeVisible();
     rerender(<TradeCard data={{ ...card, contract: 'AAPL 195C 05/15', exit: { ...card.exit, exitPlan: arithmeticPlan } }} />);
     expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
+  });
+});
+
+
+const chosenSummary = () => within(screen.getByRole('region', { name: 'Chosen method and target' }));
+const summaryValue = (label: string) => chosenSummary().getByText(label).parentElement!;
+
+describe('OPT-PRES-08 explicit decision summary', () => {
+  it('method-only, row, basis, method change and Clear record choices without changing execution fields', () => {
+    const onEditsChange = jest.fn();
+    render(<TradeCard data={card} contracts={3} onEditsChange={onEditsChange} />);
+    expect(chosenSummary().getByText(/latest-calculation fallback is not a choice/)).toBeVisible();
+    fireEvent.click(radio('Ladder'));
+    expect(chosenSummary().getByText('Target not selected')).toBeVisible();
+    expect(chosenSummary().queryByText('Matched result option premium')).not.toBeInTheDocument();
+    fireEvent.click(radio('TP1'));
+    expect(within(summaryValue('Recorded stock target')).getByText('$200.02 stock')).toBeVisible();
+    expect(within(summaryValue('Matched result option premium')).getByText('$5.00 /share')).toBeVisible();
+    // Card-level Heston is not evidence for this ladder snapshot.
+    expect(chosenSummary().getByText('Unavailable — no result model evidence')).toBeVisible();
+    expect(chosenSummary().getByText(/3 entered contracts.*ladder rung allocation 1 contracts/)).toBeVisible();
+    fireEvent.click(radio('Premium stop'));
+    expect(within(summaryValue('Judged on basis')).getByText('Premium stop')).toBeVisible();
+    expect(within(summaryValue('Execution stock stop')).getByText('$179.64 stock')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(chosenSummary().getByText(/latest-calculation fallback is not a choice/)).toBeVisible();
+    expect(onEditsChange).not.toHaveBeenCalled();
+    expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+  });
+
+  it('arithmetic uses returned R:R row premium, probability, calendar time and its own model', () => {
+    render(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }} />);
+    fireEvent.click(radio('Arithmetic'));
+    expect(chosenSummary().getByText('Target not selected')).toBeVisible();
+    fireEvent.click(radio('2:1'));
+    expect(within(summaryValue('Recorded stock target')).getByText('$210.50 stock')).toBeVisible();
+    expect(within(summaryValue('Matched result option premium')).getByText('$5.00 /share')).toBeVisible();
+    expect(within(summaryValue('Result pricing model')).getByText('Heston repriced')).toBeVisible();
+    expect(chosenSummary().getByText('~9 calendar days')).toBeVisible();
+    expect(chosenSummary().getByText('40%')).toBeVisible();
+    fireEvent.click(radio('Ladder'));
+    expect(chosenSummary().getByText('Target not selected')).toBeVisible();
+    expect(chosenSummary().queryByText('40%')).not.toBeInTheDocument();
+  });
+
+  it('MC and race summaries retain separate stock/premium spaces and distinct event probability', async () => {
+    render(<TradeCard data={card} />);
+    await runEstimate();
+    fireEvent.click(radio('Monte Carlo'));
+    fireEvent.click(radio('T20%'));
+    expect(within(summaryValue('Recorded stock target')).getByText('$197.50 stock')).toBeVisible();
+    expect(within(summaryValue('Recorded option target')).getByText('$6.24 /share')).toBeVisible();
+    expect(chosenSummary().getByText('Independent target probability before expiry')).toBeVisible();
+    expect(chosenSummary().getByText('40%')).toBeVisible();
+    expect(chosenSummary().getByText('BS repriced (IV-derived)')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T20%' }));
+    expect(chosenSummary().getByText('Not supplied by Barrier Race')).toBeVisible();
+    expect(within(summaryValue('Recorded option target')).getByText('$7.25 /share')).toBeVisible();
+    expect(chosenSummary().getByText('Allocated target-first probability')).toBeVisible();
+    expect(chosenSummary().getByText('25%')).toBeVisible();
+    expect(chosenSummary().queryByText('$197.50 stock')).not.toBeInTheDocument();
+    expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
+  });
+
+  it('changing arithmetic rows replaces all target evidence with the returned row', () => {
+    const second = { ...arithmeticPlan.targets[0], rrRatio: 3, price: 225, contractPrice: 7,
+      probability: 0.2, expectedDays: null, rrModel: 'Delta approximation' as const };
+    render(<TradeCard data={{ ...card, exit: { ...card.exit,
+      exitPlan: { ...arithmeticPlan, targets: [...arithmeticPlan.targets, second] } } }} />);
+    fireEvent.click(radio('Arithmetic'));
+    fireEvent.click(radio('2:1'));
+    fireEvent.click(radio('3:1'));
+    expect(chosenSummary().getByText('$225.00 stock')).toBeVisible();
+    expect(chosenSummary().getByText('$7.00 /share')).toBeVisible();
+    expect(chosenSummary().getByText('20%')).toBeVisible();
+    expect(chosenSummary().getByText('Delta approximation')).toBeVisible();
+    expect(chosenSummary().queryByText('~9 calendar days')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('Heston repriced')).not.toBeInTheDocument();
+  });
+
+  it('selected race median preserves a fractional calendar day with the shared formatter', async () => {
+    (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue({ ...estimate,
+      race: { ...estimate.race, outcomes: [{ ...estimate.race.outcomes[0], daysTarget: 2.5 }] } });
+    render(<TradeCard data={card} />);
+    fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
+    await waitFor(() => expect(radio('Barrier Race')).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T20%' }));
+    expect(chosenSummary().getByText('~2.5d (calendar days)')).toBeVisible();
+    expect(chosenSummary().queryByText('~3 calendar days')).not.toBeInTheDocument();
+  });
+
+  it('duplicate returned price pairs cannot supply one row’s probability or model to a stored decision', () => {
+    const second = { ...arithmeticPlan.targets[0], rrRatio: 3, probability: 0.2,
+      expectedDays: 15, rrModel: 'Delta approximation' as const };
+    render(<TradeCard data={{ ...card, exit: { ...card.exit,
+      exitPlan: { ...arithmeticPlan, targets: [...arithmeticPlan.targets, second] } } }}
+      initialMethodPick={pick({ method: 'arithmetic', rowStockPrice: 210.5 })} />);
+    expect(chosenSummary().getByText(/multiple result rows match; evidence unavailable/)).toBeVisible();
+    expect(chosenSummary().getByText('$210.50 stock')).toBeVisible();
+    expect(chosenSummary().queryByText('40%')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('20%')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('Heston repriced')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('Delta approximation')).not.toBeInTheDocument();
+  });
+
+  it('MC without result model evidence does not inherit the card Heston label', async () => {
+    render(<TradeCard data={card} />);
+    await runEstimate(false);
+    fireEvent.click(radio('Monte Carlo'));
+    fireEvent.click(radio('T20%'));
+    expect(chosenSummary().getByText('Unavailable — no result model evidence')).toBeVisible();
+    expect(chosenSummary().queryByText('Heston repriced')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('BS repriced (IV-derived)')).not.toBeInTheDocument();
+  });
+
+  it('an unmatched stored target retains recorded price without borrowing current result evidence', () => {
+    render(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }}
+      initialMethodPick={pick({ method: 'arithmetic', rowStockPrice: 220 })} />);
+    expect(chosenSummary().getByText('Recorded target — matching result unavailable')).toBeVisible();
+    expect(chosenSummary().getByText('$220.00 stock')).toBeVisible();
+    expect(chosenSummary().queryByText('40%')).not.toBeInTheDocument();
+    expect(chosenSummary().queryByText('Heston repriced')).not.toBeInTheDocument();
+    expect(chosenSummary().getByText('2026-09-14T09:00:00.000Z')).toBeVisible();
   });
 });

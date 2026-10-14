@@ -53,29 +53,28 @@ def test_iv_rank_none_is_not_rejected():
     assert "iv_rank_too_high" not in card.reject_reasons
 
 
-def test_caution_tier_stock_score_hard_rejects():
-    """A CAUTION-tier stock score (35-54, below the documented >=55 gate but
-    above the separate REJECT-status cutoff elsewhere) must reject here —
-    previously this parameter was accepted but never checked."""
-    card = validate_contract(_base_contract(), stock_score=45)
+def test_stock_score_below_options_floor_hard_rejects():
+    """An underlying below 45 still fails the options floor."""
+    card = validate_contract(_base_contract(), stock_score=44)
     assert card.status == "REJECT"
     assert "stock_score_below_threshold" in card.reject_reasons
 
 
 def test_stock_score_at_threshold_passes():
-    """stock_score exactly at the gate (55, matching scoring_rules.yaml's stock
-    `pass` bar) should not be rejected on this basis."""
-    card = validate_contract(_base_contract(), stock_score=55)
+    """The options floor is inclusive at 45."""
+    card = validate_contract(_base_contract(), stock_score=45)
     assert "stock_score_below_threshold" not in card.reject_reasons
 
 
-def test_stock_score_just_below_new_threshold_rejects():
-    """stock_score=50 passed under the old 50-point gate; after raising
-    min_stock_score to 55 (matching the stock pass bar), a CAUTION-grade
-    underlying (35-54) no longer qualifies for an options recommendation."""
-    card = validate_contract(_base_contract(), stock_score=50)
-    assert card.status == "REJECT"
-    assert "stock_score_below_threshold" in card.reject_reasons
+@pytest.mark.parametrize("stock_score", [45, 50, 54, 55])
+def test_options_floor_is_independent_of_stock_pass_threshold(stock_score):
+    from app.scoring.stock_scorer import _load_config
+
+    thresholds = _load_config()["stock_score_thresholds"]
+    assert thresholds["pass"] == 55
+    assert thresholds["caution"] == 35
+    card = validate_contract(_base_contract(), stock_score=stock_score)
+    assert "stock_score_below_threshold" not in card.reject_reasons
 
 
 def test_override_raises_max_iv_abs():

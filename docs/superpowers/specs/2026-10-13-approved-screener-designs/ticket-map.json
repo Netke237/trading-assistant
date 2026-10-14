@@ -1,0 +1,579 @@
+{
+  "register": "docs/superpowers/specs/2026-10-13-approved-screener-designs/README.md",
+  "phase_order": [
+    "OPTIONS-PRESENTATION-V2",
+    "STOCKS-PRESENTATION-V2",
+    "PREBREAKOUT-PRESENTATION-V2"
+  ],
+  "phases": [
+    {
+      "id": "OPTIONS-PRESENTATION-V2",
+      "title": "Options approved trade-card design",
+      "blocked_by": [],
+      "body_file": "OPTIONS-PRESENTATION-V2.md"
+    },
+    {
+      "id": "STOCKS-PRESENTATION-V2",
+      "title": "Stocks approved position design",
+      "blocked_by": [
+        "OPTIONS-PRESENTATION-V2"
+      ],
+      "body_file": "STOCKS-PRESENTATION-V2.md"
+    },
+    {
+      "id": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "Pre-Breakout approved ranking design",
+      "blocked_by": [
+        "STOCKS-PRESENTATION-V2"
+      ],
+      "body_file": "PREBREAKOUT-PRESENTATION-V2.md"
+    },
+    {
+      "id": "SCAN-REPORT-ISOLATION",
+      "title": "Durable isolated scan reports",
+      "blocked_by": [],
+      "body_file": "SCAN-REPORT-ISOLATION.md"
+    }
+  ],
+  "tickets": [
+    {
+      "key": "OPT-PRES-01",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-01 \u2014 Preserve app shell and combine contract/context basis",
+      "blocked_by": [],
+      "body_file": "OPT-PRES-01.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-02",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-02 \u2014 Keep context labels and full score/evidence disclosures",
+      "blocked_by": [
+        "OPT-PRES-01"
+      ],
+      "body_file": "OPT-PRES-02.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-03",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-03 \u2014 Bring editable order inputs and trade-loss budget together",
+      "blocked_by": [
+        "OPT-PRES-02"
+      ],
+      "body_file": "OPT-PRES-03.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-04",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-04 \u2014 Separate Structure & Stops with four loss figures",
+      "blocked_by": [
+        "OPT-PRES-03"
+      ],
+      "body_file": "OPT-PRES-04.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-05",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-05 \u2014 Consolidate Arithmetic target comparison",
+      "blocked_by": [
+        "OPT-PRES-04"
+      ],
+      "body_file": "OPT-PRES-05.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-06",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-06 \u2014 Make Monte Carlo essentials and inputs complete",
+      "blocked_by": [
+        "OPT-PRES-05"
+      ],
+      "body_file": "OPT-PRES-06.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-07",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-07 \u2014 Keep all Barrier Race targets action-ready",
+      "blocked_by": [
+        "OPT-PRES-06"
+      ],
+      "body_file": "OPT-PRES-07.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-08",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-08 \u2014 Preserve method plus explicit target choice and summary",
+      "blocked_by": [
+        "OPT-PRES-07"
+      ],
+      "body_file": "OPT-PRES-08.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-09",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-09 \u2014 Preserve ladder, broker actions and feedback",
+      "blocked_by": [
+        "OPT-PRES-08"
+      ],
+      "body_file": "OPT-PRES-09.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "OPT-PRES-10",
+      "phase": "OPTIONS-PRESENTATION-V2",
+      "title": "OPT-PRES-10 \u2014 Preservation verification and independent code gate",
+      "blocked_by": [
+        "OPT-PRES-09"
+      ],
+      "body_file": "OPT-PRES-10.md",
+      "coordinator_only": true
+    },
+    {
+      "key": "STK-PRES-01",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-01 \u2014 Context and initial ladder",
+      "blocked_by": [
+        "OPTIONS-PRESENTATION-V2"
+      ],
+      "body_file": "STK-PRES-01.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-02",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-02 \u2014 Inputs, validation and reactive execution risk",
+      "blocked_by": [
+        "STK-PRES-01"
+      ],
+      "body_file": "STK-PRES-02.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-03",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-03 \u2014 Structure & Stops, distinct bases",
+      "blocked_by": [
+        "STK-PRES-02"
+      ],
+      "body_file": "STK-PRES-03.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-04",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-04 \u2014 Stacked Original, Arithmetic and Monte Carlo evidence",
+      "blocked_by": [
+        "STK-PRES-03"
+      ],
+      "body_file": "STK-PRES-04.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-05",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-05 \u2014 Explicit method/target and selected summary",
+      "blocked_by": [
+        "STK-PRES-04"
+      ],
+      "body_file": "STK-PRES-05.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-06",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-06 \u2014 Actions and execution safety",
+      "blocked_by": [
+        "STK-PRES-05"
+      ],
+      "body_file": "STK-PRES-06.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-07",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-07 \u2014 Saved scan report integration",
+      "blocked_by": [
+        "STK-PRES-06",
+        "LOG-03"
+      ],
+      "body_file": "STK-PRES-07.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "STK-PRES-08",
+      "phase": "STOCKS-PRESENTATION-V2",
+      "title": "STK-PRES-08 \u2014 Preservation crosswalk and release gate",
+      "blocked_by": [
+        "STK-PRES-07"
+      ],
+      "body_file": "STK-PRES-08.md",
+      "coordinator_only": true
+    },
+    {
+      "key": "PB-BASE-01",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-BASE-01 \u2014 Reconcile current main and prior Pre-Breakout work",
+      "blocked_by": [
+        "STOCKS-PRESENTATION-V2"
+      ],
+      "body_file": "PB-BASE-01.md",
+      "coordinator_only": true
+    },
+    {
+      "key": "PB-PRES-01",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-01 \u2014 Shared ranking layout and selected symbol",
+      "blocked_by": [
+        "PB-BASE-01"
+      ],
+      "body_file": "PB-PRES-01.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-02",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-02 \u2014 Mode-specific table, metrics and evidence",
+      "blocked_by": [
+        "PB-PRES-01"
+      ],
+      "body_file": "PB-PRES-02.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-03",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-03 \u2014 Selected-stock mini chart and actions",
+      "blocked_by": [
+        "PB-PRES-02"
+      ],
+      "body_file": "PB-PRES-03.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-04",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-04 \u2014 Stock context and complete score cards",
+      "blocked_by": [
+        "PB-PRES-03"
+      ],
+      "body_file": "PB-PRES-04.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-05",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-05 \u2014 Honest filter diagnostics contract (data prerequisite)",
+      "blocked_by": [
+        "PB-PRES-04",
+        "LOG-02"
+      ],
+      "body_file": "PB-PRES-05.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-06",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-06 \u2014 Filter breakdown and inspectable analysis log",
+      "blocked_by": [
+        "PB-PRES-05",
+        "LOG-03"
+      ],
+      "body_file": "PB-PRES-06.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-07",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-07 \u2014 Stock and industry news",
+      "blocked_by": [
+        "PB-PRES-06"
+      ],
+      "body_file": "PB-PRES-07.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "PB-PRES-08",
+      "phase": "PREBREAKOUT-PRESENTATION-V2",
+      "title": "PB-PRES-08 \u2014 Preservation crosswalk, checks and shipping gate",
+      "blocked_by": [
+        "PB-PRES-07"
+      ],
+      "body_file": "PB-PRES-08.md",
+      "coordinator_only": true
+    },
+    {
+      "key": "LOG-01",
+      "phase": "SCAN-REPORT-ISOLATION",
+      "title": "LOG-01 \u2014 Durable, isolated latest-run records",
+      "blocked_by": [],
+      "body_file": "LOG-01.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "LOG-02",
+      "phase": "SCAN-REPORT-ISOLATION",
+      "title": "LOG-02 \u2014 Run lifecycle, failures and concurrency",
+      "blocked_by": [
+        "LOG-01"
+      ],
+      "body_file": "LOG-02.md",
+      "coordinator_only": false
+    },
+    {
+      "key": "LOG-03",
+      "phase": "SCAN-REPORT-ISOLATION",
+      "title": "LOG-03 \u2014 Inspector integration and verification",
+      "blocked_by": [
+        "LOG-02"
+      ],
+      "body_file": "LOG-03.md",
+      "coordinator_only": false
+    }
+  ],
+  "publication": "published",
+  "issues": {
+    "OPTIONS-PRESENTATION-V2": {
+      "number": 233,
+      "id": 5821136552,
+      "url": "https://github.com/Netke237/trading-assistant/issues/233"
+    },
+    "STOCKS-PRESENTATION-V2": {
+      "number": 234,
+      "id": 5821136886,
+      "url": "https://github.com/Netke237/trading-assistant/issues/234"
+    },
+    "PREBREAKOUT-PRESENTATION-V2": {
+      "number": 235,
+      "id": 5821137265,
+      "url": "https://github.com/Netke237/trading-assistant/issues/235"
+    },
+    "SCAN-REPORT-ISOLATION": {
+      "number": 236,
+      "id": 5821137586,
+      "url": "https://github.com/Netke237/trading-assistant/issues/236"
+    },
+    "LOG-01": {
+      "number": 237,
+      "id": 5821137918,
+      "url": "https://github.com/Netke237/trading-assistant/issues/237"
+    },
+    "LOG-02": {
+      "number": 238,
+      "id": 5821138292,
+      "url": "https://github.com/Netke237/trading-assistant/issues/238"
+    },
+    "LOG-03": {
+      "number": 239,
+      "id": 5821138651,
+      "url": "https://github.com/Netke237/trading-assistant/issues/239"
+    },
+    "OPT-PRES-01": {
+      "number": 240,
+      "id": 5821138938,
+      "url": "https://github.com/Netke237/trading-assistant/issues/240"
+    },
+    "OPT-PRES-02": {
+      "number": 241,
+      "id": 5821139247,
+      "url": "https://github.com/Netke237/trading-assistant/issues/241"
+    },
+    "OPT-PRES-03": {
+      "number": 242,
+      "id": 5821139600,
+      "url": "https://github.com/Netke237/trading-assistant/issues/242"
+    },
+    "OPT-PRES-04": {
+      "number": 243,
+      "id": 5821139912,
+      "url": "https://github.com/Netke237/trading-assistant/issues/243"
+    },
+    "OPT-PRES-05": {
+      "number": 244,
+      "id": 5821140262,
+      "url": "https://github.com/Netke237/trading-assistant/issues/244"
+    },
+    "OPT-PRES-06": {
+      "number": 245,
+      "id": 5821140622,
+      "url": "https://github.com/Netke237/trading-assistant/issues/245"
+    },
+    "OPT-PRES-07": {
+      "number": 246,
+      "id": 5821140985,
+      "url": "https://github.com/Netke237/trading-assistant/issues/246"
+    },
+    "OPT-PRES-08": {
+      "number": 247,
+      "id": 5821141284,
+      "url": "https://github.com/Netke237/trading-assistant/issues/247"
+    },
+    "OPT-PRES-09": {
+      "number": 248,
+      "id": 5821141599,
+      "url": "https://github.com/Netke237/trading-assistant/issues/248"
+    },
+    "OPT-PRES-10": {
+      "number": 249,
+      "id": 5821141940,
+      "url": "https://github.com/Netke237/trading-assistant/issues/249"
+    },
+    "STK-PRES-01": {
+      "number": 250,
+      "id": 5821142269,
+      "url": "https://github.com/Netke237/trading-assistant/issues/250"
+    },
+    "STK-PRES-02": {
+      "number": 251,
+      "id": 5821142583,
+      "url": "https://github.com/Netke237/trading-assistant/issues/251"
+    },
+    "STK-PRES-03": {
+      "number": 252,
+      "id": 5821142883,
+      "url": "https://github.com/Netke237/trading-assistant/issues/252"
+    },
+    "STK-PRES-04": {
+      "number": 253,
+      "id": 5821143228,
+      "url": "https://github.com/Netke237/trading-assistant/issues/253"
+    },
+    "STK-PRES-05": {
+      "number": 254,
+      "id": 5821143589,
+      "url": "https://github.com/Netke237/trading-assistant/issues/254"
+    },
+    "STK-PRES-06": {
+      "number": 255,
+      "id": 5821143957,
+      "url": "https://github.com/Netke237/trading-assistant/issues/255"
+    },
+    "STK-PRES-07": {
+      "number": 256,
+      "id": 5821144328,
+      "url": "https://github.com/Netke237/trading-assistant/issues/256"
+    },
+    "STK-PRES-08": {
+      "number": 257,
+      "id": 5821144769,
+      "url": "https://github.com/Netke237/trading-assistant/issues/257"
+    },
+    "PB-BASE-01": {
+      "number": 258,
+      "id": 5821145128,
+      "url": "https://github.com/Netke237/trading-assistant/issues/258"
+    },
+    "PB-PRES-01": {
+      "number": 259,
+      "id": 5821145515,
+      "url": "https://github.com/Netke237/trading-assistant/issues/259"
+    },
+    "PB-PRES-02": {
+      "number": 260,
+      "id": 5821145910,
+      "url": "https://github.com/Netke237/trading-assistant/issues/260"
+    },
+    "PB-PRES-03": {
+      "number": 261,
+      "id": 5821146285,
+      "url": "https://github.com/Netke237/trading-assistant/issues/261"
+    },
+    "PB-PRES-04": {
+      "number": 262,
+      "id": 5821146632,
+      "url": "https://github.com/Netke237/trading-assistant/issues/262"
+    },
+    "PB-PRES-05": {
+      "number": 263,
+      "id": 5821146950,
+      "url": "https://github.com/Netke237/trading-assistant/issues/263"
+    },
+    "PB-PRES-06": {
+      "number": 264,
+      "id": 5821147252,
+      "url": "https://github.com/Netke237/trading-assistant/issues/264"
+    },
+    "PB-PRES-07": {
+      "number": 265,
+      "id": 5821147556,
+      "url": "https://github.com/Netke237/trading-assistant/issues/265"
+    },
+    "PB-PRES-08": {
+      "number": 266,
+      "id": 5821147968,
+      "url": "https://github.com/Netke237/trading-assistant/issues/266"
+    }
+  },
+  "native_subissues": [
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-01",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-02",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-03",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-04",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-05",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-06",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-07",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-08",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-09",
+    "OPTIONS-PRESENTATION-V2/OPT-PRES-10",
+    "STOCKS-PRESENTATION-V2/STK-PRES-01",
+    "STOCKS-PRESENTATION-V2/STK-PRES-02",
+    "STOCKS-PRESENTATION-V2/STK-PRES-03",
+    "STOCKS-PRESENTATION-V2/STK-PRES-04",
+    "STOCKS-PRESENTATION-V2/STK-PRES-05",
+    "STOCKS-PRESENTATION-V2/STK-PRES-06",
+    "STOCKS-PRESENTATION-V2/STK-PRES-07",
+    "STOCKS-PRESENTATION-V2/STK-PRES-08",
+    "PREBREAKOUT-PRESENTATION-V2/PB-BASE-01",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-01",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-02",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-03",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-04",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-05",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-06",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-07",
+    "PREBREAKOUT-PRESENTATION-V2/PB-PRES-08",
+    "SCAN-REPORT-ISOLATION/LOG-01",
+    "SCAN-REPORT-ISOLATION/LOG-02",
+    "SCAN-REPORT-ISOLATION/LOG-03"
+  ],
+  "native_dependencies": [
+    "STOCKS-PRESENTATION-V2/OPTIONS-PRESENTATION-V2",
+    "PREBREAKOUT-PRESENTATION-V2/STOCKS-PRESENTATION-V2",
+    "OPT-PRES-02/OPT-PRES-01",
+    "OPT-PRES-03/OPT-PRES-02",
+    "OPT-PRES-04/OPT-PRES-03",
+    "OPT-PRES-05/OPT-PRES-04",
+    "OPT-PRES-06/OPT-PRES-05",
+    "OPT-PRES-07/OPT-PRES-06",
+    "OPT-PRES-08/OPT-PRES-07",
+    "OPT-PRES-09/OPT-PRES-08",
+    "OPT-PRES-10/OPT-PRES-09",
+    "STK-PRES-01/OPTIONS-PRESENTATION-V2",
+    "STK-PRES-02/STK-PRES-01",
+    "STK-PRES-03/STK-PRES-02",
+    "STK-PRES-04/STK-PRES-03",
+    "STK-PRES-05/STK-PRES-04",
+    "STK-PRES-06/STK-PRES-05",
+    "STK-PRES-07/STK-PRES-06",
+    "STK-PRES-07/LOG-03",
+    "STK-PRES-08/STK-PRES-07",
+    "PB-BASE-01/STOCKS-PRESENTATION-V2",
+    "PB-PRES-01/PB-BASE-01",
+    "PB-PRES-02/PB-PRES-01",
+    "PB-PRES-03/PB-PRES-02",
+    "PB-PRES-04/PB-PRES-03",
+    "PB-PRES-05/PB-PRES-04",
+    "PB-PRES-05/LOG-02",
+    "PB-PRES-06/PB-PRES-05",
+    "PB-PRES-06/LOG-03",
+    "PB-PRES-07/PB-PRES-06",
+    "PB-PRES-08/PB-PRES-07",
+    "LOG-02/LOG-01",
+    "LOG-03/LOG-02"
+  ]
+}

@@ -62,14 +62,14 @@ describe('scanStore migrate(): v18, options R/R on the full-premium basis', () =
   it('applies the same rule to previousRun', () => {
     const out = migrate.migrate(v17(run('A', ['full_premium']), run('P', ['premium_stop'])), 17) as Blob;
     expect(out.previousRun).toBeNull();
-    expect(out.scanResult).toEqual(run('A', ['full_premium']));
+    expect(out.scanResult).toEqual({...run('A', ['full_premium']),report_run_id:null,report_generation:null,report_persistence:null});
   });
 
   it('keeps a result whose candidates are all full_premium unchanged', () => {
     const before = v17(run('A', ['full_premium', 'full_premium']), run('P', ['full_premium']));
     const out = migrate.migrate(JSON.parse(JSON.stringify(before)), 17) as Blob;
-    expect(out.scanResult).toEqual(before.scanResult);
-    expect(out.previousRun).toEqual(before.previousRun);
+    expect(out.scanResult).toEqual({...before.scanResult,report_run_id:null,report_generation:null,report_persistence:null});
+    expect(out.previousRun).toEqual({...before.previousRun,report_run_id:null,report_generation:null,report_persistence:null});
   });
 
   it('leaves stockScanResult and every other field untouched', () => {
@@ -78,7 +78,7 @@ describe('scanStore migrate(): v18, options R/R on the full-premium basis', () =
     expect(out.scanResult).toBeNull();
     expect(out.previousRun).toBeNull();
     for (const key of ['stockScanResult', 'context', 'pickedContracts', 'screenerMode', 'stockScanRequest']) {
-      expect(out[key]).toEqual(before[key]);
+      expect(out[key]).toEqual(key==='stockScanResult'?{...before[key],report_run_id:null,report_generation:null,report_persistence:null}:before[key]);
     }
   });
 

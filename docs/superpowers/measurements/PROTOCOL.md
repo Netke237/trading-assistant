@@ -40,6 +40,19 @@ The runner stops if `backend/app/` (except `backend/app/data/sp500.csv`) or `sco
 `sp500.csv` is not frozen, because the S&P liquidity update rewrites it. Its hash is recorded, and a
 rewrite **during** a block invalidates that block (see the checklist).
 
+> **Since 2026-10-14 (#230): day runs go through the isolated runner. This note overrides the
+> "switch to the tag" instructions above and in steps 1–2.**
+> - Run a day only with `scripts/meas/run_isolated_day.ps1` (Task Scheduler) or
+>   `scripts/meas/isolated_day.py run`; check first with `isolated_day.py check`. They run the
+>   unchanged tag code and the tag's own runner from a separate checkout outside the repo, on port
+>   8100, against a copy of the database. How: [ISOLATED-RUN.md](ISOLATED-RUN.md).
+> - **Never switch the main checkout to `meas-freeze-1`** (no `git switch --detach meas-freeze-1`
+>   here), and never stop the live backend for a MEAS day. On 2026-10-09 that let the frozen code
+>   prune the live `ohlcv_daily` history.
+> - The old wrapper `C:\Users\<user>\bamendjou-jobs\meas_day.ps1` and its scheduled task are
+>   retired; keep them disabled and unused.
+> - The isolated runner runs the core block only; there is no isolated A-block (steps 3–7) yet.
+
 ## Step 1 — checklist before each day (13:00 ET at the latest)
 
 - [ ] A normal US trading day: **not a weekend, not an NYSE half-day** (the runner cannot know

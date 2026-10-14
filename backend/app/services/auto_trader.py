@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import logging
 import math
@@ -62,41 +63,16 @@ class ArmPreservedError(RuntimeError):
 
 
 class OrderNotSubmittedError(RuntimeError):
-    """The fire failed BEFORE the broker adapter was called: nothing was sent.
+    """The order provably was not submitted.
 
-    (Or, for the one subclass `OrderAwaitingConfirmationError`, the broker was
-    called and did not take the order. Either way no order is live. See the
-    paragraph on it below.)
+    Local setup failures occur before calling the adapter. An adapter can also
+    prove it sent nothing: OrderAdmissionRefusedError marks refusal before an
+    order POST and execute_option_order converts that explicit signal here.
+    All other adapter errors remain ambiguous and retain the full risk.
 
-    F2 OF 2A-ALERT ROUND 1. `fire()` wrapped the whole of `execute_option_order`
-    in one `except Exception` that wrote `order_failed` — a status whose own
-    comment says the submission MAY HAVE LANDED — and paged "the broker call was
-    made and errored ... Check the broker before re-arming". But three of the
-    four things that call reaches contact nothing at all: building the
-    `BrokerOrder`, building the router out of the credential store, and the two
-    guards in `BrokerRouter.resolve`. The reachable one is mundane and
-    recurring: credentials expire or are rotated,
-    `build_router_from_credentials` omits that adapter without complaint, and
-    `resolve` raises "Unknown broker 'tradier_paper'. Available: []". Measured
-    end to end — the delivered email told Kenneth to go and check a broker that
-    was never opened a socket to, for a position that cannot exist.
-
-    THE BOUNDARY IS `adapter.place_order`, NOT SOMEWHERE MORE CONVENIENT, and it
-    is drawn conservatively. Once that call is entered the auto-trader cannot
-    know whether bytes left the machine, so everything at or past it keeps
-    `order_failed` and keeps saying the order may have landed. This class covers
-    only what is provable from the outside. Both claims are then true statements
-    rather than one blanket guess, which is the whole of the fix: the failure
-    mode being closed is a FALSE alert, so replacing it with the opposite false
-    alert would be no better.
-
-    ONE SUBCLASS IS RAISED PAST THAT BOUNDARY: `OrderAwaitingConfirmationError`,
-    when the broker's own answer says it did not take the order. See it.
-
-    A RuntimeError so `/auto-trade/fire` maps it to a 400 like every refusal
-    but the two config faults (prefixed 500s) — and `fire()` re-raises it as a bare RuntimeError anyway, so
-    the class is a routing signal inside this module, not part of the endpoint's
-    contract.
+    OrderAwaitingConfirmationError additionally covers IBKR's authoritative
+    confirmation reply: the broker was contacted but did not accept an order.
+    That subclass sets broker_contacted on history and changes alert wording.
     """
 
 
@@ -110,13 +86,9 @@ class OrderAwaitingConfirmationError(OrderNotSubmittedError):
     confirms it. Nothing in this codebase sends that reply, so the order never
     reaches the book, and it was booked as a live order at the full premium.
 
-    THE ONE `OrderNotSubmittedError` RAISED AFTER `adapter.place_order`. The
-    class's boundary is drawn at `place_order` because past it the auto-trader
-    cannot know whether bytes left the machine. Here it can: the broker's own
-    answer says the order is not accepted. It is still a SUBCLASS, not the
-    parent, because the not-submitted alert says "the broker was not contacted
-    at all", which is false here. The row records `broker_contacted` and the
-    alert words itself from that.
+    Unlike a pre-POST admission refusal, this signal follows broker contact.
+    The broker's answer proves the order was not accepted. The subclass keeps
+    broker_contacted true so the not-submitted alert describes that contact.
     """
 
 
@@ -200,7 +172,9 @@ def _call_source_with_deadline(fn, symbol: str, deadline: float):
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        return ex.submit(fn, symbol).result(timeout=deadline)
+        # A copied context carries the caller's Tradier markers (fire path,
+        # prepaid token) into the source's worker (TRADIER-GOVERNOR D3).
+        return ex.submit(contextvars.copy_context().run, fn, symbol).result(timeout=deadline)
     except concurrent.futures.TimeoutError:
         raise _SourceTimeout from None
     finally:
@@ -232,17 +206,32 @@ def _lookup_earnings_date(symbol: str):
     from app.data import market
     # Looked up at call time, so a test patch on either module lands.
     sources = (
-        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S),
-        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S),
+        ("Tradier fundamentals", market.tradier_next_earnings_date, _TRADIER_LOOKUP_DEADLINE_S, True),
+        ("yfinance calendar", market.yfinance_next_earnings_date, _YF_LOOKUP_DEADLINE_S, False),
     )
     outcome: dict[str, str] = {}     # name -> "answered" | "timeout" | "error"
     failures: dict[str, str] = {}    # name -> why, for the sources still failed
     for attempt in range(2):
-        for name, fn, deadline in sources:
+        for name, fn, deadline, is_tradier in sources:
             if attempt == 1 and outcome.get(name) != "error":
                 continue
+            # TRADIER-GOVERNOR D3 (R3-G1/R5-G1): off the fire path, the Tradier
+            # source's slot is taken HERE, before its deadline starts, waiting
+            # as long as the queue needs; the copied context then carries the
+            # prepaid token into the source's worker. Skipped on a same-day
+            # cache hit (no request will be made). The fire path never
+            # prepays: its calls book an overdraft. Prepay and call run in one
+            # copied context, so the marker never leaks into the caller.
+            ctx = contextvars.copy_context()
+            if is_tradier and not market._TRADIER_FIRE_PATH.get():
+                cached = market._fundamentals_calendar_cache.get(symbol)
+                if not (cached is not None and cached[1] == date.today().isoformat()):
+                    if not ctx.run(market.tradier_prepay, None):
+                        outcome[name] = "error"
+                        failures[name] = f"{name}: rate limiter refused admission"
+                        continue
             try:
-                found = _call_source_with_deadline(fn, symbol, deadline)
+                found = ctx.run(_call_source_with_deadline, fn, symbol, deadline)
             except _SourceTimeout:
                 outcome[name] = "timeout"
                 failures[name] = f"{name}: no answer within {deadline:g}s"
@@ -337,8 +326,11 @@ def _apply_event_veto(strategy) -> None:
             unknown=True,
         )
 
+    from app.data import market
     try:
-        earnings = _fetch_earnings_date(strategy.symbol)
+        # TRADIER-GOVERNOR D3: a fire-path call, admitted by overdraft.
+        with market.tradier_fire_path():
+            earnings = _fetch_earnings_date(strategy.symbol)
     except Exception as exc:  # noqa: BLE001 -- a failed lookup is an unknown date (D4)
         logger.warning("Event veto: earnings lookup failed for %s: %s", strategy.symbol, exc)
         _unknown(f"lookup failed: {exc}")
@@ -668,8 +660,10 @@ def _market_is_open(symbol: str) -> bool:
     import concurrent.futures
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
+        from app.data import market
         from app.data.market import fetch_price
-        future = ex.submit(fetch_price, symbol)
+        # TRADIER-GOVERNOR D3: the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, fetch_price, symbol)
         try:
             price = future.result(timeout=3.0)
         except concurrent.futures.TimeoutError:
@@ -705,7 +699,7 @@ def _option_quote_state(option_symbol: str) -> str:
     governor = get_governor()
     def probe() -> str:
         token, base = get_tradier_creds()
-        if not token or not governor.try_acquire("tradier"):
+        if not token or not governor.admit_sync("tradier", admit_timeout=0.0, overdraft=True):
             return "unavailable"
         try:
             response = httpx.get(
@@ -1270,7 +1264,10 @@ def _measure_trade_regime(strategy: ArmedStrategy) -> "tuple[int, str] | None":
         _fetch_bars = (_fetch_intraday_regime_bars
                        if rcfg.get("timeframe") == "15min"
                        else _fetch_scan_window_bars)
-        future = ex.submit(_fetch_bars, strategy.symbol)
+        from app.data import market
+        # TRADIER-GOVERNOR D3: both branches' Tradier fetch (A1 / A2) is a
+        # fire-path call; the marker is set inside the worker thread.
+        future = ex.submit(market.run_on_fire_path, _fetch_bars, strategy.symbol)
         try:
             bars = future.result(timeout=_REGIME_FETCH_DEADLINE_S)
         except concurrent.futures.TimeoutError:
@@ -2337,10 +2334,10 @@ def _alert_risk_limit_refusal(symbol: str, exc: Exception, status: str) -> None:
     statuses are recorded BEFORE `execute_option_order` is reached, which is
     the same guarantee the `order_failed` row's own comment leans on when it
     says these two "provably never reached the broker". `_alert_not_submitted`
-    states it as fact on the same grounds, one phase later — it is reached only
-    from inside `execute_option_order` and only before `adapter.place_order`
-    (except IBKR's confirmation question, which is past it but still took no
-    order; that case is worded separately -- `OrderAwaitingConfirmationError`).
+    states it as fact on explicit proof: local setup failure or the adapter's
+    pre-POST admission refusal. IBKR's confirmation question instead proves
+    no order was accepted despite contact, and is worded separately via
+    `OrderAwaitingConfirmationError`.
     """
     which = ("the exposure cap" if status == "cap_blocked"
              else "the daily loss limit")
@@ -2400,8 +2397,8 @@ def _alert_not_submitted(symbol: str, exc: Exception, *,
     THE COUNTERPART TO `_alert_order_failed`, added by F2 of round 1, and the
     pair only works because each states what its own half provably knows.
     `fire()` reached this branch from `OrderNotSubmittedError`, which is raised
-    strictly before `adapter.place_order` (except `OrderAwaitingConfirmationError`,
-    below) — so no position can exist, and
+    on local setup failure or an adapter's explicit pre-POST admission refusal
+    (except `OrderAwaitingConfirmationError`, below) — so no position can exist, and
     hedging with "check the broker" would keep the wild goose chase F2 is about
     while merely sounding more careful.
 
@@ -2530,14 +2527,10 @@ def _alert_unclassified_refusal(symbol: str, exc: Exception) -> None:
 def execute_option_order(strategy: ArmedStrategy):
     """Execute the armed option order via the broker router. Importable for mocking.
 
-    TWO PHASES, AND THE SEAM BETWEEN THEM IS LOAD-BEARING — see
-    `OrderNotSubmittedError`. Everything inside the `try` contacts nothing: it
-    builds the order object, reads the credential store, and resolves the
-    adapter. Only `place_order`, deliberately OUTSIDE the `try`, can reach a
-    broker, so only it may raise the error `fire()` records as "may have
-    landed". The one check after it (`OrderAwaitingConfirmationError`) reads the
-    broker's own answer that it took no order. Anything moved across that line changes what Kenneth is told about
-    a possibly-live position, in one direction or the other.
+    Setup failures prove no contact and become OrderNotSubmittedError.
+    At place_order, only the adapter's explicit OrderAdmissionRefusedError
+    proves no POST occurred; all other errors remain potentially submitted.
+    An IBKR confirmation question proves no order was accepted despite contact.
     """
     from app.services.broker_router import build_router_from_credentials
     from app.data.ibkr_paper import BrokerOrder
@@ -2568,7 +2561,13 @@ def execute_option_order(strategy: ArmedStrategy):
         # ValueError would send the rest back to the "may have landed" branch
         # with the same false claim F2 exists to remove.
         raise OrderNotSubmittedError(str(exc)) from exc
-    result = adapter.place_order(order)
+    from app.data.order_errors import OrderAdmissionRefusedError
+    try:
+        result = adapter.place_order(order)
+    except OrderAdmissionRefusedError as exc:
+        # The adapter proves admission failed before any POST. Other adapter
+        # errors remain ambiguous: they may have sent an order.
+        raise OrderNotSubmittedError(str(exc)) from exc
     # A QUESTION IS NOT AN ORDER -- see `OrderAwaitingConfirmationError`.
     # getattr because Tradier's adapter has its own OrderResult without the
     # field; only IBKR's reply shape sets it.

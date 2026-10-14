@@ -70,3 +70,13 @@ test('candidate data changes replace all compact sentiment values', () => {
   expect(screen.getByText('Opposed — Against this trade.')).toBeVisible();
   expect(screen.getByText('State Bear · sticky 0% · ~0d')).toBeVisible();
 });
+
+test('compact context names conviction, state and alignment independently without a new qualification verdict', () => {
+  render(<MarketSentiment s={{ ...sentiment, state: 'Bull', conviction_pct: -30, alignment: 'Diverging' }} compact />);
+  expect(screen.getByText('Conviction')).toBeVisible();
+  expect(screen.getByText('-30%')).toHaveClass('toneReject');
+  expect(screen.getByText('State Bull · sticky 88% · ~31.5d')).toBeVisible();
+  expect(screen.getByText('Alignment')).toBeVisible();
+  expect(screen.getByText('OMM/HMM Diverging')).toHaveClass('diverging');
+  expect(screen.queryByText('PASS')).not.toBeInTheDocument();
+});

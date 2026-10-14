@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import io
 import logging
 import math
 import os
+import sys
 import time
 import weakref
 from datetime import date, datetime, timedelta
@@ -17,6 +19,8 @@ from typing import Literal, Optional
 import httpx
 import pandas as pd
 
+from app.data import governor as _governor
+from app.data.governor import ProviderUnavailable, RateLimited
 from app.data.quote_liveness import classify_quote
 from app.scoring.contract_validator import max_quote_age_seconds
 from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
@@ -127,6 +131,174 @@ def _headers(token: str | None = None) -> dict:
     }
 
 
+# ── Tradier admission (TRADIER-GOVERNOR, plan D3) ─────────────────────────────
+# Every Tradier request in this module goes through `_tradier_get` (sync) or
+# `_tradier_get_async` (async), which admit it on the governor's shared
+# `tradier` bucket first. The governor is looked up at call time through the
+# module attribute, so a test can swap `governor.get_governor`.
+
+# Set while a deadline-bound auto-trade fire-path call runs. Such a call never
+# waits for a slot: it books an overdraft (refused only during a 429 cooldown).
+_TRADIER_FIRE_PATH: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_TRADIER_FIRE_PATH", default=False,
+)
+# > 0 when a token was already taken for the next request in this context
+# (`tradier_prepay`), so that request makes no further admission.
+_TRADIER_PREPAID: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "_TRADIER_PREPAID", default=0,
+)
+# Call sites already warned about for a sync Tradier call made on a running
+# event loop (one WARNING per call site).
+_TRADIER_ON_LOOP_WARNED: set[tuple[str, int]] = set()
+
+
+@contextlib.contextmanager
+def tradier_fire_path():
+    """Mark the Tradier calls made inside the block as fire-path calls.
+
+    A ContextVar: it does NOT cross `ThreadPoolExecutor.submit` (which copies
+    no context) -- submit `run_on_fire_path` instead. Reset on exit, including
+    on an exception."""
+    token = _TRADIER_FIRE_PATH.set(True)
+    try:
+        yield
+    finally:
+        _TRADIER_FIRE_PATH.reset(token)
+
+
+def run_on_fire_path(fn, *args):
+    """`fn(*args)` inside `tradier_fire_path()`. Submit this to an executor so
+    the marker is set inside the worker thread."""
+    with tradier_fire_path():
+        return fn(*args)
+
+
+def tradier_prepay(admit_timeout: float | None) -> bool:
+    """Take one `tradier` token now (a normal, waiting admission) for the next
+    Tradier request made in the CURRENT context. True when admitted (the
+    marker is set), False otherwise (the marker is left alone)."""
+    if not _governor.get_governor().admit_sync("tradier", admit_timeout=admit_timeout):
+        return False
+    _TRADIER_PREPAID.set(1)
+    return True
+
+
+def _retry_after_seconds(resp) -> float | None:
+    """The response's Retry-After in seconds when it is numeric, else None."""
+    try:
+        value = float(resp.headers.get("Retry-After"))
+    except Exception:
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
+
+
+def _on_running_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def _warn_on_loop_once() -> None:
+    """Log one WARNING per call site of `_tradier_get` reached on a running
+    event loop, naming the site and its caller."""
+    site = sys._getframe(2)  # the caller of _tradier_get
+    key = (site.f_code.co_filename, site.f_lineno)
+    if key in _TRADIER_ON_LOOP_WARNED:
+        return
+    _TRADIER_ON_LOOP_WARNED.add(key)
+    caller = site.f_back
+    called_from = (
+        f"{os.path.basename(caller.f_code.co_filename)}:{caller.f_lineno} {caller.f_code.co_name}"
+        if caller is not None else "?"
+    )
+    logger.warning(
+        "Sync Tradier call on a running event loop: %s (%s:%d), called from %s; "
+        "admitted by overdraft so the loop is never blocked waiting. Move the caller "
+        "to a worker thread.",
+        site.f_code.co_name, os.path.basename(site.f_code.co_filename), site.f_lineno, called_from,
+    )
+
+
+def _tradier_get(url, *, params=None, headers=None, timeout, admit_timeout: float | None = None):
+    """`httpx.get` for Tradier, admitted on the governor's `tradier` bucket.
+
+    Admission, in order (plan D3): a prepaid token is consumed; else a
+    fire-path call books an overdraft; else a call on a running event loop
+    books an overdraft too (safety net, with a WARNING); else a normal
+    admission that waits up to `admit_timeout` (None = without limit, the bulk
+    default). Not admitted -> `ProviderUnavailable`, which the call site
+    handles like any failed request. `timeout` is the site's HTTP timeout,
+    passed through unchanged; `admit_timeout` is never an HTTP timeout.
+
+    A 429 records the shared cooldown (Retry-After when numeric) and the
+    response is returned unchanged for the site's own status check. There is
+    no sync retry."""
+    gov = _governor.get_governor()
+    prepaid = _TRADIER_PREPAID.get()
+    if prepaid > 0:
+        _TRADIER_PREPAID.set(prepaid - 1)
+        admitted = True
+    elif _TRADIER_FIRE_PATH.get():
+        admitted = gov.admit_sync("tradier", admit_timeout=0.0, overdraft=True)
+    elif _on_running_loop():
+        _warn_on_loop_once()
+        admitted = gov.admit_sync("tradier", admit_timeout=0.0, overdraft=True)
+    else:
+        admitted = gov.admit_sync("tradier", admit_timeout=admit_timeout)
+    if not admitted:
+        raise ProviderUnavailable("tradier rate limiter: no admission")
+
+    try:
+        resp = httpx.get(url, params=params, headers=headers, timeout=timeout)
+    except Exception:
+        gov.record_failure("tradier")
+        raise
+    if getattr(resp, "status_code", None) == 429:
+        gov.note_rate_limited("tradier", _retry_after_seconds(resp))
+    else:
+        gov.record_success("tradier")
+    return resp
+
+
+async def _tradier_get_async(
+    client,
+    url,
+    *,
+    params=None,
+    headers=None,
+    timeout=httpx.USE_CLIENT_DEFAULT,
+    retries: int = 2,
+    method: str = "GET",
+):
+    """`client.get` (or `method`) for Tradier, admitted on the governor.
+
+    Bulk calls go through `Governor.call`, which waits for a slot and retries
+    a 429 after its Retry-After (`retries` times); when they run out,
+    `RateLimited` propagates to the site's own `except`. A fire-path call
+    (`tradier_fire_path()` set in this task) goes through
+    `Governor.call_overdraft`: no waiting, exactly one attempt. Any other
+    response is returned for the site to check. The client's timeout applies
+    unless one is given; `timeout=None` is never forwarded (it would mean no
+    timeout at all in httpx)."""
+    kwargs = {"params": params, "headers": headers}
+    if timeout is not httpx.USE_CLIENT_DEFAULT and timeout is not None:
+        kwargs["timeout"] = timeout
+    send = getattr(client, method.lower())
+
+    async def _attempt():
+        resp = await send(url, **kwargs)
+        if getattr(resp, "status_code", None) == 429:
+            raise RateLimited("tradier HTTP 429", retry_after=_retry_after_seconds(resp))
+        return resp
+
+    gov = _governor.get_governor()
+    if _TRADIER_FIRE_PATH.get():
+        return await gov.call_overdraft("tradier", _attempt)
+    return await gov.call("tradier", _attempt, retries=retries)
+
+
 # ── Original synchronous functions (kept for backwards compat) ────────────────
 
 
@@ -178,7 +350,7 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         end = date.today()
         calendar_days = max(400, int(bars * 1.75))
         start = end - timedelta(days=calendar_days)
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/v1/markets/history",
             headers=_headers(),
             params={
@@ -408,7 +580,7 @@ def fetch_intraday_candles(
         try:
             end = date.today()
             start = end - timedelta(days=min(days, 55))
-            resp = httpx.get(
+            resp = _tradier_get(
                 f"{base}/v1/markets/timesales",
                 headers=_headers(token),
                 params={
@@ -664,7 +836,7 @@ def completed_bars_for_interval(
 
 def fetch_price(symbol: str) -> Optional[float]:
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": symbol},
@@ -837,7 +1009,7 @@ def fetch_option_chain(
     dte_limits: Optional[tuple[int, int, int, int]] = None,
 ) -> list[dict]:
     try:
-        exp_resp = httpx.get(
+        exp_resp = _tradier_get(
             f"{_tradier_base()}/v1/markets/options/expirations",
             headers=_headers(),
             params={"symbol": symbol, "includeAllRoots": "true"},
@@ -871,7 +1043,7 @@ def fetch_option_chain(
                           symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
-        chain_resp = httpx.get(
+        chain_resp = _tradier_get(
             f"{_tradier_base()}/v1/markets/options/chains",
             headers=_headers(),
             params={
@@ -1003,7 +1175,7 @@ def fetch_option_chain(
 
 def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": ",".join(symbols)},
@@ -1035,7 +1207,7 @@ def fetch_quotes(symbols: list[str]) -> dict[str, dict]:
 
 def fetch_earnings_date(symbol: str) -> Optional[date]:
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1063,7 +1235,7 @@ def fetch_earnings_date(symbol: str) -> Optional[date]:
 
 def fetch_dividend_date(symbol: str) -> Optional[date]:
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1091,7 +1263,7 @@ def fetch_dividend_date(symbol: str) -> Optional[date]:
 
 def fetch_company_name(symbol: str) -> Optional[str]:
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/beta/markets/fundamentals/company",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1165,7 +1337,7 @@ def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
     """
     if get_tradier_creds()[0]:
         try:
-            resp = httpx.get(
+            resp = _tradier_get(
                 f"{_tradier_base()}/v1/markets/news",
                 headers=_headers(),
                 params={"symbols": ",".join(symbols), "limit": limit},
@@ -1479,7 +1651,8 @@ async def fetch_candles_async(
         end = date.today()
         calendar_days = max(400, int(bars * 1.75))
         start = end - timedelta(days=calendar_days)
-        resp = await client.get(
+        resp = await _tradier_get_async(
+            client,
             f"{_tradier_base()}/v1/markets/history",
             headers=_headers(),
             params={
@@ -1551,7 +1724,8 @@ async def fetch_price_async(
 ) -> Optional[float]:
     """Async variant. Falls back to yfinance when Tradier is unavailable."""
     try:
-        resp = await client.get(
+        resp = await _tradier_get_async(
+            client,
             f"{_tradier_base()}/v1/markets/quotes",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1597,7 +1771,8 @@ async def fetch_option_chain_async(
         if cached_exp is not None and cached_exp[1] == date.today().isoformat():
             dates = cached_exp[0]
         else:
-            exp_resp = await client.get(
+            exp_resp = await _tradier_get_async(
+                client,
                 f"{_tradier_base()}/v1/markets/options/expirations",
                 headers=_headers(),
                 params={"symbol": symbol, "includeAllRoots": "true"},
@@ -1631,7 +1806,8 @@ async def fetch_option_chain_async(
                           symbol, dte_limits or f">= {_DEFAULT_MIN_DTE_FLOOR}", len(dates))
                 return []
 
-        chain_resp = await client.get(
+        chain_resp = await _tradier_get_async(
+            client,
             f"{_tradier_base()}/v1/markets/options/chains",
             headers=_headers(),
             params={
@@ -1868,7 +2044,8 @@ async def fetch_company_name_async(
         return known
 
     try:
-        resp = await client.get(
+        resp = await _tradier_get_async(
+            client,
             f"{_tradier_base()}/beta/markets/fundamentals/company",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1903,7 +2080,8 @@ async def fetch_fundamentals_calendar(
             return data
 
     try:
-        resp = await client.get(
+        resp = await _tradier_get_async(
+            client,
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
@@ -1988,7 +2166,7 @@ def _fundamentals_calendar_sync(symbol: str) -> dict | None:
     if cached is not None and cached[1] == date.today().isoformat():
         return cached[0]
     try:
-        resp = httpx.get(
+        resp = _tradier_get(
             f"{_tradier_base()}/beta/markets/fundamentals/calendars",
             headers=_headers(),
             params={"symbols": symbol},
