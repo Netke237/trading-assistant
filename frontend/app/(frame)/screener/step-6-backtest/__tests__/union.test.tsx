@@ -108,10 +108,10 @@ it('cycles health sorting descending, ascending, then original order', () => {
  render(<Page />);
  const symbols = () => screen.getAllByRole('button', { name: /^Watch / }).map(b => b.textContent);
  expect(symbols()).toEqual(['Watch AAPL', 'Watch MSFT']);
- fireEvent.click(screen.getByRole('button', { name: /HEALTH/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Sort by fundamental health score' }));
  expect(symbols()).toEqual(['Watch MSFT', 'Watch AAPL']);
- fireEvent.click(screen.getByRole('button', { name: /HEALTH/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Sort by fundamental health score' }));
  expect(symbols()).toEqual(['Watch AAPL', 'Watch MSFT']);
- fireEvent.click(screen.getByRole('button', { name: /HEALTH/ }));
+ fireEvent.click(screen.getByRole('button', { name: 'Sort by fundamental health score' }));
  expect(symbols()).toEqual(['Watch AAPL', 'Watch MSFT']);
 });

@@ -51,7 +51,14 @@ export default function Step6BacktestPage() {
   const portfolioPositions = usePortfolioStore(s => s.positions);
   const portfolioSymbols = new Set(portfolioPositions.map(p => p.symbol));
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
-  const [healthSort, setHealthSort] = useState<'asc' | 'desc' | null>(null);
+  const [candidateSort, setCandidateSort] = useState<null | { key: 'health' | 'score' | 'confidence'; dir: 'asc' | 'desc' }>(null);
+  function onCandidateSort(key: 'health' | 'score' | 'confidence') {
+    setCandidateSort(current => current?.key !== key ? { key, dir: 'desc' } : current.dir === 'desc' ? { key, dir: 'asc' } : null);
+  }
+  function candidateSortMark(key: 'health' | 'score' | 'confidence') {
+    if (candidateSort?.key !== key) return '↕';
+    return candidateSort.dir === 'desc' ? '↓' : '↑';
+  }
   const [showSendDialog, setShowSendDialog] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -120,18 +127,27 @@ export default function Step6BacktestPage() {
     {candidates.length > filteredCandidates.length && <Text size={11} tone="caution">{candidates.length - filteredCandidates.length} of {candidates.length} hidden by the event filter.</Text>}
     {result && filteredCandidates.length === 0 && <Text size={13} tone="dim">No candidates to display. Adjust the filter or return to Strategy and run another scan.</Text>}
     {result && <div className={styles.results}>
+      <div>
+        <button type="button" className={styles.sortableHeader} aria-label="Sort by fundamental health score" title="Sort by fundamental health score" onClick={() => onCandidateSort('health')}>Health {candidateSortMark('health')}</button>
+        {' '}
+        <button type="button" className={styles.sortableHeader} aria-label="Sort by score" title="Sort by score" onClick={() => onCandidateSort('score')}>Score {candidateSortMark('score')}</button>
+        {' '}
+        <button type="button" className={styles.sortableHeader} aria-label="Sort by confidence" title="Sort by confidence" onClick={() => onCandidateSort('confidence')}>Confidence {candidateSortMark('confidence')}</button>
+      </div>
       <div className={styles.tableHeader}>
         <span aria-hidden />
         {['SYMBOL','SUMMARY','SCORE','STATUS','Δ','WIN %','TRADES','RETURN','MAX DD'].map(label => <Text key={label} size={11} tone="dim">{label}</Text>)}
-        <button type="button" className={styles.sortableHeader} onClick={() => setHealthSort(s => s === null ? 'desc' : s === 'desc' ? 'asc' : null)} title="Sort by fundamental health score">HEALTH {healthSort === 'desc' ? '↓' : healthSort === 'asc' ? '↑' : '↕'}</button>
+        <Text size={11} tone="dim">HEALTH</Text>
         {['VS SPX','EVENT','CONF','GATE','DETAILS','POSITION'].map(label => <Text key={label} size={11} tone="dim">{label}</Text>)}
       </div>
       <div className={styles.tableBody}>
             {[...filteredCandidates].sort((a, b) => {
-              if (healthSort === null) return 0;
-              const aScore = a.fundamentals?.score ?? -1;
-              const bScore = b.fundamentals?.score ?? -1;
-              return healthSort === 'desc' ? bScore - aScore : aScore - bScore;
+              if (candidateSort === null) return 0;
+              const value = (row: typeof a) => candidateSort.key === 'health' ? (row.fundamentals?.score ?? -1) : candidateSort.key === 'score' ? row.stock_score : (row.confidence ?? -1);
+              const aValue = value(a);
+              const bValue = value(b);
+              if (aValue === bValue) return 0;
+              return candidateSort.dir === 'desc' ? bValue - aValue : aValue - bValue;
             }).map((c) => {
               const d = deltas.get(c.symbol);
               const bt = c.backtest;
