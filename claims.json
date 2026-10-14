@@ -15,14 +15,6 @@
       "expires_at": "2026-10-15T00:18:20Z",
       "note": "Resume #165 at #270 portfolio exposure serialization",
       "task": "BROKER-PATH-RESIDUALS"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/stocks-horizon-t4-118",
-      "claimed_at": "2026-10-14T21:31:53Z",
-      "expires_at": "2026-10-15T00:31:53Z",
-      "note": "Issue 118 Pre-Breakout Fibonacci backtests and per-horizon tuning",
-      "task": "STOCKS-HORIZON-T4"
     }
   ]
 }
