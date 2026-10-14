@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from app.schemas.payload_depth import validate_payload_depth
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Literal, Optional
@@ -391,7 +393,8 @@ class OmmData(BaseModel):
     p_stay: float                    # P(current state persists next bar)
     stability: Literal['Stable', 'Fragile']
     regime_age_days: int             # consecutive bars in current state
-    avg_regime_duration: float       # 1 / (1 − p_stay), in days
+    avg_regime_duration: float       # 1 / (1 − p_stay), transition strides
+    duration_stride_bars: Optional[int] = None
     transition_row: list[float]      # [P(Bull), P(Bear), P(Choppy)] for current state
     state_order: list[str]           # ['Bull', 'Bear', 'Choppy'] — index key
     conviction_pct: Optional[int] = None
@@ -536,6 +539,9 @@ class NewsItem(BaseModel):
     source:    str
     timestamp: str
     sentiment: Literal['bull', 'bear', 'neutral'] = 'neutral'
+    # Provider-supplied original article link (absolute http/https only), or
+    # None when the provider gave none or an invalid one. Additive (#265).
+    url:       str | None = None
 
 
 # ── Pricing method enum ──────────────────────────────────────────────────────
@@ -964,6 +970,8 @@ class ScanRequest(BaseModel):
                     self.overrides = {**ov, "iv_abs_pass_max": rank_max}
         return self
 
+    _validate_payload_depth = field_validator('overrides', mode="before")(validate_payload_depth)
+
 
 class RejectedCandidate(BaseModel):
     symbol: str
@@ -1325,6 +1333,8 @@ class PortfolioPositionCreate(BaseModel):
             mapped[aliases.get(k, k)] = v
         super().__init__(**mapped)
 
+    _validate_payload_depth = field_validator('exitPlan', 'targets', 'tradeCardSnapshot', 'maxLossOverride', mode="before")(validate_payload_depth)
+
 
 class PortfolioPositionUpdate(BaseModel):
     """Partial update for a persisted position — only the fields the drawer
@@ -1375,6 +1385,8 @@ class PortfolioPositionUpdate(BaseModel):
     # value alone, while an explicit null CLEARS the override and returns the
     # position to inheriting the global.
     premiumStopPct: Optional[float] = Field(alias="premium_stop_pct", default=None, gt=0, lt=1)
+
+    _validate_payload_depth = field_validator('exitPlan', 'targets', 'maxLossOverride', 'alertOverrides', mode="before")(validate_payload_depth)
 
 
 class PortfolioPositionSchema(BaseModel):

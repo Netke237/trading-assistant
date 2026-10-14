@@ -9,9 +9,11 @@ potentially every 5 minutes — triggers a full config rewrite.
 """
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import field_validator, BaseModel, Field, model_validator
 
 
 class ScanScheduleEntry(BaseModel):
@@ -62,6 +64,8 @@ class ScanScheduleEntry(BaseModel):
             raise ValueError(f"resolved_request does not match a valid request for mode={self.mode}: {exc}")
         return self
 
+    _validate_payload_depth = field_validator('resolved_request', mode="before")(validate_payload_depth)
+
 
 class ScanScheduleEntryCreate(BaseModel):
     """POST body — same shape as ScanScheduleEntry minus the server-generated id."""
@@ -78,6 +82,8 @@ class ScanScheduleEntryCreate(BaseModel):
     cadence_minutes: Optional[int] = Field(None, ge=5, le=1440)
     window_start_hour: Optional[int] = Field(None, ge=0, le=23)
     window_end_hour: Optional[int] = Field(None, ge=1, le=24)
+
+    _validate_payload_depth = field_validator('resolved_request', mode="before")(validate_payload_depth)
 
 
 class ScheduledScanRunOut(BaseModel):

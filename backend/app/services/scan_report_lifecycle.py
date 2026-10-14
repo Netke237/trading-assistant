@@ -151,6 +151,36 @@ def project(value, *, path='', unavailable=None, key=''):
 _OMIT = object()
 
 
+_TERMINAL_CODES = {
+    'accepted': {'candidate_returned'}, 'excluded': {'scan_policy'},
+    'no_data': {'missing_history', 'insufficient_history', 'missing_price', 'insufficient_intraday_history', 'regime_data_unavailable', 'trend_unmeasured'},
+    'error': {'history_fetch_failed', 'signal_processing_failed', 'regime_fetch_failed', 'data_processing_failed', 'unsupported_strategy'},
+    'no_setup': {'setup_not_returned', 'fib_level_not_returned'},
+    'filtered': {'ema_side', 'price_min', 'price_max', 'score_status', 'score_min', 'direction_conviction', 'regime_headwind', 'backtest_gate', 'confidence_gate', 'shortlist_cap'},
+}
+_TERMINAL_NUMBERS = {'current_close', 'ema_value', 'ema_period', 'price', 'min_price', 'max_price', 'score', 'min_stock_score', 'trend_score', 'min_trend', 'confidence', 'confidence_reject_below', 'cap', 'rank', 'original_count', 'sample_size', 'win_rate', 'n_trades', 'min_trades', 'min_win_rate'}
+
+
+def project_terminal_record(symbol, terminal, code, *, observations=None, thresholds=None):
+    """Dedicated finite-domain projection; never route terminal text through project."""
+    if not isinstance(symbol, str) or not _TICKER.fullmatch(symbol) or not isinstance(terminal, str) or terminal not in _TERMINAL_CODES or not isinstance(code, str) or code not in _TERMINAL_CODES[terminal]:
+        return None
+    record = dict(symbol=symbol, terminal=terminal, code=code)
+    for name, values in (('observations', observations), ('thresholds', thresholds)):
+        safe = {}
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if key in _TERMINAL_NUMBERS and isinstance(value, (int, float)) and not isinstance(value, bool) and (isinstance(value, int) or math.isfinite(value)):
+                    safe[key] = value
+                elif key in {'direction', 'strategy', 'status'} and isinstance(value, str) and value in _DOMAINS[key]:
+                    safe[key] = value
+                elif key == 'passes_gate' and isinstance(value, bool):
+                    safe[key] = value
+        if safe:
+            record[name] = safe
+    return record
+
+
 @dataclass
 class Collector:
     request: dict
@@ -161,6 +191,34 @@ class Collector:
     observations: list = field(default_factory=list)
     data_failures: list = field(default_factory=list)
     no_data: bool = False
+    terminal_enabled: bool = False
+    terminal_inputs: list[str] | None = None
+    terminal_resolution_available: bool = True
+    terminal_evaluated: list[str] = field(default_factory=list)
+    terminal_records: dict = field(default_factory=dict)
+    terminal_conflicts: set[str] = field(default_factory=set)
+
+    def terminal_snapshot(self, *, interrupted=False):
+        if not self.terminal_enabled or self.terminal_inputs is None:
+            return None
+        if not self.terminal_resolution_available and not self.terminal_records and not self.terminal_evaluated:
+            return None
+        records = [deepcopy(self.terminal_records[x]) for x in self.terminal_inputs if x in self.terminal_records and x not in self.terminal_conflicts and not (interrupted and self.terminal_records[x]['terminal'] == 'accepted')]
+        recorded = {r['symbol'] for r in records}
+        unknown = [x for x in self.terminal_inputs if x not in recorded]
+        counts = {x: 0 for x in ('accepted', 'excluded', 'no_data', 'error_count', 'no_setup', 'filtered')}
+        for record in records:
+            counts['error_count' if record['terminal'] == 'error' else record['terminal']] += 1
+        counts.update(input=len(self.terminal_inputs) if self.terminal_resolution_available else None,
+                      evaluated=len(self.terminal_evaluated) if self.terminal_resolution_available else None)
+        excluded = {r['symbol'] for r in records if r['terminal'] == 'excluded'}
+        stages_match = set(self.terminal_evaluated) == set(self.terminal_inputs) - excluded
+        result = dict(version=1, resolution_available=self.terminal_resolution_available, complete=self.terminal_resolution_available and not unknown and stages_match and not interrupted and not self.terminal_conflicts,
+                      input_symbols=list(self.terminal_inputs), evaluated_symbols=list(self.terminal_evaluated),
+                      outcomes=records, counts=counts, unknown_symbols=unknown)
+        if self.terminal_conflicts:
+            result['diagnostic_unavailable'] = True
+        return result
 
     def inputs(self):
         return dict(request=deepcopy(self.request), expanded_symbols=deepcopy(self.expanded),
@@ -183,6 +241,12 @@ def observe_resolution(expanded, dispatched, excluded):
     c = current_collector()
     if c is None:
         return
+    if c.terminal_enabled:
+        c.terminal_resolution_available = all(isinstance(x, str) and _TICKER.fullmatch(x) for x in expanded)
+        c.terminal_inputs = list(dict.fromkeys(x for x in expanded if isinstance(x, str) and _TICKER.fullmatch(x)))
+        for item in excluded:
+            symbol = item.get('symbol') if isinstance(item, dict) else item.symbol
+            observe_terminal(symbol, 'excluded', 'scan_policy')
     c.expanded = project(expanded, key='expanded_symbols', path='expanded_symbols', unavailable=c.unavailable)
     c.dispatched = project(dispatched, key='dispatched_symbols', path='dispatched_symbols', unavailable=c.unavailable)
     c.excluded = []
@@ -191,6 +255,27 @@ def observe_resolution(expanded, dispatched, excluded):
         safe = project(symbol, key='symbol', path='excluded.symbol', unavailable=c.unavailable)
         if safe is not _OMIT:
             c.excluded.append(dict(symbol=safe, reason='excluded_by_scan_policy', reason_unavailable=True))
+
+
+def observe_evaluation(symbol):
+    c = current_collector()
+    if c is not None and c.terminal_enabled and c.terminal_inputs is not None and symbol in c.terminal_inputs and symbol not in c.terminal_evaluated:
+        c.terminal_evaluated.append(symbol)
+
+
+def observe_terminal(symbol, terminal, code, *, observations=None, thresholds=None):
+    c = current_collector()
+    if c is None or not c.terminal_enabled:
+        return
+    context = {key: c.request[key] for key in ('strategy', 'direction') if key in c.request}
+    record = project_terminal_record(symbol, terminal, code, observations={**context, **(observations or {})}, thresholds=thresholds)
+    if record is None or c.terminal_inputs is None or symbol not in c.terminal_inputs:
+        return
+    previous = c.terminal_records.get(symbol)
+    if previous is not None and previous != record:
+        c.terminal_conflicts.add(symbol)
+    elif previous is None:
+        c.terminal_records[symbol] = record
 
 
 def observe_configuration(source, values, *, symbol=None):
@@ -252,10 +337,17 @@ async def recover_interrupted():
         return await scan_reports.recover_interrupted(db)
 
 
+def _partial_diagnostics(c):
+    if not c.terminal_evaluated and not c.terminal_records:
+        return None
+    terminal = c.terminal_snapshot(interrupted=True)
+    return {'terminal_outcomes': terminal} if terminal is not None else None
+
+
 async def run_reported_scan(request, *, category, trigger, callback, response=None):
     unavailable = []
     frozen = project(request, path='request', unavailable=unavailable)
-    c = Collector(request=frozen, unavailable=unavailable)
+    c = Collector(request=frozen, unavailable=unavailable, terminal_enabled=category in {'prebreakout', 'fib', 'pullback'})
     token = _collector.set(c)
     run = None
     try:
@@ -269,14 +361,14 @@ async def run_reported_scan(request, *, category, trigger, callback, response=No
             result = await callback()
         except asyncio.CancelledError:
             try:
-                await asyncio.shield(_finish(run, status='cancelled', error_code='cancelled', inputs=c.inputs()))
+                await asyncio.shield(_finish(run, status='cancelled', error_code='cancelled', inputs=c.inputs(), diagnostics=_partial_diagnostics(c), promote_usable=False))
             except (scan_reports.ScanReportStorageError, ValueError, TypeError):
                 log.error('scan report cancellation save unavailable')
             raise
         except Exception as exc:
             persistence = 'saved'
             try:
-                await _finish(run, status='failed', error_code='scan_failed', inputs=c.inputs())
+                await _finish(run, status='failed', error_code='scan_failed', inputs=c.inputs(), diagnostics=_partial_diagnostics(c), promote_usable=False)
             except (scan_reports.ScanReportStorageError, ValueError, TypeError):
                 persistence = 'unavailable'
                 log.error('scan report failure save unavailable')
@@ -304,6 +396,9 @@ async def run_reported_scan(request, *, category, trigger, callback, response=No
                                excluded=deepcopy(c.excluded), stage_counts_available=False,
                                rejection_reasons_available=False, data_failures=deepcopy(c.data_failures),
                                fields_unavailable=snapshot['fields_unavailable'])
+        terminal = c.terminal_snapshot()
+        if terminal is not None:
+            diagnostics = {**(diagnostics or {}), 'terminal_outcomes': terminal}
         status = 'failed' if getattr(result, 'state', None) == 'FAILED' else 'no_data' if c.no_data else 'complete'
         persistence = 'saved'
         try:

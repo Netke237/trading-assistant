@@ -10,6 +10,7 @@ import { CandlestickChart } from '@/components/organisms/CandlestickChart';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { useAnalysisStore } from '@/lib/analysisStore';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
+import { formatRegimeAge, formatRegimeAverage } from '@/lib/regimeDuration';
 import { GENERIC_STATUS_TOOLTIP, regimeStatusTooltip, regimeNoDataTooltip, ruleContributionTooltip } from '@/lib/statusTooltips';
 import type { FundamentalsOut } from '@/types/domain';
 import { api } from '@/lib/api';
@@ -171,7 +172,7 @@ export default function AnalysisPage() {
                       Conviction: {result.sentiment.conviction_pct > 0 ? '+' : ''}{result.sentiment.conviction_pct}% ({result.sentiment.conviction_label})
                     </Text>
                     <Text size={11} tone="dim">
-                      Day {result.sentiment.regime_age_days} · {result.sentiment.stability}
+                      {formatRegimeAge(result.sentiment.regime_age_days)} · {result.sentiment.stability}
                     </Text>
                   </>
                 );
@@ -236,7 +237,7 @@ export default function AnalysisPage() {
                         {ommStateIcon(blk.state)} {blk.state}
                       </Data>
                       <Text size={12} tone="secondary">
-                        Day {blk.regime_age_days} · avg ~{Math.round(blk.avg_regime_duration)} days · {blk.stability}
+                        {formatRegimeAge(blk.regime_age_days)} · avg {formatRegimeAverage(blk.avg_regime_duration)} · {blk.stability}
                       </Text>
                       <Text size={12} tone="secondary">
                         {pct(blk.p_stay)} chance of staying in this regime
