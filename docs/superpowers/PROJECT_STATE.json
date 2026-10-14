@@ -3444,7 +3444,7 @@
           "verification": "gateDrivers unchanged. Banner counts unchanged. gateDriverPhrase measured parts are iv && !ivMissing and event only. PASS strings unchanged. Daily duration_stride_bars is the lookback passed to compute_omm. Intraday uses one constant, 26, for the lookback and the echo. Formatter shows an integer size only. Math.round removed. 5.4 stays 5.4. JSON names unchanged. New field defaults to None. compute_omm not in the diff. No score, gate, or order change."
         }
       ],
-      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A."
+      "notes": "PLAN STAGE CLEAN at plan round 1 (7f0d7d92). CODE STAGE CLEAN at code round 1 on f12d0c8d. Counters: plan 1 of 3 clean, code 1 of 3 clean, audit_rounds 2. Kenneth accepted 1=B and 2=A. SELF-MERGE PENDING, PR #303, audited head f12d0c8d. Status stays built."
     }
   ],
   "already_shipped": [
