@@ -86,13 +86,23 @@ class ScanScheduleStore:
     def upsert(self, entry: dict) -> None:
         """Create or full-replace by id, then persist."""
         with self._lock:
-            self._entries[entry["id"]] = entry
-            self._save_locked()
+            previous = self._entries
+            self._entries = {**previous, entry["id"]: entry}
+            try:
+                self._save_locked()
+            except Exception:
+                self._entries = previous
+                raise
 
     def delete(self, entry_id: str) -> None:
         with self._lock:
-            self._entries.pop(entry_id, None)
-            self._save_locked()
+            previous = self._entries
+            self._entries = {k: v for k, v in previous.items() if k != entry_id}
+            try:
+                self._save_locked()
+            except Exception:
+                self._entries = previous
+                raise
 
     def _save_locked(self) -> None:
         """Must be called with self._lock already held."""

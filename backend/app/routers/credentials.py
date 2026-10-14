@@ -27,8 +27,7 @@ class CredentialUpdate(BaseModel):
 @router.post("/credentials")
 async def set_credentials(body: CredentialUpdate) -> dict:
     """Store broker credentials in memory and persist to local (gitignored) file."""
-    credential_store.set(body.key, body.values)
-    credential_store.save()
+    credential_store.set_and_save(body.key, body.values)
     if body.key in ("tastytrade_paper", "tastytrade_live"):
         # Deferred import: tastytrade_session imports the `tastytrade` package at
         # module scope, so importing it at router module-load time would make
