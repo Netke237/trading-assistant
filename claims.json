@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/stock-pres-p3-backtest-88bae253",
-      "claimed_at": "2026-10-14T15:53:04Z",
-      "expires_at": "2026-10-14T21:32:55Z",
-      "note": "Issue #148 Backtest page in the Options layout",
-      "task": "STOCK-PRES-P3-BACKTEST"
-    },
-    {
-      "agent": "claude",
       "branch": "board/state-multi-plan-stage-28408885",
       "claimed_at": "2026-10-14T17:32:27Z",
       "expires_at": "2026-10-14T21:09:13Z",
