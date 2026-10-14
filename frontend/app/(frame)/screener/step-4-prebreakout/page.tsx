@@ -27,6 +27,7 @@ import styles from './page.module.css';
 import { SelectedRowEvidence, fibLabel, confidenceWeights } from './PreBreakoutRowDetails';
 import { SelectedSetupChart } from './SelectedSetupChart';
 import {useSelectedStockContext, SelectedSentimentFundamentals, SelectedStockScores} from './SelectedStockContext';
+import {SelectedStockNews} from './SelectedStockNews';
 import { fmtThreshold, truncPreBreakoutInts, truncFibInts, rememberScan, scanSnapshot, type ScanSnapshot } from './scanThresholds';
 import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
@@ -625,6 +626,7 @@ export default function Step4PreBreakoutPage() {
       )}
 
       <SelectedStockScores context={selectedContext}/>
+      <SelectedStockNews symbol={selected?.symbol ?? null}/>
 
       {alertTarget && (
         <CompositeAlertDialog

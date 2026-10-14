@@ -1053,6 +1053,8 @@ export interface NewsItem {
   source:    string;
   timestamp: string;
   sentiment: NewsSentiment;
+  /** Provider-supplied original article link (absolute http/https) or null when the provider gave none/an invalid one. Additive (#265). */
+  url?:      string | null;
 }
 
 // --- Alerting & monitoring ---

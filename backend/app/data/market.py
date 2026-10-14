@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 _EASTERN = ZoneInfo("America/New_York")
 from typing import Literal, Optional
+from urllib.parse import urlsplit
 
 import httpx
 import pandas as pd
@@ -1283,6 +1284,40 @@ def fetch_company_name(symbol: str) -> Optional[str]:
         return None
 
 
+def _article_url(value: object) -> str | None:
+    """Return *value* only when it is an absolute http(s) link the provider supplied.
+
+    Non-strings, blanks, relative paths, other schemes (``javascript:``,
+    ``data:``, ``ftp:`` ...), host-less URLs and links containing whitespace or
+    control characters yield ``None``. Never constructs a link (#265).
+    """
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in candidate):
+        return None
+    try:
+        parsed = urlsplit(candidate)
+        host = parsed.hostname
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in ("http", "https") or not host:
+        return None
+    return candidate
+
+
+def _first_article_url(*values: object) -> str | None:
+    for value in values:
+        url = _article_url(value)
+        if url:
+            return url
+    return None
+
+
+def _nested_url(container: object) -> object:
+    return container.get("url") if isinstance(container, dict) else None
+
+
 def _fetch_news_yf(symbols: list[str], limit: int = 20) -> list[dict]:
     """Fetch news for *symbols* using yfinance (free, no API key needed)."""
     try:
@@ -1316,14 +1351,26 @@ def _fetch_news_yf(symbols: list[str], limit: int = 20) -> list[dict]:
             headline = content.get("title") or item.get("title", "")
             if not headline:
                 continue
-            articles.append({
+            article = {
                 "id":        uid,
                 "symbol":    article_sym,
                 "headline":  headline,
                 "source":    source,
                 "timestamp": timestamp,
                 "sentiment": "neutral",
-            })
+            }
+            # Provider-supplied original link only: new shape canonicalUrl /
+            # clickThroughUrl, then the legacy top-level "link". Added only
+            # when valid so the pre-existing item shape is untouched.
+            url = _first_article_url(
+                _nested_url(content.get("canonicalUrl")),
+                _nested_url(content.get("clickThroughUrl")),
+                content.get("link"),
+                item.get("link"),
+            )
+            if url:
+                article["url"] = url
+            articles.append(article)
 
     articles.sort(key=lambda x: x["timestamp"], reverse=True)
     return articles[:limit]
@@ -1333,7 +1380,8 @@ def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
     """
     Returns recent news headlines for the given symbols.
     Tries Tradier first (when TRADIER_API_TOKEN is set), then falls back to yfinance.
-    Each item: {id, symbol, headline, source, timestamp, sentiment}
+    Each item: {id, symbol, headline, source, timestamp, sentiment} plus an
+    optional ``url`` (provider-supplied absolute http(s) article link only).
     """
     if get_tradier_creds()[0]:
         try:
@@ -1352,14 +1400,18 @@ def fetch_news(symbols: list[str], limit: int = 20) -> list[dict]:
             for i, a in enumerate(articles):
                 art_symbols = a.get("symbols", "")
                 symbol = art_symbols.split(",")[0].strip() if art_symbols else symbols[0]
-                result.append({
+                article = {
                     "id":        str(a.get("id", i)),
                     "symbol":    symbol,
                     "headline":  a.get("title", ""),
                     "source":    a.get("source", ""),
                     "timestamp": a.get("datetime", ""),
                     "sentiment": "neutral",
-                })
+                }
+                url = _first_article_url(a.get("url"), a.get("link"))
+                if url:
+                    article["url"] = url
+                result.append(article)
             if result:
                 return result
         except Exception:
