@@ -14,6 +14,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createChart,
   CandlestickSeries,
+  LineStyle,
+  type IPriceLine,
   type IChartApi,
   type ISeriesApi,
   type Time,
@@ -34,6 +36,8 @@ interface CandlestickChartProps {
   className?: string;
   showToggles?: boolean;
   defaultIndicators?: IndicatorType[];
+  /** Optional scan/display evidence. Non-finite prices are skipped. */
+  priceLines?: { price: number; title: string }[];
 }
 
 /** Read a CSS custom property off :root. */
@@ -50,11 +54,13 @@ export function CandlestickChart({
   className,
   showToggles = true,
   defaultIndicators = ['volume', 'rsi'],
+  priceLines,
 }: CandlestickChartProps) {
   const theme = useThemeStore((s) => s.theme);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const priceLineHandles = useRef<IPriceLine[]>([]);
   const [chartVersion, setChartVersion] = useState(0);
   const [activeIndicators, setActiveIndicators] = useState<IndicatorType[]>(defaultIndicators);
 
@@ -116,6 +122,10 @@ export function CandlestickChart({
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', applySize);
+      // React runs this lifecycle cleanup before the later line-effect cleanup.
+      // Remove live handles before disposing the series/chart.
+      for (const handle of priceLineHandles.current) candle.removePriceLine(handle);
+      priceLineHandles.current = [];
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -164,6 +174,23 @@ export function CandlestickChart({
     );
     chartRef.current?.timeScale().fitContent();
   }, [cleanCandles, chartVersion]);
+
+  // Adapted from PR #224 head 5e8a2d2; content identity avoids literal-array churn.
+  const priceLinesKey = JSON.stringify((priceLines ?? []).filter(line => Number.isFinite(line.price)));
+  useEffect(() => {
+    const candle = candleSeriesRef.current;
+    if (!candle || chartVersion === 0) return;
+    const lines = JSON.parse(priceLinesKey) as {price: number; title: string}[];
+    const color = token('--accent') || token('--text-secondary') || '#787B86';
+    priceLineHandles.current = lines.map(({price, title}) => candle.createPriceLine({
+      price, title, color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+    }));
+    return () => {
+      if (candleSeriesRef.current !== candle) return;
+      for (const handle of priceLineHandles.current) candle.removePriceLine(handle);
+      priceLineHandles.current = [];
+    };
+  }, [priceLinesKey, chartVersion]);
 
   const indicatorData = useMemo(
     () => ({

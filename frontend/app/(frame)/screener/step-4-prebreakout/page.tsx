@@ -25,6 +25,7 @@ import { confidenceTier, confidenceTone } from '@/lib/confidenceText';
 import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
 import { SelectedRowEvidence, fibLabel, confidenceWeights } from './PreBreakoutRowDetails';
+import { SelectedSetupChart } from './SelectedSetupChart';
 import { fmtThreshold, truncPreBreakoutInts, truncFibInts, rememberScan, scanSnapshot, type ScanSnapshot } from './scanThresholds';
 import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
@@ -81,7 +82,7 @@ export default function Step4PreBreakoutPage() {
   const [pullbackResults, setPullbackResults] = useState<PositionCardData[]>([]);
   const [scanning, setScanning]             = useState(false);
   const [error, setError]                   = useState<string | null>(null);
-  const [alertSymbol, setAlertSymbol]       = useState<string | null>(null);
+  const [alertTarget, setAlertTarget] = useState<{symbol: string; direction: string} | null>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const requestToken = useRef(0);
   const isFirstRender                       = useRef(true);
@@ -234,7 +235,7 @@ export default function Step4PreBreakoutPage() {
   const chartShell = <section className={styles.chartShell} role="region" aria-label="Selected setup chart">
     <Title as="h2" size={20}>Selected setup</Title>
     <div aria-label="Selected setup"><Text size={13} tone="secondary">{selected?.symbol ?? 'Select a candidate'}</Text></div>
-    <Text size={12} tone="dim">{selected ? 'Chart data unavailable.' : 'Select a row to inspect its chart.'}</Text>
+    {selected ? <SelectedSetupChart row={selected} mode={scanMode} scope={sourceRows} snapshot={applied}/> : <Text size={12} tone="dim">Select a row to inspect its chart.</Text>}
     {selected && <SelectedRowEvidence row={selected} mode={scanMode} scanned={applied} />}
     {selected && <Text size={11} tone="dim">{applied ? `${applied.scope.direction} · ${applied.scope.horizon ?? 'Horizon unavailable'} · ${applied.scope.mode}` : 'Scan snapshot unavailable'}</Text>}
   </section>;
@@ -393,7 +394,7 @@ export default function Step4PreBreakoutPage() {
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                   >
                     <Text size={11} weight={500}>Alert</Text>
                   </button>
@@ -481,7 +482,7 @@ export default function Step4PreBreakoutPage() {
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                     title="Set alert"
                   >
                     Alert
@@ -583,7 +584,7 @@ export default function Step4PreBreakoutPage() {
                   <button
                     type="button"
                     className={styles.alertBtn}
-                    onClick={() => setAlertSymbol(row.symbol)}
+                    onClick={event => {event.stopPropagation(); setAlertTarget({symbol: row.symbol, direction: row.direction});}}
                   >
                     <Text size={11} weight={500}>Alert</Text>
                   </button>
@@ -598,11 +599,12 @@ export default function Step4PreBreakoutPage() {
         </>
       )}
 
-      {alertSymbol && (
+      {alertTarget && (
         <CompositeAlertDialog
-          symbol={alertSymbol}
-          direction={direction}
-          onClose={() => setAlertSymbol(null)}
+          key={`${alertTarget.symbol}-${alertTarget.direction}`}
+          symbol={alertTarget.symbol}
+          direction={alertTarget.direction}
+          onClose={() => setAlertTarget(null)}
         />
       )}
     </div>

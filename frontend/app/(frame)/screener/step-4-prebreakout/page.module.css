@@ -170,3 +170,5 @@
 .evidenceFields dd { margin: 2px 0 0; white-space: pre-wrap; font-family: var(--font-mono); }
 
 .pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 90px 60px; }
+.selectedChart { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chartMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
