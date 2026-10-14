@@ -225,16 +225,72 @@ def test_real_scan_schedule_portfolio_routers_no_work_or_db(kind, depth, monkeyp
     assert db.mock_calls == []
 
 
-def test_normal_numeric_error_input_still_sanitized():
+@pytest.mark.parametrize('kind', ['scan', 'arm'])
+def test_real_routes_mixed_depth_errors_are_compact_and_preserve_metadata(kind, monkeypatch):
+    from app.routers import scan
+    if kind == 'scan':
+        module, path, model, base, field, missing, invalid, effect_name = (
+            scan, '/api/scan', ScanRequest, SCAN, 'overrides', 'universe',
+            {'min_price': 'invalid'}, 'run_reported_scan')
+    else:
+        module, path, model, base, field, missing, invalid, effect_name = (
+            auto_trade, '/auto-trade/arm', auto_trade.ArmRequest, ARM, 'exit_plan',
+            'symbol', {'quantity': 'invalid', 'entry_premium': 0}, 'auto_trader')
+    body = {key: value for key, value in base.items() if key != missing}
+    body.update(invalid)
+    effect = MagicMock()
+    monkeypatch.setattr(module, effect_name, effect)
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, request_validation_handler)
+    app.include_router(module.router)
+    # A shallow rejected chain produces the same metadata without retaining a
+    # decoder-limit body in the expected result. Keep every error key but input.
+    with pytest.raises(ValidationError) as exc:
+        model.model_validate({**body, field: nested(33)})
+    expected = []
+    for error in exc.value.errors(include_url=False):
+        expected.append({**{key: value for key, value in error.items() if key != 'input'},
+                         'loc': ['body', *error['loc']]})
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(path, content=raw_body(body, field, 900),
+                               headers={'content-type': 'application/json'})
+    assert response.status_code == 422
+    assert len(response.content) < 1500
+    assert response.json()['detail'] == expected
+    assert {error['type'] for error in expected} >= {'missing', 'payload_depth'}
+    assert any(error['type'].endswith('_parsing') for error in expected)
+    effect.assert_not_called()
+    assert effect.mock_calls == []
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), float('-inf')])
+def test_normal_numeric_error_input_still_sanitized(value):
     app = FastAPI()
     app.add_exception_handler(RequestValidationError, request_validation_handler)
     @app.post('/')
     def endpoint(body: auto_trade.ArmRequest):
         raise AssertionError('invalid numeric input reached handler')
     with TestClient(app) as client:
-        response = client.post('/', content=json.dumps({**ARM, 'entry_premium': float('inf')}),
+        response = client.post('/', content=json.dumps({**ARM, 'entry_premium': value}),
                                headers={'content-type': 'application/json'})
     assert response.status_code == 422
     error = response.json()['detail'][0]
     assert error['type'] == 'finite_number'
-    assert error['input'] == 'inf'
+    assert error['input'] == str(value)
+
+
+def test_ordinary_mixed_validation_errors_keep_input():
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, request_validation_handler)
+    @app.post('/')
+    def endpoint(body: ScanRequest):
+        raise AssertionError('invalid input reached handler')
+    body = {'direction': 'Bullish', 'horizon': 'Swing', 'min_price': 'invalid'}
+    with TestClient(app) as client:
+        response = client.post('/', json=body)
+    assert response.status_code == 422
+    errors = response.json()['detail']
+    assert errors[0]['type'] == 'missing'
+    assert errors[0]['input'] == body
+    assert errors[1]['type'] == 'float_parsing'
+    assert errors[1]['input'] == 'invalid'
