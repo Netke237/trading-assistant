@@ -3710,7 +3710,9 @@
             "C2-G1 scripts/state.py:903-909: suffix after colon/dash boundary (range4-6: if approved / -- is not authorized) grants false reopening",
             "C2-G2 scripts/state.py:919-933: lower-case suffix for other / other-target passes with q naming only TRADIER-GOVERNOR"
           ],
-          "fixes": [],
+          "fixes": [
+            "#308 7099cd77e22fcdfda0fbea96f5d922bf1de75944 by fresh /root/recover_308: conditional colon/dash suffix and case-insensitive owner fixes/interactions; final review pending."
+          ],
           "outstanding": [
             "C2-G1",
             "C2-G2"
@@ -3719,7 +3721,7 @@
           "verification": "Fresh auditor reproduced all cases on Python3.11.16 real git with4noncleanplanrounds; unauthorized overall4 incorrectly becomes local1. Secondpass confirmed changed guards/interactions; no edits."
         }
       ],
-      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged.",
+      "notes": "PAUSED by user request after code round2/continuous4: two gate findings C2-G1/C2-G2 unresolved. Built/tested, NOT audit-clean, no PR or merge. Plan2clean; code2notclean, only ONE qualifying code round remains under existing cap3. Next session: fresh implementer fixes only C2 findings/interactions, then fresh code3 reviewer. Preserve all counters and histories; no reset/fourth round. || User requested takeover of pasted continuation session; claim now board/state-multi-plan-stage-ef27feff. Main472bb1b0 integrated, existing history retained; fresh #308 implementer reconstructing unpushed fix. Code2notclean and final code3 budget unchanged. || #308 fixed at7099cd77, required checks green. Final independent code3/continuous5 pending; counters unchanged.",
       "tickets": [
         300,
         301,
@@ -3754,9 +3756,14 @@
         },
         "308": {
           "implementer": "/root/recover_308",
-          "status": "in_progress",
+          "status": "done",
           "scope": "C2-G1/C2-G2 and interactions only; prior session fix unpushed and unavailable; recovered from frozen checkpoint581cbedd.",
-          "audit": "Final code3 pending; no counter reset."
+          "audit": "Fresh independent final code3 pending.",
+          "commit": "7099cd77e22fcdfda0fbea96f5d922bf1de75944",
+          "red": "14 original C2,4 indirect/chained suffix,8 trailing owner forms reproduced false authorization before corresponding guards.",
+          "green": "Python3.11.16 focused401; backend8799passed9skip1077.58s; frontend252suites5254tests227.389s/typecheck; frozen fingerprints unchanged.",
+          "cli": "Canonical/historical approvals exit0; four original unauthorized forms exit1 with STATE DRIFT on synthetic real-git CLI cases.",
+          "deviation": "Initial frontend six timeout failures; isolated31passed then full252/5254 rerun passed. Initial backend run stopped before final interaction adjustment; final full run above."
         }
       },
       "implementation_interruption": {
