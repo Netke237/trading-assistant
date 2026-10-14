@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/meas-market-data-measurement-11d464ec",
       "claimed_at": "2026-10-14T19:40:24Z",
-      "expires_at": "2026-10-14T22:46:36Z",
+      "expires_at": "2026-10-14T22:46:57Z",
       "note": "#121 day-2 reading: record Kenneth's answers, audit, PR (Kenneth asked in chat 2026-10-14)",
       "task": "MEAS-MARKET-DATA-MEASUREMENT"
     }
