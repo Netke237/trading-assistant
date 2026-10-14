@@ -1,6 +1,5 @@
 """Plural plan-stage contracts proved with real branch subjects."""
 import json
-import subprocess
 from pathlib import Path
 import pytest
 from tests.test_state_audit_bookkeeping import _mod, repo, STATE_REL
@@ -21,7 +20,7 @@ def drift(s):
     return result[1]
 def test_real_authorized_stage_regression(repo):
     root = Path(__file__).resolve().parents[2]
-    main = json.loads(subprocess.check_output(['git', 'show', 'origin/main:' + STATE_REL], cwd=root))
+    main = json.loads((root / STATE_REL).read_text(encoding='utf-8'))
     d = next(d for d in main['decisions'] if 'open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall)' in d.get('a', ''))
     s = state(decisions=[d])
     s['phases'][0]['plan_stages'][0]['closed_by'] = d['id']
@@ -375,7 +374,7 @@ def test_c3_complete_policy_control_preserves_approval(repo, prefix, separator):
 ])
 def test_c3_historical_policy_cannot_hide_opening_qualification(repo, qualification):
     root = Path(__file__).resolve().parents[2]
-    main = json.loads(subprocess.check_output(['git', 'show', 'origin/main:' + STATE_REL], cwd=root))
+    main = json.loads((root / STATE_REL).read_text(encoding='utf-8'))
     d = next(d for d in main['decisions'] if 'open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall)' in d.get('a', ''))
     d['a'] = d['a'].replace('; bulk traffic', qualification + '; bulk traffic')
     subjects(repo, 4, clean=False)
