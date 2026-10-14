@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/screen-labels-19-20-b7802f40",
       "claimed_at": "2026-10-14T07:00:17Z",
-      "expires_at": "2026-10-14T11:48:28Z",
+      "expires_at": "2026-10-14T11:50:33Z",
       "note": "resume #163 from discovery af780c6d; decisions 1=B 2=A",
       "task": "SCREEN-LABELS-19-20"
     },
