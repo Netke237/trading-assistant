@@ -152,3 +152,62 @@ print('YAML small_cycle',cycle['a'][0] is cycle['a'],'small_shared_alias',fanout
 try: yaml.safe_load('['*600+'0'+']'*600)
 except Exception as e: print('YAML depth600',type(e).__name__,'is_YAMLError',isinstance(e,yaml.YAMLError))
 ```
+
+## B follow-up: bounded alias DAG reaches repeated live validation work
+
+A separate Python 3.11.16 subprocess completed in under one second with `timeout 10s` (exit 0). The only payloads were **182 and 218 bytes**, with fanout 5 and respectively 3 and 4 alias levels. No file/store/DB/network mutation or HTTP server was used. An initial harness constructor typo (`_FileResult(file=...)`) raised `TypeError`; the completed run below uses the actual no-argument constructor.
+
+Each document has valid empty `swing`/`position`/`intraday` horizon mappings and an unrelated `_aliases` holder. Its base anchor is `[0]`; each next anchor is a list of five references to the previous list. The actual walker was wrapped only to count calls and container identities; the unmodified original executed all traversal and validation. We called the real `_validated_direction_conviction_blocks`, the real scan-facing `load_direction_conviction_min_trend` (patching only its config source to return the parsed temporary document), and health's real `_check_conviction`.
+
+| Levels / bytes | Real call path | Walker calls (includes scalars) | Container visits / unique containers | Base anchor visits | Outcome |
+|---|---|---:|---:|---:|---|
+| 3 / 182 | validator | 356 | 200 / 10 | 156 | Valid horizons; each block `None` |
+| 3 / 182 | scan loader | 356 | 200 / 10 | 156 | Bullish Swing threshold `30.0` |
+| 3 / 182 | health conviction check | 712 | 400 / 10 | 312 | No conviction errors |
+| 4 / 218 | validator | 1762 | 981 / 11 | 781 | Valid horizons; each block `None` |
+| 4 / 218 | scan loader | 1762 | 981 / 11 | 781 | Bullish Swing threshold `30.0` |
+| 4 / 218 | health conviction check | 3524 | 1962 / 11 | 1562 | No conviction errors |
+
+Adding one **36-byte** alias level increased unique containers from 10 to 11 but multiplied walker work approximately fivefold. The same base list is visited `1+5+25+125=156` times at level 3 and `1+5+25+125+625=781` at level 4. This demonstrates the pathological repeated-work mechanism through real reachable validation functions. The bounded payloads complete normally; this run does **not** claim a measured event-loop freeze, a wrong numeric result, or an HTTP-wide green health report. Full health checks include other config validations not exercised by the minimal document.
+
+Reachability in the current source:
+
+- `backend/app/routers/scan.py:1783` and `backend/app/routers/stock_scan.py:1826` synchronously call `load_direction_conviction_min_trend` in their scan cores. `backend/app/services/config_loader.py:367` calls `_validated_direction_conviction_blocks()`, whose loop at `:280` exhausts `_walk_direction_conviction_paths(cfg)`. The actual traversal recurses at `:211` / `:221`. Its ancestor set rejects cycles but deliberately revisits shared containers under every path (`:169` docstring explains the positional-validation reason). These are config-file aliases; JSON request bodies cannot introduce YAML aliases.
+- `backend/app/routers/config.py:82` is the sync health handler returning `config_health.report()` at `:89` (FastAPI dispatches sync handlers in its worker pool). `backend/app/services/config_health.py:473` registers `_check_conviction` among scoring-file checks; `:538` invokes `_validated_direction_conviction_blocks(cfg=doc)`. Then `:542` calls `direction_conviction_value_errors`, which validates the whole graph again at `backend/app/services/config_loader.py:417`, explaining the doubled health counts. This is not evidence that this health route itself runs on the event loop.
+
+**B remains separate under the approved split.** The A API cap/atomic-save/options-restore work does not eliminate YAML alias DAG expansion in manually edited config files. No B implementation is proposed or performed by this evidence follow-up.
+
+Exact command from repository root (save the following script under the named `/tmp` path):
+
+```sh
+PYTHONPATH=backend timeout 10s backend/.venv/bin/python -u /tmp/yaml_alias_evidence_20261014.py
+```
+
+```python
+import os
+from collections import Counter
+from unittest.mock import patch
+os.environ['BAMENDJOU_CREDS_PATH']=''
+import yaml
+from app.services import config_loader, config_health
+for levels in (3,4):
+    text='horizons: {swing: {}, position: {}, intraday: {}}\n_aliases:\n  n0: &n0 [0]\n'
+    for level in range(1,levels+1):
+        text+=f'  n{level}: &n{level} ['+', '.join([f'*n{level-1}']*5)+']\n'
+    doc=yaml.safe_load(text)
+    original=config_loader._walk_direction_conviction_paths
+    for route in ('validator','scan_loader','health_conviction'):
+        calls=Counter();containers=Counter()
+        def counted(node,*args,**kwargs):
+            calls['all']+=1
+            if isinstance(node,(dict,list,tuple)): containers[id(node)]+=1
+            yield from original(node,*args,**kwargs)
+        with patch.object(config_loader,'_walk_direction_conviction_paths',counted),patch.object(config_loader,'load_scoring_cfg',return_value=doc):
+            if route=='validator': outcome=config_loader._validated_direction_conviction_blocks(doc)
+            elif route=='scan_loader': outcome=config_loader.load_direction_conviction_min_trend('Bullish','Swing')
+            else:
+                result=config_health._FileResult()
+                config_health._check_conviction(doc,result)
+                outcome=f'errors={len(result.errors)}'
+        print('levels',levels,'fanout',5,'bytes',len(text),'path',route,'calls',calls['all'],'container_visits',sum(containers.values()),'unique_containers',len(containers),'n0_visits',containers[id(doc['_aliases']['n0'])],'outcome',outcome)
+```
