@@ -201,3 +201,66 @@ def test_answer_must_be_affirmative(repo, answer):
     d = decision()
     d['a'] = answer
     drift(state(decisions=[d]))
+
+@pytest.mark.parametrize('answer', [
+    'Open one new plan stage: plan rounds 4-6 if approved',
+    'Open one new plan stage: plan rounds 4-6 is not authorized',
+    'For OTHER, open one new plan stage: plan rounds 4-6',
+])
+def test_c1_wrong_authorization_cannot_reopen_capped_stage(repo, answer):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d.update(q=TARGET + ' or OTHER', a=answer)
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
+
+@pytest.mark.parametrize('answer,ok', [
+    ('Open one new plan stage: plan rounds 4-6', True),
+    ('For TRADIER-GOVERNOR, open one new plan stage: plan rounds 4-6', True),
+    ('For TRADIER-GOVERNOR: open one new plan stage: plan rounds 4-6', True),
+    ('TRADIER-GOVERNOR: open one new plan stage: plan rounds 4-6', True),
+    ('Open one new plan stage for TRADIER-GOVERNOR: plan rounds 4-6', True),
+    ('Open one new plan stage: plan rounds 4-6 for TRADIER-GOVERNOR', True),
+    ('Open one new plan stage: plan rounds 4-6; never wait on fire calls. Not a merge approval.', True),
+    ('Open one new plan stage: plan rounds 4-6 -- fire calls never wait. Not a merge approval.', True),
+    ('Open one new plan stage (up to 3 rounds, plan rounds 4-6 overall) for the redesign: fire calls never wait. Not a merge approval.', True),
+    ('For OTHER: open one new plan stage: plan rounds 4-6', False),
+    ('For other, open one new plan stage: plan rounds 4-6', False),
+    ('OTHER: open one new plan stage: plan rounds 4-6', False),
+    ('For TRADIER-GOVERNOR or OTHER, open one new plan stage: plan rounds 4-6', False),
+    ('For TRADIER-GOVERNOR and OTHER, open one new plan stage: plan rounds 4-6', False),
+    ('Open one new plan stage for OTHER: plan rounds 4-6', False),
+    ('Open one new plan stage: plan rounds 4-6 for OTHER', False),
+    ('Open one new plan stage: plan rounds 4-6 for TRADIER-GOVERNOR or OTHER', False),
+    ('Open one new plan stage: plan rounds 4-6 if approved for TRADIER-GOVERNOR', False),
+    ('For TRADIER-GOVERNOR, open one new plan stage: plan rounds 4-6 is not authorized', False),
+    ('Open one new plan stage (plan rounds 4-6 overall) only if approved', False),
+    ('Open one new plan stage: plan rounds 4-6 without authorization', False),
+    ('Open one new plan stage: plan rounds 4-6?', False),
+])
+def test_c1_opening_clause_and_target_interactions(repo, answer, ok):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d.update(q=TARGET + (' or OTHER' if not ok or TARGET in answer else ''), a=answer)
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    if ok:
+        assert _mod.audit_bookkeeping_drift(s) is None
+    else:
+        assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('answer', [
+    'Open one new plan stage: plan rounds 4-6',
+    'Open one new plan stage: plan rounds 4-6 for other',
+    'Open one new plan stage: plan rounds 4-6 for TRADIER-GOVERNOR or other',
+    'Open one new plan stage: plan rounds 4-6 for TRADIER-GOVERNOR and other',
+])
+def test_c1_competing_question_targets_need_explicit_ownership(repo, answer):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d.update(q=TARGET + ' or OTHER', a=answer)
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)

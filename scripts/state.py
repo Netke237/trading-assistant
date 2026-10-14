@@ -898,13 +898,43 @@ def _plan_stages(target, key, declared, state, subjects):
             return 'opening answer must contain exactly one bounded opening declaration'
         match = declarations[0]
         boundary = max(answer.rfind(c, 0, match.start()) for c in '.;!?') + 1
-        local = answer[boundary:match.end()]
-        following = re.search(r'[.;!?]', answer[match.end():])
+        # Include qualifications after the range. A following colon/dash starts
+        # policy detail, as in the original answer's overdraft redesign prose.
+        following = re.search(r'[.;!?:]|\s--\s', answer[match.end():])
+        end = match.end() + following.start() if following else len(answer)
+        local = answer[boundary:end]
         if (re.search(r'\b(?:should|could|would|might|may|whether|if)\b', local, re.I)
                 or (following and following[0] == '?')):
             return 'opening declaration is conditional or interrogative, not affirmative'
-        if negative.search(answer[boundary:match.end()]):
+        if negative.search(local):
             return 'opening declaration is locally negated'
+        # A question's target mention cannot override an explicitly qualified
+        # answer. Prefix qualifiers are bounded by the opening verb; suffix
+        # qualifiers name identifier tokens, not later prose about the redesign.
+        prefix = answer[boundary:match.start()]
+        qualifiers = re.findall(r'\bfor\s+([^,:]+)', prefix, re.I)
+        bare = re.fullmatch(r'\s*([\w-]+)\s*:\s*', prefix)
+        if bare:
+            qualifiers.append(bare[1])
+        qualifiers += re.findall(
+            r'\bfor\s+([A-Z][A-Z0-9_-]*(?:\s+(?:or|and)\s+[A-Z][A-Z0-9_-]*)*)\b',
+            answer[match.start():end])
+        question = d.get('q') if isinstance(d.get('q'), str) else ''
+        alternatives = re.findall(
+            token.pattern + r'\s+(?:or|and)\s+([\w-]+)', question, re.I)
+        alternatives += re.findall(
+            r'([\w-]+)\s+(?:or|and)\s+' + token.pattern, question, re.I)
+        # Also recognize the question's competing identifier in lower-case
+        # answer qualifiers, without treating ordinary redesign prose as an ID.
+        for name in [key.split()[0], *alternatives]:
+            if re.search(r'\bfor\s+(?:[\w-]+\s+(?:or|and)\s+)*'
+                         + re.escape(name) + r'(?![\w-])',
+                         answer[match.start():end], re.I):
+                qualifiers.append(name)
+        if any(q.strip().casefold() != key.split()[0].casefold() for q in qualifiers):
+            return 'opening declaration qualifies a conflicting or ambiguous target'
+        if alternatives and not qualifiers:
+            return 'opening declaration leaves competing question targets ambiguous'
         start = endpoints[i - 1] + 1
         if (int(match[1]), int(match[2])) != (start, start + 2):
             return f'opening decision must authorize plan rounds {start}-{start + 2}'
