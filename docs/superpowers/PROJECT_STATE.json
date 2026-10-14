@@ -3346,7 +3346,7 @@
         "rounds": 0,
         "clean": false
       },
-      "note": "2026-10-14 #258\u2013263 built/pushed; #263 validation recorded by takeover coordinator on board/prebreakout-presentation-v2-f78dd25f; #264 filter breakdown next, then #265 news, #266 integrated verification/code audit. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258\u2013264 built/pushed on board/prebreakout-presentation-v2-f78dd25f; #265 news next, then #266 integrated verification/code audit. Plan2 clean; original plan1 and separate layout revision1 preserved. Code0/audit_clean false, no merge. #150/PR224 untouched/open.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -3377,6 +3377,11 @@
           "issue": 263,
           "commit": "ca7addbf7a2d2a2fa7e558b4ed3a6a7ad5d3592c",
           "validation": "Implementer (prior container): backend Python 3.11 8021 passed/9 skipped, frontend 248 suites/5214 tests, typecheck pass. Coordinator re-verified 2026-10-14 on fresh takeover branch at ca7addbf: Python 3.11.17 venv from backend/requirements.txt, backend 8020 passed/9 skipped/1 failed where the single failure (test_notifications::test_telegram_skips_when_not_configured) is environmental (container exports BAMENDJOU_TELEGRAM_* vars; file passes 6/6 with them unset); frontend typecheck clean, 248 suites/5214 tests pass. Additive diagnostics.terminal_outcomes v1 on prebreakout/fib/pullback reports; list transport, candidate values/order unchanged per its contract tests. Not an audit; integrated code audit pending."
+        },
+        {
+          "issue": 264,
+          "commit": "44ece365ce25d209a180cf0878a394bcbe3dd732",
+          "validation": "Fresh implementer (Claude subagent): 13 new tests RED for expected reasons (missing Terminal outcomes region / candidates headings / Filter breakdown button), then GREEN; coordinator re-verified typecheck clean, frontend 250 suites/5227 tests. Filter breakdown beside each mode's candidates heading opens the existing saved-report inspector (former Analysis log, all disclosures preserved); terminal counts only from the saved report's counts+unknown_symbols, null input/evaluated unavailable, partial/conflict/resolution labels, saved-run vs table-run identity, searchable per-symbol reasons with backend-verified units (win_rate/min_win_rate fraction 0-1), generic no-setup names no rule; Options/Stocks inspector unchanged. Not an audit."
         }
       ],
       "implementation_interruption": {
