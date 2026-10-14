@@ -3280,7 +3280,7 @@
       "id": "MEAS-LIVE-DB-ISOLATION",
       "name": "Frozen MEAS runs on an isolated DB copy, separate checkout and port; live DB refused",
       "status": "built",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": false,
       "depends_on": [
         "MEAS-MARKET-DATA-MEASUREMENT"
@@ -3352,6 +3352,22 @@
             "main invalidate_symbol can prefix-delete tag-format cache rows in the shared live file when main stores new bars, so old-process carry-over was activity-dependent; v3 carry-over is not strictly identical; recorded per day via tag-hittable count"
           ],
           "clean": true
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "code_round": 1,
+          "reviewer": "fresh gate-auditor subagent (code round 1)",
+          "reviewed": "3b144eed..911cc3d5 (whole change)",
+          "gate_findings": 1,
+          "findings": [
+            "F1 copy_day copies a pre-existing <meas>/scans/<ET date> folder on a second same-day run (tag runner refuses without writing), attaching the new run's isolation.json to run 1's manifest; corrupt evidence"
+          ],
+          "fixes": [
+            "pending: fresh implementer"
+          ],
+          "outstanding": [],
+          "clean": false
         }
       ],
       "notes": "2026-10-13: taken from the Board. Acceptance item 1 recorded on #230 (only MEAS task disabled on Kenneth's instruction; live history re-downloaded 2026-10-12; six symbols short -> #114). The real-container setup step (role + REVOKE CONNECT on the live DB) needs Kenneth's explicit yes after merge."
