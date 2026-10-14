@@ -325,3 +325,60 @@ def test_c2_suffix_owner_with_trailing_prose(repo, owner, tail):
     s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
                          {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
     assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('prefix', [
+    'fire calls', 'deadline-bound auto-trade fire-path Tradier calls',
+])
+@pytest.mark.parametrize('separator', [': ', ' -- '])
+@pytest.mark.parametrize('suffix', [
+    ' aside, this opening is not authorized',
+    ' aside, this opening is conditional on approval',
+    ' never wait: this opening is not authorized',
+    ' never wait -- this opening is conditional on approval',
+    ' never wait; this opening is not authorized',
+    ' never wait. This opening is conditional on approval',
+    ' never wait. Not a merge approval. This opening is not authorized',
+    ' never wait: -- if approved',
+    ' never wait for OTHER',
+    ' never wait, plan rounds 7-9 only',
+    ' (this opening is not authorized) never wait',
+    ' never wait (this opening is not authorized',
+    ' never wait) -- conditional on approval',
+])
+def test_c3_complete_policy_clause_cannot_hide_opening_qualification(repo, prefix, separator, suffix):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += separator + prefix + suffix
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert 'opening' in drift(s)
+
+
+@pytest.mark.parametrize('prefix', [
+    'fire calls', 'deadline-bound auto-trade fire-path Tradier calls',
+])
+@pytest.mark.parametrize('separator', [': ', ' -- '])
+def test_c3_complete_policy_control_preserves_approval(repo, prefix, separator):
+    subjects(repo, 4, clean=False)
+    d = decision()
+    d['a'] += separator + prefix + ' never wait. Not a merge approval.'
+    s = state(4, stages=[{'rounds': 3, 'closed_by': 'OPEN'},
+                         {'rounds': 1, 'opened_by': 'OPEN'}], decisions=[d])
+    assert _mod.audit_bookkeeping_drift(s) is None
+
+
+@pytest.mark.parametrize('qualification', [
+    ': this opening is not authorized',
+    ' -- this opening is conditional on approval',
+    ' for OTHER',
+])
+def test_c3_historical_policy_cannot_hide_opening_qualification(repo, qualification):
+    root = Path(__file__).resolve().parents[2]
+    main = json.loads(subprocess.check_output(['git', 'show', 'origin/main:' + STATE_REL], cwd=root))
+    d = next(d for d in main['decisions'] if 'open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall)' in d.get('a', ''))
+    d['a'] = d['a'].replace('; bulk traffic', qualification + '; bulk traffic')
+    subjects(repo, 4, clean=False)
+    s = state(4, stages=[{'rounds': 3, 'closed_by': d['id']},
+                         {'rounds': 1, 'opened_by': d['id']}], decisions=[d])
+    assert 'opening' in drift(s)

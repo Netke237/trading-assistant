@@ -904,8 +904,28 @@ def _plan_stages(target, key, declared, state, subjects):
         following = re.search(r'[.;!?:]|\s--\s', answer[match.end():])
         if following and (following[0] == ':' or '--' in following[0]):
             suffix_start = match.end() + following.end()
-            if not re.match(r'\s*(?:fire\s+calls|deadline-bound\s+auto-trade\s+'
-                            r'fire-path\s+Tradier\s+calls)\b', answer[suffix_start:], re.I):
+            # Validate the entire excluded tail, including chained punctuation.
+            # Only complete known policy controls qualify; a calls prefix cannot
+            # hide opening conditions, denials, owners or different round ranges.
+            policy = ' '.join(answer[suffix_start:].split()).casefold()
+            controls = ('fire calls never wait',
+                        'deadline-bound auto-trade fire-path tradier calls never wait')
+            accepted = {control + tail for control in controls
+                        for tail in ('', '.', '. not a merge approval.')}
+            accepted.add(
+                'deadline-bound auto-trade fire-path tradier calls '
+                '(regime fetch incl. intraday, earnings veto, market-open price check) '
+                'never wait and never fail on the limiter -- they take a slot if free, '
+                'otherwise go anyway and book an overdraft '
+                '(bucket negative, floored at -capacity 15); bulk traffic '
+                '(scans, prewarm, monitors, probes) waits until it is repaid, '
+                "so the average stays 120/min; the stock scan's earnings lookup "
+                'waits for its slot before its 5 s deadline starts. q3 yes: a burst '
+                'of at most 15 extra requests is accepted. q2 not needed. no counter '
+                'reset: plan rounds 1-3 stay recorded; the scan-slowdown merge question '
+                "stays pre-accepted ('ok go ahead', 2026-10-10). not a merge approval."
+            )
+            if policy not in accepted:
                 return 'opening declaration has an unsupported colon/dash qualification'
         end = match.end() + following.start() if following else len(answer)
         local = answer[boundary:end]
