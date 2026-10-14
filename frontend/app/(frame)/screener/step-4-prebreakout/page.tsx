@@ -26,6 +26,7 @@ import { statusForScore, toneForStatus } from '@/lib/status';
 import styles from './page.module.css';
 import { SelectedRowEvidence, fibLabel, confidenceWeights } from './PreBreakoutRowDetails';
 import { SelectedSetupChart } from './SelectedSetupChart';
+import {useSelectedStockContext, SelectedSentimentFundamentals, SelectedStockScores} from './SelectedStockContext';
 import { fmtThreshold, truncPreBreakoutInts, truncFibInts, rememberScan, scanSnapshot, type ScanSnapshot } from './scanThresholds';
 import { useRiskStore } from '@/lib/riskStore';
 import { scanSizingFromRisk } from '@/lib/stockScan';
@@ -220,6 +221,7 @@ export default function Step4PreBreakoutPage() {
   const preApplied = scanSnapshot(preResults)?.pre;
   const fibApplied = scanSnapshot(fibResults)?.fib;
   const selected = activeRows.find(row => row.symbol === selectedSymbol) ?? null;
+  const selectedContext = useSelectedStockContext(selected, scanMode, sourceRows, applied);
   useEffect(() => { setSelectedSymbol(null); }, [scanMode]);
   useEffect(() => { if (!activeRows.some(row => row.symbol === selectedSymbol)) setSelectedSymbol(null); }, [activeRows, selectedSymbol]);
   const selectionProps = (symbol: string) => ({
@@ -230,7 +232,7 @@ export default function Step4PreBreakoutPage() {
   const identity = (row: {symbol: string; company?: string}) => <div className={styles.identity} aria-label={`Identity for ${row.symbol}`} onClick={event => event.stopPropagation()}>
     <WatchStar symbol={row.symbol} size="sm" />
     <button type="button" className={styles.chartBtn} title="Open in Chart" aria-label={`Open ${row.symbol} chart in a new tab`} onClick={() => window.open(`/chart?symbol=${encodeURIComponent(row.symbol)}`, '_blank')}>↗</button>
-    <div className={styles.identityText} onClick={() => setSelectedSymbol(row.symbol)}><Text size={13} weight={500}>{row.symbol}</Text><Text size={11} tone="dim">{row.company || 'Company unavailable'}</Text></div>
+    <div className={styles.identityText} onClick={() => setSelectedSymbol(row.symbol)}><Text size={13} weight={500}>{row.symbol}</Text><Text size={11} tone="dim">{row.company || (selectedContext.live?.data.symbol===row.symbol ? selectedContext.live.data.company : null) || 'Company unavailable'}</Text></div>
   </div>;
   const chartShell = <section className={styles.chartShell} role="region" aria-label="Selected setup chart">
     <Title as="h2" size={20}>Selected setup</Title>
@@ -357,6 +359,7 @@ export default function Step4PreBreakoutPage() {
           </div>
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
@@ -439,6 +442,7 @@ export default function Step4PreBreakoutPage() {
           />
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
@@ -529,6 +533,7 @@ export default function Step4PreBreakoutPage() {
           />
 
           {error && <Text size={12} tone="reject">{error}</Text>}
+          <SelectedSentimentFundamentals context={selectedContext}/>
 
           {(
             <div className={styles.resultsGrid}><div className={styles.tableWrap}>
@@ -598,6 +603,8 @@ export default function Step4PreBreakoutPage() {
           )}
         </>
       )}
+
+      <SelectedStockScores context={selectedContext}/>
 
       {alertTarget && (
         <CompositeAlertDialog

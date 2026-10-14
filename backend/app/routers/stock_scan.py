@@ -1294,6 +1294,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     return StockAnalysisOut(
         symbol=symbol, company=core.company, price=core.price, direction=req.direction,
         stock_score=card.score, stock_status=card.status, is_index=is_index,
+        stock_explanation=_stock_explanation_out(symbol, card),
         strategy=strategy_out, backtest=backtest_out,
         confidence=core.conf_val, confidence_text=core.conf_txt,
         sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,

@@ -172,3 +172,12 @@
 .pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 90px 60px; }
 .selectedChart { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .chartMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.contextSection { display: flex; flex-direction: column; gap: 12px; padding: 16px 0; }
+.contextGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.scoreContextGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.contextCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; }
+.contextDisclosure { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.contextDisclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
+@media (max-width: 1100px) { .scoreContextGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .contextGrid, .scoreContextGrid { grid-template-columns: 1fr; } }
