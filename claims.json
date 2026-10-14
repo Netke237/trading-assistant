@@ -2,34 +2,10 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/broker-path-residuals-07462388",
-      "claimed_at": "2026-10-13T18:56:11Z",
-      "expires_at": "2026-10-14T01:38:42Z",
-      "note": "",
-      "task": "BROKER-PATH-RESIDUALS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/meas-live-db-isolation-c461488d",
-      "claimed_at": "2026-10-13T20:57:30Z",
-      "expires_at": "2026-10-14T02:19:40Z",
-      "note": "Isolate frozen MEAS runs from the live DB (#230)",
-      "task": "MEAS-LIVE-DB-ISOLATION"
-    },
-    {
-      "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-13T21:15:32Z",
-      "expires_at": "2026-10-14T00:15:32Z",
-      "note": "Allow opening the frontend from another PC on the LAN (opt-in bind + CORS)",
-      "task": "LAN-ACCESS"
-    },
-    {
-      "agent": "claude",
       "branch": "board/prebreakout-presentation-v2-c89f5fa0",
-      "claimed_at": "2026-10-13T21:33:29Z",
-      "expires_at": "2026-10-14T00:56:11Z",
-      "note": "Continue approved Pre-Breakout presentation; begin reconciliation #258",
+      "claimed_at": "2026-10-14T04:31:06Z",
+      "expires_at": "2026-10-14T07:31:06Z",
+      "note": "Resume interrupted #261 chart/actions validation",
       "task": "PREBREAKOUT-PRESENTATION-V2"
     }
   ]
