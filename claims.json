@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/meas-live-db-isolation-c461488d",
       "claimed_at": "2026-10-14T04:44:27Z",
-      "expires_at": "2026-10-14T08:22:35Z",
+      "expires_at": "2026-10-14T08:27:29Z",
       "note": "Isolate frozen MEAS runs from the live DB (#230)",
       "task": "MEAS-LIVE-DB-ISOLATION"
     }
