@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/stocks-horizon-t4-merge-record-e4a71497",
       "claimed_at": "2026-10-15T06:39:56Z",
-      "expires_at": "2026-10-15T09:42:23Z",
+      "expires_at": "2026-10-15T09:43:19Z",
       "note": "Reconcile verified PR325 merge in documentation only",
       "task": "STOCKS-HORIZON-T4"
     }
