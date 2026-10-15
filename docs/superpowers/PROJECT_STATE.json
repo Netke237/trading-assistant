@@ -4436,7 +4436,11 @@
           "verification": "Applied BMad skill; rechecked whole scope after zero findings. Routine API name correction scanPositions→scanPortfolio only; no semantic change."
         }
       ],
-      "notes": "Plan audit clean, build tickets next. User-set gate decisions unchanged; generated nonpositive sentinel contract restored."
+      "notes": "Plan audit clean, build tickets next. User-set gate decisions unchanged; generated nonpositive sentinel contract restored.",
+      "tickets": [
+        338,
+        339
+      ]
     }
   ],
   "already_shipped": [
