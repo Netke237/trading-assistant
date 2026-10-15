@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { useScanReportUpdates } from '@/lib/scanReports';
 import { useScanStore } from '@/lib/scanStore';
 import { scanReportInputsDiffer, SavedScanReportInspector } from '../index';
@@ -45,6 +45,23 @@ test('clearing candidates and editing controls leaves frozen report contents int
  r.rerender(<SavedScanReportInspector category="options" currentInputs={{direction:'bearish'}} tableRunId={null} />);
  expect(screen.getByText(/Current controls differ/)).toBeInTheDocument();expect(screen.getByText(/Displayed table run: unavailable/)).toBeInTheDocument();
  expect(JSON.parse(screen.getByText(/"diagnostics":/).textContent!)).toEqual({diagnostics:saved.diagnostics,result:saved.result});
+});
+test('raw report and exclusion data are collapsed, and opening a different run resets disclosure', async () => {
+ const saved = { ...report('options', 'compact'), diagnostics: { excluded: [{symbol:'SKIP',reason:'excluded_by_scan_policy'}] } };
+ latest.mockResolvedValue({category:'options',latest_attempt:saved,previous_report:report('options','previous')});
+ render(<SavedScanReportInspector category="options" />);
+ await screen.findByText('Run compact');
+ const raw = screen.getByText('Saved survivors, exclusions, observed diagnostics and results').closest('details')!;
+ const exclusions = screen.getByText('Saved exclusions').closest('details')!;
+ expect(raw.open).toBe(false); expect(exclusions.open).toBe(false);
+ expect(raw.querySelector('pre')).not.toBeVisible(); expect(exclusions.querySelector('pre')).not.toBeVisible();
+ fireEvent.click(within(raw).getByText('Saved survivors, exclusions, observed diagnostics and results'));
+ expect(raw.open).toBe(true);
+ expect(JSON.parse(raw.querySelector('pre')!.textContent!)).toEqual({diagnostics:saved.diagnostics,result:saved.result});
+ fireEvent.click(screen.getByText('Previous saved report'));
+ expect(screen.getByText('Run previous')).toBeInTheDocument();
+ expect(screen.getByText('Saved survivors, exclusions, observed diagnostics and results').closest('details')!.open).toBe(false);
+ expect(screen.getByText('View record').closest('details')!.open).toBe(false);
 });
 test('control removal and zero follow frozen request semantics',()=>{
  expect(scanReportInputsDiffer({min_price:20,overrides:{fast_ema:5}},{overrides:{}})).toBe(true);

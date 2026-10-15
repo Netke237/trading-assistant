@@ -1,0 +1,11 @@
+.scroll { min-width: 0; overflow-x: auto; margin-top: var(--space-4); }
+.table { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.table caption { text-align: left; font-weight: 500; padding-bottom: var(--space-2); }
+.table th, .table td { padding: var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+.table thead { background: var(--bg-surface-2); color: var(--text-secondary); }
+.table th { font-weight: 500; }
+.numeric { font-variant-numeric: tabular-nums; }
+.record { margin: 0; }
+.record summary { cursor: pointer; color: var(--accent); }
+.record pre { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.empty { padding: var(--space-3) var(--space-2); color: var(--text-secondary); font-size: 12px; }
