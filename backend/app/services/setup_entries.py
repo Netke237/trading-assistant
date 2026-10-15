@@ -145,7 +145,12 @@ def setup_series(bars: list[dict], strategy: str, direction: str,
             touched = float(detail['label'])
             deeper = min((v for v in p['fib_levels'] if v > touched), default=100.)
             def level_at(depth):
-                return high - depth/100*(high-low) if long else low + depth/100*(high-low)
+                if depth == 100.:
+                    return low if long else high
+                # Match the detector's exact float arithmetic: depth / 100
+                # can differ from its canonical ratio and invent a cross.
+                ratio = se._FIB_RATIOS[depth]
+                return high - ratio*(high-low) if long else low + ratio*(high-low)
             stop = math.nextafter(level_at(deeper), -math.inf if long else math.inf)
             pending = (t, level_at(touched), stop, high if long else low, None)
     return out

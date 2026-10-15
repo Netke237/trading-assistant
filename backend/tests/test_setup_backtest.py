@@ -278,3 +278,62 @@ def test_fib_requires_requested_research_lookback():
     b[59]['close']=102.36; b[60]['close']=104.
     s=signal_series(b,'fibonacci_pullback','Bullish',{'ema_filter_period':0})
     assert all(v is None for v in s[:100])
+
+
+# Explicit scanner ratios are the authoritative boundaries. In particular,
+# 23.6 / 100 differs from 0.236 by one ULP on Python 3.11.
+FIB_BOUNDARIES = [(23.6, .236), (38.2, .382), (50., .5), (61.8, .618), (78.6, .786)]
+
+
+def flat_fib_bars(direction, ratio, *, low=20., high=110.):
+    level = high - ratio * (high-low) if direction == 'Bullish' else low + ratio * (high-low)
+    b = bars(120)
+    for row in b:
+        row.update(open=level, high=high, low=low, close=level)
+    return b, level
+
+
+@pytest.mark.parametrize('direction', ['Bullish', 'Bearish'])
+@pytest.mark.parametrize('depth,ratio', FIB_BOUNDARIES)
+def test_fib_flat_at_authoritative_boundary_never_confirms(direction, depth, ratio):
+    b, level = flat_fib_bars(direction, ratio)
+    p = {'ema_filter_period': 0, 'fib_levels': [depth], 'fib_tolerance_pct': 0.}
+    detail = se.fibonacci_pullback_detail(b[:100], direction, fib_levels=[depth], fib_tolerance_pct=0.)
+    assert detail['at_level'] and detail['label'] == str(depth)
+    assert b[99]['close'] == level
+    assert all(s is None for s in signal_series(b, 'fibonacci_pullback', direction, p))
+
+
+@pytest.mark.parametrize('direction', ['Bullish', 'Bearish'])
+@pytest.mark.parametrize('depth,ratio', FIB_BOUNDARIES)
+@pytest.mark.parametrize('deeper_configured', [False, True])
+def test_fib_one_ulp_cross_and_frozen_canonical_stop(direction, depth, ratio, deeper_configured):
+    b, level = flat_fib_bars(direction, ratio, low=.1)
+    long = direction == 'Bullish'
+    toward = math.inf if long else -math.inf
+    # Equality on the first eligible close must wait; one ULP beyond suffices.
+    b[101].update(close=math.nextafter(level, toward), high=200., low=.01)
+    levels = [d for d, _ in FIB_BOUNDARIES] if deeper_configured else [depth]
+    p = {'ema_filter_period': 0, 'fib_levels': levels, 'fib_tolerance_pct': 0.}
+    s = signal_series(b, 'fibonacci_pullback', direction, p)
+    assert s[99] is None and s[100] is None
+    event = s[101]
+    assert event is not None and event.entry == math.nextafter(level, toward) and event.setup_age == 2
+    deeper_ratios = [r for d, r in FIB_BOUNDARIES if d > depth] if deeper_configured else []
+    boundary = ((110. - deeper_ratios[0] * 109.9 if long else .1 + deeper_ratios[0] * 109.9)
+                if deeper_ratios else (.1 if long else 110.))
+    assert event.stop == math.nextafter(boundary, -toward)
+    assert event.target == (110. if long else .1)
+    assert signal_series(b[:102], 'fibonacci_pullback', direction, p) == s[:102]
+
+
+@pytest.mark.parametrize('direction', ['Bullish', 'Bearish'])
+def test_fib_public_adapter_flat_boundary_has_no_fabricated_trades(direction):
+    from app.services.strategy_backtest import run_strategy_backtest_trades
+    b, _ = flat_fib_bars(direction, .236)
+    result, trades = run_strategy_backtest_trades(
+        b, strategy='fibonacci_pullback', direction=direction, commission=.002,
+        params={'ema_filter_period': 0, 'fib_levels': [23.6]}, min_trades=1)
+    assert not trades
+    assert result.n_trades == 0 and result.win_rate == 0. and result.expectancy == 0.
+    assert result.total_return_pct == 0. and not result.passes_gate
