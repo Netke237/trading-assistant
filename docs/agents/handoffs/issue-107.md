@@ -89,3 +89,9 @@ User asked: take #107 on. Later explicitly requested regular saved progress so a
 ## Browser handoff state
 
 The tab was marked for handoff, and the temporary viewport override was reset to default. On resume, set the desktop viewport again if MinWidthGate hides controls. The in-flight stock scan was left running. No paper setup response received at this checkpoint. Keep this task unfinished and resume with the stock result, successful request-scope evidence, and the missing broker prerequisite.
+
+## User decision — leave send checks pending (2026-10-15)
+
+The user explicitly chose “Leave send checks pending” in response to the missing paper-broker configuration question. Respect this decision: do not configure a broker, request credentials, or retry the bearish/earnings send checks unless the user later reopens them. This defers those acceptance checks; it does not turn them into passes or authorize closing #107 as fully verified.
+
+At about 22:12 Berlin, GET /api/stock-scan/last-run still reported status running, updated_at 2026-10-15 21:59:30, strategy pullback_ema. The already-running Stocks scan remains outstanding. All prior limitations, including the unconfirmed actual request universe and after-close result timing, remain.
