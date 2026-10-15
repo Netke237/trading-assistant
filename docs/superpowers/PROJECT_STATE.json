@@ -4401,8 +4401,8 @@
     {
       "id": "STOP-ALERT-DRAWER-PARITY",
       "name": "Stop alert, stored stop and Portfolio drawer agree",
-      "status": "not_started",
-      "audit_rounds": 0,
+      "status": "in_progress",
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "BROKER-PATH-RESIDUALS"
@@ -4413,15 +4413,30 @@
       "plan": "docs/superpowers/plans/2026-10-15-stop-alert-drawer-parity-plan.md",
       "branch": "board/stop-alert-drawer-parity-dfe3d7ec",
       "plan_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Independent /root/parity_plan_audit_r1 reviewed full plan at 0dffd304e8b3ea312ff38064dff15f4250113baa against real sources and issue334; complete second scope pass; zero gate findings."
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
-      "notes": "Claimed #334. Planning; gates unchanged, NULL stops explicit. No implementation yet."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/parity_plan_audit_r1",
+          "reviewed": "Full plan at 0dffd304e8b3ea312ff38064dff15f4250113baa against T8, drawer/browser/backend alerts, writer/PATCH/migration/booking",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Applied BMad skill; rechecked whole scope after zero findings. Routine API name correction scanPositions→scanPortfolio only; no semantic change."
+        }
+      ],
+      "notes": "Plan audit clean, build tickets next. User-set gate decisions unchanged; generated nonpositive sentinel contract restored."
     }
   ],
   "already_shipped": [
