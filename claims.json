@@ -7,6 +7,14 @@
       "expires_at": "2026-10-15T23:12:30Z",
       "note": "Continue issue 107 UI verification after session interruption",
       "task": "KENNETH-A2-P0B-MARKET-HOURS-CHECK"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/d3-history-recovery-0d18b172",
+      "claimed_at": "2026-10-15T20:24:58Z",
+      "expires_at": "2026-10-15T23:24:58Z",
+      "note": "D3 #114: deploy #341 on mini PC, migrate, restart, rebuild seam-refused symbols, record evidence",
+      "task": "KENNETH-D3-BACKFILL"
     }
   ]
 }
