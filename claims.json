@@ -15,6 +15,14 @@
       "expires_at": "2026-10-15T23:24:58Z",
       "note": "D3 #114: deploy #341 on mini PC, migrate, restart, rebuild seam-refused symbols, record evidence",
       "task": "KENNETH-D3-BACKFILL"
+    },
+    {
+      "agent": "codex",
+      "branch": "fix/legacy-scan-report-layout",
+      "claimed_at": "2026-10-15T22:04:53Z",
+      "expires_at": "2026-10-16T01:04:53Z",
+      "note": "Readable legacy scan report summary with separate raw data",
+      "task": "LEGACY-SCAN-REPORT-LAYOUT"
     }
   ]
 }
