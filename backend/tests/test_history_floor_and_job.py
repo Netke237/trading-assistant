@@ -260,6 +260,8 @@ def job_mocks(monkeypatch):
     prune = AsyncMock(return_value=3)
     monkeypatch.setattr(job, "fetch_daily_bars_batch", batch)
     monkeypatch.setattr(job, "update_history", update)
+    monkeypatch.setattr(job, "rebuild_single_provider",
+                        AsyncMock(side_effect=history.SingleProviderRefused("synthetic refusal")))
     monkeypatch.setattr(job, "_prune_old_rows", prune)
     return batch, update, prune, client
 

@@ -1,21 +1,28 @@
 """Ingestion router — manual trigger, status, and schedule endpoints.
 
 POST /api/data/ingest          → trigger an ingestion run (fire-and-forget)
-GET  /api/data/ingest/status   → current job state
+GET  /api/data/ingest/status   → current job state + single-provider symbols
 GET  /api/data/ingest/schedule → nightly schedule config
 POST /api/data/ingest/schedule → update nightly schedule config
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.ingestion_job import start_ingestion_task, get_ingestion_state
+from app.services.ingestion_job import (
+    get_ingestion_state,
+    single_provider_symbols,
+    start_ingestion_task,
+)
 from app.services.ingestion_schedule_store import ingestion_schedule_store
 from app.services import ingestion_scheduler
 from app.services.history_retention import effective_years
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/data", tags=["ingestion"])
 
@@ -26,6 +33,9 @@ class IngestRequest(BaseModel):
     symbols: list[str]
     years: int | None = Field(default=None, ge=1, le=20)
     force_backfill: bool = False
+    # Rebuild every requested symbol from one provider (Tiingo, else yfinance)
+    # instead of the normal Alpaca-suffix update.
+    rebuild: bool = False
 
 
 _UNIVERSE_PRESETS = {"SP500", "NDX100", "DOW30"}
@@ -50,16 +60,22 @@ async def trigger_ingest(req: IngestRequest) -> dict:
             pass
     years = effective_years(req.years)
     symbols = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
-    started = start_ingestion_task(symbols, years=years, force_backfill=req.force_backfill)
+    started = start_ingestion_task(symbols, years=years, force_backfill=req.force_backfill,
+                                   rebuild=req.rebuild)
     if started is False:
         raise HTTPException(status_code=409, detail="Ingestion already running")
-    return {"status": "started", "total": len(symbols), "years": years}
+    return {"status": "started", "total": len(symbols), "years": years, "rebuild": req.rebuild}
 
 
 @router.get("/ingest/status")
 async def ingest_status() -> dict:
-    """Return the current ingestion job state."""
-    return get_ingestion_state()
+    """Return the current ingestion job state and the persisted single-provider symbols."""
+    try:
+        singles = await single_provider_symbols()
+    except Exception as exc:
+        logger.warning("ingest status: single-provider symbols unavailable — %s", exc)
+        singles = {}
+    return {**get_ingestion_state(), "single_provider_symbols": singles}
 
 
 # ── Schedule endpoints ────────────────────────────────────────────────────────
