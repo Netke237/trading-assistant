@@ -4399,6 +4399,94 @@
       }
     },
     {
+      "id": "STOP-ALERT-DRAWER-PARITY",
+      "name": "Stop alert, stored stop and Portfolio drawer agree",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "depends_on": [
+        "BROKER-PATH-RESIDUALS"
+      ],
+      "covers": [
+        "board item #334"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-15-stop-alert-drawer-parity-plan.md",
+      "branch": "board/stop-alert-drawer-parity-dfe3d7ec",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Independent /root/parity_plan_audit_r1 reviewed full plan at 0dffd304e8b3ea312ff38064dff15f4250113baa against real sources and issue334; complete second scope pass; zero gate findings."
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent /root/parity_code_audit_r1 applied BMad to exact473a049ad339f79a74f968a3cf5de27d267fe9b3..856abb52e6e5cb721f1a7701945b1648f47cce33, all8files, complete second pass; zero gate findings. Independently ran73drawer and178backend tests."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "/root/parity_plan_audit_r1",
+          "reviewed": "Full plan at 0dffd304e8b3ea312ff38064dff15f4250113baa against T8, drawer/browser/backend alerts, writer/PATCH/migration/booking",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Applied BMad skill; rechecked whole scope after zero findings. Routine API name correction scanPositions→scanPortfolio only; no semantic change."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "/root/parity_code_audit_r1",
+          "reviewed": "473a049ad339f79a74f968a3cf5de27d267fe9b3..856abb52e6e5cb721f1a7701945b1648f47cce33; all8changed files vs clean plan and T8",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "BMad plus second complete scope pass. Traced drawer/browser/backend alerts, generated flooring/reanchor, preserved user gates, PATCH/storage normalization, stop_required and booking wrapper. Independent73drawer+178backend tests passed; full logs inspected. No working-tree edits."
+        }
+      ],
+      "notes": "SELF-MERGE PENDING, PR #340, audited head 856abb52e6e5cb721f1a7701945b1648f47cce33. Built/unmerged; independent plan1/code1 clean (continuous2rounds). Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Await exact PR head CI and all board step7 conditions. Actual main record preserved; no merge claimed.",
+      "tickets": [
+        338,
+        339
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+        "pattern": "const structuralStopBreached = isBreached",
+        "note": "Presence only: drawer checks structural underlying stop. Does not certify behavior, independent audit, or merge."
+      },
+      "validation": {
+        "frontend": {
+          "suites": 265,
+          "passed": 5443,
+          "typecheck": "passed",
+          "commit": "2a4eaab5",
+          "log": "334-drawer-full-frontend.log"
+        },
+        "backend_targeted": {
+          "passed": 178,
+          "runtime": "Python3.11.16"
+        },
+        "backend_full": {
+          "passed": 9297,
+          "skipped": 9,
+          "runtime": "Python3.11.16",
+          "seconds": 905.63,
+          "commit": "232aa2f8",
+          "log": "stop-parity-backend-full.log",
+          "note": "Final generic warning headline additionally covered by60booking tests; no behavior change."
+        }
+      },
+      "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33",
+      "pr": 340
+    },
+    {
       "id": "HISTORY-SINGLE-PROVIDER-REBUILD",
       "owner": "agent",
       "depends_on": [

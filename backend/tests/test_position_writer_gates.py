@@ -23,6 +23,7 @@ import app.models  # noqa: F401  (registers all tables on Base.metadata)
 from app.database import Base
 from app.models.portfolio import PortfolioPositionModel
 from app.schemas import PortfolioPositionCreate
+from app.services.alert_generator import generate_alerts
 from app.services.portfolio_risk import RiskCheckResult
 from app.services.position_writer import create_position
 
@@ -78,6 +79,17 @@ def _fetchers(quote=None, price=None) -> dict:
 async def _rows(Session) -> list[PortfolioPositionModel]:
     async with Session() as db:
         return list((await db.execute(select(PortfolioPositionModel))).scalars().all())
+
+
+async def _stop_alerts(Session, quote):
+    """Run the real alert engine on the committed row, without external audit IO."""
+    with patch("app.services.alert_generator.log_event"):
+        async with Session() as db:
+            alerts = await generate_alerts(db, {"ABT": quote})
+    return {
+        alert.alertType: alert.referenceValue for alert in alerts
+        if alert.alertType in {"STOP_REACHED", "STRUCTURAL_STOP_BREACHED"}
+    }
 
 
 # ── the exposure gate ────────────────────────────────────────────────────────
@@ -463,8 +475,8 @@ async def test_p1a_11_the_writer_reads_no_risk_config_of_its_own(Session, mocker
 # quote is wrong-side for a user-set stop (`>=` / `<=`), because the alert
 # fires on the same comparison. Gates off is an order already at the broker:
 # the stop is booked and the warning is returned. A generated stop is
-# re-anchored and is not direction-checked. Zero is floored to unset only
-# after that check.
+# re-anchored and is not direction-checked. Generated nonpositive levels stay
+# unset; user nonpositive levels still reach the existing gates-on check.
 
 def _user_live_cases():
     rows = []
@@ -548,6 +560,9 @@ async def test_user_set_stop_is_judged_against_the_live_quote_not_the_entry(
     assert [(r.stop, r.entry_price) for r in await _rows(Session)] == [
         (stop, quote if instrument == "stock" else 8.25),
     ]
+    assert await _stop_alerts(Session, quote) == (
+        {"STOP_REACHED": stop} if kind == "wrong" else {}
+    )
 
 
 @pytest.mark.asyncio
@@ -600,44 +615,53 @@ async def test_no_live_quote_and_no_scan_price_does_not_direction_check(Session)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "direction, quote, sent, gates_on, refused",
-    [
-        ("Bullish", 120.0, 0, True, False),
-        ("Bullish", 120.0, 0, False, False),
-        ("Bullish", 120.0, -1, True, False),
-        ("Bearish", 80.0, 0, True, True),
-        ("Bearish", 80.0, 0, False, False),
-        ("Bearish", 80.0, -1, True, True),
-        ("Bullish", 120.0, None, True, False),
-    ],
-)
+@pytest.mark.parametrize("direction, quote", [("Bullish", 120.0), ("Bearish", 80.0)])
+@pytest.mark.parametrize("instrument", ["stock", "option"])
+@pytest.mark.parametrize("sent", [0, -1, None])
+@pytest.mark.parametrize("gates_on", [True, False])
 async def test_zero_and_unset_user_stops_are_floored_after_the_direction_check(
-    Session, direction, quote, sent, gates_on, refused,
+    Session, direction, quote, instrument, sent, gates_on,
 ):
-    """Zero is a number at the direction check and unset only at the floor.
-    A bearish 0 is on the wrong side of a positive quote, so gates on refuses
-    it and gates off pages it — then stores NULL. A bullish 0 is below the
-    quote, so it is not wrong-side, and the floor still stores NULL. None
-    skips the check."""
-    body = _body(**_direction_fields(direction, "stock", sent))
+    """Preserve the gates-on policy; gates off describes the persisted NULL."""
+    body = _body(**_direction_fields(direction, instrument, sent))
+    refused = gates_on and direction == "Bearish" and sent is not None
     async with Session() as db:
         if refused:
             with pytest.raises(HTTPException) as exc:
-                await create_position(body, db, enforce_pre_trade_gates=True, **_underlying_fetch("stock", quote))
+                await create_position(body, db, enforce_pre_trade_gates=True, **_underlying_fetch(instrument, quote))
             assert exc.value.status_code == 422
             assert exc.value.detail == _wrong_side_detail(direction, sent, quote)
             assert await _rows(Session) == []
             return
         outcome = await create_position(
-            body, db, enforce_pre_trade_gates=gates_on, **_underlying_fetch("stock", quote),
+            body, db, enforce_pre_trade_gates=gates_on, **_underlying_fetch(instrument, quote),
         )
     assert outcome.position.stop is None
     assert [r.stop for r in await _rows(Session)] == [None]
-    if direction == "Bearish" and sent is not None and sent <= 0:
-        assert outcome.wrong_side_stop == _wrong_side_detail(direction, sent, quote)
+    assert await _stop_alerts(Session, quote) == {}
+    if not gates_on and sent is not None:
+        assert "no stop set; STOP_REACHED cannot fire" in outcome.wrong_side_stop
+        assert "fire immediately" not in outcome.wrong_side_stop
     else:
         assert outcome.wrong_side_stop is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("direction", ["Bullish", "Bearish"])
+@pytest.mark.parametrize("instrument", ["stock", "option"])
+@pytest.mark.parametrize("sent", [0, -1])
+async def test_unset_user_stop_warning_does_not_require_a_checking_quote(
+    Session, direction, instrument, sent,
+):
+    body = _body(**_direction_fields(direction, instrument, sent, scanStockPrice=None))
+    async with Session() as db:
+        outcome = await create_position(
+            body, db, enforce_pre_trade_gates=False, **_fetchers(),
+        )
+    assert outcome.position.stop is None
+    assert "no stop set; STOP_REACHED cannot fire" in outcome.wrong_side_stop
+    assert "fire immediately" not in outcome.wrong_side_stop
+    assert await _stop_alerts(Session, 120.0) == {}
 
 
 @pytest.mark.asyncio
@@ -669,6 +693,12 @@ async def test_a_generated_stop_reanchors_and_is_not_direction_checked(
     assert outcome.wrong_side_stop is None
     assert (outcome.position.stop, outcome.position.structural_stop) == (stored, structural_stored)
     assert outcome.position.entry_price == live
+    breached = (lambda level: live >= level) if direction == "Bearish" else (lambda level: live <= level)
+    assert await _stop_alerts(Session, live) == {
+        alert_type: level for alert_type, level in (
+            ("STOP_REACHED", stored), ("STRUCTURAL_STOP_BREACHED", structural_stored),
+        ) if breached(level)
+    }
 
 
 @pytest.mark.asyncio
@@ -684,6 +714,9 @@ async def test_an_option_generated_stop_above_the_underlying_is_stored(Session):
     assert (outcome.position.stop, outcome.position.structural_stop, outcome.position.entry_price) == (
         125.0, 122.0, 8.25,
     )
+    assert await _stop_alerts(Session, 120.0) == {
+        "STOP_REACHED": 125.0, "STRUCTURAL_STOP_BREACHED": 122.0,
+    }
 
 
 @pytest.mark.asyncio
@@ -699,26 +732,49 @@ async def test_a_user_set_stop_does_not_exempt_the_structural_stop_from_reanchor
     assert (outcome.position.stop, outcome.position.structural_stop, outcome.position.entry_price) == (
         110.0, 125.0, 120.0,
     )
+    assert await _stop_alerts(Session, 120.0) == {"STRUCTURAL_STOP_BREACHED": 125.0}
 
 
 @pytest.mark.asyncio
-async def test_a_generated_zero_reanchors_to_a_positive_stop_before_the_floor(Session):
-    """The floor treats non-positive as unset, but re-anchor runs first.
-    Sent 0 with delta +20 is stored as 20, not NULL. Without a scan price
-    there is no re-anchor, and 0 is stored as NULL."""
+@pytest.mark.parametrize("sent", [0, -1])
+@pytest.mark.parametrize("instrument", ["stock", "option"])
+@pytest.mark.parametrize("gates_on", [True, False])
+async def test_generated_unset_stops_stay_null_with_a_positive_reanchor(
+    Session, sent, instrument, gates_on,
+):
+    """Delta +20 cannot turn the unset sentinel into a real main/structural stop."""
     body = _body(**_direction_fields(
-        "Bullish", "stock", 0, stopIsUserSet=None, structuralStop=0,
+        "Bullish", instrument, sent, stopIsUserSet=None, structuralStop=sent,
     ))
     async with Session() as db:
-        moved = await create_position(body, db, **_underlying_fetch("stock", 120.0))
+        moved = await create_position(
+            body, db, enforce_pre_trade_gates=gates_on, **_underlying_fetch(instrument, 120.0),
+        )
     assert moved.wrong_side_stop is None
-    assert (moved.position.stop, moved.position.structural_stop) == (20.0, 20.0)
+    assert (moved.position.stop, moved.position.structural_stop) == (None, None)
+    assert [(row.stop, row.structural_stop) for row in await _rows(Session)] == [(None, None)]
+    # A low quote would breach an incorrectly manufactured 19/20 stop.
+    assert await _stop_alerts(Session, 10.0) == {}
 
-    plain = _body(**_direction_fields(
-        "Bullish", "stock", 0, stopIsUserSet=None, structuralStop=0,
-        scanStockPrice=None, recId="REC-G2", symbol="ABT2", contract="ABT2|STOCK",
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sent", [0, -1])
+@pytest.mark.parametrize("instrument", ["stock", "option"])
+@pytest.mark.parametrize("gates_on", [True, False])
+async def test_stop_required_refuses_generated_unset_even_with_a_positive_delta(
+    Session, sent, instrument, gates_on,
+):
+    body = _body(**_direction_fields(
+        "Bullish", instrument, sent, stopIsUserSet=None,
     ))
-    async with Session() as db:
-        stayed = await create_position(plain, db, **_underlying_fetch("stock", 120.0))
-    assert stayed.wrong_side_stop is None
-    assert (stayed.position.stop, stayed.position.structural_stop) == (None, None)
+    with patch(_RISK, return_value=RiskCheckResult(approved=True)) as risk:
+        async with Session() as db:
+            with pytest.raises(HTTPException) as exc:
+                await create_position(
+                    body, db, stop_required=True, enforce_pre_trade_gates=gates_on,
+                    **_underlying_fetch(instrument, 120.0),
+                )
+    assert exc.value.status_code == 422
+    assert "No usable stop" in exc.value.detail
+    risk.assert_not_called()
+    assert await _rows(Session) == []

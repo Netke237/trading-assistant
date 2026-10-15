@@ -64,7 +64,9 @@ exactly three things:
   - the exposure RESIZE: `qty` is `body.qty`, the quantity that was ordered.
     The books match the broker, not the gate;
   - the wrong-side-stop 422: warned instead of raised, and reported in
-    `WriteOutcome.wrong_side_stop` so the caller can page it (Q12). With gates
+    `WriteOutcome.wrong_side_stop` so the caller can page it (Q12). A
+    nonpositive user-set stop is stored as NULL and reports an unset warning
+    through that same outcome, even without a checking price. With gates
     off only, when the live underlying fetch returned nothing, the direction is
     checked against `scanStockPrice` instead (when > 0). GAPS, stated: no live
     price and no scanStockPrice means no check; and only USER-SET stops are
@@ -171,10 +173,11 @@ class WriteOutcome:
     it is that comment's own gloss, "the booking went past a cap", made true
     (O4 step 2, round 1).
 
-    `wrong_side_stop` (Q12) is the wrong-side detail when a user-set stop on
-    the wrong side of the underlying was booked with gates off (None
-    otherwise). With gates on that stop raises 422 instead. The caller must
-    put it in front of a human; a log line alone hides it.
+    `wrong_side_stop` (Q12) carries a stop warning when a user-set stop was
+    booked with gates off: a positive stop on the wrong side of the underlying,
+    or a nonpositive stop stored as NULL. With gates on the existing direction
+    check can raise 422 instead. The caller must put the warning in front of
+    a human; a log line alone hides it.
 
     `premium_stop_unapplied` (decision PREMIUM-STOP-FALLBACK-USER-FRACTION-
     2026-10-03) is set when a `premiumStopDollar` was sent and the stored
@@ -309,8 +312,10 @@ async def create_position(
     # gets persisted, not the frontend's (possibly stale) entryPrice — otherwise
     # a position could be approved against one price and stored at a materially
     # different one, silently bypassing the exposure gate.
-    adjusted_stop = body.stop
-    adjusted_structural_stop = body.structuralStop
+    # Generated nonpositive levels mean unset before AND after re-anchoring.
+    # Keep user main stops raw until the existing pre-trade direction check.
+    adjusted_stop = body.stop if body.stopIsUserSet else _floor_stop(body.stop)
+    adjusted_structural_stop = _floor_stop(body.structuralStop)
     adjusted_targets = list(body.targets or [])
     entry_stock_price = body.scanStockPrice
     entry_price = body.entryPrice
@@ -440,7 +445,17 @@ async def create_position(
     elif not enforce_pre_trade_gates and body.scanStockPrice and body.scanStockPrice > 0:
         check_price = body.scanStockPrice
         check_suffix = f" (against the scan price {body.scanStockPrice:.2f}; the live fetch failed)"
-    if body.stopIsUserSet and adjusted_stop is not None and check_price is not None:
+    if body.stopIsUserSet and adjusted_stop is not None and adjusted_stop <= 0 \
+            and not enforce_pre_trade_gates:
+        wrong_side_stop = (
+            f"A user-set stop of {adjusted_stop:.2f} is stored as unset: "
+            "no stop set; STOP_REACHED cannot fire."
+        )
+        _log.warning(
+            "create_position: %s -- booking %s anyway, pre-trade gates are off",
+            wrong_side_stop, body.contract,
+        )
+    elif body.stopIsUserSet and adjusted_stop is not None and check_price is not None:
         wrong_side = (
             adjusted_stop >= check_price if body.direction == "Bullish"
             else adjusted_stop <= check_price

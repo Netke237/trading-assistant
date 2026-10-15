@@ -614,6 +614,43 @@ async def test_p1a_14_a_gates_off_wrong_side_user_stop_pages_and_stays_booked(
                 if c.kwargs["alert_type"] == "AUTO_TRADE_BOOKED_WRONG_SIDE_STOP")
     assert call.kwargs["rec_id"] == "auto-trade-wrong-side-stop:AAPL"
     assert out.rec_id in call.kwargs["reason"] and "wrong side" in call.kwargs["reason"]
+    assert "it would fire immediately" in call.kwargs["reason"]
+    assert "It will fire STOP_REACHED" not in call.kwargs["reason"]
+    assert "verify the stop in Portfolio" in call.kwargs["reason"]
+
+
+@pytest.mark.asyncio
+async def test_booking_stop_warning_composition_preserves_an_unset_warning(
+    engine_and_session, env,
+):
+    """The existing paging wrapper must not promise an alert for persisted NULL.
+
+    Auto-booking requires a stop; its shared warning wrapper can nevertheless
+    receive the writer's gates-off warning, so exercise that composition with
+    a real committed row and real writer detail.
+    """
+    _, Session = engine_and_session
+    fired = _fired()
+    body = atb._build_body(fired, "REC-UNSET-WARNING").model_copy(update={
+        "stop": 0.0, "stopIsUserSet": True,
+    })
+    async with Session() as s:
+        outcome = await create_position(
+            body, s, enforce_pre_trade_gates=False,
+            quote_fetcher=env.quote, price_fetcher=env.price,
+            exit_plan_cfg_loader=lambda: {},
+        )
+    [row] = await _rows(Session)
+    assert row.stop is None
+    assert outcome.wrong_side_stop is not None
+    await atb._alert_wrong_side_stop(fired, row.rec_id, outcome.wrong_side_stop)
+    assert _alert_types(env.notify) == ["AUTO_TRADE_BOOKED_WRONG_SIDE_STOP"]
+    call = env.notify.await_args
+    assert call.kwargs["rec_id"] == "auto-trade-wrong-side-stop:AAPL"
+    assert "no stop set; STOP_REACHED cannot fire" in call.kwargs["reason"]
+    assert "It will fire" not in call.kwargs["reason"]
+    assert "with a stop on the wrong side" not in call.kwargs["reason"]
+    assert "verify the stop in Portfolio" in call.kwargs["reason"]
 
 
 async def _commit_then_fail(body, db, **kw):

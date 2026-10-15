@@ -301,11 +301,10 @@ async def _alert_wrong_side_stop(fired: FiredOrder, rec_id: str, detail: str) ->
     s = fired.strategy
     text = (
         f"{_order_label(fired).capitalize()} for {s.option_symbol} was booked as "
-        f"{rec_id} with a stop on the wrong side: {detail} It will fire "
-        "STOP_REACHED on the first scan — correct the stop in Portfolio."
+        f"{rec_id} with a stop warning: {detail} Correct or verify the stop in Portfolio."
     )
     await _page(
-        s.symbol, "auto-trade booking with a wrong-side stop", text,
+        s.symbol, "auto-trade booking with a stop warning", text,
         auto_trader_module._per_symbol_rec_id(_REC_ID_WRONG_SIDE_STOP, s.symbol),
         _ALERT_TYPE_WRONG_SIDE_STOP,
     )
