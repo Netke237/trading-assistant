@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import math
+from numbers import Real
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -16,6 +17,8 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from app.services.strategy_backtest import BacktestResult
+
+ENGINE_CONTRACT_VERSION = "backtesting-0.6.6-v2"
 
 DetailStatus = Literal["success", "unsupported", "insufficient_history", "invalid_input", "failed", "invalid_evidence"]
 
@@ -76,7 +79,7 @@ class DetailedBacktestResult:
     initial_equity: float | None = None
     configuration: dict = field(default_factory=dict)
     effective_params: dict = field(default_factory=dict)
-    engine_contract_version: str = "backtesting-0.6.6-v1"
+    engine_contract_version: str = ENGINE_CONTRACT_VERSION
     time_basis: str = "UTC epoch seconds; naive input interpreted UTC"
 
 
@@ -103,19 +106,64 @@ def validate_frame(df: pd.DataFrame) -> None:
         raise ValueError("invalid OHLCV range")
 
 
-def collect_details(summary, stats, df, *, entry_start, entry_end, hold_max_days,
+def source_frame(bars):
+    """Validate source time independently of the unchanged legacy engine parser."""
+    frame = pd.DataFrame(bars).rename(columns={
+        "open": "Open", "high": "High", "low": "Low",
+        "close": "Close", "volume": "Volume"})
+    values = frame["time"].tolist()
+    numeric = [isinstance(v, Real) and not isinstance(v, bool) for v in values]
+    if any(numeric) and not all(numeric):
+        raise ValueError("mixed numeric and dated source timestamps")
+    if all(numeric):
+        times = [float(v) for v in values]
+        frame.index = pd.to_datetime(times, unit="s", utc=True)
+    else:
+        times = [epoch(v) for v in values]
+        frame.index = pd.DatetimeIndex([pd.Timestamp(v) for v in values])
+    if not all(math.isfinite(t) for t in times):
+        raise ValueError("nonfinite source timestamps")
+    if any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError("source timestamps must be unique and chronological")
+    frame = frame[["Open", "High", "Low", "Close", "Volume"]]
+    validate_frame(frame)
+    return frame, times, all(numeric)
+
+
+def collect_details(summary, stats, df, *, source_bars, entry_start, entry_end, hold_max_days,
                     commission, effective_params, time_closed):
     """Read this run's real equity/fills; any invalid evidence fails as a unit."""
-    validate_frame(df)
-    input_candles = tuple(BacktestCandle(epoch(t), *(float(v) for v in row)) for t, row in df.iterrows())
+    source, source_times, numeric = source_frame(source_bars)
+    input_candles = tuple(BacktestCandle(t, *(float(v) for v in row))
+                          for t, row in zip(source_times, source.to_numpy()))
     eq = stats["_equity_curve"]["Equity"]
     if not eq.index.equals(df.index):
         raise ValueError("equity/candle timestamp mismatch")
+    if len(source) != len(df):
+        raise ValueError("source/engine bar count mismatch")
+    if (numeric and any(v is not None for v in (entry_start, entry_end, hold_max_days))
+            and list(source.index.date) != list(df.index.date)):
+        raise ValueError("source/legacy engine timing guard mismatch")
+
+    def fill_time(position):
+        bar = int(position)
+        if bar != position or not 0 <= bar < len(source_times):
+            raise ValueError("invalid engine fill bar position")
+        return source_times[bar]
+
+    # Keep the engine index check above before replacing its display timestamps.
+    # The engine itself still runs on its legacy index, preserving all statistics.
+    eq = eq.copy()
+    eq.index = source.index
+    df = source
+    visible_times = source_times
     if entry_start is not None:
         cutoff = pd.Timestamp(entry_start)
         if df.index.tz is not None:
             cutoff = cutoff.tz_localize(df.index.tz)
-        df, eq = df[df.index >= cutoff], eq[eq.index >= cutoff]
+        mask = df.index >= cutoff
+        visible_times = [t for t, keep in zip(source_times, mask) if keep]
+        df, eq = df[mask], eq[mask]
     if not len(eq):
         raise ValueError("empty evaluation window")
     # Existing no-window engine Return[%] uses initial broker cash. Windowed
@@ -128,10 +176,12 @@ def collect_details(summary, stats, df, *, entry_start, entry_end, hold_max_days
             raise ValueError("nonfinite summary")
     if not math.isclose((float(eq.iloc[-1]) / baseline - 1) * 100, summary.total_return_pct, abs_tol=1e-9):
         raise ValueError("equity does not reconcile with summary return")
-    candles = tuple(BacktestCandle(epoch(t), *(float(v) for v in row)) for t, row in df.iterrows())
+    candles = tuple(BacktestCandle(t, *(float(v) for v in row))
+                    for t, row in zip(visible_times, df.to_numpy()))
     benchmark_baseline = float(df.Close.iloc[0])
-    equity = tuple(EquitySample(epoch(t), float(v), 100 * float(v) / baseline,
-                               100 * float(df.loc[t, "Close"]) / benchmark_baseline) for t, v in eq.items())
+    equity = tuple(EquitySample(t, float(v), 100 * float(v) / baseline,
+                               100 * float(close) / benchmark_baseline)
+                   for t, v, close in zip(visible_times, eq, df.Close))
     if not all(math.isfinite(v) for sample in equity
                for v in (sample.time, sample.equity, sample.strategy_index, sample.benchmark_index)):
         raise ValueError("nonfinite indexed series")
@@ -141,14 +191,14 @@ def collect_details(summary, stats, df, *, entry_start, entry_end, hold_max_days
         if not all(math.isfinite(float(v)) for v in values):
             raise ValueError("nonfinite fill")
         trades.append(DetailedTrade(
-            f"closed-{i}", summary.direction, epoch(row.EntryTime), epoch(row.ExitTime),
+            f"closed-{i}", summary.direction, fill_time(row.EntryBar), fill_time(row.ExitBar),
             float(row.EntryPrice), float(row.ExitPrice), int(row.Size), float(row.ReturnPct) * 100,
             float(row.Commission), "time" if int(row.EntryBar) in time_closed else "unknown"))
     positions = []
     for i, trade in enumerate(stats["_strategy"].trades):
         if not all(math.isfinite(float(v)) for v in (trade.entry_price, trade.size, trade.pl)):
             raise ValueError("nonfinite open position")
-        positions.append(OpenPosition(f"open-{i}", summary.direction, epoch(trade.entry_time),
+        positions.append(OpenPosition(f"open-{i}", summary.direction, fill_time(trade.entry_bar),
                                       float(trade.entry_price), int(trade.size), float(trade.pl)))
     from backtesting import Strategy
     return DetailedBacktestResult(
@@ -162,4 +212,6 @@ def collect_details(summary, stats, df, *, entry_start, entry_end, hold_max_days
                            hold_max_days=hold_max_days,
                            entry_start=entry_start.isoformat() if entry_start is not None else None,
                            entry_end=entry_end.isoformat() if entry_end is not None else None),
-        effective_params=copy.deepcopy(effective_params))
+        effective_params=copy.deepcopy(effective_params),
+        time_basis=("UTC epoch seconds from source bars; fills/equity mapped by actual engine bar position; "
+                    "legacy engine timestamp interpretation unchanged; naive input interpreted UTC"))

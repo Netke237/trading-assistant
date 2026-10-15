@@ -169,3 +169,130 @@ def test_nonfinite_engine_equity_is_unavailable(monkeypatch):
     monkeypatch.setattr(Backtest, "run", corrupt)
     detail = service.run_strategy_backtest_detailed(bars(), strategy="pullback_ema", direction="Bullish")
     assert detail.status == "invalid_evidence" and not detail.equity
+
+
+@pytest.mark.parametrize('freq', ['15min', '1min'])
+@pytest.mark.parametrize('direction', ['Bullish', 'Bearish'])
+@pytest.mark.parametrize('fraction', [0., .25])
+@pytest.mark.parametrize('same_bar', [False, True])
+def test_numeric_source_epochs_use_actual_engine_bar_positions(monkeypatch, freq, direction, fraction, same_bar):
+    signal(monkeypatch, direction)
+    data = bars(freq)
+    for bar in data:
+        bar['time'] = int(pd.Timestamp(bar['time']).timestamp()) if not fraction else pd.Timestamp(bar['time']).timestamp() + fraction
+    data[101 if same_bar else 103].update(high=111., low=89.)
+    if same_bar:
+        # Force a market entry in the real engine: production limit orders defer
+        # ambiguous same-bar contingent fills to the next matching candle.
+        from backtesting import Strategy
+        order_name = 'buy' if direction == 'Bullish' else 'sell'
+        original_order = getattr(Strategy, order_name)
+        def market_order(self, *, size=1 - 2 ** -52, **kwargs):
+            kwargs['size'] = size
+            kwargs['limit'] = None
+            return original_order(self, **kwargs)
+        monkeypatch.setattr(Strategy, order_name, market_order)
+    kw = dict(strategy='pullback_ema', direction=direction, commission=.002, min_trades=1)
+    expected, legacy = service.run_strategy_backtest_trades(data, **kw)
+    from backtesting import Backtest
+    original = Backtest.run
+    calls = []
+    def capture(self, **kwargs):
+        stats = original(self, **kwargs)
+        calls.append(stats)
+        return stats
+    monkeypatch.setattr(Backtest, 'run', capture)
+    detail = service.run_strategy_backtest_detailed(data, **kw)
+    assert len(calls) == 1
+    assert detail.status == 'success', detail.reason
+    assert asdict(detail.summary) == asdict(expected)
+    assert [c.time for c in detail.input_candles] == [b['time'] for b in data]
+    assert [e.time for e in detail.equity] == [b['time'] for b in data]
+    actual = calls[0]['_trades'].iloc[0]
+    trade = detail.trades[0]
+    assert trade.entry_time == data[int(actual.EntryBar)]['time']
+    assert trade.exit_time == data[int(actual.ExitBar)]['time']
+    assert (actual.EntryBar == actual.ExitBar) == same_bar
+    assert trade.commission == actual.Commission > 0
+    assert trade.size == actual.Size
+    assert trade.entry_price == actual.EntryPrice
+    assert trade.exit_price == actual.ExitPrice
+    assert trade.net_return_pct == actual.ReturnPct * 100 == legacy[0].net_return_pct
+    assert detail.equity[-1].equity == calls[0]['_equity_curve'].Equity.iloc[-1]
+
+
+@pytest.mark.parametrize('direction', ['Bullish', 'Bearish'])
+def test_numeric_source_open_position_preserves_mtm_and_aggregate(monkeypatch, direction):
+    signal(monkeypatch, direction)
+    data = bars('1min')
+    for bar in data:
+        bar['time'] = pd.Timestamp(bar['time']).timestamp()
+    data[-1].update(close=105., high=106.)
+    kw = dict(strategy='pullback_ema', direction=direction, commission=.002)
+    expected = service.run_strategy_backtest(data, **kw)
+    from backtesting import Backtest
+    original = Backtest.run
+    calls = []
+    def capture(self, **kwargs):
+        stats = original(self, **kwargs)
+        calls.append(stats)
+        return stats
+    monkeypatch.setattr(Backtest, 'run', capture)
+    detail = service.run_strategy_backtest_detailed(data, **kw)
+    assert len(calls) == 1
+    assert detail.status == 'success', detail.reason
+    assert detail.summary == expected
+    actual = calls[0]['_strategy'].trades[0]
+    assert detail.open_positions[0].entry_time == data[actual.entry_bar]['time']
+    assert detail.open_positions[0].size == actual.size
+    assert detail.open_positions[0].entry_price == actual.entry_price
+    assert detail.open_positions[0].unrealized_pnl == actual.pl
+    assert detail.equity[-1].equity == calls[0]['_equity_curve'].Equity.iloc[-1]
+    from app.services.strategy_backtest_details import ENGINE_CONTRACT_VERSION
+    assert detail.engine_contract_version == ENGINE_CONTRACT_VERSION == 'backtesting-0.6.6-v2'
+    assert 'legacy engine timestamp interpretation unchanged' in detail.time_basis
+    assert not detail.trades and detail.summary.n_trades == 0
+    assert detail.equity[-1].strategy_index - 100 == pytest.approx(expected.total_return_pct)
+
+
+@pytest.mark.parametrize('guard', [dict(entry_start=date(2024, 1, 1)),
+    dict(entry_end=date(2024, 1, 2)), dict(hold_max_days=2)])
+def test_numeric_source_legacy_timing_guard_mismatch_unavailable(monkeypatch, guard):
+    signal(monkeypatch)
+    data = bars('15min')
+    for bar in data:
+        bar['time'] = pd.Timestamp(bar['time']).timestamp()
+    kw = dict(strategy='pullback_ema', direction='Bullish', **guard)
+    expected = service.run_strategy_backtest(data, **kw)
+    detail = service.run_strategy_backtest_detailed(data, **kw)
+    assert detail.status == 'invalid_evidence'
+    assert detail.summary == expected
+    assert 'timing' in detail.reason
+
+
+@pytest.mark.parametrize('problem', ['reverse', 'mixed', 'duplicate'])
+def test_numeric_source_invalid_chronology_and_mixed_basis(monkeypatch, problem):
+    data = bars('1min')
+    for bar in data:
+        bar['time'] = pd.Timestamp(bar['time']).timestamp()
+    if problem == 'reverse': data.reverse()
+    if problem == 'mixed': data[10]['time'] = '2024-01-01T00:10:00Z'
+    if problem == 'duplicate': data[10]['time'] = data[9]['time']
+    detail = service.run_strategy_backtest_detailed(data, strategy='pullback_ema', direction='Bullish')
+    assert detail.status == 'invalid_input'
+
+
+def test_equity_index_is_checked_before_source_positional_mapping(monkeypatch):
+    from backtesting import Backtest
+    original = Backtest.run
+    def corrupt(self, **kw):
+        stats = original(self, **kw)
+        stats['_equity_curve'].index = stats['_equity_curve'].index + pd.Timedelta(seconds=1)
+        return stats
+    monkeypatch.setattr(Backtest, 'run', corrupt)
+    data = bars('15min')
+    for bar in data:
+        bar['time'] = pd.Timestamp(bar['time']).timestamp()
+    detail = service.run_strategy_backtest_detailed(data, strategy='pullback_ema', direction='Bullish')
+    assert detail.status == 'invalid_evidence'
+    assert 'timestamp mismatch' in detail.reason

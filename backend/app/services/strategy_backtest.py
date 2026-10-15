@@ -9,7 +9,7 @@ from typing import Literal
 import pandas as pd
 
 from app.services.strategy_backtest_details import (
-    DetailedBacktestResult, DetailStatus, collect_details, validate_frame,
+    DetailedBacktestResult, DetailStatus, collect_details, source_frame,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def run_strategy_backtest_detailed(
         if len(bars) < 100:
             reason = "Insufficient history (< 100 bars)"
             return DetailedBacktestResult(_empty_result(strategy, direction, reason), "insufficient_history", reason)
-        validate_frame(_bars_to_df(bars))
+        source_frame(bars)
         if not math.isfinite(commission):
             raise ValueError("nonfinite commission")
     except Exception as exc:
@@ -424,7 +424,7 @@ def _run_backtest(
     )
     if detail_collector is not None:
         try:
-            detail = collect_details(result, stats, df, entry_start=entry_start,
+            detail = collect_details(result, stats, df, source_bars=bars, entry_start=entry_start,
                                      entry_end=entry_end, hold_max_days=hold_max_days,
                                      commission=commission, effective_params=effective_params,
                                      time_closed=time_closed)
