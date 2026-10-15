@@ -7,14 +7,6 @@
       "expires_at": "2026-10-15T23:01:56Z",
       "note": "Continue issue 107 UI verification after session interruption",
       "task": "KENNETH-A2-P0B-MARKET-HOURS-CHECK"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/stop-alert-drawer-parity-merge-record-8e84a41a",
-      "claimed_at": "2026-10-15T19:58:47Z",
-      "expires_at": "2026-10-15T23:02:41Z",
-      "note": "Finish documentation merge reconciliation PR 342 after user requested continue",
-      "task": "STOP-ALERT-DRAWER-PARITY"
     }
   ]
 }
