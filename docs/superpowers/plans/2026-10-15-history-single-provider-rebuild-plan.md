@@ -109,7 +109,7 @@ Tests first (in-memory SQLite factory exactly as `tests/test_history_coherent_ba
 - Commit: `feat(history): rebuild a seam-refused symbol from one provider (HISTORY-SINGLE-PROVIDER-REBUILD T2)`.
 
 ### T3 — ingestion trigger, request flag, status
-Files: `backend/app/services/ingestion_job.py`, `backend/app/routers/ingestion.py`, `backend/tests/test_history_single_provider_ingestion.py` (new). Blocked by T2.
+Files: `backend/app/services/ingestion_job.py`, `backend/app/routers/ingestion.py`, `backend/tests/test_history_single_provider_ingestion.py` (new)., and `backend/tests/test_history_floor_and_job.py` (its `job_mocks` fixture patches only `update_history`; with the automatic rebuild its seam-refused symbol would reach the real `rebuild_single_provider` and the network, so the fixture also patches `job.rebuild_single_provider` to raise `SingleProviderRefused` — amendment 2026-10-15 during T3, test-only, no behaviour change). Blocked by T2.
 Tests first (same in-memory factory; Alpaca batch patched at `app.services.ingestion_job.fetch_daily_bars_batch` / `get_alpaca_client`; `_prune_old_rows` left real on the in-memory DB):
 1. A seam-refusing symbol in `run_ingestion` is counted in `seam_mismatch` **and** rebuilt (`rebuilt_symbols`, `rebuild_details[sym]` with provider/trigger/rows/dates), not in `failed`.
 2. **Next normal ingestion** (second `run_ingestion`, new settled day available from Tiingo and Alpaca, Alpaca still seam-incompatible): no `seam_mismatch`, `single_provider_updated == 1`, the new date is stored with `source == "tiingo"` (acceptance 2).
