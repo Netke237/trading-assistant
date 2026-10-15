@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/kenneth-a2-p0b-market-hours-check-bf069dbd",
       "claimed_at": "2026-10-15T15:57:20Z",
-      "expires_at": "2026-10-15T18:57:20Z",
+      "expires_at": "2026-10-15T18:57:42Z",
       "note": "Issue 107 live market-hours UI verification",
       "task": "KENNETH-A2-P0B-MARKET-HOURS-CHECK"
     }
