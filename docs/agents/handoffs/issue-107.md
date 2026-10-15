@@ -85,3 +85,7 @@ User asked: take #107 on. Later explicitly requested regular saved progress so a
 - Paper selectors NOT CONFIGURED is a real missing prerequisite for UI send checks, despite backend Data Sources probes reporting connected. Those probes are not proof that this frontend profile is configured.
 - Acceptance remains unfinished; no independent audits run; no clean shipping verdict. Options CAUTION/Unvalidated was observed; bearish/earnings send refusal, persistence after refused send, and Stocks results still pending.
 - Market close was 22:00 Berlin. Any remaining checks now occur after close and must be reported honestly.
+
+## Browser handoff state
+
+The tab was marked for handoff, and the temporary viewport override was reset to default. On resume, set the desktop viewport again if MinWidthGate hides controls. The in-flight stock scan was left running. No paper setup response received at this checkpoint. Keep this task unfinished and resume with the stock result, successful request-scope evidence, and the missing broker prerequisite.
