@@ -7,6 +7,14 @@
       "expires_at": "2026-10-15T07:36:45Z",
       "note": "Continue issue118 verification and independent code audit fix",
       "task": "STOCKS-HORIZON-T4"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/candidate-backtest-chart-40fc1ac9",
+      "claimed_at": "2026-10-15T04:37:13Z",
+      "expires_at": "2026-10-15T07:37:13Z",
+      "note": "Continue original backtest artifacts and chart integration",
+      "task": "CANDIDATE-BACKTEST-CHART"
     }
   ]
 }
