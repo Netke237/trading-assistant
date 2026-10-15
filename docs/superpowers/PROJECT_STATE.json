@@ -4181,11 +4181,11 @@
       "summary": "Rebuild seam-refused symbols from one provider (17y history, stale SPY) and keep them current from that provider.",
       "name": "Single-provider history rebuild",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "branch": "board/history-single-provider-rebuild-570085af",
       "plan": "docs/superpowers/plans/2026-10-15-history-single-provider-rebuild-plan.md",
-      "notes": "Built: T1-T4 closed. origin/main merged before code round 1 (conflict in PROJECT_STATE.json only). Code audit next. Operational run on the mini PC (acceptance 3-4) is out of this session and needs Kenneth go-ahead.",
+      "notes": "Built; plan and code independently clean in one round each. Code audited head 07c25fce. PR next. Operational run on the mini PC (acceptance 3-4) is out of this session and needs Kenneth go-ahead.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
@@ -4205,6 +4205,25 @@
           "below_gate_logged": [
             "Tiingo 50-symbols/hour governor budget may push some rebuilds to yfinance or skip a nightly single-provider update (staleness/basis choice, not a wrong number)",
             "Alpaca IEX close vs consolidated close could cause a false identity refusal (refusal leaves data untouched)"
+          ]
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "code_round": 1,
+          "reviewer": "gate-auditor subagent a6b67caa66c40976e (fresh, bmad-review-adversarial-general)",
+          "scope": "64b9d53f21f92e0266cb7dd7790c66e3f19f1397..07c25fce923e7657f7798507b2e6338ba2f765fb (origin/main..branch, whole integrated change) against the plan",
+          "reviewed_head": "07c25fce923e7657f7798507b2e6338ba2f765fb",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "validation": "Auditor ran 63 focused tests (Python 3.11.9) independently: all passed.",
+          "below_gate_logged": [
+            "Rebuilt symbols are not counted in backfilled/floor_reached (plan intent; rebuild_details carries first dates)",
+            "Tiingo rate limit during an automatic rebuild falls back to yfinance (plan intent)",
+            "Run crossing midnight/settle can leave a short-lived edge row (pre-existing on the normal path)",
+            "Delta rows on a yfinance-only series can carry dividend-stale prices between nightly runs (documented residual)"
           ]
         }
       ],
@@ -4246,7 +4265,14 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh gate-auditor abdca7204adc24d5b reviewed the whole plan at 1e1790f9 against the named code; zero gate findings."
-      }
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh gate-auditor a6b67caa66c40976e reviewed origin/main..07c25fce (whole change incl. merge); zero gate findings; 63 focused tests passed independently."
+      },
+      "validation": "Merged head 07c25fce: backend full suite 9019 passed/7 failed/1 error/11 skipped (Python 3.11.9), failures identical to origin/main baseline (Windows-only test_atomic_yaml x4, test_payload_persistence_atomicity x3, test_historical_store_settle::test_19 tzset); frontend typecheck clean; Jest 5271/5273, 2 machine-locale (de-DE) failures (BarrierRaceCard, StockSendDialog.session) with zero frontend files changed."
     }
   ],
   "already_shipped": [
