@@ -620,7 +620,53 @@ strategies:
         resistance_proximity_pct: 0.08
         swing_lookback: 50
         require_trend: true
-    # no search block — SetupSignal has no entry/stop/target; cannot be backtested
+    # Research confirmation grids only; scanner baseline above is unchanged.
+    search_by_horizon:
+      bullish:
+        Swing: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Position: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Annual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+      bearish:
+        Swing: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Position: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Annual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+
+  fibonacci_pullback:
+    # Fixed scanner detector baseline; research grids do not adopt profiles.
+    active:
+      bullish:
+        fib_swing_lookback: 100
+        fib_levels: [38.2, 61.8]
+        fib_tolerance_pct: 0.015
+        impulse_min_pct: 0.08
+        retracement_recency_bars: 40
+        ema_filter_period: 20
+        setup_expiry_bars: 5
+      bearish:
+        fib_swing_lookback: 100
+        fib_levels: [38.2, 61.8]
+        fib_tolerance_pct: 0.015
+        impulse_min_pct: 0.08
+        retracement_recency_bars: 40
+        ema_filter_period: 20
+        setup_expiry_bars: 5
+    search_by_horizon:
+      bullish:
+        Swing: {setup_expiry_bars: [3, 5, 8]}
+        Position: {setup_expiry_bars: [3, 5, 8]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8]}
+        Annual: {setup_expiry_bars: [3, 5, 8]}
+      bearish:
+        Swing: {setup_expiry_bars: [3, 5, 8]}
+        Position: {setup_expiry_bars: [3, 5, 8]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8]}
+        Annual: {setup_expiry_bars: [3, 5, 8]}
 
 composite_trigger:
   conviction_min: 60

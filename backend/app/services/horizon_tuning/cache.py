@@ -17,9 +17,11 @@ of ``routers/stock_scan.py::_direction_conviction_drop`` and of
 """
 from __future__ import annotations
 
+from dataclasses import asdict, fields
 import hashlib
 import inspect
 import json
+import math
 import os
 import uuid
 from pathlib import Path
@@ -32,7 +34,7 @@ from app.services.horizon_tuning.signals import SignalPoint
 # Bump whenever a signal function in strategy_engine.py changes what it
 # returns. tests/test_horizon_tuning_core.py pins strategy_engine.py's source
 # hash per version and fails with "bump SIGNAL_CACHE_VERSION" when it changes.
-SIGNAL_CACHE_VERSION = 2
+SIGNAL_CACHE_VERSION = 3
 
 DEFAULT_CACHE_DIR = Path(__file__).resolve().parents[3] / "data" / "tuning_cache"
 
@@ -59,6 +61,18 @@ def ohlcv_hash(bars: list[dict] | None) -> str | None:
     return _sha(_canonical([[b.get(k) for k in _OHLCV] for b in bars]))
 
 
+def signal_sources() -> dict[str, str]:
+    """Dynamic source identity for signal computation and research order semantics.
+
+    Included in both disk-cache keys and CLI resume identities. A code change
+    invalidates persisted research results even without a manual version bump.
+    """
+    from app.services import setup_entries, strategy_engine
+    from app.services.horizon_tuning import simulate
+    return {module.__name__: _sha(_source_text(Path(inspect.getfile(module))))
+            for module in (strategy_engine, setup_entries, _signals, simulate)}
+
+
 def signal_key(symbol: str, bars: list[dict], strategy: str, direction: str, params: dict | None) -> str:
     from app.services.strategy_backtest import normalize_direction
     from app.services.strategy_engine import SIGNAL_WINDOW_BARS
@@ -71,6 +85,7 @@ def signal_key(symbol: str, bars: list[dict], strategy: str, direction: str, par
         "bars_basis": BARS_BASIS_VERSION,
         "ohlcv": ohlcv_hash(bars),
         "version": SIGNAL_CACHE_VERSION,
+        "sources": signal_sources(),
     }))
 
 
@@ -131,11 +146,27 @@ class TuningCache:
         path = self.root / "signals" / f"{signal_key(symbol, bars, strategy, direction, params)}.json"
         cached = _read(path)
         if isinstance(cached, list) and len(cached) == len(bars):
-            self.hits += 1
-            return [None if p is None else SignalPoint(*p) for p in cached]
+            try:
+                expected = {f.name for f in fields(SignalPoint)}
+                if any(p is not None and (not isinstance(p, dict) or set(p) != expected) for p in cached):
+                    raise ValueError("incomplete cached signal")
+                series = [None if p is None else SignalPoint(**p) for p in cached]
+                if any(p is not None and (type(p.market) is not bool or
+                       type(p.setup_age) is not int or p.setup_age < 0 or
+                       type(p.entry) not in (int, float) or type(p.stop) not in (int, float) or
+                       type(p.target) not in (int, float) or
+                       not all(math.isfinite(v) for v in (p.entry, p.stop, p.target)) or
+                       (p.rr_multiple is not None and (type(p.rr_multiple) not in (int, float) or not math.isfinite(p.rr_multiple))))
+                       for p in series):
+                    raise ValueError("invalid cached signal fields")
+            except (TypeError, ValueError):
+                pass  # old or malformed event shape: recompute, never downgrade to limit
+            else:
+                self.hits += 1
+                return series
         self.misses += 1
         series = _signals.signal_series(bars, strategy, direction, params)
-        _write_atomic(path, [None if p is None else [p.entry, p.stop, p.target] for p in series])
+        _write_atomic(path, [None if p is None else asdict(p) for p in series])
         return series
 
     def gate_mask(self, symbol: str, bars: list[dict], direction: str, scoring_horizon: str, *,

@@ -226,6 +226,14 @@ def _run_backtest(
     collect_trades: bool,
     detail_collector: list[DetailedBacktestResult] | None = None,
 ) -> tuple[BacktestResult, list[TradeRecord] | None]:
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_backtest import run_setup_backtest
+        result, records = run_setup_backtest(
+            bars, strategy=strategy, direction=direction, min_trades=min_trades,
+            min_win_rate=min_win_rate, params=params, commission=commission,
+            entry_start=entry_start, entry_end=entry_end, hold_max_days=hold_max_days,
+        )
+        return result, records if collect_trades else None
     direction = normalize_direction(direction)
 
     def _empty(reason: str, status: DetailStatus = "failed") -> tuple[BacktestResult, list[TradeRecord]]:
