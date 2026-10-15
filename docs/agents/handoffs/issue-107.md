@@ -75,3 +75,13 @@ User asked: take #107 on. Later explicitly requested regular saved progress so a
 - Actual bearish Swing stock scan started about 21:59 through Run stock scan, after strategy and custom context were set. UI shows SCANNING. It began before US regular close 22:00 Berlin; result/send checks may occur after close, which must be disclosed.
 - Current tab: localhost:3001/screener/step-3-direction. Browser id 2/tab1, current active CUA bindings tab/browser/scanEvidenceFs.
 - Next: inspect completed stock results and refusal; inspect Settings paper configuration if possible without changing credentials. Do not fabricate store data, inject candidates or call opening-order APIs to bypass UI. Remaining acceptance checks still unfinished.
+
+## Checkpoint — 22:05 Berlin (correction and blocker)
+
+- CORRECTION to 21:59 checkpoint: clicking Universe Next does NOT reconcile the Stocks scan universe. Further source inspection confirmed StepNavBar only navigates and Step 3 preserves stale context.universe. Do not rely on the previous claim that the real scan had corrected custom scope.
+- Filed separate defect #343: https://github.com/Netke237/trading-assistant/issues/343 — Stocks scan ignores current Custom universe and reuses stale scan context. No fix implemented. The pending request body was not captured, so describe the intended three-symbol scope separately from actual request scope.
+- Actual stock scan remained SCANNING at about 22:05, after market close. UI still had prior options scan header. Do not label it a successful market-hours stock check.
+- Sent an asynchronous user question: configure an existing PAPER broker in the in-app browser Settings > Brokers, or leave send checks pending. No response yet. Never ask for credentials in chat. No fake broker credentials, store injection or direct opening-order API calls.
+- Paper selectors NOT CONFIGURED is a real missing prerequisite for UI send checks, despite backend Data Sources probes reporting connected. Those probes are not proof that this frontend profile is configured.
+- Acceptance remains unfinished; no independent audits run; no clean shipping verdict. Options CAUTION/Unvalidated was observed; bearish/earnings send refusal, persistence after refused send, and Stocks results still pending.
+- Market close was 22:00 Berlin. Any remaining checks now occur after close and must be reported honestly.
