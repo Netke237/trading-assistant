@@ -4402,8 +4402,8 @@
       "id": "STOP-ALERT-DRAWER-PARITY",
       "name": "Stop alert, stored stop and Portfolio drawer agree",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "depends_on": [
         "BROKER-PATH-RESIDUALS"
       ],
@@ -4419,8 +4419,10 @@
         "closure_evidence": "Independent /root/parity_plan_audit_r1 reviewed full plan at 0dffd304e8b3ea312ff38064dff15f4250113baa against real sources and issue334; complete second scope pass; zero gate findings."
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent /root/parity_code_audit_r1 applied BMad to exact473a049ad339f79a74f968a3cf5de27d267fe9b3..856abb52e6e5cb721f1a7701945b1648f47cce33, all8files, complete second pass; zero gate findings. Independently ran73drawer and178backend tests."
       },
       "audit_history": [
         {
@@ -4434,9 +4436,21 @@
           "outstanding": [],
           "clean": true,
           "verification": "Applied BMad skill; rechecked whole scope after zero findings. Routine API name correction scanPositions→scanPortfolio only; no semantic change."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "/root/parity_code_audit_r1",
+          "reviewed": "473a049ad339f79a74f968a3cf5de27d267fe9b3..856abb52e6e5cb721f1a7701945b1648f47cce33; all8changed files vs clean plan and T8",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "BMad plus second complete scope pass. Traced drawer/browser/backend alerts, generated flooring/reanchor, preserved user gates, PATCH/storage normalization, stop_required and booking wrapper. Independent73drawer+178backend tests passed; full logs inspected. No working-tree edits."
         }
       ],
-      "notes": "Both build tickets complete. Full backend9297passed/9skipped on Python3.11.16; frontend265suites/5443tests and typecheck green. Code audit pending; not ready to merge. Source unchanged from final suite scopes; generic notification headline tweak independently covered by final60booking tests. Baseline slow scan reproduced~80s in historical provider governor; full suite passed.",
+      "notes": "Built, unmerged. Independent plan1/code1 clean (continuous2rounds); zero findings in both. Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Audited code head856abb52; subsequent changes only independent verdict/merge records. PR/CI next.",
       "tickets": [
         338,
         339
@@ -4468,7 +4482,8 @@
           "log": "stop-parity-backend-full.log",
           "note": "Final generic warning headline additionally covered by60booking tests; no behavior change."
         }
-      }
+      },
+      "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33"
     }
   ],
   "already_shipped": [
