@@ -1,3 +1,4 @@
+import type { BacktestArtifact, OriginalBacktestUnavailableReason } from '@/types/backtest';
 import { useScanReportUpdates, type LatestScanReport, type ScanReport, type ScanReportCategory, type ScanReportMetadata } from './scanReports';
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
@@ -405,7 +406,22 @@ export interface LastStockScanRequest {
   request: StockScanRequestBody;
 }
 
+export class BacktestArtifactError extends Error {
+  constructor(public readonly reason: OriginalBacktestUnavailableReason, public readonly status: number) {
+    super(`Original backtest unavailable (${reason})`);
+    this.name = 'BacktestArtifactError';
+  }
+}
+
 export const api = {
+  getOriginalBacktest: async (artifactId: string, symbol: string, signal?: AbortSignal): Promise<BacktestArtifact> => {
+    const res = await fetch(`${BASE_URL}/api/backtest-artifacts/${encodeURIComponent(artifactId)}?symbol=${encodeURIComponent(symbol)}`, {signal});
+    if (!res.ok) {
+      const reason = res.status === 404 ? 'missing' : res.status === 410 ? 'expired' : res.status === 422 ? 'invalid_input' : res.status === 503 ? 'storage_unavailable' : 'failed';
+      throw new BacktestArtifactError(reason, res.status);
+    }
+    return res.json() as Promise<BacktestArtifact>;
+  },
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   /** Hard DELETE of one tracked row by rec_id (204; 404 when absent). A plain

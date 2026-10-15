@@ -1,3 +1,4 @@
+import type { BacktestArtifactReference } from './backtest';
 import type { Status } from '@/lib/status';
 import type { SentimentData, FundamentalsOut } from '@/types/domain';
 import type { StockExplanation } from './domain';
@@ -25,7 +26,7 @@ export interface BacktestData {
   n_time_exits?: number | null;
   hold_max_days?: number | null;
 }
-export interface PositionCardData {
+export interface PositionCardData extends BacktestArtifactReference {
   symbol: string; company: string; price: number; direction: string;
   strategy: StrategySignalData; backtest: BacktestData;
   stock_score: number; stock_status: Status;

@@ -711,3 +711,21 @@ it('restores an explicit Ladder target on remount and clears it when its edited 
   summaryField('Selected method / target', 'Ladder · T1');
   await edit('T1 TARGET', '161'); expect(selectedSummary()).toHaveTextContent('Choose a method');
 });
+
+
+it.each(['embedded', 'position'] as const)('%s chart link freezes the displayed candidate identity in both directions', async presentation => {
+  for (const direction of ['Bullish','Bearish'] as const) {
+    const originalId = direction === 'Bullish' ? '0f15f060-4602-4254-a113-2076894eb97c' : '1f15f060-4602-4254-a113-2076894eb97c';
+    const c = {...card('CLICK',direction),backtest_artifact_id:originalId,backtest_artifact_status:'available' as const};
+    let view!: ReturnType<typeof render>;
+    await act(async () => { view = render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation={presentation}/>); });
+    const link = screen.getByRole('link',{name:'View Chart'});
+    const query = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
+    expect(query.get('symbol')).toBe('CLICK');
+    expect(query.get('source')).toBe('stocks');
+    expect(query.get('backtest_artifact_id')).toBe(originalId);
+    expect(query.get('backtest_artifact_status')).toBe('available');
+    expect(link).toHaveAttribute('target','_blank');
+    view.unmount();
+  }
+});
