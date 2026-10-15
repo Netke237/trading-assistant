@@ -110,9 +110,36 @@ order, alert or save calls. Auditor made no edits. Plan1/code1 clean; total2.
 - Production build: passed with the actual Google Fonts fetch in this environment.
 - Mocked Chromium: **10 cases passed** (9 matrix/availability + 1 fresh separation).
 - Focused backend: **76 passed**, including 15 fresh-run tests.
-- Full Python 3.11 backend: still running; final outcome pending.
+- Full Python 3.11 backend: **9084 passed, 9 skipped, 1 failed** in 960.18 seconds. Sole failure is the route-wide untyped-field inventory, which detects the new `FreshBacktestRequest.params` entry. Bounded inventory/documentation and HTTP regression follow-up pending; no production-code validation defect observed.
 - Exact-head hosted CI: not started because publication authorization is pending.
 
 No application code changed after the clean audit. This documentation records
 its verdict only. Local audit-clean/built does not mean shipped or merge-ready:
 full backend completion, publication authorization and exact-head CI remain.
+
+## Full-suite inventory follow-up
+
+The full run completed; its single failure is
+`test_request_finite_inventory.py::test_untyped_leaves_match_the_section_1_inventory`.
+The runtime registry now has 35 untyped dictionary leaves; the historical
+inventory listed 34. Fresh implementer `/root/backtest_inventory_fix` is
+checking the existing strict parameter/middleware validation, recording the
+new route deliberately, and adding direct/nested nonfinite HTTP refusals.
+Original independent clean code round1 remains in history; overall clean
+status is pending the bounded follow-up audit within the remaining cap.
+
+Follow-up implemented at `2625a73f` by the fresh implementer. Three changed
+files: the exact request inventory test, fresh HTTP tests and section1 of the
+existing finite-input inventory plan. Exact original34 entries and float-leaf
+probes remain; only the deliberate new endpoint is added (current total35).
+Twenty new HTTP nonfinite literal/string cases cover direct and nested multi
+parameters and prove422 before any history/engine call; finite controls reach
+history. All tests passed against unchanged production validation.
+
+Combined follow-up verification: request finite inventory, JSON finite guard,
+fresh endpoint and artifact suites **84 passed** in7.59seconds. Typecheck and
+diff checks passed. The full16-minute backend run was not repeated after this
+test/documentation-only correction; every other test had already passed, and
+the sole failed check now passes in the affected suites. Exact-head hosted CI
+still must pass after authorized publication and before any merge. Fresh
+shrinking follow-up audit is pending; no application code changed.

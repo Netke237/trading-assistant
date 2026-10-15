@@ -4173,7 +4173,7 @@
       "name": "Original candidate backtest candles, trade markers and indexed equity comparison",
       "status": "built",
       "audit_rounds": 2,
-      "audit_clean": true,
+      "audit_clean": false,
       "depends_on": [
         "PREBREAKOUT-PRESENTATION-V2"
       ],
@@ -4196,9 +4196,10 @@
       },
       "code_stage": {
         "rounds": 1,
-        "clean": true,
-        "closed_by": "clean",
-        "closure_evidence": "Fresh independent /root/backtest_code_audit_r1 reviewed complete exact 64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f against approved plan; two source passes, independent Python3.11 matrix12cases all six fresh strategies/both directions, zero numeric/persistence gate findings."
+        "clean": false,
+        "closure_evidence": "Fresh independent /root/backtest_code_audit_r1 reviewed complete exact 64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f against approved plan; two source passes, independent Python3.11 matrix12cases all six fresh strategies/both directions, zero numeric/persistence gate findings.",
+        "last_clean_head": "bc81207942574257eb123f3479ce37da668dfc4f",
+        "pending": "Bounded inventory/docs/HTTP-regression follow-up after full backend identified new FreshBacktestRequest.params untyped leaf; preserve independent clean code round1, re-audit only follow-up within remaining cap."
       },
       "audit_history": [
         {
@@ -4226,7 +4227,7 @@
           "verification": "Independent BMad adversarial review, two complete source passes plus synthetic Python3.11 12-case fresh strategy/direction matrix. Original engine summary/epoch/equity/fills, immutable persistence/cache/report linkage, UI stale/provenance, exact fresh configuration agreement and isolation checked. No real provider/order/alert/save calls."
         }
       ],
-      "notes": "BUILT LOCAL, NOT MERGED. Plan1clean/code1clean (continuous rounds2), reviewed exact feature64b9d53f..bc812079; zero gate findings, independent matrix12pass. Frontend261suites/5344tests, typecheck, production build passed. Mocked browser9matrix/availability plus1fresh-separation pass. Full final Python3.11 backend still running; targeted76pass. New-code publication and child-issue closure rejected by automatic approval review pending explicit user authorization; no PR/CI/merge attempted. Application code unchanged since clean audit.",
+      "notes": "BUILT LOCAL, NOT MERGED. Complete application diff bc812079 independently code round1clean, matrix12pass. Full backend9084pass9skip1inventory failure; test/docs-only fix2625a73f registers guarded fresh params,20HTTP probes reject nonfinite before history/engine. All4affected suites84pass; no production changes. Full backend not repeated after test/docs-only update. Frontend5344/typecheck/build/browser10 passed. Fresh shrinking code audit round2 pending; plan1 preserved, code rounds run1. Publication/issue closure blocked autoapproval pending explicit user authorization.",
       "tickets": [
         289,
         290,
