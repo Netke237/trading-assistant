@@ -25,11 +25,33 @@ class HistorySeamMismatch(ValueError):
         self.ratio = ratio
 
 
+class SingleProviderRefused(ValueError):
+    """Every single-provider candidate was refused; rows and state are untouched."""
+
+
 @dataclass(frozen=True)
 class HistoryUpdateResult:
     stored: int
     backfilled: bool
     floor_reached: bool
+    provider: str | None = None
+
+
+@dataclass(frozen=True)
+class RebuildResult:
+    provider: str
+    rows_before: int
+    rows_after: int
+    first_date_before: date | None
+    first_date_after: date
+    last_date_after: date
+    backfilled: bool
+    floor_reached: bool
+
+
+_MAX_GAP = timedelta(days=7)
+_IDENTITY_DATES = 5
+_IDENTITY_TOLERANCE = Decimal("0.005")
 
 
 def _validated(bars, start, end):
@@ -78,6 +100,82 @@ async def _fetch_fallback(symbol, start, end, accept=None):
     return []
 
 
+def _dec(value) -> Decimal:
+    return Decimal(str(value))
+
+
+async def _single_provider_locked(db, symbol, start, end, providers) -> RebuildResult:
+    """Replace the whole window from one provider; any refusal leaves rows and state untouched."""
+    from app.data.tiingo import fetch_historical_candles
+    existing = [(r.date, r.close, r.adj_factor, r.source) for r in (await db.execute(select(M).where(
+        M.symbol == symbol, M.date >= start, M.date <= end).order_by(M.date))).scalars().all()]
+    required = {d for d, *_ in existing if hs.is_settled(d, hs._utcnow())}
+    reasons = []
+    for provider in providers:
+        try:
+            if provider == "tiingo":
+                bars = await fetch_historical_candles(symbol, start, end + timedelta(days=1),
+                                                      strict_adjustments=True)
+            else:
+                bars = await asyncio.to_thread(hs._yfinance_fetch, symbol, start,
+                                               end + timedelta(days=1))
+            candidate = _validated(bars, start, end)
+            if not candidate:
+                raise ValueError("no settled bars in the window")
+            if any(b["source"] != provider for b in candidate.values()):
+                raise ValueError("reply is not from the requested provider")
+            dates = list(candidate)
+            for a, b in zip(dates, dates[1:]):
+                if b - a > _MAX_GAP:
+                    raise ValueError(f"internal gap {a} to {b}")
+            shared = [row for row in existing if row[3] != provider and row[0] in candidate]
+            for d, close, factor, source in shared[-_IDENTITY_DATES:]:
+                bar = candidate[d]
+                if provider == "tiingo" and source in {"alpaca", "tiingo"}:
+                    ratio = _dec(bar["close"]) / _dec(close)
+                else:
+                    ratio = (_dec(bar["close"]) * _dec(bar["adj_factor"])) / (_dec(close) * _dec(factor or 1))
+                if abs(ratio - 1) > _IDENTITY_TOLERANCE:
+                    raise ValueError(f"close differs from stored {source} on {d} (ratio {float(ratio):.4f})")
+            if not required <= set(candidate):
+                raise ValueError("reply omits existing stored dates")
+            stored = await hs._store_bars(symbol, list(candidate.values()), db)
+            if stored != set(candidate):
+                raise ValueError("not every candidate date was stored")
+            state = await db.get(State, symbol)
+            if state is None:
+                state = State(symbol=symbol)
+                db.add(state)
+            now = hs._utcnow()
+            state.basis_provider, state.basis_rebuilt_at = provider, now
+            state.seam_date = state.old_source = state.seam_signature = None
+            state.floor_requested_start = start
+            state.floor_date, state.floor_provider = dates[0], provider
+            state.floor_checked_at = now
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            reasons.append(f"{provider}: {exc}")
+            logger.warning("history: single-provider %s refused for %s: %s", provider, symbol, exc)
+            continue
+        notify_bars_changed(symbol)
+        first_before = existing[0][0] if existing else None
+        return RebuildResult(
+            provider=provider, rows_before=len(existing), rows_after=len(candidate),
+            first_date_before=first_before, first_date_after=dates[0], last_date_after=dates[-1],
+            backfilled=first_before is None or dates[0] < first_before,
+            floor_reached=dates[0] > start + timedelta(days=7),
+        )
+    raise SingleProviderRefused("; ".join(reasons))
+
+
+async def rebuild_single_provider(symbol: str, start: date, end: date) -> RebuildResult:
+    """Rebuild a symbol's window from Tiingo, or yfinance if Tiingo is refused."""
+    async with history_lock(symbol):
+        async with AsyncSessionLocal() as db:
+            return await _single_provider_locked(db, symbol, start, end, ("tiingo", "yfinance"))
+
+
 async def update_history(symbol: str, start: date, end: date, *,
                          alpaca_bars: list[dict] | None = None,
                          force_backfill: bool = False) -> HistoryUpdateResult:
@@ -89,6 +187,10 @@ async def update_history(symbol: str, start: date, end: date, *,
             ).order_by(M.date))).scalars().all()
             required = {r.date for r in existing if hs.is_settled(r.date, hs._utcnow())}
             state = await db.get(State, symbol)
+            if state is not None and state.basis_provider in {"tiingo", "yfinance"}:
+                r = await _single_provider_locked(db, symbol, start, end, (state.basis_provider,))
+                return HistoryUpdateResult(stored=r.rows_after, backfilled=r.backfilled,
+                                           floor_reached=r.floor_reached, provider=r.provider)
             if alpaca_bars is None:
                 from app.data.alpaca import fetch_daily_bars_single, get_alpaca_client
                 client = await get_alpaca_client()
