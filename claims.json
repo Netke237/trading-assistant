@@ -15,14 +15,6 @@
       "expires_at": "2026-10-15T23:24:58Z",
       "note": "D3 #114: deploy #341 on mini PC, migrate, restart, rebuild seam-refused symbols, record evidence",
       "task": "KENNETH-D3-BACKFILL"
-    },
-    {
-      "agent": "codex",
-      "branch": "fix/saved-scan-report-layout",
-      "claimed_at": "2026-10-15T21:37:02Z",
-      "expires_at": "2026-10-16T00:37:02Z",
-      "note": "Compact saved candidate report and collapse raw evidence",
-      "task": "SAVED-SCAN-REPORT-LAYOUT"
     }
   ]
 }
