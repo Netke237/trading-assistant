@@ -4171,7 +4171,7 @@
     {
       "id": "CANDIDATE-BACKTEST-CHART",
       "name": "Original candidate backtest candles, trade markers and indexed equity comparison",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
@@ -4184,9 +4184,9 @@
       "branch": "board/candidate-backtest-chart-3c95ac9e",
       "verify": {
         "kind": "present",
-        "path": "frontend/components/organisms/ChartWorkspace/index.tsx",
-        "pattern": "candidate-backtest-chart",
-        "note": "Presence only: completed comparison integration marker; absent while planning."
+        "path": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+        "pattern": "Historical candles",
+        "note": "Presence only: historical frozen comparison panes; does not certify numerical behavior, audit or merge."
       },
       "plan_stage": {
         "rounds": 1,
@@ -4212,7 +4212,7 @@
           "verification": "Auditor applied bmad adversarial; independently re-read committed whole plan and checked adjacent cache consumers, all setup modes, normalization, provenance; plan only."
         }
       ],
-      "notes": "BT-01 a1f70820 + epoch-source correction7a2e4af1 and BT-02 d9b5f9f4 committed. Details44/focused110; combined157/typecheckpass; frontend5273tests255suitespass. Full pre-correction8903pass9skip1spyfailure; sole failure fixed and affectedmodulegreen. Final integrated exact-head fullchecks/codeaudit pending. BT-03 next. Plan1clean/code0 preserved.",
+      "notes": "BT01-03 recovered f3441005; BT04 fresh implementation30ea2236; main64b9d53f merged at b3c29593; BT05 fresh implementation6193551f. Backend76focused/typecheck/frontend23focused pass. Browser9 matrix cases and1 fresh-separation case passed, both themes/directions daily/intraday1280/1920; no real orders/arms/alerts/saves. Full final backend/frontend/build running. Plan1clean/code0 pending; built not ready to merge. Automatic approval review rejected new-code publication pending explicit user authorization; new commits retained locally.",
       "tickets": [
         289,
         290,
