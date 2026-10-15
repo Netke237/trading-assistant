@@ -4,17 +4,9 @@
       "agent": "claude",
       "branch": "board/broker-path-residuals-3f35b8cf",
       "claimed_at": "2026-10-14T21:14:30Z",
-      "expires_at": "2026-10-15T03:56:35Z",
+      "expires_at": "2026-10-15T05:01:29Z",
       "note": "Resume #165 at #270 portfolio exposure serialization",
       "task": "BROKER-PATH-RESIDUALS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/stocks-horizon-t4-a4153a02",
-      "claimed_at": "2026-10-14T21:33:00Z",
-      "expires_at": "2026-10-15T01:00:12Z",
-      "note": "Issue 118 backtests and per-horizon tuning",
-      "task": "STOCKS-HORIZON-T4"
     }
   ]
 }
