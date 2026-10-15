@@ -7,6 +7,10 @@ Runs as a single idempotent operation:
   4. Update the ingestion state singleton so callers can track progress.
 
 Entry point: `await run_ingestion(symbols)` (configured horizon, default 17 years).
+
+A symbol whose seam is refused is rebuilt from one provider in the same pass
+(`rebuild_single_provider`, trigger "seam_refusal"); `rebuild=True` rebuilds every
+requested symbol instead of updating it (trigger "request").
 """
 from __future__ import annotations
 
@@ -16,13 +20,18 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
-from app.models.ohlcv_daily import OhlcvDailyModel
+from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
 from app.services.historical_store import most_recent_trading_day
-from app.services.history_backfill import update_history, HistorySeamMismatch
+from app.services.history_backfill import (
+    HistorySeamMismatch,
+    SingleProviderRefused,
+    rebuild_single_provider,
+    update_history,
+)
 from app.services.history_retention import effective_years
 
 logger = logging.getLogger(__name__)
@@ -41,6 +50,14 @@ _state: dict[str, Any] = {
     "started_at":     None,
     "finished_at":    None,
     "error":          None,
+    "rebuilt":        0,
+    "rebuilt_symbols": [],
+    "rebuild_details": {},
+    "rebuild_refused": 0,
+    "rebuild_refused_symbols": [],
+    "rebuild_errors": {},
+    "single_provider_updated": 0,
+    "single_provider_failed_symbols": [],
 }
 _task: asyncio.Task | None = None
 _ALPACA_CHUNK = 100
@@ -61,11 +78,62 @@ class IngestionResult:
     seam_mismatch_symbols: list[str] = field(default_factory=list)
     floor_reached_symbols: list[str] = field(default_factory=list)
     seam_ratios:   dict[str, float] = field(default_factory=dict)
+    rebuilt:       int = 0
+    rebuilt_symbols: list[str] = field(default_factory=list)
+    rebuild_details: dict[str, dict] = field(default_factory=dict)
+    rebuild_refused: int = 0
+    rebuild_refused_symbols: list[str] = field(default_factory=list)
+    rebuild_errors: dict[str, str] = field(default_factory=dict)
+    single_provider_updated: int = 0
+    single_provider_failed_symbols: list[str] = field(default_factory=list)
 
 
 def get_ingestion_state() -> dict:
     """Return a snapshot of the current ingestion state."""
     return dict(_state)
+
+
+async def single_provider_symbols() -> dict:
+    """Symbols whose retained series comes from one provider (survives restarts)."""
+    async with AsyncSessionLocal() as db:
+        states = (await db.execute(
+            select(OhlcvHistoryStateModel)
+            .where(OhlcvHistoryStateModel.basis_provider.is_not(None))
+            .order_by(OhlcvHistoryStateModel.symbol)
+        )).scalars().all()
+    return {
+        s.symbol: {
+            "provider":   s.basis_provider,
+            "rebuilt_at": s.basis_rebuilt_at.isoformat() if s.basis_rebuilt_at else None,
+            "floor_date": s.floor_date.isoformat() if s.floor_date else None,
+        }
+        for s in states
+    }
+
+
+def _iso(d: date | None) -> str | None:
+    return d.isoformat() if d is not None else None
+
+
+def _record_rebuilt(sym: str, result, trigger: str) -> None:
+    _state["rebuilt"] += 1
+    _state["rebuilt_symbols"].append(sym)
+    _state["rebuild_details"][sym] = {
+        "provider":          result.provider,
+        "trigger":           trigger,
+        "rows_before":       result.rows_before,
+        "rows_after":        result.rows_after,
+        "first_date_before": _iso(result.first_date_before),
+        "first_date_after":  _iso(result.first_date_after),
+        "last_date_after":   _iso(result.last_date_after),
+    }
+
+
+def _record_rebuild_refused(sym: str, exc: SingleProviderRefused) -> None:
+    _state["failed"] += 1
+    _state["rebuild_refused"] += 1
+    _state["rebuild_refused_symbols"].append(sym)
+    _state["rebuild_errors"][sym] = str(exc)
 
 
 def _should_ingest(last_date: date | None) -> bool:
@@ -90,10 +158,13 @@ async def run_ingestion(
     symbols: list[str],
     years: int | None = None,
     force_backfill: bool = False,
+    rebuild: bool = False,
 ) -> IngestionResult:
     """Run a full ingestion pass for `symbols`.
 
     Stage Alpaca, validate fallback history, and commit each coherent symbol.
+    A seam refusal is followed by one single-provider rebuild of that symbol;
+    `rebuild=True` rebuilds every symbol from one provider instead of updating it.
     """
     global _state
     years = effective_years(years)
@@ -119,6 +190,14 @@ async def run_ingestion(
         "floor_reached":  0,
         "floor_reached_symbols": [],
         "seam_ratios":    {},
+        "rebuilt":        0,
+        "rebuilt_symbols": [],
+        "rebuild_details": {},
+        "rebuild_refused": 0,
+        "rebuild_refused_symbols": [],
+        "rebuild_errors": {},
+        "single_provider_updated": 0,
+        "single_provider_failed_symbols": [],
     })
 
     errors: list[str] = []
@@ -147,24 +226,51 @@ async def run_ingestion(
         for sym in symbols:
             _state["current_symbol"] = sym
             try:
-                result = await update_history(sym, fetch_start, fetch_end,
-                                              alpaca_bars=alpaca_result.get(sym, []),
-                                              force_backfill=force_backfill)
-                if alpaca_result.get(sym):
-                    alpaca_count += 1
+                if rebuild:
+                    try:
+                        rebuilt = await rebuild_single_provider(sym, fetch_start, fetch_end)
+                    except SingleProviderRefused as refused:
+                        _record_rebuild_refused(sym, refused)
+                        errors.append(f"{sym}: rebuild refused — {refused}")
+                    else:
+                        _record_rebuilt(sym, rebuilt, "request")
                 else:
-                    gapfill_count += 1
-                for name in ("backfilled", "floor_reached"):
-                    if getattr(result, name):
-                        _state[name] += 1
-                        _state[name + "_symbols"].append(sym)
+                    result = await update_history(sym, fetch_start, fetch_end,
+                                                  alpaca_bars=alpaca_result.get(sym, []),
+                                                  force_backfill=force_backfill)
+                    if result.provider is not None:
+                        _state["single_provider_updated"] += 1
+                    elif alpaca_result.get(sym):
+                        alpaca_count += 1
+                    else:
+                        gapfill_count += 1
+                    for name in ("backfilled", "floor_reached"):
+                        if getattr(result, name):
+                            _state[name] += 1
+                            _state[name + "_symbols"].append(sym)
             except HistorySeamMismatch as exc:
                 _state["seam_mismatch"] += 1
                 _state["seam_mismatch_symbols"].append(sym)
                 if exc.ratio is not None:
                     _state["seam_ratios"][sym] = exc.ratio
+                # A seam-refused symbol gets no bars at all; one coherent single-provider
+                # series is strictly better, and the next run keeps it on that provider.
+                try:
+                    rebuilt = await rebuild_single_provider(sym, fetch_start, fetch_end)
+                except SingleProviderRefused as refused:
+                    _record_rebuild_refused(sym, refused)
+                    errors.append(f"{sym}: seam mismatch — {exc}; rebuild refused — {refused}")
+                except Exception as rebuild_exc:
+                    logger.warning("ingestion: history failed for %s — %s", sym, rebuild_exc)
+                    errors.append(f"{sym}: history error — {rebuild_exc}")
+                    _state["failed"] += 1
+                else:
+                    _record_rebuilt(sym, rebuilt, "seam_refusal")
+            except SingleProviderRefused as exc:
+                # A single-provider symbol's own update; never rebuilt in the same pass.
                 _state["failed"] += 1
-                errors.append(f"{sym}: seam mismatch — {exc}")
+                _state["single_provider_failed_symbols"].append(sym)
+                errors.append(f"{sym}: single-provider update refused — {exc}")
             except Exception as exc:
                 logger.warning("ingestion: history failed for %s — %s", sym, exc)
                 errors.append(f"{sym}: history error — {exc}")
@@ -212,11 +318,19 @@ async def run_ingestion(
         seam_mismatch_symbols=list(_state["seam_mismatch_symbols"]),
         floor_reached_symbols=list(_state["floor_reached_symbols"]),
         seam_ratios=dict(_state["seam_ratios"]),
+        rebuilt=_state["rebuilt"],
+        rebuilt_symbols=list(_state["rebuilt_symbols"]),
+        rebuild_details={sym: dict(d) for sym, d in _state["rebuild_details"].items()},
+        rebuild_refused=_state["rebuild_refused"],
+        rebuild_refused_symbols=list(_state["rebuild_refused_symbols"]),
+        rebuild_errors=dict(_state["rebuild_errors"]),
+        single_provider_updated=_state["single_provider_updated"],
+        single_provider_failed_symbols=list(_state["single_provider_failed_symbols"]),
     )
 
 
 def start_ingestion_task(symbols: list[str], years: int | None = None,
-                         force_backfill: bool = False) -> bool:
+                         force_backfill: bool = False, rebuild: bool = False) -> bool:
     """Create an asyncio Task for run_ingestion (fire-and-forget).
 
     Must be called from inside a running event loop (FastAPI lifespan or endpoint).
@@ -225,5 +339,8 @@ def start_ingestion_task(symbols: list[str], years: int | None = None,
     if (_task is not None and not _task.done()) or _state.get("status") == "running":
         logger.warning("ingestion: already running — ignoring new request")
         return False
-    _task = asyncio.create_task(run_ingestion(symbols, years=years, force_backfill=force_backfill))
+    kwargs: dict[str, Any] = {"years": years, "force_backfill": force_backfill}
+    if rebuild:
+        kwargs["rebuild"] = True
+    _task = asyncio.create_task(run_ingestion(symbols, **kwargs))
     return True
