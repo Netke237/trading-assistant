@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/history-single-provider-rebuild-570085af",
       "claimed_at": "2026-10-15T06:22:53Z",
-      "expires_at": "2026-10-15T10:42:16Z",
+      "expires_at": "2026-10-15T10:47:08Z",
       "note": "Single-provider rebuild of seam-refused symbols (#324)",
       "task": "HISTORY-SINGLE-PROVIDER-REBUILD"
     },
