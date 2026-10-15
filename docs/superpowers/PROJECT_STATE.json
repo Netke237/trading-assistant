@@ -4450,7 +4450,7 @@
           "verification": "BMad plus second complete scope pass. Traced drawer/browser/backend alerts, generated flooring/reanchor, preserved user gates, PATCH/storage normalization, stop_required and booking wrapper. Independent73drawer+178backend tests passed; full logs inspected. No working-tree edits."
         }
       ],
-      "notes": "Built, unmerged. Independent plan1/code1 clean (continuous2rounds); zero findings in both. Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Audited code head856abb52; subsequent changes only independent verdict/merge records. PR/CI next.",
+      "notes": "SELF-MERGE PENDING, PR #340, audited head 856abb52e6e5cb721f1a7701945b1648f47cce33. Built/unmerged; independent plan1/code1 clean (continuous2rounds). Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Await exact PR head CI and all board step7 conditions. Actual main record preserved; no merge claimed.",
       "tickets": [
         338,
         339
@@ -4483,7 +4483,8 @@
           "note": "Final generic warning headline additionally covered by60booking tests; no behavior change."
         }
       },
-      "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33"
+      "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33",
+      "pr": 340
     }
   ],
   "already_shipped": [
