@@ -86,3 +86,19 @@ On 2026-10-15 the user explicitly authorized the public branch push and PR
 creation only. The automatic-review publication block is resolved for those
 actions. Do not merge automatically. Exact-head CI will be checked on the PR;
 historical tuning and adoption remain separate.
+
+
+## Verified merge
+
+The user subsequently instructed merge if audited, superseding the PR-only
+hold. Both independent audit stages were verified clean after two rounds each;
+all three CI checks were SUCCESS on exact head
+33ea2823e13f59e61238661c14d93731419b4ee1. Only documentation records differed
+from the final audited application commit. The PR was OPEN and MERGEABLE.
+
+PR #325 was merged with a merge commit and --match-head-commit safeguard.
+GitHub verified MERGED at 1031a82fc79cb5803793b60a4f46a9ed35e8ff4a on
+2026-10-15T05:53:58Z. Issue #118 closed automatically. The task claim was
+released and its agent-in-progress label removed. Historical tuning and
+adoption were not part of this merge. This documentation follow-up reconciles the verified feature merge in
+the project ledger; the live PR merge is authoritative.
