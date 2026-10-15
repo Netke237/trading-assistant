@@ -1466,34 +1466,37 @@ describe('a field where 0 is not the clear gesture', () => {
     expect(screen.queryByText(/Enter 0 to clear this level/i)).not.toBeInTheDocument();
   });
 
-  it('documentation of intent: leaves a real edit alone on both fields', () => {
+  it('documentation of intent: a price edit still saves, and a quantity increase waits for its fill price', () => {
     // DOCUMENTATION OF INTENT, like the boundary pair above: no mutation of the
     // zero bound is expected to fail this; it records that the bound is on 0,
-    // not on editing -- the two fields still commit.
+    // not on editing. A larger quantity is an added fill and does not save on
+    // blur. Current price still does.
     const onPatch = jest.fn();
     render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
 
     const contracts = screen.getByLabelText(/Contracts/) as HTMLInputElement;
     fireEvent.change(contracts, { target: { value: '3' } });
     fireEvent.blur(contracts);
-    expect(onPatch).toHaveBeenCalledWith({ contracts: 3 });
+    expect(onPatch).not.toHaveBeenCalled();
     expect(contracts.value).toBe('3');
+    expect(screen.getByLabelText(/Added fill price/i)).toBeInTheDocument();
 
     const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
     fireEvent.change(price, { target: { value: '5.10' } });
     fireEvent.blur(price);
-    // entry 4.2, 3 contracts, x100 -> (5.10 - 4.2) * 100 * 3 = 270. Asserted,
-    // not merely stated in a comment: pnlDollar and pnlPct are the two values
-    // a wrongly-refused-or-accepted price actually puts on the row.
+    // entry 4.2, contracts still 1 (the increase was not saved), x100
+    // -> (5.10 - 4.2) * 100 * 1 = 90. Asserted, not merely stated in a
+    // comment: pnlDollar and pnlPct are the two values a wrongly-refused
+    // price actually puts on the row.
     expect(onPatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ currentPrice: 5.1 }),
     );
-    // closeTo, not toBe: the drawer stores the raw float product
-    // (269.99999999999983), which every readout formats before showing. The
-    // point of the assertion is the magnitude and the SIGN -- a refused or
-    // mis-parsed price is what puts a -100% on the row.
+    // closeTo, not toBe: the drawer stores the raw float product, which every
+    // readout formats before showing. The point of the assertion is the
+    // magnitude and the SIGN -- a refused or mis-parsed price is what puts a
+    // -100% on the row.
     const patch = onPatch.mock.calls.at(-1)![0];
-    expect(patch.pnlDollar).toBeCloseTo(270, 6);
+    expect(patch.pnlDollar).toBeCloseTo(90, 6);
     expect(patch.pnlPct).toBeCloseTo(21.43, 2);
     expect(price.value).toBe('5.1');
   });
