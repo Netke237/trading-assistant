@@ -15,10 +15,10 @@ test('options rows keep the saved stock score and capped status, with the full r
   expect(within(result).getByText('Bearish')).toBeInTheDocument();
   expect(within(result).getByText('62')).toBeInTheDocument();
   expect(within(result).getByText('CAUTION')).toBeInTheDocument();
-  const details = within(result).getByText('View record').closest('details')!;
+  const details = within(result).getByText('Raw record').closest('details')!;
   expect(details.open).toBe(false);
   expect(within(details).getByText(/unrounded_score/)).not.toBeVisible();
-  fireEvent.click(within(details).getByText('View record'));
+  fireEvent.click(within(details).getByText('Raw record'));
   expect(details.open).toBe(true);
   expect(JSON.parse(details.querySelector('pre')!.textContent!)).toEqual(row);
 });

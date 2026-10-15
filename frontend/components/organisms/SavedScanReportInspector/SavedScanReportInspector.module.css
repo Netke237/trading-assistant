@@ -16,3 +16,12 @@
 .terminal th, .terminal td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
 .counts { display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; margin: 8px 0; padding: 0; font-size: 12px; }
 .values { list-style: none; margin: 0; padding: 0; }
+.legacy { border-top: 1px solid var(--border-subtle); padding-top: var(--space-3); }
+.metadata { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: var(--space-3) 0; }
+.metadata dt { color: var(--text-secondary); }
+.metadata dd { margin: 0; }
+.raw { margin-top: var(--space-3); }
+.tableScroll { min-width: 0; overflow-x: auto; margin-top: var(--space-2); }
+.recordsTable { width: 100%; min-width: 480px; table-layout: fixed; border-collapse: collapse; }
+.recordsTable th, .recordsTable td { padding: var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+.recordsTable th { font-weight: 500; }
