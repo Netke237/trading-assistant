@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/broker-path-residuals-3f35b8cf",
       "claimed_at": "2026-10-14T21:14:30Z",
-      "expires_at": "2026-10-15T05:02:02Z",
+      "expires_at": "2026-10-15T05:23:40Z",
       "note": "Resume #165 at #270 portfolio exposure serialization",
       "task": "BROKER-PATH-RESIDUALS"
     }
