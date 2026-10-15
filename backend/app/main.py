@@ -53,6 +53,7 @@ from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
 from app.routers.journal         import router as journal_router
+from app.routers.backtest_artifacts import router as backtest_artifacts_router
 from app.routers.scan_reports    import router as scan_reports_router
 
 
@@ -451,6 +452,7 @@ def create_app() -> FastAPI:
     app.include_router(scan_schedule_router)
     app.include_router(journal_router)
     app.include_router(scan_reports_router)
+    app.include_router(backtest_artifacts_router)
 
     return app
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
+from collections import OrderedDict
 import dataclasses
 import functools
 import hashlib
@@ -23,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.scan_report_lifecycle import (run_reported_scan, observe_resolution, observe_configuration, observe_data_failure, observe_no_data, observe_evaluation, observe_terminal)
+from app.services.scan_report_lifecycle import (run_reported_scan, current_collector, observe_resolution, observe_configuration, observe_data_failure, observe_no_data, observe_evaluation, observe_terminal)
 from fastapi import Response
 from app.services.config_health import config_health
 from app.database import AsyncSessionLocal, get_db
@@ -70,6 +72,7 @@ from app.services.strategy_engine import (
     SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
+from app.services.strategy_backtest_details import ENGINE_CONTRACT_VERSION
 from app.services.horizon_profiles import (
     hold_for_backtest, migrate_saved_stock_request, resolve_params_horizon,
 )
@@ -810,6 +813,68 @@ def _get_backtest_cached(key: str):
     return None
 
 
+# Exact inputs AND the legacy cached summary object's identity are required.
+# Legacy aggregate entries cannot be upgraded by another backtest invocation.
+_BACKTEST_DETAILS: OrderedDict[str, tuple] = OrderedDict()
+
+
+def _detail_key(symbol, bars, inputs):
+    payload = json.dumps(dict(bars=bars, inputs=inputs, bars_basis=BARS_BASIS_VERSION,
+                              engine=ENGINE_CONTRACT_VERSION), sort_keys=True,
+                         separators=(',', ':'), allow_nan=False, default=str)
+    return symbol.upper() + '|' + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _run_backtest_with_details(bars, **kwargs):
+    """Picklable ProcessPool entry; summary and evidence share one engine run."""
+    details = []
+    summary = run_strategy_backtest(bars, **kwargs, detail_collector=details)
+    return summary, details[0] if len(details) == 1 else None
+
+
+def _remember_detail(key, summary, detail):
+    _BACKTEST_DETAILS[key] = (summary, copy.deepcopy(detail), time.time() + _BACKTEST_TTL)
+    _BACKTEST_DETAILS.move_to_end(key)
+    while len(_BACKTEST_DETAILS) > 128:
+        _BACKTEST_DETAILS.popitem(last=False)
+
+
+def _cached_detail(key, summary):
+    entry = _BACKTEST_DETAILS.get(key)
+    if entry is None:
+        return None
+    if time.time() >= entry[2]:
+        _BACKTEST_DETAILS.pop(key, None)
+        return None
+    if entry[0] is not summary:
+        return None
+    _BACKTEST_DETAILS.move_to_end(key)
+    return copy.deepcopy(entry[1])
+
+
+async def _original_artifact(detail, *, scan_id, symbol, strategy, direction, horizon,
+                             interval, detail_key):
+    """Optional persistence must never perturb numeric/trading scan behavior."""
+    if detail is None:
+        return dict(backtest_artifact_status='original_unavailable')
+    if detail.status != 'success':
+        return dict(backtest_artifact_status=detail.status)
+    collector = current_collector()
+    identity = dict(scan_id=scan_id, report_run_id=collector.report_run_id if collector else None,
+                    symbol=symbol, strategy=strategy, direction=direction, horizon=horizon,
+                    interval=interval, bars_basis_version=BARS_BASIS_VERSION,
+                    input_hash=detail_key.split('|', 1)[1],
+                    engine_contract_version=detail.engine_contract_version)
+    try:
+        from app.services.backtest_artifacts import save_artifact
+        async with AsyncSessionLocal() as db:
+            saved = await save_artifact(db, detail=detail, identity=identity)
+        return dict(backtest_artifact_id=saved['artifact_id'], backtest_artifact_status='available')
+    except Exception:
+        # Never log provider/configuration text or let optional storage drop a row.
+        return dict(backtest_artifact_status='storage_unavailable')
+
+
 def evict_backtest_cache(symbols: Iterable[str]) -> int:
     """Remove every cached BacktestResult for ``symbols``; returns the count removed.
 
@@ -826,6 +891,9 @@ def evict_backtest_cache(symbols: Iterable[str]) -> int:
     keys = [k for k in list(_BACKTEST_CACHE) if k.startswith(prefixes)]
     for k in keys:
         _BACKTEST_CACHE.pop(k, None)
+    for k in list(_BACKTEST_DETAILS):
+        if k.startswith(prefixes):
+            _BACKTEST_DETAILS.pop(k, None)
     return len(keys)
 
 
@@ -1554,22 +1622,30 @@ async def _process_stock(
             _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
                                      commission=_bt_commission, min_trades=req.bt_min_trades,
                                      min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
+            _detail_inputs = dict(strategy=_bt_strategy, direction=req.direction,
+                                  min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
+                                  params=_bt_params, commission=_bt_commission, hold_max_days=_bt_hold)
+            try:
+                _detail_identity = _detail_key(symbol, bt_bars, _detail_inputs)
+            except (ValueError, TypeError):
+                _detail_identity = None
             bt_result = _get_backtest_cached(_bt_key)
+            try:
+                _detail = _cached_detail(_detail_identity, bt_result) if _detail_identity else None
+            except Exception:
+                _detail = None
             if bt_result is None:
-                bt_result = await asyncio.get_running_loop().run_in_executor(
+                bt_result, _detail = await asyncio.get_running_loop().run_in_executor(
                     _BACKTEST_POOL,
-                    functools.partial(
-                        run_strategy_backtest, bt_bars,
-                        strategy=_bt_strategy, direction=req.direction,
-                        min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
-                        params=_bt_params, commission=_bt_commission,
-                        hold_max_days=_bt_hold,
-                    ),
+                    functools.partial(_run_backtest_with_details, bt_bars, **_detail_inputs),
                 )
-                # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
-                # stored when a refresh invalidated the symbol after the bars read.
                 if not conf_invalidated_since(symbol, _bars_gen):
                     _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+                    if _detail_identity:
+                        try:
+                            _remember_detail(_detail_identity, bt_result, _detail)
+                        except Exception:
+                            pass
             if (_drop := _backtest_drop(symbol, bt_result)):
                 observe_terminal(symbol, "filtered", "backtest_gate", observations={"passes_gate": bt_result.passes_gate, "win_rate": getattr(bt_result, "win_rate", None), "n_trades": getattr(bt_result, "n_trades", None)}, thresholds={"min_trades": req.bt_min_trades, "min_win_rate": req.bt_min_win_rate})
                 return _drop
@@ -1683,7 +1759,14 @@ async def _process_stock(
             if _earn_flag is not None:
                 gate_flags.append(GateFlag(**_earn_flag))
 
+            _artifact = await _original_artifact(
+                _detail, scan_id=scan_id, symbol=symbol, strategy=_bt_strategy,
+                direction=req.direction, horizon=req.horizon,
+                interval='15m' if _bt_strategy in _INTRADAY_STRATEGIES else '1d',
+                detail_key=_detail_identity,
+            ) if _detail_identity else dict(backtest_artifact_status='capture_unavailable')
             return PositionCardOut(
+                **_artifact,
                 symbol=symbol, company=company or symbol, price=price, direction=req.direction,
                 strategy=StrategySignalOut(
                     strategy=signal.strategy, entry_price=signal.entry_price,
