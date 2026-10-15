@@ -4166,20 +4166,39 @@
       "summary": "Rebuild seam-refused symbols from one provider (17y history, stale SPY) and keep them current from that provider.",
       "name": "Single-provider history rebuild",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "branch": "board/history-single-provider-rebuild-570085af",
       "plan": "docs/superpowers/plans/2026-10-15-history-single-provider-rebuild-plan.md",
-      "notes": "Plan written 2026-10-15; plan audit next. Operational run on the mini PC (acceptance 3-4) is out of this session and needs Kenneth's go-ahead.",
+      "notes": "Plan audit clean in round 1 (plan stage closed). Tickets next. Operational run on the mini PC (acceptance 3-4) is out of this session and needs Kenneth go-ahead.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
         "pattern": "async def rebuild_single_provider",
         "note": "PRESENCE ONLY of the single-provider rebuild entry point. Correctness requires tests and the independent phase audit."
       },
-      "audit_history": [],
-      "plan_audit_clean": false,
-      "tickets": []
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent abdca7204adc24d5b (fresh, bmad-review-adversarial-general)",
+          "scope": "1e1790f9 docs/superpowers/plans/2026-10-15-history-single-provider-rebuild-plan.md (whole plan) against history_backfill.py, historical_store.py, history_basis.py, ingestion_job.py, routers/ingestion.py, models/ohlcv_daily.py, data/tiingo.py, data/alpaca.py, main.py startup, migrations head a93b8d24f760",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "below_gate_logged": [
+            "Tiingo 50-symbols/hour governor budget may push some rebuilds to yfinance or skip a nightly single-provider update (staleness/basis choice, not a wrong number)",
+            "Alpaca IEX close vs consolidated close could cause a false identity refusal (refusal leaves data untouched)"
+          ]
+        }
+      ],
+      "plan_audit_clean": true,
+      "tickets": [],
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true
+      }
     }
   ],
   "already_shipped": [
