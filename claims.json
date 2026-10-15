@@ -10,10 +10,16 @@
     },
     {
       "agent": "claude",
-      "branch": "board/history-single-provider-rebuild-1096bfbb",
-      "claimed_at": "2026-10-15T16:21:30Z",
-      "expires_at": "2026-10-15T20:17:48Z",
-      "note": "Bring main into #324 and finish the merge Kenneth asked for",
+      "branch": "claude/history-single-provider-rebuild-069d7a",
+      "claimed_at": "2026-10-15T17:59:00Z",
+      "expires_at": "2026-10-15T20:59:00Z",
+      "note": "Kenneth reassigned #324 from the Grok board worker",
+      "previous": [
+        {
+          "branch": "board/history-single-provider-rebuild-1096bfbb",
+          "claimed_at": "2026-10-15T16:21:30Z"
+        }
+      ],
       "task": "HISTORY-SINGLE-PROVIDER-REBUILD"
     }
   ]
