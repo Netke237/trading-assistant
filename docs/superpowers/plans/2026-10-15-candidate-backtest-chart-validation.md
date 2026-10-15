@@ -172,3 +172,13 @@ automatic approval review rejected those external writes. New commits are
 local; the remote continuation branch still contains the recovered checkpoint.
 A local continuation bundle is prepared alongside the repository for recovery
 if publication stays blocked.
+
+## Authorized publication and pending merge
+
+The user explicitly authorized pushing the reviewed branch, opening its PR and
+merging only after required CI passes (2026-10-15, this chat). Publication is
+now authorized; prior automatic-approval blockage is historical. PR #333 is
+open. SELF-MERGE PENDING; phase remains built. Last independent clean scope
+ends at413e1e4a; subsequent commits record only verdict/validation/pending-merge
+documentation. No application changes. Exact final published head must be
+MERGEABLE with every required CI check successful before a matched-head merge.

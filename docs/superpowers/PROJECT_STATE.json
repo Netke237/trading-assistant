@@ -4238,7 +4238,7 @@
           "verification": "Independent BMad second scope pass; preserved all original34 inventory tuples, added only guarded fresh params(total35);22 targeted tests passed,220 invalid configurations rejected,12 finite direct/multi accepted. Typed-float walker/probes unchanged; refusals before history/engine; finite controls reach history. Full backend not rerun after test/docs-only fix accurately documented."
         }
       ],
-      "notes": "BUILT LOCAL, NOT MERGED. Plan1clean/code2clean, continuous3; complete feature reviewed64b9d53f..bc812079, bounded test/docs follow-up reviewedbc812079..413e1e4a, zero gate findings. Frontend5344/typecheck/build/browser10 pass. Full backend9084pass9skip1inventory failure; test/docs-only fix2625a73f, all4affected suites84pass. No full rerun after that nonproduction fix. Independent matrices12cases initial; follow-up22tests/220invalid-rejected/12finite-accepted. No application code changed after initial clean audit. New code remains local: automatic approval rejected GitHub publication/child closure pending explicit user authorization. Exact-head hosted CI and merge not attempted.",
+      "notes": "SELF-MERGE PENDING, PR #333. User explicitly authorized publication and merge after CI in this chat, 2026-10-15. Audited complete feature64b9d53f..bc812079; last clean follow-up head413e1e4a2556dc5845bc99785c83d469a086aea4. Only verdict/validation documentation since clean scope; application unchanged. Plan1/code2 clean, continuous3 preserved. Local frontend5344/typecheck/build/browser10 pass. Full backend9084pass9skip1inventory failure, test/docs-only fix2625a73f; all4affected suites84pass, independent follow-up22tests/220invalid-rejected/12finite-accepted. Published recovered continuation branch; exact-head hosted CI pending. Status built, not shipped; never record merged before verification.",
       "tickets": [
         289,
         290,
@@ -4246,7 +4246,8 @@
         292,
         293,
         294
-      ]
+      ],
+      "pr": 333
     }
   ],
   "already_shipped": [
