@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/stop-alert-drawer-parity-dfe3d7ec",
       "claimed_at": "2026-10-15T16:14:55Z",
-      "expires_at": "2026-10-15T19:19:18Z",
+      "expires_at": "2026-10-15T19:20:20Z",
       "note": "Issue 334: align stop drawer, persistence and alerts",
       "task": "STOP-ALERT-DRAWER-PARITY"
     }
