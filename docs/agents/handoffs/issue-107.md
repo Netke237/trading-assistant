@@ -63,3 +63,15 @@ User asked: take #107 on. Later explicitly requested regular saved progress so a
 3. Use small custom universe for remaining Stocks/earnings checks via normal UI. Record actual fresh timestamps and all limitations.
 4. Update this file after each meaningful result and push. Keep #107 open and explicitly unfinished if blocked or unverified. User wants continuity over lost progress.
 5. No merge is needed unless a documentation/evidence PR is warranted. All merges remain subject to board self-merge conditions or explicit chat approval; no push to main.
+
+## Checkpoint — 21:59 Berlin
+
+- User said continue after an elapsed interruption. Claim had expired; ledger had no active claims. Re-took same phase on same branch, verified issue agent-in-progress and Branch still matched. New expiry 2026-10-15T22:58:04Z (renew as needed).
+- Frontend typecheck completed exit 0 (original checkout). No application code changed.
+- Options scan completed HTTP 200 in 20m10s. At 21:57 UI showed five candidates: MKC, GIS, LNC, KEY, EMN; all labelled Unvalidated. MKC selected panel explicitly CAUTION BEARISH, score 62. Ranking banner says all CAUTION-grade. Evidence saved locally in original checkout .scratch/issue107-evidence/options-ranking.txt and .jpg.
+- Options Step 7 MKC opened with a selected 45 Put expiring 2026-12-18. It shows CAUTION BEARISH and Unvalidated CAUTION. BUT all execution broker selectors (IBKR/Tradier/Tastytrade Paper) show NOT CONFIGURED and disabled in this browser profile. Thus actual bearish/earnings refusal controls have NOT been verified; do not claim send checks passed. Saved options-trade-card.txt locally. UI Portfolio remains 8; no opening-order action attempted.
+- Set Custom universe MKC, KEY, EMN; selected Stocks and Bounce to 35-EMA strategy (pullback_ema). Must click Universe Next to commit scan context; jumping via sidebar alone left context SP500. This was corrected before the real stock scan started.
+- First stock Run clicks with no selected strategy did nothing except toast (source confirms strategy selection required); no scan occurred then.
+- Actual bearish Swing stock scan started about 21:59 through Run stock scan, after strategy and custom context were set. UI shows SCANNING. It began before US regular close 22:00 Berlin; result/send checks may occur after close, which must be disclosed.
+- Current tab: localhost:3001/screener/step-3-direction. Browser id 2/tab1, current active CUA bindings tab/browser/scanEvidenceFs.
+- Next: inspect completed stock results and refusal; inspect Settings paper configuration if possible without changing credentials. Do not fabricate store data, inject candidates or call opening-order APIs to bypass UI. Remaining acceptance checks still unfinished.
