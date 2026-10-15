@@ -582,7 +582,7 @@ async def _lead_submission(kind, req, order, service, claim, rec_id, exposure_se
     exposure_hooks = capture_exposure_hooks(exposure_sessions) if order.effect == "OPEN" else None
     result = await asyncio.to_thread(
         _dispatch_order, router_, req.broker, order, hooks, claim.attempt_id,
-        req.saved_rec_id, exposure_hooks,
+        claim.saved_rec_id, exposure_hooks,
     )
     if _confirmation_question(result) is not None:
         _raise_if_awaiting_confirmation(result, rec_id, kind, req.symbol)
