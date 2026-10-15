@@ -7,14 +7,6 @@
       "expires_at": "2026-10-15T08:54:48Z",
       "note": "Continue original backtest artifacts and chart integration",
       "task": "CANDIDATE-BACKTEST-CHART"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/stocks-horizon-t4-a4153a02",
-      "claimed_at": "2026-10-15T04:42:26Z",
-      "expires_at": "2026-10-15T08:54:58Z",
-      "note": "User authorized public push and PR only; audited implementation ready",
-      "task": "STOCKS-HORIZON-T4"
     }
   ]
 }
