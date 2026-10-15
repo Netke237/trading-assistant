@@ -1,5 +1,7 @@
 # Candidate backtest chart — integrated validation
 
+**Current status: feature merged.** PR #333 was verified MERGED at `2d04dbf34262623b14a0ac6da98f6a9bb20b5bc6`. All required CI checks passed on exact head `3e0d1c1e36f0312a73b266c82983f1ff8c9ca35e`; this documentation follow-up reconciles the shipped ledger without application changes.
+
 Phase `CANDIDATE-BACKTEST-CHART`, parent #288, units #289–294.
 
 ## Preservation crosswalk
@@ -182,3 +184,9 @@ open. SELF-MERGE PENDING; phase remains built. Last independent clean scope
 ends at413e1e4a; subsequent commits record only verdict/validation/pending-merge
 documentation. No application changes. Exact final published head must be
 MERGEABLE with every required CI check successful before a matched-head merge.
+
+## Verified feature merge
+
+PR #333 merged at `2d04dbf34262623b14a0ac6da98f6a9bb20b5bc6` after explicit user authorization and all exact-head checks succeeded. Hosted Python3.11 backend **9105passed,9skipped**; frontend **261suites/5344tests**, typecheck and production build passed. Playwright smoke passed. The first frontend build hit the previously recorded Google Fonts loader TypeError; one permitted failed-job rerun on the same head passed. No source or head change to reset retries.
+
+The merged tree equals the tested PR head and is present on main. Phase status is now recorded shipped with the verified merge SHA and CI provenance, preserving plan1/code2 (continuous3), all audit histories and all unrelated phase records. The initial local backend inventory failure is resolved and the full hosted backend run is green. No real orders, arms, alerts or saves were made.
