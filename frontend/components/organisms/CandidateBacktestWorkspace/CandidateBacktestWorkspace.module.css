@@ -1,0 +1,17 @@
+.workspace { overflow: auto; padding: 16px; color: var(--text-primary); background: var(--bg-surface); height: 100%; }
+.workspace h1 { font-size: 20px; }
+.workspace h2 { font-size: 16px; margin-top: 20px; }
+.workspace h3 { font-size: 14px; }
+.workspace p { font-size: 13px; color: var(--text-secondary); }
+.workspace button { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 8px; cursor: pointer; }
+.workspace button:focus-visible { outline: 2px solid var(--accent); }
+.workspace dl { display: grid; grid-template-columns: 180px 1fr; gap: 8px; font-size: 13px; }
+.workspace dd { margin: 0; font-variant-numeric: tabular-nums; }
+.workspace pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.price { height: 360px; border: 1px solid var(--border-subtle); }
+.equity { height: 220px; border: 1px solid var(--border-subtle); }
+
+.scope { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.navigation { display: flex; align-items: center; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
+.navigation a { color: var(--accent); }
+.navigation input, .navigation select { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 6px; }

@@ -10,6 +10,10 @@ jest.mock('@/components/organisms/ChartWorkspace', () => ({__esModule:true, defa
   const {context,state} = useCandidateBacktest();
   return <div data-testid="scope">{JSON.stringify({context,state})}</div>;
 }}));
+jest.mock('@/components/organisms/CandidateBacktestWorkspace', () => ({__esModule:true, default: function HistoricalProbe() {
+  const {useCandidateBacktest} = jest.requireActual('..');
+  return <div data-testid="scope">{JSON.stringify(useCandidateBacktest())}</div>;
+}}));
 const id = '0f15f060-4602-4254-a113-2076894eb97c';
 beforeEach(() => jest.clearAllMocks());
 
@@ -34,4 +38,12 @@ test('new-tab route reconstructs original identity without scan stores and expos
   expect(screen.getByTestId('scope')).not.toHaveTextContent('"artifact":');
   expect(api.getOriginalBacktest).toHaveBeenCalledTimes(1);
   expect(JSON.stringify(localStorage)).toBe(storageBefore);
+});
+
+test.each(['failed','unsupported','insufficient_history'])( 'unavailable %s is distinct from successful zero trades', (reason) => {
+  (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams(`symbol=AAA&source=stocks&backtest_artifact_status=${reason}`));
+  render(<CandidateChartWorkspace/>);
+  expect(screen.getByRole('status')).toHaveTextContent(`Original backtest unavailable: ${reason}`);
+  expect(screen.queryByText(/Successful result: zero closed trades/)).not.toBeInTheDocument();
+  expect(api.getOriginalBacktest).not.toHaveBeenCalled();
 });
