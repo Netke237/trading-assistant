@@ -73,7 +73,7 @@ test.each(['prebreakout', 'fib', 'pullback'])('%s actions keep selection and per
   expect(api.removeWatchlist).toHaveBeenCalledWith('CLICK');
   expect(useWatchlistStore.getState().added).not.toContain('CLICK');
   fireEvent.click(screen.getByRole('button', {name: 'Open CLICK chart in a new tab'}));
-  expect(open).toHaveBeenCalledWith('/chart?symbol=CLICK', '_blank');
+  expect(open).toHaveBeenCalledWith(`/chart?symbol=CLICK&source=${mode}&backtest_artifact_status=${mode === 'pullback' ? 'original_unavailable' : 'unsupported'}`, '_blank');
   expect(screen.getByLabelText('Selected setup')).toHaveTextContent('OTHER');
   expect(within(screen.getByRole('region', {name: 'Selected setup chart'})).queryByRole('button', {name: /Alert|watchlist|new tab/})).toBeNull();
   open.mockRestore();
@@ -128,4 +128,24 @@ test('nested action keyboard events retain default activation and do not select 
     expect(screen.getByLabelText('Selected setup')).toHaveTextContent('OTHER');
   }
   await act(async () => {});
+});
+
+
+test.each(['Bullish','Bearish'])('pullback %s chart takes clicked original ID even after same-symbol scan replacement', async direction => {
+  const id = '0f15f060-4602-4254-a113-2076894eb97c';
+  const replacement = '1f15f060-4602-4254-a113-2076894eb97c';
+  const candidate = (symbol: string, artifactId: string) => ({...row(symbol,direction),stock_score:70,price:100,backtest_artifact_id:artifactId,backtest_artifact_status:'available'});
+  (api.postStockScan as jest.Mock).mockResolvedValue({candidates:[candidate('OTHER',replacement),candidate('CLICK',id)]});
+  const open = jest.spyOn(window,'open').mockImplementation(() => null);
+  render(<Page/>);
+  fireEvent.click(screen.getByRole('button',{name:'Pullback to EMA 50'}));
+  await act(async () => fireEvent.click(screen.getByRole('button',{name:'Run Scan'})));
+  fireEvent.click(screen.getByRole('button',{name:'Select OTHER'}));
+  fireEvent.click(screen.getByRole('button',{name:'Open CLICK chart in a new tab'}));
+  expect(open).toHaveBeenLastCalledWith(`/chart?symbol=CLICK&source=pullback&backtest_artifact_status=available&backtest_artifact_id=${id}`,'_blank');
+  (api.postStockScan as jest.Mock).mockResolvedValue({candidates:[candidate('CLICK',replacement)]});
+  await act(async () => fireEvent.click(screen.getByRole('button',{name:'Run Scan'})));
+  fireEvent.click(screen.getByRole('button',{name:'Open CLICK chart in a new tab'}));
+  expect(open).toHaveBeenLastCalledWith(`/chart?symbol=CLICK&source=pullback&backtest_artifact_status=available&backtest_artifact_id=${replacement}`,'_blank');
+  open.mockRestore();
 });

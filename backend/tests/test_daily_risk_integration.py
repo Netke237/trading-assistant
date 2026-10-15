@@ -11,7 +11,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.database import Base, get_db
 from app.models.daily_risk import DailyRiskBudget, DailyRiskAttempt
-from app.services import daily_risk, daily_risk_hooks, portfolio_risk
+from app.services import daily_risk, daily_risk_hooks, portfolio_exposure, portfolio_risk
 from app.services.auto_trader import AutoTradeService, ArmedStrategy
 from app.data.ibkr_paper import OrderResult
 from app.routers import broker, portfolio
@@ -27,6 +27,7 @@ async def rig(tmp_path, monkeypatch):
     cfg = portfolio_risk._load_config()
     cfg = {**cfg, 'portfolio': {**cfg['portfolio'], 'portfolio_value': 100000}, 'auto_trade': {'max_daily_loss_pct': .02}}
     monkeypatch.setattr(portfolio_risk, '_load_config', lambda: cfg)
+    monkeypatch.setattr(portfolio_exposure.book, 'sessions', sessions)
     service = daily_risk.DailyRiskService(sessions, config_provider=lambda: cfg, history_provider=lambda: [])
     monkeypatch.setattr(daily_risk, 'reserve', service.reserve)
     monkeypatch.setattr(daily_risk, 'resolve', service.resolve)

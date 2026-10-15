@@ -203,3 +203,18 @@ describe('watched contracts — grading on the wire (WATCHLIST-SCAN-CONTRACT-RUL
     expect(u).not.toContain('expiry');
   });
 });
+
+
+describe('original backtest client', () => {
+  it('sends the opaque ID and exact symbol with cancellation', async () => {
+    const artifact = {schema_version:1, artifact_id:'opaque'};
+    global.fetch = jest.fn().mockResolvedValue({ok:true,json:async () => artifact});
+    const signal = new AbortController().signal;
+    await expect(api.getOriginalBacktest('opaque/id','BRK.B',signal)).resolves.toEqual(artifact);
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/backtest-artifacts/opaque%2Fid?symbol=BRK.B'), {signal});
+  });
+  it.each([[404,'missing'],[410,'expired'],[422,'invalid_input'],[503,'storage_unavailable'],[500,'failed']])('retains HTTP %s as %s', async (status, reason) => {
+    mockFetchOnce(status as number, {detail:'error'});
+    await expect(api.getOriginalBacktest('id','AAA')).rejects.toMatchObject({status,reason});
+  });
+});

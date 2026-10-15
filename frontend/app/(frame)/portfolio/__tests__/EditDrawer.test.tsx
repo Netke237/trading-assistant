@@ -1466,34 +1466,37 @@ describe('a field where 0 is not the clear gesture', () => {
     expect(screen.queryByText(/Enter 0 to clear this level/i)).not.toBeInTheDocument();
   });
 
-  it('documentation of intent: leaves a real edit alone on both fields', () => {
+  it('documentation of intent: a price edit still saves, and a quantity increase waits for its fill price', () => {
     // DOCUMENTATION OF INTENT, like the boundary pair above: no mutation of the
     // zero bound is expected to fail this; it records that the bound is on 0,
-    // not on editing -- the two fields still commit.
+    // not on editing. A larger quantity is an added fill and does not save on
+    // blur. Current price still does.
     const onPatch = jest.fn();
     render(<LiveDrawer initial={makeOptionPosition({ contracts: 1 })} onPatch={onPatch} />);
 
     const contracts = screen.getByLabelText(/Contracts/) as HTMLInputElement;
     fireEvent.change(contracts, { target: { value: '3' } });
     fireEvent.blur(contracts);
-    expect(onPatch).toHaveBeenCalledWith({ contracts: 3 });
+    expect(onPatch).not.toHaveBeenCalled();
     expect(contracts.value).toBe('3');
+    expect(screen.getByLabelText(/Added fill price/i)).toBeInTheDocument();
 
     const price = screen.getByLabelText(/Current price/) as HTMLInputElement;
     fireEvent.change(price, { target: { value: '5.10' } });
     fireEvent.blur(price);
-    // entry 4.2, 3 contracts, x100 -> (5.10 - 4.2) * 100 * 3 = 270. Asserted,
-    // not merely stated in a comment: pnlDollar and pnlPct are the two values
-    // a wrongly-refused-or-accepted price actually puts on the row.
+    // entry 4.2, contracts still 1 (the increase was not saved), x100
+    // -> (5.10 - 4.2) * 100 * 1 = 90. Asserted, not merely stated in a
+    // comment: pnlDollar and pnlPct are the two values a wrongly-refused
+    // price actually puts on the row.
     expect(onPatch).toHaveBeenLastCalledWith(
       expect.objectContaining({ currentPrice: 5.1 }),
     );
-    // closeTo, not toBe: the drawer stores the raw float product
-    // (269.99999999999983), which every readout formats before showing. The
-    // point of the assertion is the magnitude and the SIGN -- a refused or
-    // mis-parsed price is what puts a -100% on the row.
+    // closeTo, not toBe: the drawer stores the raw float product, which every
+    // readout formats before showing. The point of the assertion is the
+    // magnitude and the SIGN -- a refused or mis-parsed price is what puts a
+    // -100% on the row.
     const patch = onPatch.mock.calls.at(-1)![0];
-    expect(patch.pnlDollar).toBeCloseTo(270, 6);
+    expect(patch.pnlDollar).toBeCloseTo(90, 6);
     expect(patch.pnlPct).toBeCloseTo(21.43, 2);
     expect(price.value).toBe('5.1');
   });
@@ -1967,5 +1970,151 @@ describe('Current price on a position without a quote', () => {
     expect(price.value).toBe('4.5');
     expect(screen.getByText(/Manual override/)).toBeInTheDocument();
     expect(screen.queryByText('Quote unavailable')).not.toBeInTheDocument();
+  });
+});
+
+// T8 — stop direction against a quote that is not the stored entry.
+// Bullish quote 120, entry 100. Bearish quote 80, entry 100.
+// A stop above the bullish entry (110) is a trailing stop: the stock drawer
+// does not call it wrong-side, and the in-app alert does not fire.
+// Equality with the quote does. The option drawer does not apply that check.
+describe('broker-path stop direction boundaries', () => {
+  const noop = () => {};
+
+  function levelAlerts(position: PortfolioPosition): string[] {
+    return scanPortfolio([position])
+      .filter((a) => a.alertType === 'STOP_REACHED' || a.alertType === 'STRUCTURAL_STOP_BREACHED')
+      .map((a) => a.alertType);
+  }
+
+  function stock(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
+    return makeStockPosition({
+      entryPrice: 100,
+      currentPrice: 120,
+      currentStockPrice: 120,
+      stop: 110,
+      structuralStop: null,
+      targets: [{ id: 'T1', stockPrice: 150, targetPrice: 150, status: 'PENDING' }],
+      ...overrides,
+    });
+  }
+
+  function bearishStock(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
+    return stock({
+      direction: 'Bearish',
+      currentPrice: 80,
+      currentStockPrice: 80,
+      stop: 90,
+      targets: [{ id: 'T1', stockPrice: 60, targetPrice: 60, status: 'PENDING' }],
+      ...overrides,
+    });
+  }
+
+  function option(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
+    return makeOptionPosition({
+      entryPrice: 8,
+      currentPrice: 4.5,
+      currentStockPrice: 120,
+      stop: 110,
+      structuralStop: null,
+      direction: 'Bullish',
+      ...overrides,
+    });
+  }
+
+  function levelInput(label: 'Stop' | 'Structural stop'): HTMLInputElement {
+    const captions = screen.getAllByText(label, { exact: true, selector: 'span' });
+    for (const caption of captions) {
+      const input = caption.parentElement?.querySelector('input');
+      if (input instanceof HTMLInputElement) return input;
+    }
+    throw new Error(`no input for ${label}`);
+  }
+
+  function shown(position: PortfolioPosition) {
+    render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
+    return {
+      warned: screen.queryByText(/stop is already on the wrong side/) !== null,
+      estimateEnabled: !screen.getByRole('button', { name: 'Estimate' }).hasAttribute('disabled'),
+      alerts: levelAlerts(position),
+    };
+  }
+
+  it.each<[string, PortfolioPosition, boolean, boolean, string[]]>([
+    ['bullish trailing stop above entry', stock({ stop: 110 }), false, true, []],
+    ['bullish stop equal to the quote', stock({ stop: 120 }), true, false, ['STOP_REACHED']],
+    ['bullish stop above the quote', stock({ stop: 130 }), true, false, ['STOP_REACHED']],
+    ['bullish stop below entry', stock({ stop: 90 }), false, true, []],
+    ['bearish trailing stop below entry', bearishStock({ stop: 90 }), false, true, []],
+    ['bearish stop equal to the quote', bearishStock({ stop: 80 }), true, false, ['STOP_REACHED']],
+    ['bearish stop below the quote', bearishStock({ stop: 70 }), true, false, ['STOP_REACHED']],
+    ['bearish stop above entry', bearishStock({ stop: 110 }), false, true, []],
+    ['stock with no live quote', stock({ currentPrice: 0, currentStockPrice: 0, stop: 130 }), false, false, []],
+    ['unset stock stop', stock({ stop: null }), false, false, []],
+    ['structural stop above the quote while the stop is valid', stock({ stop: 110, structuralStop: 130 }), false, true, ['STRUCTURAL_STOP_BREACHED']],
+    ['option stop above the underlying', option({ stop: 130 }), false, true, ['STOP_REACHED']],
+    ['option stop equal to the underlying', option({ stop: 120 }), false, true, ['STOP_REACHED']],
+    ['option trailing stop above the premium entry', option({ stop: 110 }), false, true, []],
+    ['option bearish stop below the underlying', option({ direction: 'Bearish', currentStockPrice: 80, stop: 70 }), false, true, ['STOP_REACHED']],
+    ['option bearish stop above the underlying', option({ direction: 'Bearish', currentStockPrice: 80, stop: 90 }), false, true, []],
+    ['option with no underlying quote', option({ currentStockPrice: 0, stop: 130 }), false, false, []],
+    ['unset option stop', option({ stop: null }), false, false, []],
+  ])('%s', (_name, position, warned, estimateEnabled, alerts) => {
+    const view = shown(position);
+    expect(view.warned).toBe(warned);
+    expect(view.estimateEnabled).toBe(estimateEnabled);
+    expect(view.alerts).toEqual(alerts);
+  });
+
+  it('a stock with no live quote names the missing price, not a wrong-side stop', () => {
+    const position = stock({ currentPrice: 0, currentStockPrice: 0, stop: 130 });
+    shown(position);
+    expect(screen.getByText(/No live current price yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/stop is already on the wrong side/)).not.toBeInTheDocument();
+  });
+
+  it('an unset stop is shown as 0', () => {
+    shown(stock({ stop: null }));
+    expect(levelInput('Stop').value).toBe('0');
+  });
+
+  it.each([
+    ['a trailing stop above entry', '110', 110],
+    ['a stop equal to the quote', '120', 120],
+    ['a stop above the quote', '130', 130],
+  ])('the stock Stop field commits %s', (_name, typed, sent) => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={stock({ stop: 90 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    const input = levelInput('Stop');
+    fireEvent.change(input, { target: { value: typed } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ stop: sent });
+  });
+
+  it('the structural field commits a level above the quote', () => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={stock({ stop: 110, structuralStop: 100 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    const input = levelInput('Structural stop');
+    fireEvent.change(input, { target: { value: '130' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ structuralStop: 130 });
+  });
+
+  it('the option Stop field commits a stop above the underlying', () => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={option({ stop: 110 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    const input = levelInput('Stop');
+    fireEvent.change(input, { target: { value: '130' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ stop: 130 });
+  });
+
+  it('typing 0 clears a stock stop to null', () => {
+    const onChange = jest.fn();
+    render(<EditDrawer position={stock({ stop: 110 })} onClose={noop} onChange={onChange} onRemove={noop} />);
+    const input = levelInput('Stop');
+    fireEvent.change(input, { target: { value: '0' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledWith({ stop: null });
   });
 });

@@ -7,6 +7,8 @@ import sys
 
 NEW_REVISION = "a6a5b5d01fa5"
 PRIOR_HEAD = "a93b8d24f760"
+MAIN_HEAD = "c29a451f911c"
+MERGE_HEAD = "35c19d72ef80"
 
 
 def _alembic_runner(path):
@@ -68,8 +70,30 @@ def test_basis_columns_upgrade_and_downgrade_preserve_state_row(tmp_path):
             f"SELECT {', '.join(OLD_COLUMNS)} FROM ohlcv_history_state").fetchall() == [OLD_ROW]
 
 
-def test_alembic_has_single_head_the_basis_revision(tmp_path):
+def test_alembic_has_single_head_above_the_basis_revision(tmp_path):
+    """Main's head and the basis revision forked. One empty merge joins them."""
     alembic = _alembic_runner(tmp_path / "heads.db")
     out = alembic("heads").stdout
     heads = [line.split()[0] for line in out.splitlines() if line.strip()]
-    assert heads == [NEW_REVISION]
+    assert heads == [MERGE_HEAD]
+    shown = alembic("show", MERGE_HEAD).stdout
+    assert NEW_REVISION in shown
+    assert MAIN_HEAD in shown
+
+
+def test_upgrade_from_main_head_adds_basis_columns(tmp_path):
+    """A database already on main's head must still gain the basis columns."""
+    path = tmp_path / "from_main_head.db"
+    with sqlite3.connect(path) as db:
+        _create_history_state(db)
+    alembic = _alembic_runner(path)
+    alembic("stamp", MAIN_HEAD)
+    alembic("upgrade", "head")
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == MERGE_HEAD
+        columns = [row[1] for row in db.execute("PRAGMA table_info(ohlcv_history_state)")]
+        assert {"basis_provider", "basis_rebuilt_at"} <= set(columns)
+        row = db.execute(
+            f"SELECT {', '.join(OLD_COLUMNS)}, basis_provider, basis_rebuilt_at "
+            "FROM ohlcv_history_state").fetchall()
+        assert row == [OLD_ROW + (None, None)]

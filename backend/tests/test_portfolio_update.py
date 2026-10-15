@@ -43,8 +43,9 @@ async def client(monkeypatch) -> AsyncGenerator[AsyncClient, None]:
 
 
 async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec="REC-1",
-                stop=None, structural_stop=None, targets=None):
-    body = {"recId": rec, "symbol": "AAPL", "contract": contract, "direction": "Bullish",
+                stop=None, structural_stop=None, targets=None, direction="Bullish",
+                symbol="AAPL"):
+    body = {"recId": rec, "symbol": symbol, "contract": contract, "direction": direction,
             "entryPrice": entry, "qty": qty, "entryDate": "2026-05-01",
             "stop": stop, "structuralStop": structural_stop, "targets": targets or [],
             "dteTotal": 140, "portfolioValue": 1_000_000}
@@ -194,83 +195,75 @@ async def test_patch_qty_decrease_does_not_require_portfolio_value(client):
 
 @pytest.mark.asyncio
 async def test_patch_qty_increase_without_portfolio_value_uses_server_account(client):
-    await _add(client, rec="REC-QTYUP-NOVAL", qty=1)
-    r = await client.patch("/api/portfolio/REC-QTYUP-NOVAL", json={"qty": 2})
+    await _add(client, rec="REC-QTYUP-NOVAL", qty=1, entry=0.50)
+    r = await client.patch(
+        "/api/portfolio/REC-QTYUP-NOVAL",
+        json={"qty": 2, "expectedQty": 1, "addedFillPrice": 0.50},
+    )
     assert r.status_code == 200, r.text
     assert r.json()["qty"] == 2
+    assert r.json()["entryPrice"] == 0.50
 
 
 @pytest.mark.asyncio
-async def test_patch_qty_increase_reruns_risk_gate_and_rejects_when_exposure_too_high(client):
-    # Proves the exploit this endpoint must NOT allow: open a trivially-small
-    # position, then try to inflate it past what the exposure cap would ever
-    # have approved at creation. entry=6.00, multiplier=100 (option contract).
-    # portfolioValue=10_000 is deliberately above risk_rules.yaml's
-    # min_portfolio_value (5_000) — using something below it (e.g. 1_000)
-    # would make check_position_risk short-circuit on "portfolio_too_small"
-    # before ever reaching the exposure math this test means to exercise, and
-    # the 422 would come back for the wrong reason. qty=1 -> capital_at_risk=
-    # $600, fine against portfolioValue=1_000_000 at POST time (via `_add`).
-    # Increasing to qty=5 against portfolioValue=$10,000 -> capital_at_risk=
-    # $3,000 -> 30% single-position exposure, way over the 5%
-    # (max_single_position_pct) cap, and too small to reduce-and-approve
-    # (max_allowed_premium=$500 / $600-per-contract rounds down to 0) -> hard
-    # reject. 30% also exceeds max_total_exposure_pct (25%), so the response
-    # detail carries BOTH "single_trade_exposure_too_high" and
-    # "total_exposure_limit_reached" — the assertion below only checks the
-    # first is present, not that it's the only reason.
+async def test_patch_qty_increase_over_the_cap_persists_the_full_fill_and_warns(client):
+    # A reported fill is indivisible. 5 contracts at 6.00 is $3,000, over both
+    # the option single cap and the 25% total cap at the $10,000 account. The
+    # row keeps the full quantity and weighted entry, and the response warns.
     await _add(client, rec="REC-QTYUP-REJECT", qty=1, entry=6.00)
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-REJECT",
-        json={"qty": 5, "portfolioValue": 1_000_000.0},
+        json={"qty": 5, "expectedQty": 1, "addedFillPrice": 6.00},
     )
-    assert r.status_code == 422, r.text
-    assert "single_trade_exposure_too_high" in r.json()["detail"]
-    # The qty must NOT have been silently applied despite the 422.
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["qty"] == 5
+    assert body["entryPrice"] == 6.00
+    assert body.get("adjustedQty") is None
+    assert "single_trade_exposure_too_high" in body["exposureBreach"]
     with patch("app.routers.portfolio.fetch_contract_quote_async",
                new=AsyncMock(return_value=None)), \
          patch("app.routers.portfolio.fetch_price_async",
                new=AsyncMock(return_value=None)):
         get_r = await client.get("/api/portfolio")
     row = next(p for p in get_r.json() if p["recId"] == "REC-QTYUP-REJECT")
-    assert row["qty"] == 1
+    assert row["qty"] == 5
+    assert row["entryPrice"] == 6.00
 
 
 @pytest.mark.asyncio
 async def test_patch_qty_increase_reruns_risk_gate_and_approves_when_exposure_ok(client):
-    await _add(client, rec="REC-QTYUP-OK", qty=1, entry=1.00)
+    # 1 @ 0.50 plus 1 @ 1.50 is 2 @ 1.00. Notional 200 is inside the option cap
+    # at the fixture's $10,000 account, so this increase is not resized.
+    await _add(client, rec="REC-QTYUP-OK", qty=1, entry=0.50)
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-OK",
-        json={"qty": 3, "portfolioValue": 1_000_000.0},
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["qty"] == 3
-    assert r.json().get("adjustedQty") is None  # no soft-reduction happened
-
-
-@pytest.mark.asyncio
-async def test_patch_qty_increase_soft_reduces_and_reports_adjusted_qty(client):
-    # Distinct from the hard-reject test above: here the exposure check DOES
-    # trigger, but a smaller size still fits, so check_position_risk approves
-    # at a reduced size instead of rejecting outright. The PATCH response must
-    # surface that (`adjustedQty`), the same way POST /api/portfolio already
-    # does via `resp.adjustedQty` — otherwise the drawer shows the qty the
-    # user typed while the database quietly holds a smaller one, and the next
-    # sync poll would silently snap the input back with zero explanation.
-    # entry=1.50, requested qty=5 (at risk_rules.yaml's
-    # sizing.max_contracts_per_trade ceiling, so it isn't clamped further) ->
-    # capital_at_risk=$750 against portfolioValue=$10,000 -> 7.5% exposure,
-    # over the 3.75% option cap (min of the 5% single cap and the 3.75% loss
-    # limit, review fix #4 / D5) -> max_allowed_premium=$375 / $150-per-contract -> 2.
-    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=1.50)
-    r = await client.patch(
-        "/api/portfolio/REC-QTYUP-SOFT",
-        json={"qty": 5, "portfolioValue": 10_000.0},
+        json={"qty": 2, "expectedQty": 1, "addedFillPrice": 1.50},
     )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["qty"] == 2
-    assert body["adjustedQty"] == 2
+    assert body["entryPrice"] == 1.0
+    assert body.get("adjustedQty") is None
+    assert not body.get("exposureBreach")
+
+
+@pytest.mark.asyncio
+async def test_patch_qty_increase_that_would_resize_persists_the_full_fill(client):
+    # entry=1.50, requested qty=5 -> $750 against the $10,000 account, over the
+    # 3.75% option cap. The check would resize to 2. The reported fill is still
+    # stored at 5, with a warning and no adjustedQty shrink.
+    await _add(client, rec="REC-QTYUP-SOFT", qty=1, entry=1.50)
+    r = await client.patch(
+        "/api/portfolio/REC-QTYUP-SOFT",
+        json={"qty": 5, "expectedQty": 1, "addedFillPrice": 1.50},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["qty"] == 5
+    assert body["entryPrice"] == 1.50
+    assert body.get("adjustedQty") is None
+    assert "size_reduced_to_fit_exposure_limit" in body["exposureBreach"]
 
 
 @pytest.mark.asyncio
@@ -325,40 +318,41 @@ async def test_patch_empty_body_is_a_noop(client):
 
 
 @pytest.mark.asyncio
-async def test_resized_qty_raise_scales_the_rungs_sent_with_it(client):
-    # Open question 54 (C2): the soft-resize scenario above (1 -> 5 asked,
-    # booked 2) with rungs planned for the 5 asked. Stored verbatim they would
-    # sell 5 of 2 held; capped by the overflow (_rescale_rung_shares' rounding)
-    # 3/2 becomes 1/1.
+async def test_full_fill_scales_rungs_down_to_the_persisted_qty(client):
+    # The fill persists all 5, so rungs are capped to that quantity, not to the
+    # size the exposure check would have resized to. 6/4 of 10 scales to 3/2.
     await _add(client, rec="REC-QTYUP-RUNGS", qty=1, entry=1.50)
-    rungs = [{"stockPrice": 200.0, "contractsToSell": 3}, {"stockPrice": 210.0, "contractsToSell": 2}]
+    rungs = [{"stockPrice": 200.0, "contractsToSell": 6}, {"stockPrice": 210.0, "contractsToSell": 4}]
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-RUNGS",
-        json={"qty": 5, "targets": rungs, "portfolioValue": 10_000.0},
+        json={"qty": 5, "expectedQty": 1, "addedFillPrice": 1.50, "targets": rungs},
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["adjustedQty"] == 2
-    assert [t["contractsToSell"] for t in body["targets"]] == [1, 1]
+    assert body["qty"] == 5
+    assert body.get("adjustedQty") is None
+    assert [t["contractsToSell"] for t in body["targets"]] == [3, 2]
     assert [t["stockPrice"] for t in body["targets"]] == [200.0, 210.0]
     stored = next(p for p in (await client.get("/api/portfolio")).json() if p["recId"] == "REC-QTYUP-RUNGS")
-    assert stored["qty"] == 2
-    assert [t["contractsToSell"] for t in stored["targets"]] == [1, 1]
+    assert stored["qty"] == 5
+    assert [t["contractsToSell"] for t in stored["targets"]] == [3, 2]
 
 
 @pytest.mark.asyncio
-async def test_resized_qty_raise_leaves_stored_rungs_alone(client):
-    # Rungs NOT sent with the resized PATCH were planned for the smaller
-    # pre-raise qty (here 1 of 1); they still fit the booked 2, so they stay.
+async def test_full_fill_leaves_stored_rungs_that_still_fit(client):
+    # Rungs not sent with the fill were planned for the pre-fill qty. They fit
+    # the persisted 5, so they stay. The cap warning is separate from rungs.
     await _add(client, rec="REC-QTYUP-KEEP", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
     r = await client.patch(
         "/api/portfolio/REC-QTYUP-KEEP",
-        json={"qty": 5, "portfolioValue": 10_000.0},
+        json={"qty": 5, "expectedQty": 1, "addedFillPrice": 1.50},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["adjustedQty"] == 2
+    assert r.json()["qty"] == 5
+    assert r.json().get("adjustedQty") is None
     assert [t["contractsToSell"] for t in r.json()["targets"]] == [1]
+    assert r.json()["exposureBreach"]
 
 
 async def _patch_rungs(client, rec, body):
@@ -368,16 +362,16 @@ async def _patch_rungs(client, rec, body):
 
 
 @pytest.mark.asyncio
-async def test_resized_qty_raise_keeps_rungs_that_fit_the_booked_qty(client):
-    # Delta review B2: a rung edit typed against the held qty can be merged
-    # into the same debounced PATCH as the raise. Rungs that already fit the
-    # booked 2 are stored as sent -- not scaled by asked/booked (-> 0/0).
+async def test_full_fill_keeps_rungs_that_fit_the_persisted_qty(client):
+    # Rungs typed against the fill total are stored as sent when they fit the
+    # persisted quantity. They are not scaled as if the cap had resized it.
     await _add(client, rec="REC-QTYUP-FIT", qty=1, entry=1.50)
     body = await _patch_rungs(client, "REC-QTYUP-FIT", {
-        "qty": 5, "portfolioValue": 10_000.0,
+        "qty": 5, "expectedQty": 1, "addedFillPrice": 1.50,
         "targets": [{"stockPrice": 200.0, "contractsToSell": 1}, {"stockPrice": 210.0, "contractsToSell": 1}],
     })
-    assert body["adjustedQty"] == 2
+    assert body["qty"] == 5
+    assert body.get("adjustedQty") is None
     assert [t["contractsToSell"] for t in body["targets"]] == [1, 1]
 
 
@@ -412,8 +406,8 @@ async def test_qty_decrease_caps_the_stored_rungs(client):
 
 @pytest.mark.asyncio
 async def test_rejected_qty_raise_still_caps_the_rungs_sent_with_it(client):
-    # The raise is refused (portfolioValue missing) but the rungs in the same
-    # PATCH are saved -- against the qty actually held (5), not the asked 9.
+    # The increase is refused (no added-fill price) but the rungs in the same
+    # PATCH are saved against the qty actually held (5), not the asked 9.
     await _add(client, rec="REC-QTYREJ-RUNGS", qty=5, entry=1.00)
     r = await client.patch("/api/portfolio/REC-QTYREJ-RUNGS", json={
         "qty": 9, "targets": [{"stockPrice": 200.0, "contractsToSell": 9}],
@@ -425,11 +419,14 @@ async def test_rejected_qty_raise_still_caps_the_rungs_sent_with_it(client):
 
 
 @pytest.mark.asyncio
-async def test_resized_raise_with_null_targets_stores_none(client):
+async def test_full_fill_with_null_targets_clears_them(client):
     await _add(client, rec="REC-QTYUP-NULL", qty=1, entry=1.50,
                targets=[{"stockPrice": 200.0, "contractsToSell": 1}])
-    body = await _patch_rungs(client, "REC-QTYUP-NULL", {"qty": 5, "portfolioValue": 10_000.0, "targets": None})
-    assert body["adjustedQty"] == 2
+    body = await _patch_rungs(client, "REC-QTYUP-NULL", {
+        "qty": 5, "expectedQty": 1, "addedFillPrice": 1.50, "targets": None,
+    })
+    assert body["qty"] == 5
+    assert body.get("adjustedQty") is None
     assert body["targets"] == []
 
 @pytest.mark.asyncio
@@ -456,3 +453,65 @@ async def test_quantity_decrease_bypasses_invalid_account(client, monkeypatch):
     response = await client.patch('/api/portfolio/REC-INVALID-DECREASE', json={'qty': 2})
     assert response.status_code == 200
     assert response.json()['qty'] == 2
+
+
+# ── T8: PATCH has no quote and no stop provenance ────────────────────────────
+#
+# Entry stays 100. The live quote is not an input. A positive stop is stored
+# on either side of that entry, for both directions, including one equal to a
+# quote this handler never sees. stopIsUserSet is not an update field.
+
+@pytest.mark.asyncio
+async def test_patch_stores_a_positive_stop_with_no_provenance(client):
+    await _add(client, contract="ABT|STOCK", qty=1, entry=100.0, rec="REC-BULL-STOP", stop=90.0)
+    for stop in (110.0, 120.0, 130.0, 90.0):
+        r = await client.patch(
+            "/api/portfolio/REC-BULL-STOP",
+            json={"stop": stop, "stopIsUserSet": True},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["stop"] == stop
+        assert r.json()["entryPrice"] == 100.0
+        assert r.json()["direction"] == "Bullish"
+
+    await _add(
+        client, contract="IBM|STOCK", qty=1, entry=100.0, rec="REC-BEAR-STOP",
+        stop=110.0, direction="Bearish", symbol="IBM",
+    )
+    for stop in (90.0, 80.0, 70.0, 110.0):
+        r = await client.patch(
+            "/api/portfolio/REC-BEAR-STOP",
+            json={"stop": stop, "structuralStop": stop},
+        )
+        assert r.status_code == 200, r.text
+        assert (r.json()["stop"], r.json()["structuralStop"]) == (stop, stop)
+        assert r.json()["entryPrice"] == 100.0
+        assert r.json()["direction"] == "Bearish"
+
+
+@pytest.mark.asyncio
+async def test_patch_floors_zero_negative_and_null_and_leaves_an_omitted_stop(client):
+    await _add(
+        client, contract="ABT|STOCK", qty=1, entry=100.0, rec="REC-FLOOR-STOP",
+        stop=110.0, structural_stop=115.0,
+    )
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": 0, "structuralStop": 0})
+    assert r.status_code == 200, r.text
+    assert (r.json()["stop"], r.json()["structuralStop"]) == (None, None)
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": -5, "structuralStop": -1})
+    assert r.status_code == 200, r.text
+    assert (r.json()["stop"], r.json()["structuralStop"]) == (None, None)
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": 110.0, "structuralStop": 115.0})
+    assert r.status_code == 200, r.text
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": None})
+    assert r.status_code == 200, r.text
+    assert r.json()["stop"] is None
+    assert r.json()["structuralStop"] == 115.0
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["stop"] is None
+    assert r.json()["structuralStop"] == 115.0
+    assert r.json()["entryPrice"] == 100.0

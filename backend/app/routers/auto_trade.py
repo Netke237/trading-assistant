@@ -287,13 +287,19 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     # written. Release it so a /fire queued behind the one worker (market-open
     # check + regime deadline + broker call) does not pin a connection;
     # `book_fired_order` checks one out again.
+    from app.services.portfolio_exposure_hooks import capture_exposure_hooks, sessions_for
+    exposure_sessions = sessions_for(db)
     await db.rollback()
     from app.services.daily_risk_hooks import capture_daily_risk_hooks
     hooks = capture_daily_risk_hooks()
+    # No engine (a test double) keeps the caller's snapshot. A real session
+    # admits on its own engine after this transaction is released.
+    exposure_hooks = capture_exposure_hooks(exposure_sessions) if exposure_sessions is not None else None
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
         daily_risk_hooks=hooks,
+        exposure_hooks=exposure_hooks,
         portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler

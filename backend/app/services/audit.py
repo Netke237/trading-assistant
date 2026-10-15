@@ -142,8 +142,39 @@ def prune_audit_log_archives(retention_years: int) -> None:
 # dual-system traceability.  rec_id must use new_rec_id() format.
 
 async def log_approval(rec_id: str, trade_card_data: dict, db: "AsyncSession") -> None:
-    """Write approval event to AuditEvent table and JSONL audit.log."""
+    """Write one approval, or nothing if a hard delete already removed the trade.
+
+    Callers commit the position first and treat a failure here as non-fatal.
+    The insert takes the same exposure guard as DELETE. There is no foreign
+    key: a retained closed-history row still gets the approval, and an open
+    row does too. If neither row is left, skip the table and the JSONL line.
+    """
+    from sqlalchemy import select
+
     from app.models.audit_event import AuditEventModel  # deferred to avoid circular import
+    from app.models.closed_position import ClosedPositionModel
+    from app.models.portfolio import PortfolioPositionModel
+    from app.services.portfolio_exposure import lock_exposure
+
+    # The position refresh leaves a read snapshot. End it before the guard,
+    # or this transaction can miss the delete it waited on. Rollback is not
+    # usable here: it expires every object, including the position the caller
+    # still reads after this returns.
+    sync = db.sync_session
+    if not (sync.new or sync.dirty or sync.deleted):
+        await db.commit()
+
+    await lock_exposure(db)
+    open_row = (await db.execute(
+        select(PortfolioPositionModel.id).where(PortfolioPositionModel.rec_id == rec_id)
+    )).first()
+    if open_row is None:
+        closed_row = (await db.execute(
+            select(ClosedPositionModel.id).where(ClosedPositionModel.rec_id == rec_id)
+        )).first()
+        if closed_row is None:
+            await db.commit()
+            return
 
     event = AuditEventModel(
         event_type="approval",
@@ -153,7 +184,7 @@ async def log_approval(rec_id: str, trade_card_data: dict, db: "AsyncSession") -
     )
     db.add(event)
     await db.commit()
-    # Dual-system traceability: also write to JSONL
+    # JSONL only after the guarded row commits. log_event swallows its own errors.
     log_event("approval", rec_id, trade_card_data)
 
 
