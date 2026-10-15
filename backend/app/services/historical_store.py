@@ -343,46 +343,51 @@ async def _fetch_chain(
     start: date,
     end: date,
     accept: Callable[[str, list[dict]], Awaitable[bool]] | None = None,
+    providers: tuple[str, ...] = ("alpaca", "tiingo", "yfinance"),
 ) -> list[dict] | None:
     """Provider chain Alpaca → Tiingo → yfinance; the first accepted result wins.
 
     ``accept(name, bars)`` decides success (and may store); by default any non-empty
     list is accepted. A provider error, including one raised by ``accept``, is logged
-    and the next provider is tried. Returns the accepted bars, or None.
+    and the next provider is tried. Only ``providers`` are tried, always in that fixed
+    order. Returns the accepted bars, or None.
     """
     async def _ok(name: str, bars: list[dict]) -> bool:
         return await accept(name, bars) if accept is not None else bool(bars)
 
     # 1. Alpaca (primary)
-    try:
-        from app.data.alpaca import fetch_daily_bars_single, get_alpaca_client
-        alpaca_client = await get_alpaca_client()
-        if alpaca_client is not None:
-            new_bars = await fetch_daily_bars_single(
-                symbol, start, end, client=alpaca_client
-            )
-            if await _ok("Alpaca", new_bars):
-                return new_bars
-    except Exception as exc:
-        logger.warning("historical_store: Alpaca fetch failed for %s — %s", symbol, exc)
+    if "alpaca" in providers:
+        try:
+            from app.data.alpaca import fetch_daily_bars_single, get_alpaca_client
+            alpaca_client = await get_alpaca_client()
+            if alpaca_client is not None:
+                new_bars = await fetch_daily_bars_single(
+                    symbol, start, end, client=alpaca_client
+                )
+                if await _ok("Alpaca", new_bars):
+                    return new_bars
+        except Exception as exc:
+            logger.warning("historical_store: Alpaca fetch failed for %s — %s", symbol, exc)
 
     # 2. Tiingo fallback
-    try:
-        new_bars = await fetch_historical_candles(symbol, start, end)
-        if await _ok("Tiingo", new_bars):
-            return new_bars
-    except Exception as exc:
-        logger.warning("historical_store: Tiingo fetch failed for %s — %s", symbol, exc)
+    if "tiingo" in providers:
+        try:
+            new_bars = await fetch_historical_candles(symbol, start, end)
+            if await _ok("Tiingo", new_bars):
+                return new_bars
+        except Exception as exc:
+            logger.warning("historical_store: Tiingo fetch failed for %s — %s", symbol, exc)
 
     # 3. yfinance last resort
-    try:
-        new_bars = await asyncio.to_thread(_yfinance_fetch, symbol, start, end)
-        if await _ok("yfinance", new_bars):
-            return new_bars
-    except Exception as exc:
-        logger.warning(
-            "historical_store: yfinance fetch failed for %s — %s", symbol, exc
-        )
+    if "yfinance" in providers:
+        try:
+            new_bars = await asyncio.to_thread(_yfinance_fetch, symbol, start, end)
+            if await _ok("yfinance", new_bars):
+                return new_bars
+        except Exception as exc:
+            logger.warning(
+                "historical_store: yfinance fetch failed for %s — %s", symbol, exc
+            )
     return None
 
 
@@ -621,7 +626,9 @@ async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
        ``heal .. end + 1 day`` (the ``+1`` makes the request independent of each
        provider's ``end`` inclusivity). Providers Alpaca → Tiingo → yfinance: first
        success wins, where success is any non-empty list, or — when healing — the heal
-       date actually stored with a new ``fetched_at``.
+       date actually stored with a new ``fetched_at``. A single-provider symbol
+       (``basis_provider`` tiingo/yfinance) asks only its own provider, so no other
+       provider's rows are appended to its series between nightly runs.
     4. Return all bars from the DB in the requested range.
     Only settled rows are stored (``_store_bars``). Falls back gracefully: if all
     providers fail and DB has partial data, returns what's there.
@@ -674,7 +681,12 @@ async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
                     return heal in stored_dates
                 return True
 
-            stored = (await _fetch_chain(symbol, fetch_start, fetch_end, accept=_try)) is not None
+            state = await db.get(OhlcvHistoryStateModel, symbol)
+            basis = state.basis_provider if state is not None else None
+            providers = (basis,) if basis in ("tiingo", "yfinance") else ("alpaca", "tiingo", "yfinance")
+            stored = (await _fetch_chain(
+                symbol, fetch_start, fetch_end, accept=_try, providers=providers
+            )) is not None
             if heal is not None and not stored:
                 logger.warning(
                     "historical_store: no provider returned provisional row %s for %s; "
