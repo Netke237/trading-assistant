@@ -43,8 +43,9 @@ async def client(monkeypatch) -> AsyncGenerator[AsyncClient, None]:
 
 
 async def _add(client, contract="AAPL|185|2026-09-18|C", qty=5, entry=1.00, rec="REC-1",
-                stop=None, structural_stop=None, targets=None):
-    body = {"recId": rec, "symbol": "AAPL", "contract": contract, "direction": "Bullish",
+                stop=None, structural_stop=None, targets=None, direction="Bullish",
+                symbol="AAPL"):
+    body = {"recId": rec, "symbol": symbol, "contract": contract, "direction": direction,
             "entryPrice": entry, "qty": qty, "entryDate": "2026-05-01",
             "stop": stop, "structuralStop": structural_stop, "targets": targets or [],
             "dteTotal": 140, "portfolioValue": 1_000_000}
@@ -452,3 +453,65 @@ async def test_quantity_decrease_bypasses_invalid_account(client, monkeypatch):
     response = await client.patch('/api/portfolio/REC-INVALID-DECREASE', json={'qty': 2})
     assert response.status_code == 200
     assert response.json()['qty'] == 2
+
+
+# ── T8: PATCH has no quote and no stop provenance ────────────────────────────
+#
+# Entry stays 100. The live quote is not an input. A positive stop is stored
+# on either side of that entry, for both directions, including one equal to a
+# quote this handler never sees. stopIsUserSet is not an update field.
+
+@pytest.mark.asyncio
+async def test_patch_stores_a_positive_stop_with_no_provenance(client):
+    await _add(client, contract="ABT|STOCK", qty=1, entry=100.0, rec="REC-BULL-STOP", stop=90.0)
+    for stop in (110.0, 120.0, 130.0, 90.0):
+        r = await client.patch(
+            "/api/portfolio/REC-BULL-STOP",
+            json={"stop": stop, "stopIsUserSet": True},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["stop"] == stop
+        assert r.json()["entryPrice"] == 100.0
+        assert r.json()["direction"] == "Bullish"
+
+    await _add(
+        client, contract="IBM|STOCK", qty=1, entry=100.0, rec="REC-BEAR-STOP",
+        stop=110.0, direction="Bearish", symbol="IBM",
+    )
+    for stop in (90.0, 80.0, 70.0, 110.0):
+        r = await client.patch(
+            "/api/portfolio/REC-BEAR-STOP",
+            json={"stop": stop, "structuralStop": stop},
+        )
+        assert r.status_code == 200, r.text
+        assert (r.json()["stop"], r.json()["structuralStop"]) == (stop, stop)
+        assert r.json()["entryPrice"] == 100.0
+        assert r.json()["direction"] == "Bearish"
+
+
+@pytest.mark.asyncio
+async def test_patch_floors_zero_negative_and_null_and_leaves_an_omitted_stop(client):
+    await _add(
+        client, contract="ABT|STOCK", qty=1, entry=100.0, rec="REC-FLOOR-STOP",
+        stop=110.0, structural_stop=115.0,
+    )
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": 0, "structuralStop": 0})
+    assert r.status_code == 200, r.text
+    assert (r.json()["stop"], r.json()["structuralStop"]) == (None, None)
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": -5, "structuralStop": -1})
+    assert r.status_code == 200, r.text
+    assert (r.json()["stop"], r.json()["structuralStop"]) == (None, None)
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": 110.0, "structuralStop": 115.0})
+    assert r.status_code == 200, r.text
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={"stop": None})
+    assert r.status_code == 200, r.text
+    assert r.json()["stop"] is None
+    assert r.json()["structuralStop"] == 115.0
+
+    r = await client.patch("/api/portfolio/REC-FLOOR-STOP", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["stop"] is None
+    assert r.json()["structuralStop"] == 115.0
+    assert r.json()["entryPrice"] == 100.0
