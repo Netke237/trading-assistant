@@ -100,5 +100,5 @@ PR #325 was merged with a merge commit and --match-head-commit safeguard.
 GitHub verified MERGED at 1031a82fc79cb5803793b60a4f46a9ed35e8ff4a on
 2026-10-15T05:53:58Z. Issue #118 closed automatically. The task claim was
 released and its agent-in-progress label removed. Historical tuning and
-adoption were not part of this merge. This merge record is retained on a
-local documentation follow-up branch; the live PR merge is authoritative.
+adoption were not part of this merge. This documentation follow-up reconciles the verified feature merge in
+the project ledger; the live PR merge is authoritative.
