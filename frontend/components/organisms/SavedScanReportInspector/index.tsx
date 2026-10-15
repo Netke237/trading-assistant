@@ -8,6 +8,9 @@ import type { StockPipeline } from '@/types/stockDomain';
 import { PipelineInspector } from '@/components/organisms/PipelineInspector';
 import { SavedScanResultsTable } from '@/components/molecules/SavedScanResultsTable';
 import { TerminalOutcomes, TERMINAL_OUTCOME_CATEGORIES } from './TerminalOutcomes';
+import { LegacyReport } from './LegacyReport';
+import { UnsavedReport } from './UnsavedReport';
+import { SavedExclusions } from './SavedExclusions';
 import styles from './SavedScanReportInspector.module.css';
 const categories: ScanReportCategory[] = ['options', 'stocks', 'prebreakout', 'pullback', 'fib'];
 const labels: Record<ScanReportCategory, string> = { options: 'Options', stocks: 'Stocks', prebreakout: 'Pre-Breakout', pullback: 'Pullback', fib: 'Fib Pullback' };
@@ -84,7 +87,15 @@ export function SavedScanReportInspector({ category, currentInputs, isOpen = tru
             }
             if (e.key !== 'Tab')
                 return;
-            const elements = drawerRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),select,input,summary,a[href]');
+            const elements = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),select,input,summary,a[href]') ?? []).filter(element => {
+                for (let parent = element.parentElement; parent && parent !== drawerRef.current; parent = parent.parentElement) {
+                    if (parent.hidden)
+                        return false;
+                    if (parent instanceof HTMLDetailsElement && !parent.open && !parent.querySelector('summary')?.contains(element))
+                        return false;
+                }
+                return true;
+            });
             if (!elements?.length)
                 return;
             const first = elements[0], last = elements[elements.length - 1];
@@ -116,6 +127,7 @@ export function SavedScanReportInspector({ category, currentInputs, isOpen = tru
     const diagnostics = report?.diagnostics;
     const pipeline = report?.diagnostics_available ? diagnostics?.pipeline : undefined;
     const result = report?.result;
+    const exclusions = diagnostics?.excluded ?? report?.inputs?.excluded;
     const content = <section ref={drawerRef} className={isDrawer ? styles.drawer : styles.container} role={isDrawer ? 'dialog' : 'region'} aria-label="Saved scan report" aria-modal={isDrawer || undefined}>
   <div className={styles.actions}><h2>Saved scan report</h2>{onClose && <button type="button" onClick={onClose} aria-label="Close inspector">Close</button>}</div>
   <div className={styles.controls}><label>Report category <select aria-label="Report category" value={selected} onChange={e => { setSelected(e.target.value as typeof selected); setPrevious(false); }}>{categories.map(c => <option key={c} value={c}>{labels[c]}</option>)}<option value="legacy">Legacy / unclassified</option></select></label>
@@ -123,7 +135,7 @@ export function SavedScanReportInspector({ category, currentInputs, isOpen = tru
   {loading && <p role="status">Loading saved report…</p>}
   {error && <p role="alert">Saved report storage unavailable.</p>}
   {selected === category && !comparedInputs && <p role="status">Current controls comparison unavailable; saved reports retain their frozen inputs.</p>}
-  {unsaved && <div role="alert"><p>Current run {update.run_id}: report unsaved — persistence unavailable. Durable evidence below belongs to its own saved run.</p><details><summary>Unsaved current survivors and recorded counts</summary><pre>{json(update)}</pre></details></div>}
+  {unsaved && <UnsavedReport update={update} />}
   {data?.category === selected && data.previous_report && <div className={styles.actions}><button type="button" aria-pressed={!previous} onClick={() => setPrevious(false)}>Latest attempt</button><button type="button" aria-pressed={previous} onClick={() => setPrevious(true)}>Previous saved report</button></div>}
   {!loading && !error && selected !== 'legacy' && !report && <p>No saved report available.</p>}
   {report && <>
@@ -132,14 +144,14 @@ export function SavedScanReportInspector({ category, currentInputs, isOpen = tru
    <p>Started {report.started_at} · Ended {report.ended_at ?? 'not ended'}</p>
    <p>Displayed table run: {selected === category ? (tableRunId ?? 'unavailable') : 'another category'}. Saved evidence has its own run identity.</p>
    {mismatch && <p role="status">Current controls differ from this saved run. Evidence uses the frozen inputs below.</p>}
-   <details><summary>Frozen inputs and configuration</summary><pre>{json(report.inputs)}</pre><p>{report.inputs?.effective_configuration_complete === true ? 'Effective configuration recorded.' : 'Effective configuration incomplete; comparison of unavailable settings is unavailable. Recorded fields are in the snapshot.'}</p></details>
+   <details key={`${report.run_id}:inputs`}><summary>Raw frozen inputs and configuration</summary><pre>{json(report.inputs)}</pre><p>{report.inputs?.effective_configuration_complete === true ? 'Effective configuration recorded.' : 'Effective configuration incomplete; comparison of unavailable settings is unavailable. Recorded fields are in the snapshot.'}</p></details>
    {pipeline ? (report.category === 'options' ? <PipelineInspector key={report.run_id} isDrawer={false} pipeline={pipeline as OptionsPipeline} rejected={diagnostics?.rejected} survivors={diagnostics?.accepted_symbols} contractRules={result?.contract_rules as Record<string, number> | undefined} dteWindow={result?.dte_window as import('@/types/domain').DteWindow | undefined}/> : <PipelineInspector key={report.run_id} mode="stock" isDrawer={false} pipeline={pipeline as StockPipeline} rejected={diagnostics?.rejected} survivors={diagnostics?.accepted_symbols}/>) : <p>Diagnostics unavailable: stage counts and rejection reasons were not recorded for this run.</p>}
    {TERMINAL_OUTCOME_CATEGORIES.includes(report.category) && <TerminalOutcomes key={report.run_id} value={diagnostics?.terminal_outcomes} runId={report.run_id} tableRunId={tableRunId} sameCategory={selected === category}/>}
    {Array.isArray(result?.candidates) && <SavedScanResultsTable key={`${report.run_id}:results`} category={report.category} rows={result.candidates as Record<string, unknown>[]} />}
-   {Array.isArray(diagnostics?.excluded ?? report.inputs?.excluded) && <details key={`${report.run_id}:exclusions`}><summary>Saved exclusions</summary><pre>{json(diagnostics?.excluded ?? report.inputs?.excluded)}</pre></details>}
-   <details key={`${report.run_id}:raw`}><summary>Saved survivors, exclusions, observed diagnostics and results</summary><pre>{json({ diagnostics: report.diagnostics, result: report.result })}</pre></details>
+   {Array.isArray(exclusions) && <SavedExclusions key={`${report.run_id}:exclusions`} rows={exclusions} />}
+   <details key={`${report.run_id}:raw`}><summary>Raw report data</summary><pre>{json({ diagnostics: report.diagnostics, result: report.result })}</pre></details>
   </>}
-  {selected === 'legacy' && legacy && <><p>Legacy / unclassified evidence. Category, effective settings and diagnostics may be unavailable; no category has been inferred.</p>{TERMINAL_OUTCOME_CATEGORIES.includes(category) && <p>Terminal outcome diagnostics unavailable for legacy / unclassified runs.</p>}{legacy.length === 0 ? <p>No legacy evidence available.</p> : legacy.map((entry, i) => <details key={String(entry.run_id ?? i)}><summary>{String(entry.run_id)} · {String(entry.status)}</summary><pre>{json(entry)}</pre></details>)}</>}
+  {selected === 'legacy' && legacy && <><p>Legacy / unclassified evidence. Category, effective settings and diagnostics may be unavailable; no category has been inferred.</p>{TERMINAL_OUTCOME_CATEGORIES.includes(category) && <p>Terminal outcome diagnostics unavailable for legacy / unclassified runs.</p>}{legacy.length === 0 ? <p>No legacy evidence available.</p> : legacy.map((entry, i) => <LegacyReport key={`${String(entry.run_id)}:${i}`} entry={entry} />)}</>}
  </section>;
     return isDrawer ? <><div className={styles.backdrop} onClick={onClose} aria-hidden/>{content}</> : content;
 }

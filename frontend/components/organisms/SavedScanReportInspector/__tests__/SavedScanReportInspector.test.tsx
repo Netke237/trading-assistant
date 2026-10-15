@@ -51,17 +51,17 @@ test('raw report and exclusion data are collapsed, and opening a different run r
  latest.mockResolvedValue({category:'options',latest_attempt:saved,previous_report:report('options','previous')});
  render(<SavedScanReportInspector category="options" />);
  await screen.findByText('Run compact');
- const raw = screen.getByText('Saved survivors, exclusions, observed diagnostics and results').closest('details')!;
+ const raw = screen.getByText('Raw report data').closest('details')!;
  const exclusions = screen.getByText('Saved exclusions').closest('details')!;
  expect(raw.open).toBe(false); expect(exclusions.open).toBe(false);
  expect(raw.querySelector('pre')).not.toBeVisible(); expect(exclusions.querySelector('pre')).not.toBeVisible();
- fireEvent.click(within(raw).getByText('Saved survivors, exclusions, observed diagnostics and results'));
+ fireEvent.click(within(raw).getByText('Raw report data'));
  expect(raw.open).toBe(true);
  expect(JSON.parse(raw.querySelector('pre')!.textContent!)).toEqual({diagnostics:saved.diagnostics,result:saved.result});
  fireEvent.click(screen.getByText('Previous saved report'));
  expect(screen.getByText('Run previous')).toBeInTheDocument();
- expect(screen.getByText('Saved survivors, exclusions, observed diagnostics and results').closest('details')!.open).toBe(false);
- expect(screen.getByText('View record').closest('details')!.open).toBe(false);
+ expect(screen.getByText('Raw report data').closest('details')!.open).toBe(false);
+ expect(screen.getByText('Raw record').closest('details')!.open).toBe(false);
 });
 test('control removal and zero follow frozen request semantics',()=>{
  expect(scanReportInputsDiffer({min_price:20,overrides:{fast_ema:5}},{overrides:{}})).toBe(true);
@@ -80,6 +80,69 @@ test('legacy evidence is accessible without inventing a category or diagnostics'
  (api.getLegacyScanReports as jest.Mock).mockResolvedValue([entry]);render(<SavedScanReportInspector category="fib" />);await screen.findByText('Run fib-A');
  fireEvent.change(screen.getByLabelText('Report category'),{target:{value:'legacy'}});
  await screen.findByText(/Legacy \/ unclassified evidence/);expect(JSON.parse(screen.getByText(/"legacy:1"/).textContent!)).toEqual(entry);expect(latest).toHaveBeenCalledTimes(1);
+});
+test('expanded legacy reports keep each saved run separate and raw records collapsed after category switching', async () => {
+ const entries = ['current', 'stock-current'].map((id, index) => ({
+  run_id: `legacy:${id}`, status: 'complete', inputs:{direction:index ? 'Bullish' : 'Bearish',horizon:'Swing'},
+  result:{candidates:[{symbol:index ? 'STOCK' : 'OPTION',direction:index ? 'Bullish' : 'Bearish'}]},
+ }));
+ (api.getLegacyScanReports as jest.Mock).mockResolvedValue(entries);
+ render(<SavedScanReportInspector category="options" currentInputs={{direction:'Bullish',horizon:'Position'}} />);
+ await screen.findByText('Run options-A');
+ fireEvent.change(screen.getByLabelText('Report category'),{target:{value:'legacy'}});
+ const first = await screen.findByText('legacy:current · complete');
+ fireEvent.click(first); fireEvent.click(screen.getByText('legacy:stock-current · complete'));
+ const record = first.closest('details')!;
+ expect(within(record).getByText('Recorded direction').nextElementSibling).toHaveTextContent('Bearish');
+ expect(within(record).getByRole('rowheader',{name:'OPTION'})).toBeVisible();
+ expect(within(record).queryByRole('rowheader',{name:'STOCK'})).not.toBeInTheDocument();
+ expect(within(record).getByText('Raw data').closest('details')!.open).toBe(false);
+ fireEvent.click(within(record).getByText('Raw data'));
+ fireEvent.change(screen.getByLabelText('Report category'),{target:{value:'options'}});
+ await screen.findByText('Run options-A');
+ fireEvent.change(screen.getByLabelText('Report category'),{target:{value:'legacy'}});
+ const reopened = (await screen.findByText('legacy:current · complete')).closest('details')!;
+ expect(reopened.open).toBe(false);
+ expect(within(reopened).getByText('Raw data').closest('details')!.open).toBe(false);
+});
+test.each(['options', 'stocks', 'prebreakout', 'pullback', 'fib'] as const)('%s has no JSON outside explicit raw disclosures in page and drawer views', async category => {
+ const saved = {...report(category,`${category}-matrix`),diagnostics:{excluded:[{symbol:'EXCLUDED',reason:'Excluded by scan policy'}]}};
+ latest.mockResolvedValue({category,latest_attempt:saved,previous_report:null});
+ for (const isDrawer of [false,true]) {
+  const view = render(<SavedScanReportInspector category={category} isDrawer={isDrawer} onClose={isDrawer ? jest.fn() : undefined} />);
+  await screen.findByText(`Run ${category}-matrix`);
+  fireEvent.click(screen.getByText('Saved exclusions'));
+  expect(screen.getByRole('rowheader',{name:'EXCLUDED'})).toBeVisible();
+  for (const pre of view.container.querySelectorAll('pre')) {
+   const details=pre.closest('details')!;
+   expect(details.querySelector('summary')).toHaveTextContent(/^Raw /);
+   expect(details.open).toBe(false);
+   expect(pre).not.toBeVisible();
+  }
+  view.unmount();
+ }
+});
+test('unsaved survivor counts are readable, preserve zero, and do not expose raw JSON when expanded', async () => {
+ const update={run_id:'unsaved-readable',generation:9,persistence:'unavailable',accepted_symbols:['NEW'],pipeline_counts:{scanned:1,failed_score:0}};
+ useScanReportUpdates.getState().record('stocks',update);
+ render(<SavedScanReportInspector category="stocks" />);
+ await screen.findByText('Run stocks-A');
+ fireEvent.click(screen.getByText('Unsaved current survivors and recorded counts'));
+ const alert=screen.getByRole('alert');
+ expect(within(alert).getByText('Recorded survivors: NEW')).toBeVisible();
+ expect(within(alert).getByText('failed score').nextElementSibling).toHaveTextContent('0');
+ const raw=within(alert).getByText('Raw unsaved-run data').closest('details')!;
+ expect(raw.open).toBe(false);expect(raw.querySelector('pre')).not.toBeVisible();
+ expect(JSON.parse(raw.querySelector('pre')!.textContent!)).toEqual(update);
+});
+test('switching saved runs also resets an opened raw input disclosure', async () => {
+ latest.mockResolvedValue({category:'options',latest_attempt:report('options','latest'),previous_report:report('options','previous')});
+ render(<SavedScanReportInspector category="options" />);
+ await screen.findByText('Run latest');
+ fireEvent.click(screen.getByText('Raw frozen inputs and configuration'));
+ expect(screen.getByText('Raw frozen inputs and configuration').closest('details')!.open).toBe(true);
+ fireEvent.click(screen.getByText('Previous saved report'));
+ expect(screen.getByText('Raw frozen inputs and configuration').closest('details')!.open).toBe(false);
 });
 test('same category stale reads cannot replace higher server generation',async()=>{
  let resolve!:(value:unknown)=>void;latest.mockResolvedValueOnce({category:'options',latest_attempt:report('options','newest',10),previous_report:null}).mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
@@ -103,6 +166,20 @@ test('drawer contains keyboard focus and restores opener when closed',async()=>{
  const controls=drawer.querySelectorAll<HTMLElement>('button:not([disabled]),select,input,summary,a[href]');const first=controls[0],last=controls[controls.length-1];
  expect(first).toHaveFocus();fireEvent.keyDown(window,{key:'Tab',shiftKey:true});expect(last).toHaveFocus();fireEvent.keyDown(window,{key:'Tab'});expect(first).toHaveFocus();fireEvent.keyDown(window,{key:'Escape'});expect(close).toHaveBeenCalledTimes(1);
  r.rerender(<><button>Open report</button><SavedScanReportInspector category="fib" isDrawer isOpen={false} onClose={close}/></>);expect(opener).toHaveFocus();
+});
+test('drawer focus skips raw disclosures inside collapsed legacy reports', async () => {
+ (api.getLegacyScanReports as jest.Mock).mockResolvedValue([{run_id:'legacy:focus',status:'complete',result:{candidates:[{symbol:'FOCUS'}]}}]);
+ render(<SavedScanReportInspector category="options" isDrawer onClose={jest.fn()} />);
+ await screen.findByText('Run options-A');
+ fireEvent.change(screen.getByLabelText('Report category'),{target:{value:'legacy'}});
+ const legacy=await screen.findByText('legacy:focus · complete');
+ const close=screen.getByRole('button',{name:'Close inspector'});
+ close.focus();fireEvent.keyDown(window,{key:'Tab',shiftKey:true});
+ expect(legacy).toHaveFocus();
+ fireEvent.keyDown(window,{key:'Tab'});expect(close).toHaveFocus();
+ fireEvent.click(legacy);
+ close.focus();fireEvent.keyDown(window,{key:'Tab',shiftKey:true});
+ expect(screen.getByText('Raw data')).toHaveFocus();
 });
 test.each([['stocks',null],['stocks',{enabled:true}],['options',null],['options',{enabled:true}]] as const)('invalid %s settings make controls comparison unavailable while saved evidence stays readable',async(category,gate)=>{
  const { useSettingsStore } = await import('@/lib/settingsStore');
