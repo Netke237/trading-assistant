@@ -19,6 +19,7 @@ from app.models.base import Base
 from app.database import Base as DatabaseBase
 from app.models.scan_session import ScanSessionBase
 from app.models.scan_report import ScanReportBase
+from app.models.backtest_artifact import BacktestArtifact  # noqa: F401
 from app.models.ohlcv_daily import OhlcvBase
 from app.models.scheduled_scan_run import ScheduledScanRunBase
 
