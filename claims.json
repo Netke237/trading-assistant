@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "board/broker-path-residuals-3f35b8cf",
+      "claimed_at": "2026-10-15T15:25:40Z",
+      "expires_at": "2026-10-15T18:25:40Z",
+      "note": "merge #323: resolve main conflict, plan-amendment audit, merge",
+      "task": "BROKER-PATH-RESIDUALS"
+    }
+  ]
 }
