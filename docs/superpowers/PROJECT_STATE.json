@@ -4085,7 +4085,7 @@
           "verification": "Auditor applied bmad adversarial; independently re-read committed whole plan and checked adjacent cache consumers, all setup modes, normalization, provenance; plan only."
         }
       ],
-      "notes": "Implementation authorized in chat after #235 completed. BT-01 a1f70820 committed: details19/focused70 passed; Python3.11 full backend split coverage8877passed/9skip; frontend5273tests/255suites/typecheckpassed. BT-02 next. Preserved plan1clean, code0, integrated audit pending.",
+      "notes": "BT-01 a1f70820 + epoch-source correction7a2e4af1 and BT-02 d9b5f9f4 committed. Details44/focused110; combined157/typecheckpass; frontend5273tests255suitespass. Full pre-correction8903pass9skip1spyfailure; sole failure fixed and affectedmodulegreen. Final integrated exact-head fullchecks/codeaudit pending. BT-03 next. Plan1clean/code0 preserved.",
       "tickets": [
         289,
         290,
