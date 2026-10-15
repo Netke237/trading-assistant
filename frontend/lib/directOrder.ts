@@ -67,6 +67,16 @@ export function normaliseStatus(status: unknown): string {
   return String(status ?? '').trim().toLowerCase().replace(/^orderstatus\./, '');
 }
 
+const ACCEPTED_NOT_FILLED = new Set([
+  'accepted', 'presubmitted', 'submitted', 'pending', 'pendingsubmit', 'pendingnew', 'new',
+]);
+
+/** Accepted, pending, and submitted broker statuses are not fills. */
+export function isAcceptedNotFilled(status: unknown): boolean {
+  const token = normaliseStatus(status).replace(/[\s_]/g, '');
+  return ACCEPTED_NOT_FILLED.has(token);
+}
+
 export type DirectOutcome =
   | { verdict: 'placed'; orderId: string }
   | { verdict: 'delete'; why: string }

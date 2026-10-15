@@ -8,6 +8,8 @@ from typing import Literal, Optional
 import httpx
 import urllib3
 
+from app.data.order_errors import OrderBeforeSubmissionError, OrderSubmissionUnknownError
+
 warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
@@ -133,7 +135,7 @@ class IbkrPaperAdapter:
 
     def place_order(self, order: BrokerOrder) -> OrderResult:
         if not paper_gateway_available():
-            raise RuntimeError(
+            raise OrderBeforeSubmissionError(
                 "IBKR paper order failed: gateway session is not authenticated. "
                 "Re-login to the IBKR paper Client Portal Gateway and retry."
             )
@@ -142,14 +144,29 @@ class IbkrPaperAdapter:
         try:
             resp = httpx.post(url, json=payload, verify=False, timeout=self._timeout)
         except Exception as exc:
-            raise RuntimeError(f"IBKR paper order failed: connection error — {exc}") from exc
+            raise OrderSubmissionUnknownError(
+                f"IBKR paper order failed: connection error — {exc}"
+            ) from exc
         if resp.status_code >= 400:
-            raise RuntimeError(
+            raise OrderSubmissionUnknownError(
                 f"IBKR paper order failed: HTTP {resp.status_code} — {resp.text[:200]}"
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise OrderSubmissionUnknownError(
+                f"IBKR paper order failed: response was not JSON — {exc}"
+            ) from exc
         if isinstance(data, list):
+            if len(data) != 1 or not isinstance(data[0], dict):
+                raise OrderSubmissionUnknownError(
+                    "IBKR paper order failed: response was not an order object"
+                )
             data = data[0]
+        if not isinstance(data, dict):
+            raise OrderSubmissionUnknownError(
+                "IBKR paper order failed: response was not an order object"
+            )
         message = data.get("message", "")
         # The confirmation question carries its text as a LIST of strings.
         if isinstance(message, list):

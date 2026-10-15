@@ -452,3 +452,273 @@ async def test_p1a_11_the_writer_reads_no_risk_config_of_its_own(Session, mocker
             outcome = await create_position(
                 _body(qty=9), db, enforce_pre_trade_gates=False, **_fetchers())
     assert (outcome.position.qty, outcome.over_exposure) == (9, True)
+
+
+# ── T8: stop direction against a quote that is not the stored entry ──────────
+#
+# The live underlying is 120 for a bullish position and 80 for a bearish one.
+# The client entry is 100 on a stock (or the option premium, 10.45 / stored
+# 8.25). A bullish stop of 110 is above that entry and still below the quote:
+# that is a profitable trailing stop, not a wrong-side stop. Equality with the
+# quote is wrong-side for a user-set stop (`>=` / `<=`), because the alert
+# fires on the same comparison. Gates off is an order already at the broker:
+# the stop is booked and the warning is returned. A generated stop is
+# re-anchored and is not direction-checked. Zero is floored to unset only
+# after that check.
+
+def _user_live_cases():
+    rows = []
+    specs = (
+        ("Bullish", 120.0, ((110.0, "ok"), (120.0, "wrong"), (130.0, "wrong"), (90.0, "ok"))),
+        ("Bearish", 80.0, ((90.0, "ok"), (80.0, "wrong"), (70.0, "wrong"), (110.0, "ok"))),
+    )
+    for direction, quote, stops in specs:
+        for instrument in ("stock", "option"):
+            for gates_on in (True, False):
+                for stop, kind in stops:
+                    rows.append(pytest.param(
+                        direction, instrument, quote, stop, gates_on, kind,
+                        id=f"{direction.lower()}-{instrument}-{stop:.0f}-{'on' if gates_on else 'off'}-{kind}",
+                    ))
+    return rows
+
+
+def _direction_fields(direction, instrument, stop, **extra):
+    fields = {
+        "direction": direction,
+        "stop": stop,
+        "stopIsUserSet": True,
+        "scanStockPrice": 100.0,
+        "entryPrice": 100.0,
+    }
+    if instrument == "stock":
+        fields.update(contract="ABT|STOCK", qty=1)
+    else:
+        # Premium entry, so the stored entry cannot be confused with the
+        # underlying quote the stop is checked against.
+        fields["entryPrice"] = 10.45
+    fields.update(extra)
+    return fields
+
+
+def _underlying_fetch(instrument, underlying):
+    if instrument == "stock":
+        return _fetchers(quote={"price": underlying})
+    return _fetchers(quote={"price": 8.25}, price=underlying)
+
+
+def _wrong_side_detail(direction, stop, price, suffix=""):
+    return (
+        f"A {direction.lower()} stop of {stop:.2f} is on the wrong side of the "
+        f"underlying at {price:.2f}; it would fire immediately.{suffix}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "direction, instrument, quote, stop, gates_on, kind", _user_live_cases(),
+)
+async def test_user_set_stop_is_judged_against_the_live_quote_not_the_entry(
+    Session, direction, instrument, quote, stop, gates_on, kind,
+):
+    """Gates off books a wrong-side user stop (already filled) and pages it.
+    Gates on refuses it. Neither path treats "above the client entry" as the
+    violation, and a user-set stop is stored as sent — not re-anchored off
+    scanStockPrice 100."""
+    body = _body(**_direction_fields(direction, instrument, stop))
+    fetched = _underlying_fetch(instrument, quote)
+    detail = _wrong_side_detail(direction, stop, quote)
+    async with Session() as db:
+        if kind == "wrong" and gates_on:
+            with pytest.raises(HTTPException) as exc:
+                await create_position(body, db, enforce_pre_trade_gates=True, **fetched)
+            assert exc.value.status_code == 422
+            assert exc.value.detail == detail
+            assert await _rows(Session) == []
+            return
+        outcome = await create_position(
+            body, db, enforce_pre_trade_gates=gates_on, **fetched,
+        )
+    assert outcome.position.stop == stop
+    assert outcome.position.entry_price == (quote if instrument == "stock" else 8.25)
+    if kind == "wrong":
+        assert outcome.wrong_side_stop == detail
+    else:
+        assert outcome.wrong_side_stop is None
+    assert [(r.stop, r.entry_price) for r in await _rows(Session)] == [
+        (stop, quote if instrument == "stock" else 8.25),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gates_on", [True, False])
+async def test_no_live_quote_user_stop_uses_the_scan_price_only_when_gates_are_off(Session, gates_on):
+    """No live quote. Client entry 100 stays stored. Scan 120 is a different
+    number from that entry. Stop 110 is above the entry and below the scan
+    quote, so it is not wrong-side. Stop 130 is above the scan quote: gates
+    off pages it, gates on still stores it and does not check."""
+    stored = []
+    for rec, stop, scan, direction in (
+        ("REC-G1", 110.0, 120.0, "Bullish"),
+        ("REC-G2", 130.0, 100.0, "Bullish"),
+        ("REC-G3", 90.0, 80.0, "Bearish"),
+        ("REC-G4", 70.0, 80.0, "Bearish"),
+    ):
+        body = _body(**_direction_fields(
+            direction, "stock", stop, recId=rec, symbol=rec, contract=f"{rec}|STOCK",
+            scanStockPrice=scan,
+        ))
+        async with Session() as db:
+            outcome = await create_position(
+                body, db, enforce_pre_trade_gates=gates_on, **_fetchers(),
+            )
+        assert outcome.position.entry_price == 100.0
+        assert outcome.position.stop == stop
+        if gates_on or stop in (110.0, 90.0):
+            assert outcome.wrong_side_stop is None
+        else:
+            assert outcome.wrong_side_stop == _wrong_side_detail(
+                direction, stop, scan,
+                f" (against the scan price {scan:.2f}; the live fetch failed)",
+            )
+        stored.append((rec, stop, 100.0, outcome.wrong_side_stop is not None))
+    rows = sorted((r.rec_id, r.stop, r.entry_price) for r in await _rows(Session))
+    assert rows == sorted((rec, stop, entry) for rec, stop, entry, _warned in stored)
+
+
+@pytest.mark.asyncio
+async def test_no_live_quote_and_no_scan_price_does_not_direction_check(Session):
+    body = _body(**_direction_fields(
+        "Bullish", "stock", 130.0, scanStockPrice=None,
+    ))
+    async with Session() as db:
+        outcome = await create_position(
+            body, db, enforce_pre_trade_gates=False, **_fetchers(),
+        )
+    assert outcome.wrong_side_stop is None
+    assert (outcome.position.stop, outcome.position.entry_price) == (130.0, 100.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "direction, quote, sent, gates_on, refused",
+    [
+        ("Bullish", 120.0, 0, True, False),
+        ("Bullish", 120.0, 0, False, False),
+        ("Bullish", 120.0, -1, True, False),
+        ("Bearish", 80.0, 0, True, True),
+        ("Bearish", 80.0, 0, False, False),
+        ("Bearish", 80.0, -1, True, True),
+        ("Bullish", 120.0, None, True, False),
+    ],
+)
+async def test_zero_and_unset_user_stops_are_floored_after_the_direction_check(
+    Session, direction, quote, sent, gates_on, refused,
+):
+    """Zero is a number at the direction check and unset only at the floor.
+    A bearish 0 is on the wrong side of a positive quote, so gates on refuses
+    it and gates off pages it — then stores NULL. A bullish 0 is below the
+    quote, so it is not wrong-side, and the floor still stores NULL. None
+    skips the check."""
+    body = _body(**_direction_fields(direction, "stock", sent))
+    async with Session() as db:
+        if refused:
+            with pytest.raises(HTTPException) as exc:
+                await create_position(body, db, enforce_pre_trade_gates=True, **_underlying_fetch("stock", quote))
+            assert exc.value.status_code == 422
+            assert exc.value.detail == _wrong_side_detail(direction, sent, quote)
+            assert await _rows(Session) == []
+            return
+        outcome = await create_position(
+            body, db, enforce_pre_trade_gates=gates_on, **_underlying_fetch("stock", quote),
+        )
+    assert outcome.position.stop is None
+    assert [r.stop for r in await _rows(Session)] == [None]
+    if direction == "Bearish" and sent is not None and sent <= 0:
+        assert outcome.wrong_side_stop == _wrong_side_detail(direction, sent, quote)
+    else:
+        assert outcome.wrong_side_stop is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "direction, scan, live, sent, stored, structural_sent, structural_stored, gates_on",
+    [
+        ("Bullish", 100.0, 120.0, 105.0, 125.0, 102.0, 122.0, True),
+        ("Bullish", 100.0, 120.0, 105.0, 125.0, 102.0, 122.0, False),
+        ("Bullish", 100.0, 120.0, 90.0, 110.0, 95.0, 115.0, True),
+        ("Bearish", 100.0, 80.0, 110.0, 90.0, 115.0, 95.0, True),
+        ("Bearish", 100.0, 80.0, 95.0, 75.0, 90.0, 70.0, True),
+    ],
+)
+async def test_a_generated_stop_reanchors_and_is_not_direction_checked(
+    Session, direction, scan, live, sent, stored, structural_sent, structural_stored, gates_on,
+):
+    """No stopIsUserSet. Delta is live minus scan. A result on the wrong side
+    of the quote (bullish 125 vs 120, bearish 75 vs 80) is still stored, with
+    gates on or off, and no wrong-side warning. The re-anchored bullish 110
+    is above the client entry 100 and below the quote."""
+    body = _body(**_direction_fields(
+        direction, "stock", sent, stopIsUserSet=None, scanStockPrice=scan,
+        structuralStop=structural_sent,
+    ))
+    async with Session() as db:
+        outcome = await create_position(
+            body, db, enforce_pre_trade_gates=gates_on, **_underlying_fetch("stock", live),
+        )
+    assert outcome.wrong_side_stop is None
+    assert (outcome.position.stop, outcome.position.structural_stop) == (stored, structural_stored)
+    assert outcome.position.entry_price == live
+
+
+@pytest.mark.asyncio
+async def test_an_option_generated_stop_above_the_underlying_is_stored(Session):
+    """Underlying quote 120 comes from price_fetcher, not the premium. The
+    stored entry stays 8.25. Stop 125 is above both, and is not refused."""
+    async with Session() as db:
+        outcome = await create_position(
+            _body(stop=105.0, structuralStop=102.0, scanStockPrice=100.0, entryPrice=10.45),
+            db, **_fetchers(quote={"price": 8.25}, price=120.0),
+        )
+    assert outcome.wrong_side_stop is None
+    assert (outcome.position.stop, outcome.position.structural_stop, outcome.position.entry_price) == (
+        125.0, 122.0, 8.25,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_user_set_stop_does_not_exempt_the_structural_stop_from_reanchor(Session):
+    """Stop 110 is kept (below the quote, above the client entry). Structural
+    105 moves by +20 to 125, which is above the quote, and is still stored."""
+    body = _body(**_direction_fields(
+        "Bullish", "stock", 110.0, structuralStop=105.0,
+    ))
+    async with Session() as db:
+        outcome = await create_position(body, db, **_underlying_fetch("stock", 120.0))
+    assert outcome.wrong_side_stop is None
+    assert (outcome.position.stop, outcome.position.structural_stop, outcome.position.entry_price) == (
+        110.0, 125.0, 120.0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_generated_zero_reanchors_to_a_positive_stop_before_the_floor(Session):
+    """The floor treats non-positive as unset, but re-anchor runs first.
+    Sent 0 with delta +20 is stored as 20, not NULL. Without a scan price
+    there is no re-anchor, and 0 is stored as NULL."""
+    body = _body(**_direction_fields(
+        "Bullish", "stock", 0, stopIsUserSet=None, structuralStop=0,
+    ))
+    async with Session() as db:
+        moved = await create_position(body, db, **_underlying_fetch("stock", 120.0))
+    assert moved.wrong_side_stop is None
+    assert (moved.position.stop, moved.position.structural_stop) == (20.0, 20.0)
+
+    plain = _body(**_direction_fields(
+        "Bullish", "stock", 0, stopIsUserSet=None, structuralStop=0,
+        scanStockPrice=None, recId="REC-G2", symbol="ABT2", contract="ABT2|STOCK",
+    ))
+    async with Session() as db:
+        stayed = await create_position(plain, db, **_underlying_fetch("stock", 120.0))
+    assert stayed.wrong_side_stop is None
+    assert (stayed.position.stop, stayed.position.structural_stop) == (None, None)

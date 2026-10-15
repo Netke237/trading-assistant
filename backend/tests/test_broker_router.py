@@ -141,6 +141,31 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 
 
+def _wipe_broker_attempts():
+    from app.database import engine
+    import sqlite3
+    if engine.url.get_backend_name() != "sqlite":
+        return
+    database = engine.url.database
+    if not database or database == ":memory:":
+        return
+    conn = sqlite3.connect(database, timeout=30)
+    try:
+        conn.execute("delete from broker_attempts")
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+@pytest.fixture(autouse=True)
+def _clear_durable_attempts():
+    _wipe_broker_attempts()
+    yield
+    _wipe_broker_attempts()
+
+
 @pytest.mark.asyncio
 async def test_broker_status_lists_tradier_live_as_locked():
     """Regression: broker_status()'s hardcoded live-broker roster (display-only,
@@ -407,7 +432,10 @@ async def test_unexpected_exception_releases_the_idempotency_claim():
     _idempotency_inflight.clear()
 
     class BrokenAdapter:
+        calls = 0
+
         def place_order(self, order):
+            type(self).calls += 1
             raise AttributeError("malformed broker response")
 
     router = BrokerRouter(adapters={"ibkr_paper": BrokenAdapter()})
@@ -418,9 +446,10 @@ async def test_unexpected_exception_releases_the_idempotency_claim():
     with patch("app.routers.broker.build_router_from_credentials", return_value=router):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            with pytest.raises(AttributeError):
-                await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)
-            # Second identical request must NOT hang waiting on a stale
-            # reservation left behind by the first (failed) request's claim.
-            with pytest.raises(AttributeError):
-                await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)
+            first = await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)
+            # The malformed response is an unknown outcome. A retry must not
+            # dispatch again or hang on the old in-memory claim.
+            second = await asyncio.wait_for(client.post("/broker/stock-order", json=payload), timeout=2.0)
+    assert first.status_code >= 400
+    assert second.status_code >= 400
+    assert BrokenAdapter.calls == 1

@@ -25,12 +25,23 @@ export const REJECTION_LABELS: Record<string, string> = {
 const SEGMENT_SEPARATOR = ' | ';
 // Exact prefix, digits only: `qty_saved_as_x` and `xqty_saved_as_3` are not it.
 const QTY_SAVED = /^qty_saved_as_(\d+)$/;
+// A stored added fill the cap would have resized. The amount stays visible;
+// nothing in this string is a quantity that was cut down.
+const EXPOSURE_BREACH = /^exposure_breach:\s*(.*?);\s*combined exposure\s+(\S+)\s*$/;
 
-/** Map one segment: a `qty_saved_as_<N>` code, else its space-split tokens
- *  through REJECTION_LABELS, else the raw segment. */
+/** Map one segment: a `qty_saved_as_<N>` code, an added-fill exposure warning,
+ *  else its space-split tokens through REJECTION_LABELS, else the raw segment. */
 function segmentMessage(segment: string): string {
   const saved = QTY_SAVED.exec(segment);
   if (saved) return `Quantity saved as ${saved[1]} (reduced to fit exposure).`;
+  const breach = EXPOSURE_BREACH.exec(segment);
+  if (breach) {
+    const reasons = [...new Set(
+      breach[1].split(/\s+/).map((code) => REJECTION_LABELS[code]).filter(Boolean),
+    )];
+    const why = reasons.length ? reasons.join(' ') : breach[1];
+    return `${why} Combined exposure ${breach[2]}. The full fill was recorded.`;
+  }
   const mapped = segment
     .split(' ')
     .map((code) => REJECTION_LABELS[code])

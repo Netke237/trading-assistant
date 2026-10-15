@@ -37,7 +37,9 @@ async def setup_db():
     """Create all tables before each test; drop them after."""
     from app.database import Base
     from app.models.scan_session import ScanSessionBase
-    # Import models so their metadata is registered on Base
+    # Import models so their metadata is registered on Base.
+    # log_approval takes the exposure guard, so that table has to exist too.
+    import app.models  # noqa: F401
     from app.models import portfolio, watchlist, audit_event  # noqa: F401
 
     async with test_engine.begin() as conn:
@@ -344,9 +346,15 @@ async def test_audit_log_approval_creates_db_row(db_session):
     """call log_approval() → AuditEvent row exists with correct rec_id."""
     from app.services.audit import log_approval
     from app.models.audit_event import AuditEventModel
+    from app.models.portfolio import PortfolioPositionModel
 
     rec_id = "REC-20260508-AUDITROW"
     trade_data = {"symbol": "AAPL", "contract": "AAPL|190|2026-06-20|C"}
+    db_session.add(PortfolioPositionModel(
+        rec_id=rec_id, symbol="AAPL", contract="AAPL|190|2026-06-20|C",
+        direction="Bullish", entry_price=1.0, qty=1, entry_date="2026-05-08",
+    ))
+    await db_session.commit()
     await log_approval(rec_id, trade_data, db_session)
 
     result = await db_session.execute(
@@ -367,6 +375,7 @@ async def test_rec_id_dual_system_match(db_session, tmp_path, monkeypatch):
     import app.services.audit as audit_module
     from app.services.audit import log_approval
     from app.models.audit_event import AuditEventModel
+    from app.models.portfolio import PortfolioPositionModel
 
     # Redirect the JSONL log to a temp file
     log_file = tmp_path / "test_audit.log"
@@ -374,6 +383,11 @@ async def test_rec_id_dual_system_match(db_session, tmp_path, monkeypatch):
 
     rec_id = "REC-20260508-DUALSYS"
     trade_data = {"symbol": "TSLA", "action": "BUY"}
+    db_session.add(PortfolioPositionModel(
+        rec_id=rec_id, symbol="TSLA", contract="TSLA|200|2026-06-20|C",
+        direction="Bullish", entry_price=1.0, qty=1, entry_date="2026-05-08",
+    ))
+    await db_session.commit()
     await log_approval(rec_id, trade_data, db_session)
 
     # Check DB row

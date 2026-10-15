@@ -414,6 +414,7 @@ async def book_fired_order(fired: FiredOrder, db: AsyncSession) -> BookingOutcom
                 exit_plan_cfg_loader=load_exit_plan_cfg,
                 enforce_pre_trade_gates=False,
                 stop_required=True,
+                exposure_attempt_id=fired.attempt_id,
                 **basis_kwargs,
             )
         except Exception as exc:
