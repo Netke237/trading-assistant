@@ -213,6 +213,7 @@ def test_gate_cache_recomputes_when_scoring_rules_change(tmp_path, monkeypatch):
 
 # Pinned per SIGNAL_CACHE_VERSION: sha256 of strategy_engine.py (LF line endings).
 _ENGINE_SOURCE_PINS = {
+    3: "3821eeee4059ad40cc788d94182336c4b2c35f43161116fc2ddb49932f257006",
     1: "a43b311fc33ea5862d212f29c43d430e9be5807c0b3c8641995ede9266aa2519",
     2: "1054b5a87a9142c5db8f45b16181edd0289d551f27dacc6e896f61949d1ed812",
 }
