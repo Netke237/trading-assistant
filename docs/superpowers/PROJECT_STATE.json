@@ -4057,7 +4057,7 @@
       "audit_clean": false,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
-      "notes": "Built, not ready to merge: plan clean in two independent rounds; code round1 reviewing afbd292f..154de52c. Backend full8,960 passed/9 skipped; 864-case parity passed; frontend255 suites/5,273 tests passed; CLI fixture probe passed. Fibonacci boundary finding awaits fix and fresh review. Historical evidence and adoption remain outside this cloud validation.",
+      "notes": "Built; code round2 reviewing CA1-01 fix b77fb014 and interactions. Plan clean in2 rounds. Original full backend8,960passed/9skipped; frontend255suites/5,273tests and864-case parity passed. Fix validation215focusedtests passed. Not ready to merge until fresh audit and exact-headCI clear.",
       "name": "Pre-Breakout/Fibonacci backtests and per-horizon tuning",
       "verify": {
         "kind": "present",
@@ -4099,7 +4099,9 @@
           "findings": [
             "CA1-01: setup_entries.py level_at divides depth/100 instead of authoritative _FIB_RATIOS; flat touched closes can falsely confirm due to one-ULP drift. Independent public adapter reproduction fabricated five trades on flat88.76 closes for low20/high110/level23.6/EMA0."
           ],
-          "fixes": [],
+          "fixes": [
+            "b77fb014 uses canonical _FIB_RATIOS for configured levels and exact frozen origin for 100%;32 boundary regressions added (17 failed on old code);215 focused tests and typecheck pass."
+          ],
           "outstanding": [
             "CA1-01"
           ],

@@ -30,9 +30,21 @@ from the definitive run after the final application commit.
 ## Audit and remaining work
 
 Plan: two independent rounds, one numeric finding fixed, then clean.
-Code: round 1 reviewing afbd292f..154de52c; not yet clean. Its Fibonacci strict
-confirmation rounding finding is pending correction and fresh independent
-review. The build is unfinished and not ready to merge until that gate clears.
+Code round 1: one gate finding on afbd292f..154de52c (all 16 original
+files). Reviewer: /root/t4_code_audit_1. Recomputing a configured percentage
+as depth/100 shifted strict Fib boundaries by one floating-point unit and
+fabricated trades on unchanged closes.
+
+Fix b77fb014 uses the detector's canonical ratios and exact frozen origin
+for the 100% fallback. Thirty-two boundary regressions cover both directions,
+all supported depths, equality, strict one-ULP crossings, frozen stops and
+public-adapter trades. Old-code RED: 17 failed / 15 passed. Post-fix focused
+setup/tuning/T1 checks: **215 passed**; frontend typecheck passed. Legacy
+simulator and existing stock signal code are unchanged by this fix.
+
+Code round 2: fresh independent review of c4126c55..b77fb014 and interactions
+is pending. The build remains unfinished and not ready to merge until that
+review and exact-head CI pass.
 
 ## Historical evidence
 
