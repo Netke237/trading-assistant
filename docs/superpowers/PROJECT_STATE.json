@@ -4401,7 +4401,7 @@
     {
       "id": "STOP-ALERT-DRAWER-PARITY",
       "name": "Stop alert, stored stop and Portfolio drawer agree",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "depends_on": [
@@ -4450,7 +4450,7 @@
           "verification": "BMad plus second complete scope pass. Traced drawer/browser/backend alerts, generated flooring/reanchor, preserved user gates, PATCH/storage normalization, stop_required and booking wrapper. Independent73drawer+178backend tests passed; full logs inspected. No working-tree edits."
         }
       ],
-      "notes": "SELF-MERGE PENDING, PR #340, audited head 856abb52e6e5cb721f1a7701945b1648f47cce33. Built/unmerged; independent plan1/code1 clean (continuous2rounds). Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Await exact PR head CI and all board step7 conditions. Actual main record preserved; no merge claimed.",
+      "notes": "SHIPPED: PR #340 verified MERGED at c2fbae35e3eb1f38579b37c1574251ee570fb48e on 2026-10-15T17:16:47Z. User explicitly authorized merge in this chat. Exact head 3aaadc7fbf6693d8a548503d884515db69e75d76 passed backend/frontend/browser CI. Independent plan 1/code 1 clean (continuous 2 rounds), histories preserved; local frontend 5443 passed, backend 9297 passed/9 skipped. Documentation-only record of the verified feature merge.",
       "tickets": [
         338,
         339
@@ -4484,7 +4484,17 @@
         }
       },
       "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33",
-      "pr": 340
+      "pr": 340,
+      "merged_commit": "c2fbae35e3eb1f38579b37c1574251ee570fb48e",
+      "ci": {
+        "head": "3aaadc7fbf6693d8a548503d884515db69e75d76",
+        "backend": "SUCCESS",
+        "frontend": "SUCCESS",
+        "browser": "SUCCESS",
+        "run": "https://github.com/Netke237/trading-assistant/actions/runs/38771695040",
+        "browser_run": "https://github.com/Netke237/trading-assistant/actions/runs/38771695186"
+      },
+      "merge_record_branch": "board/stop-alert-drawer-parity-merge-record-8e84a41a"
     },
     {
       "id": "HISTORY-SINGLE-PROVIDER-REBUILD",
@@ -6650,8 +6660,8 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "HISTORY-SINGLE-PROVIDER-REBUILD",
-  "active_phase_note": "HISTORY-SINGLE-PROVIDER-REBUILD code round 3 is clean at 536e34fe (origin/main c2fbae35 merged). SELF-MERGE PENDING, PR #341. Main's record above is STOP-ALERT-DRAWER-PARITY (PR #340 merged on main at c2fbae35). The mini-PC run is still Kenneth's after the code merges.",
+  "active_phase": "STOP-ALERT-DRAWER-PARITY",
+  "active_phase_note": "Documentation-only reconciliation: PR #340 is verified merged at c2fbae35; preserving all newer main/HISTORY-SINGLE-PROVIDER-REBUILD records and application files. Independent plan/code audit history unchanged.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
