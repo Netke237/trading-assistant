@@ -34,7 +34,7 @@ test('Fib string percent appears once and swing and zero distance survive',()=>{
 test('Pullback retains authoritative conditional evidence and clicked chart identity',async()=>{
  (api.postStockScan as jest.Mock).mockResolvedValue({candidates:[{symbol:'PB',company:'Actual Company',direction:'Bearish',stock_score:0,price:0,confidence:null,status:'REJECT',confidence_qualification:'Unvalidated',stop:null,custom_evidence:{observed:0}}]});
  const open=jest.spyOn(window,'open').mockImplementation(()=>null);render(<Page/>);fireEvent.click(screen.getByRole('button',{name:'Pullback to EMA 50'}));await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Run Scan'})));
- fireEvent.click(screen.getByRole('button',{name:'Open PB chart in a new tab'}));expect(open).toHaveBeenCalledWith('/chart?symbol=PB','_blank');
+ fireEvent.click(screen.getByRole('button',{name:'Open PB chart in a new tab'}));expect(open).toHaveBeenCalledWith('/chart?symbol=PB&source=pullback&backtest_artifact_status=original_unavailable','_blank');
  fireEvent.click(screen.getByRole('button',{name:'Select PB'}));expect(screen.getByRole('region',{name:'Evidence for PB'})).toHaveTextContent('Unvalidated');expect(screen.getByText('custom_evidence').parentElement).toHaveTextContent('0');open.mockRestore();
 });
 

@@ -159,6 +159,8 @@ class BacktestOut(BaseModel):
 
 
 class PositionCardOut(BaseModel):
+    backtest_artifact_id: str | None = None
+    backtest_artifact_status: Literal["available", "unsupported", "insufficient_history", "invalid_input", "failed", "invalid_evidence", "storage_unavailable", "capture_unavailable", "original_unavailable"] | None = None
     model_config = ConfigDict(populate_by_name=True)
     symbol:       str
     company:      str

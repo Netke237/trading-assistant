@@ -8,6 +8,8 @@ import { useScanStore } from '@/lib/scanStore';
 import { useUniverseStore } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api } from '@/lib/api';
+import { buildCandidateChartHref } from '@/lib/candidateChart';
+import type { BacktestArtifactReference } from '@/types/backtest';
 import type { PositionCardData, PreBreakoutResultRow } from '@/types/stockDomain';
 import { CompositeAlertDialog } from '@/components/organisms/CompositeAlertDialog';
 import {
@@ -232,9 +234,9 @@ export default function Step4PreBreakoutPage() {
     onClick: (event: React.MouseEvent) => { if (!(event.target as HTMLElement).closest('button')) setSelectedSymbol(symbol); },
     onKeyDown: (event: React.KeyboardEvent) => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSymbol(symbol); } },
   });
-  const identity = (row: {symbol: string; company?: string}) => <div className={styles.identity} aria-label={`Identity for ${row.symbol}`} onClick={event => event.stopPropagation()}>
+  const identity = (row: BacktestArtifactReference & {symbol: string; company?: string}) => <div className={styles.identity} aria-label={`Identity for ${row.symbol}`} onClick={event => event.stopPropagation()}>
     <WatchStar symbol={row.symbol} size="sm" />
-    <button type="button" className={styles.chartBtn} title="Open in Chart" aria-label={`Open ${row.symbol} chart in a new tab`} onClick={() => window.open(`/chart?symbol=${encodeURIComponent(row.symbol)}`, '_blank')}>↗</button>
+    <button type="button" className={styles.chartBtn} title="Open in Chart" aria-label={`Open ${row.symbol} chart in a new tab`} onClick={() => window.open(buildCandidateChartHref(row, scanMode), '_blank')}>↗</button>
     <div className={styles.identityText} onClick={() => setSelectedSymbol(row.symbol)}><Text size={13} weight={500}>{row.symbol}</Text><Text size={11} tone="dim">{row.company || (selectedContext.live?.data.symbol===row.symbol ? selectedContext.live.data.company : null) || 'Company unavailable'}</Text></div>
   </div>;
   const chartShell = <section className={styles.chartShell} role="region" aria-label="Selected setup chart">

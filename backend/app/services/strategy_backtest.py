@@ -8,6 +8,10 @@ from typing import Literal
 
 import pandas as pd
 
+from app.services.strategy_backtest_details import (
+    DetailedBacktestResult, DetailStatus, collect_details, source_frame,
+)
+
 logger = logging.getLogger(__name__)
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily", "mean_reversion_multi"]
@@ -110,6 +114,7 @@ def run_strategy_backtest(
     entry_start: date | None = None,
     hold_max_days: int | None = None,
     entry_end: date | None = None,
+    detail_collector: list[DetailedBacktestResult] | None = None,
 ) -> BacktestResult:
     """Run a full entry+stop+target backtest using backtesting.py.
 
@@ -126,13 +131,58 @@ def run_strategy_backtest(
 
     ``entry_end``: no new entry on a bar dated on or after it; a trade already
     open still runs to its stop, target or time exit.
+
+    ``detail_collector``: optionally append detached chart evidence from this
+    same invocation. Evidence extraction failure preserves this aggregate.
     """
     return _run_backtest(
         bars, strategy=strategy, direction=direction, min_trades=min_trades,
         min_win_rate=min_win_rate, params=params, commission=commission,
         entry_start=entry_start, hold_max_days=hold_max_days, entry_end=entry_end,
         collect_trades=False,
+        detail_collector=detail_collector,
     )[0]
+
+
+def run_strategy_backtest_detailed(
+    bars: list[dict],
+    *,
+    strategy: str,
+    direction: str,
+    min_trades: int = _MIN_TRADES,
+    min_win_rate: float = _MIN_WIN_RATE,
+    params: dict | None = None,
+    commission: float = 0.0,
+    entry_start: date | None = None,
+    hold_max_days: int | None = None,
+    entry_end: date | None = None,
+) -> DetailedBacktestResult:
+    """One engine invocation with precise, detached chart evidence.
+
+    Unlike legacy aggregate APIs, malformed input is an explicit non-success.
+    Existing aggregate callers may pass ``detail_collector=[]`` to capture the
+    same evidence without changing their return type or invoking the engine twice.
+    """
+    try:
+        direction = normalize_direction(direction)
+        if len(bars) < 100:
+            reason = "Insufficient history (< 100 bars)"
+            return DetailedBacktestResult(_empty_result(strategy, direction, reason), "insufficient_history", reason)
+        source_frame(bars)
+        if not math.isfinite(commission):
+            raise ValueError("nonfinite commission")
+    except Exception as exc:
+        return DetailedBacktestResult(_empty_result(strategy, direction, str(exc)), "invalid_input", str(exc))
+    details: list[DetailedBacktestResult] = []
+    try:
+        run_strategy_backtest(
+            bars, strategy=strategy, direction=direction, min_trades=min_trades,
+            min_win_rate=min_win_rate, params=params, commission=commission,
+            entry_start=entry_start, hold_max_days=hold_max_days, entry_end=entry_end,
+            detail_collector=details)
+    except Exception as exc:
+        return DetailedBacktestResult(_empty_result(strategy, direction, str(exc)), "failed", str(exc))
+    return details[0]
 
 
 def run_strategy_backtest_trades(
@@ -174,17 +224,29 @@ def _run_backtest(
     hold_max_days: int | None,
     entry_end: date | None,
     collect_trades: bool,
+    detail_collector: list[DetailedBacktestResult] | None = None,
 ) -> tuple[BacktestResult, list[TradeRecord] | None]:
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_backtest import run_setup_backtest
+        result, records = run_setup_backtest(
+            bars, strategy=strategy, direction=direction, min_trades=min_trades,
+            min_win_rate=min_win_rate, params=params, commission=commission,
+            entry_start=entry_start, entry_end=entry_end, hold_max_days=hold_max_days,
+        )
+        return result, records if collect_trades else None
     direction = normalize_direction(direction)
 
-    def _empty(reason: str) -> tuple[BacktestResult, list[TradeRecord]]:
-        return _empty_result(strategy, direction, reason), []
+    def _empty(reason: str, status: DetailStatus = "failed") -> tuple[BacktestResult, list[TradeRecord]]:
+        result = _empty_result(strategy, direction, reason)
+        if detail_collector is not None:
+            detail_collector.append(DetailedBacktestResult(result, status, reason))
+        return result, []
     from backtesting import Backtest, Strategy as BtStrategy
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
-        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal,
+        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal, _multi_variant_fns,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -203,10 +265,10 @@ def _run_backtest(
     }.get(strategy)
 
     if not _signal_fn:
-        return _empty(f"Unknown strategy '{strategy}'")
+        return _empty(f"Unknown strategy '{strategy}'", "unsupported")
 
     if len(bars) < 100:
-        return _empty("Insufficient history (< 100 bars)")
+        return _empty("Insufficient history (< 100 bars)", "insufficient_history")
 
     df = _bars_to_df(bars)
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -360,14 +422,28 @@ def _run_backtest(
             f"{n_trades} trades · Win {win_rate:.0%} · "
             f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f} · Expectancy ${expectancy:.2f}"
         )
-    return BacktestResult(
+    result = BacktestResult(
         strategy=strategy, direction=direction,
         n_trades=n_trades, win_rate=win_rate,
         total_return_pct=total_ret, max_drawdown_pct=max_dd,
         expectancy=round(expectancy, 3), sharpe=round(sharpe, 3),
         confidence=confidence, passes_gate=passes, summary_text=summary,
         n_time_exits=n_time_exits,
-    ), records
+    )
+    if detail_collector is not None:
+        try:
+            detail = collect_details(result, stats, df, source_bars=bars, entry_start=entry_start,
+                                     entry_end=entry_end, hold_max_days=hold_max_days,
+                                     commission=commission, effective_params=effective_params,
+                                     time_closed=time_closed, signal_fn=fn,
+                                     variant_fns=(_multi_variant_fns() if strategy == "mean_reversion_multi" else None),
+                                     min_trades=min_trades, min_win_rate=min_win_rate,
+                                     min_expectancy=_MIN_EXPECTANCY, signal_window_bars=_window)
+        except Exception as exc:
+            # Optional evidence must never change ranking/gates/aggregate results.
+            detail = DetailedBacktestResult(result, "invalid_evidence", str(exc))
+        detail_collector.append(detail)
+    return result, records
 
 
 def _trade_records(

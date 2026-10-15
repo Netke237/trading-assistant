@@ -343,7 +343,7 @@ async def test_t4_multi_cache_miss_runs_the_multi_backtest_in_both_legs(monkeypa
     runs: list = []
 
     def _spy_run(bars, *, strategy, direction, min_trades, min_win_rate, params, commission,
-                 hold_max_days):
+                 hold_max_days, detail_collector=None):
         runs.append({"strategy": strategy, "bars": bars, "params": params})
         return _bt(False)
     monkeypatch.setattr(ss, "run_strategy_backtest", _spy_run)

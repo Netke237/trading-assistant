@@ -1480,6 +1480,9 @@ def bars_needed(strategy: str, params: dict | None = None) -> int:
     * mean_reversion_multi: the max over its variants (``params["variants"]``,
       default the request's three), each with ``params["variant_params"][v]``.
     """
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_entries import setup_bars_needed
+        return setup_bars_needed(strategy, params)
     p = dict(params or {})
     if strategy == "pullback_ema":
         fn = pullback_ema_signal

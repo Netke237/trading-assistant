@@ -15,6 +15,7 @@ import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE
 import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 import { api } from '@/lib/api';
+import { buildCandidateChartHref } from '@/lib/candidateChart';
 import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStockExecutionField';
 import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
@@ -877,7 +878,7 @@ export function StockPositionCard({
             ? `Recorded horizon: ${recordedRequest.horizon}${recordedRequest.hold_max_days != null ? ` · hold ${recordedRequest.hold_max_days} days` : ''}`
             : 'Recorded horizon unavailable'}</Text>
           <div className={styles.actionRow}>        <a
-          href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+          href={buildCandidateChartHref(card, 'stocks')}
           target="_blank"
           rel="noopener noreferrer"
           className={styles.actionBtn}
@@ -1524,7 +1525,7 @@ export function StockPositionCard({
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>
         {!position && <>        <a
-          href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+          href={buildCandidateChartHref(card, 'stocks')}
           target="_blank"
           rel="noopener noreferrer"
           className={styles.actionBtn}

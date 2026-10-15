@@ -27,6 +27,13 @@ fill rules are copied from ``backtesting.backtesting._Broker._process_orders``:
 * Fewer than 100 bars: no trades. A trade still open at the end is dropped and
   counted in ``SimulatedTrades.dropped_open``.
 
+Explicit ``SignalPoint.market`` events use next-open market fills instead:
+positive finite stop/open/target must have valid geometry, optional R targets
+are calculated from the actual open, and brackets are active on the fill bar.
+Their setup age also enforces entry windows and gates at both closes. Legacy
+three-field points retain every DAY-limit rule above. ``equity_curve`` records
+cash plus marked position P&L, including entry commissions, at each close.
+
 The parity test (tests/test_tuning_simulator_parity.py) is the judge.
 """
 from __future__ import annotations
@@ -51,9 +58,10 @@ class SimulatedTrades(list):
     ``dropped_open``: trades still open at the end of the series, dropped as
     ``finalize_trades=False`` drops them (0 or 1: one position at a time)."""
 
-    def __init__(self, trades=(), dropped_open: int = 0):
+    def __init__(self, trades=(), dropped_open: int = 0, equity_curve=None):
         super().__init__(trades)
         self.dropped_open = dropped_open
+        self.equity_curve = equity_curve
 
 
 def bar_dates(bars: list[dict]) -> list[date]:
@@ -107,8 +115,10 @@ def simulate_trades(
         # would then be for a different bar order. The tuner's bars are sorted.
         raise ValueError("simulate_trades needs bars in ascending date order")
 
+    equity = [_CASH] * n_bars
     cash = _CASH
     pending: tuple[str, float, float, float] | None = None   # (side, limit, sl, tp) for the next bar
+    pending_market: SignalPoint | None = None
     trade: dict | None = None
     out: list[TradeRecord] = []
 
@@ -146,12 +156,22 @@ def simulate_trades(
         elif pending is not None:
             side, limit, sl, tp = pending
             is_long = side == "buy"
-            if (lo <= limit) if is_long else (h >= limit):
-                price = min(o, limit) if is_long else max(o, limit)
+            market = pending_market is not None
+            if market or ((lo <= limit) if is_long else (h >= limit)):
+                price = o if market else (min(o, limit) if is_long else max(o, limit))
+                valid_market = True
+                if market:
+                    rr = pending_market.rr_multiple
+                    if rr is not None:
+                        valid_market = math.isfinite(rr) and rr > 0
+                        if valid_market:
+                            tp = price + (1 if is_long else -1) * rr * abs(price - sl)
+                    valid_market = (valid_market and all(math.isfinite(v) and v > 0 for v in (price, sl, tp))
+                                    and _entry_side(direction, entry=price, sl=sl, tp=tp) is not None)
                 order_size = _FULL_EQUITY if is_long else -_FULL_EQUITY
                 adjusted = price * (1 + copysign(0.0, order_size))
                 plus_commission = adjusted + (abs(order_size) * price * commission) / abs(order_size)
-                units = copysign(int((cash * 1.0 * abs(order_size)) // plus_commission), order_size)
+                units = copysign(int((cash * 1.0 * abs(order_size)) // plus_commission), order_size) if valid_market else 0
                 if units and not abs(units) * plus_commission > cash:
                     if not (_contingent_ok(sl) and _contingent_ok(tp)):
                         # Trade.sl/tp assert -> the backtest run fails -> empty result.
@@ -161,13 +181,21 @@ def simulate_trades(
                     trade = {"size": size, "entry_price": adjusted, "entry_bar": i,
                              "sl": sl or None, "tp": tp or None, "signal_stop": sl,
                              "close_order": False, "time_closed": False}
+                    if market:
+                        if (lo <= sl) if is_long else (h >= sl):
+                            _close(min(o, sl) if is_long else max(o, sl), i)
+                        elif (h >= tp) if is_long else (lo <= tp):
+                            _close(max(o, tp) if is_long else min(o, tp), i)
+        pending_market = None
         pending = None   # a DAY order: filled or gone
         # ── broker: out of money (equity <= 0) closes at the close and stops ──
         if trade is not None:
             size = trade["size"]
             if cash + (c * size - size * trade["entry_price"]) <= 0:
                 _close(c, i)
-                return SimulatedTrades(out, 0)
+                equity[i:] = [0.] * (n_bars-i)
+                return SimulatedTrades(out, 0, equity)
+        equity[i] = cash + (trade["size"] * (c - trade["entry_price"]) if trade is not None else 0.)
         # ── strategy.next() at bar i's close ──
         if i + 1 < MIN_SIGNAL_BARS:
             continue
@@ -183,8 +211,15 @@ def simulate_trades(
             sig = signals[i]
             if sig is None or (allowed is not None and not allowed[i]):
                 continue
-            side = _entry_side(direction, entry=sig.entry, sl=sig.stop, tp=sig.target)
+            if sig.market:
+                from app.services.setup_entries import event_allowed
+                if not event_allowed(sig, i, dates, allowed=allowed, entry_start=entry_start, entry_end=entry_end):
+                    continue
+                side = "buy" if direction == "Bullish" else "sell"
+                pending_market = sig
+            else:
+                side = _entry_side(direction, entry=sig.entry, sl=sig.stop, tp=sig.target)
             if side is not None:
                 pending = (side, sig.entry, sig.stop, sig.target)
 
-    return SimulatedTrades(out, 1 if trade is not None else 0)
+    return SimulatedTrades(out, 1 if trade is not None else 0, equity)
