@@ -4185,7 +4185,7 @@
       "audit_clean": true,
       "branch": "board/history-single-provider-rebuild-570085af",
       "plan": "docs/superpowers/plans/2026-10-15-history-single-provider-rebuild-plan.md",
-      "notes": "Built; plan and code independently clean in one round each. Code audited head 07c25fce. PR next. Operational run on the mini PC (acceptance 3-4) is out of this session and needs Kenneth go-ahead.",
+      "notes": "Built; plan and code independently clean in one round each (audited head 07c25fce). PR #332 open, labelled waiting-merge. Operational run on the mini PC (acceptance 3-4) needs Kenneth go-ahead after merge.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
@@ -4255,9 +4255,9 @@
         },
         {
           "issue": 330,
-          "status": "open",
-          "commit": null,
-          "validation": "coordinator: merge origin/main, full suites, code audit, PR"
+          "status": "closed",
+          "commit": "1839bb44",
+          "validation": "merge of origin/main, full suites, code round 1 clean, PR #332 opened"
         }
       ],
       "plan_stage": {
@@ -4272,7 +4272,15 @@
         "closed_by": "clean",
         "closure_evidence": "Fresh gate-auditor a6b67caa66c40976e reviewed origin/main..07c25fce (whole change incl. merge); zero gate findings; 63 focused tests passed independently."
       },
-      "validation": "Merged head 07c25fce: backend full suite 9019 passed/7 failed/1 error/11 skipped (Python 3.11.9), failures identical to origin/main baseline (Windows-only test_atomic_yaml x4, test_payload_persistence_atomicity x3, test_historical_store_settle::test_19 tzset); frontend typecheck clean; Jest 5271/5273, 2 machine-locale (de-DE) failures (BarrierRaceCard, StockSendDialog.session) with zero frontend files changed."
+      "validation": "Merged head 07c25fce: backend full suite 9019 passed/7 failed/1 error/11 skipped (Python 3.11.9), failures identical to origin/main baseline (Windows-only test_atomic_yaml x4, test_payload_persistence_atomicity x3, test_historical_store_settle::test_19 tzset); frontend typecheck clean; Jest 5271/5273, 2 machine-locale (de-DE) failures (BarrierRaceCard, StockSendDialog.session) with zero frontend files changed.",
+      "pr": 332,
+      "pull_request": "https://github.com/Netke237/trading-assistant/pull/332",
+      "self_merge": {
+        "status": "not_attempted_waiting_merge",
+        "pr": 332,
+        "audited_head": "07c25fce923e7657f7798507b2e6338ba2f765fb",
+        "note": "Condition 1 not met: Kenneth instructed in chat to stop after the PR; operational acceptance 3-4 (mini PC run) still open, so the PR uses Part of #324 rather than Closes. Merge is Kenneth decision."
+      }
     }
   ],
   "already_shipped": [
