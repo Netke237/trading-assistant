@@ -2388,14 +2388,18 @@ async def run_scan(req: ScanRequest, db: AsyncSession = Depends(get_db)) -> Scan
             # Scan persistence occurs in _upsert_session below. This read-only
             # transaction can release its connection while the worker reserves
             # durable budget in a fresh transaction on the originating loop.
+            from app.services.portfolio_exposure_hooks import capture_exposure_hooks, sessions_for
+            exposure_sessions = sessions_for(db)
             await db.rollback()
             from app.services.daily_risk_hooks import capture_daily_risk_hooks
             hooks = capture_daily_risk_hooks()
+            exposure_hooks = capture_exposure_hooks(exposure_sessions) if exposure_sessions is not None else None
             cf = _SCAN_FIRE_EXECUTOR.submit(
                 _auto_trader.maybe_fire_on_scan,
                 _portfolio_snapshot,
                 None,  # fire() resolves the server account configuration at dispatch
                 daily_risk_hooks=hooks,
+                exposure_hooks=exposure_hooks,
             )
             # AUTOTRADE-FIRE-HYGIENE H2: this block owns the fire's outcome
             # until booking returns, and `phase` says how far it got, so a

@@ -2246,6 +2246,103 @@ def _is_rejected_status(status) -> bool:
     return str(status).strip().lower() in _REJECTED_STATUSES
 
 
+_UNUSABLE_ORDER_IDS = frozenset({"", "unknown", "none", "null"})
+_UNKNOWN_ATTEMPT_STATUSES = frozenset({"", "unknown", "unknownstatus"})
+_FILLED_ATTEMPT_STATUSES = frozenset({"filled", "fill"})
+
+
+def _bridge_call(exposure_hooks, factory):
+    """Run one coroutine on the worker's bridge. None when this thread already has a loop and no bridge."""
+    if exposure_hooks is not None:
+        return exposure_hooks._run(factory())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(factory())
+    return None
+
+
+def _attempt_sessions(exposure_hooks):
+    sessions = getattr(exposure_hooks, "sessions", None) if exposure_hooks is not None else None
+    if sessions is not None:
+        return sessions
+    from app.services.portfolio_exposure import book
+    return book.session_factory()
+
+
+def _auto_attempt_payload(strategy) -> dict:
+    from decimal import Decimal
+    limit = None
+    if strategy.order_type == "LMT":
+        limit = format(Decimal(str(strategy.limit_price)).normalize(), "f")
+    return {
+        "kind": "option",
+        "broker": strategy.broker,
+        "symbol": strategy.symbol,
+        "instrument": strategy.option_symbol,
+        "action": strategy.action,
+        "effect": "OPEN",
+        "quantity": int(strategy.quantity),
+        "order_type": strategy.order_type,
+        "limit": limit,
+        "tif": "DAY",
+        "conid": strategy.conid,
+    }
+
+
+def _claim_auto_attempt(strategy, attempt_id, exposure_hooks):
+    from app.services.broker_attempts import BrokerAttemptService
+    service = BrokerAttemptService(_attempt_sessions(exposure_hooks))
+    payload = _auto_attempt_payload(strategy)
+
+    async def _go():
+        return await service.claim(attempt_id, payload)
+
+    return _bridge_call(exposure_hooks, _go)
+
+
+def _auto_attempt_state(result) -> str:
+    status = str(getattr(result, "status", "") or "").strip().lower()
+    if _is_rejected_status(status):
+        return "proven-not-submitted"
+    order_id = str(getattr(result, "order_id", "") or "").strip().lower()
+    usable = order_id not in _UNUSABLE_ORDER_IDS
+    if usable and status in _FILLED_ATTEMPT_STATUSES:
+        return "filled"
+    if usable and status not in _UNKNOWN_ATTEMPT_STATUSES:
+        return "submitted"
+    return "outcome-unknown"
+
+
+def _record_auto_outcome(claim, state, exposure_hooks, result=None):
+    if claim is None:
+        return
+    try:
+        from app.services.broker_attempts import BrokerAttemptService
+        service = BrokerAttemptService(_attempt_sessions(exposure_hooks))
+        order_id = None if result is None else getattr(result, "order_id", None)
+        broker_status = None if result is None else getattr(result, "status", None)
+
+        async def _go():
+            await service.record_outcome(
+                claim.attempt_id,
+                state,
+                expected_version=claim.verification_version,
+                broker_order_id=None if order_id is None else str(order_id),
+                broker_status=None if broker_status is None else str(broker_status),
+            )
+
+        _bridge_call(exposure_hooks, _go)
+    except Exception:
+        logger.exception("Auto-trade attempt outcome was not recorded for %s", getattr(claim, "attempt_id", None))
+
+
+def _release_auto_exposure(exposure_hooks, attempt_id, owned):
+    if exposure_hooks is None or not owned:
+        return
+    exposure_hooks.release(attempt_id)
+
+
 # The history statuses `fire()` writes, named here because `maybe_fire_on_scan`
 # routes on them. They are `fire()`'s to define; this is a reader of them.
 _SIZING_STATUSES = ("sizing_config_blocked", "sizing_data_blocked")
@@ -2641,7 +2738,8 @@ class AutoTradeService:
              portfolio_value: float | None = None,
              attempt_id: str | None = None,
              expect: ArmedStrategy | None = None,
-             daily_risk_hooks=None) -> FiredOrder:
+             daily_risk_hooks=None,
+             exposure_hooks=None) -> FiredOrder:
         """Execute the armed strategy.
 
         Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
@@ -2672,6 +2770,7 @@ class AutoTradeService:
         refuses BEFORE the disarm, so the new order stays armed and the next
         scan gets it.
         """
+        supplied_attempt = attempt_id is not None
         attempt_id = attempt_id or uuid.uuid4().hex
 
         with self._lock:
@@ -2941,7 +3040,57 @@ class AutoTradeService:
         except AccountValueError as exc:
             self._record_refusal(attempt_id, strategy, _STATUS_RISK_CHECK_FAILED, str(exc))
             raise
-        if portfolio_snapshot is not None:
+        owned_hold = False
+        if exposure_hooks is not None:
+            # The caller's snapshot is advisory. Admission reads the database itself.
+            from app.services.portfolio_exposure import ExposureRefused
+            try:
+                basis = armed_cap_basis(strategy)
+                held = exposure_hooks.admit(
+                    attempt_id=attempt_id,
+                    instrument=strategy.option_symbol,
+                    symbol=strategy.symbol,
+                    quantity=int(strategy.quantity),
+                    limit_price=basis,
+                    multiplier=100,
+                    effect="OPEN",
+                    action=strategy.action,
+                    order_type=strategy.order_type,
+                    gate="auto",
+                )
+                owned_hold = bool(held.created)
+            except ExposureRefused as exc:
+                message = str(exc)
+                if "exposure cap" not in message.lower():
+                    message = f"Exposure cap breach: {message}"
+                with self._lock:
+                    self._state.history.append({
+                        "attempt_id":      attempt_id,
+                        "order_id":        None,
+                        "status":          "cap_blocked",
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
+                        "error":           message,
+                    })
+                raise RuntimeError(message) from exc
+            except Exception as exc:
+                with self._lock:
+                    self._state.history.append({
+                        "attempt_id":      attempt_id,
+                        "order_id":        None,
+                        "status":          _STATUS_RISK_CHECK_FAILED,
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
+                        "error":           f"exposure check failed: {exc}",
+                    })
+                raise
+        elif portfolio_snapshot is not None:
             try:
                 self._check_exposure(strategy, portfolio_snapshot, pv)
             except RuntimeError as exc:
@@ -2992,6 +3141,7 @@ class AutoTradeService:
                                         order_type=strategy.order_type, limit_price=strategy.limit_price)
             this_risk = reservation.reserved_cents / 100
         except RuntimeError as exc:
+            _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
             with self._lock:
                 self._state.history.append({
                     "attempt_id":      attempt_id,
@@ -3010,6 +3160,7 @@ class AutoTradeService:
             # `float()` ValueError this catches was already acknowledged in a
             # comment on `_check_daily_loss`; it now leaves a row like every
             # other consumed attempt. See `_STATUS_RISK_CHECK_FAILED`.
+            _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
             with self._lock:
                 self._state.history.append({
                     "attempt_id":      attempt_id,
@@ -3024,10 +3175,71 @@ class AutoTradeService:
                 })
             raise
 
+        claim = None
+        if exposure_hooks is not None or supplied_attempt:
+            try:
+                from app.services.broker_attempts import BrokerAttemptConflict
+                claim = _claim_auto_attempt(strategy, attempt_id, exposure_hooks)
+            except BrokerAttemptConflict:
+                if exposure_hooks is None:
+                    claim = None
+                else:
+                    _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
+                    hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+                    with self._lock:
+                        self._state.history.append({
+                            "attempt_id":      attempt_id,
+                            "order_id":        None,
+                            "status":          "not_submitted",
+                            "broker":          strategy.broker,
+                            "symbol":          strategy.symbol,
+                            "option":          strategy.option_symbol,
+                            "timestamp":       datetime.now(timezone.utc).isoformat(),
+                            "premium_at_risk": 0.0,
+                            "error":           "Unresolved order fingerprint already exists; nothing submitted",
+                        })
+                    raise RuntimeError("Unresolved order fingerprint already exists; nothing submitted")
+            except Exception as exc:
+                if exposure_hooks is None:
+                    claim = None
+                else:
+                    _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
+                    hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+                    with self._lock:
+                        self._state.history.append({
+                            "attempt_id":      attempt_id,
+                            "order_id":        None,
+                            "status":          _STATUS_RISK_CHECK_FAILED,
+                            "broker":          strategy.broker,
+                            "symbol":          strategy.symbol,
+                            "option":          strategy.option_symbol,
+                            "timestamp":       datetime.now(timezone.utc).isoformat(),
+                            "premium_at_risk": 0.0,
+                            "error":           f"attempt claim failed: {exc}",
+                        })
+                    raise
+            if claim is not None and not claim.authorized:
+                _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
+                with self._lock:
+                    self._state.history.append({
+                        "attempt_id":      attempt_id,
+                        "order_id":        None,
+                        "status":          "not_submitted",
+                        "broker":          strategy.broker,
+                        "symbol":          strategy.symbol,
+                        "option":          strategy.option_symbol,
+                        "timestamp":       datetime.now(timezone.utc).isoformat(),
+                        "premium_at_risk": 0.0,
+                        "error":           "duplicate submission attempt; nothing submitted",
+                    })
+                raise RuntimeError("duplicate submission attempt; nothing submitted")
+
         try:
             result = execute_option_order(strategy)
         except OrderNotSubmittedError as exc:
+            _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
             hooks.resolve(attempt_id, definitely_not_submitted=True, outcome="not_submitted")
+            _record_auto_outcome(claim, "proven-not-submitted", exposure_hooks)
             # ORDERED ABOVE THE HANDLER BELOW, and it has to be: this is a
             # RuntimeError, so the bare `except Exception` would swallow it and
             # write the `order_failed` row F2 is about. See the class.
@@ -3068,6 +3280,7 @@ class AutoTradeService:
             raise RuntimeError(f"Order not submitted: {exc}") from exc
         except Exception as exc:
             hooks.resolve(attempt_id, definitely_not_submitted=False, outcome="dispatch_error")
+            _record_auto_outcome(claim, "outcome-unknown", exposure_hooks)
             with self._lock:
                 self._state.history.append({
                     "attempt_id":      attempt_id,
@@ -3101,7 +3314,11 @@ class AutoTradeService:
             logger.error("AutoTrader order failed for %s: %s", strategy.symbol, exc)
             raise RuntimeError(f"Order failed: {exc}") from exc
 
-        hooks.resolve(attempt_id, definitely_not_submitted=_is_rejected_status(result.status), outcome=str(result.status))
+        rejected = _is_rejected_status(result.status)
+        hooks.resolve(attempt_id, definitely_not_submitted=rejected, outcome=str(result.status))
+        if rejected:
+            _release_auto_exposure(exposure_hooks, attempt_id, owned_hold)
+        _record_auto_outcome(claim, _auto_attempt_state(result), exposure_hooks, result)
 
         with self._lock:
             self._state.history.append({
@@ -3196,6 +3413,7 @@ class AutoTradeService:
         portfolio_snapshot: list | None = None,
         portfolio_value: float | None = None,
         daily_risk_hooks=None,
+        exposure_hooks=None,
     ) -> Optional[FiredOrder]:
         """Trigger #2: called after each scan completes. Fires if armed and fresh.
 
@@ -3307,6 +3525,7 @@ class AutoTradeService:
                               portfolio_value=portfolio_value,
                               attempt_id=attempt_id,
                               daily_risk_hooks=daily_risk_hooks,
+                              exposure_hooks=exposure_hooks,
                               # FIRE THE ORDER THIS TRIGGER READ, OR NOTHING.
                               # The staleness check above was made against
                               # `strategy`; without this, a re-arm inside the

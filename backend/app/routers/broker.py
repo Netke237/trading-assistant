@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import json
+import math
 import re
 import threading
 import time
@@ -42,12 +43,47 @@ def _selected_adapter(router_, broker):
     return router_.resolve(broker)
 
 
-def _release_open_risk(order, hooks, attempt_id, reserved, definite, outcome):
-    if order.effect == "OPEN" and reserved:
+def _bridged(hooks) -> bool:
+    """True only for a real loop bridge. A test double answers every attribute."""
+    return callable(getattr(type(hooks), "_run", None))
+
+
+def _release_open_risk(order, hooks, attempt_id, reserved, definite, outcome, exposure_hooks=None, exposure_held=False):
+    if order.effect == "OPEN" and reserved and hooks is not None:
         hooks.resolve(attempt_id, definitely_not_submitted=definite, outcome=outcome)
+    if order.effect == "OPEN" and exposure_held and definite and exposure_hooks is not None:
+        exposure_hooks.release(attempt_id)
 
 
-def _dispatch_order(router_, broker, order, hooks, attempt_id):
+def _exposure_price(order, hooks, instrument):
+    """Price the hold outside the exposure transaction. Limit orders do not quote."""
+    if order.order_type == "LMT":
+        price = order.limit_price
+    elif _bridged(hooks):
+        from app.services.daily_risk_hooks import opening_price
+        price = hooks._run(opening_price(instrument, order.order_type, order.limit_price))
+    else:
+        price = order.limit_price if order.limit_price is not None else 1
+    if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
+        raise HTTPException(status_code=422, detail="Exposure admission refused opening order: price is not positive")
+    return float(price)
+
+
+def _reserve_open_budget(hooks, attempt_id, *, instrument, quantity, source, multiplier, order_type, limit_price, price):
+    """Daily reservation after exposure has committed. A real bridge reuses the price already taken."""
+    if _bridged(hooks):
+        from app.services import daily_risk
+        return hooks._run(daily_risk.reserve(
+            attempt_id, instrument=instrument, quantity=quantity, price=price,
+            source=source, multiplier=multiplier,
+        ))
+    return hooks.reserve(
+        attempt_id, instrument=instrument, quantity=quantity, source=source,
+        multiplier=multiplier, order_type=order_type, limit_price=limit_price,
+    )
+
+
+def _dispatch_order(router_, broker, order, hooks, attempt_id, saved_rec_id=None, exposure_hooks=None):
     """Validate current configuration in the worker immediately before dispatch."""
     if order.effect == "OPEN":
         bearish = order.sec_type == "STK" and order.action == "SELL"
@@ -64,7 +100,9 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
     except ValueError as exc:
         raise OrderPreflightRefusedError(str(exc)) from exc
     reserved = False
+    exposure_held = False
     if order.effect == "OPEN":
+        from app.services.portfolio_exposure import ExposureRefused, LinkedExposureRefused
         from app.services.portfolio_risk import account_value, AccountValueError
         try:
             account_value()
@@ -73,32 +111,67 @@ def _dispatch_order(router_, broker, order, hooks, attempt_id):
         if order.sec_type == "OPT" and order.action != "BUY":
             raise HTTPException(status_code=422, detail="Daily risk budget refuses naked short option opens")
         instrument = order.option_symbol if order.sec_type == "OPT" else f"{order.symbol}|STOCK"
+        multiplier = 100 if order.sec_type == "OPT" else 1
+        source = "manual_option" if order.sec_type == "OPT" else "manual_stock"
         try:
-            hooks.reserve(attempt_id, instrument=instrument, quantity=order.quantity,
-                          source="manual_option" if order.sec_type == "OPT" else "manual_stock",
-                          multiplier=100 if order.sec_type == "OPT" else 1,
-                          order_type=order.order_type, limit_price=order.limit_price)
+            price = _exposure_price(order, hooks, instrument)
+            if exposure_hooks is None:
+                raise HTTPException(status_code=422, detail="Exposure admission has no originating event-loop bridge")
+            exposure_hooks.admit(
+                attempt_id=attempt_id,
+                instrument=instrument,
+                symbol=order.symbol,
+                quantity=int(order.quantity),
+                limit_price=price,
+                multiplier=multiplier,
+                effect=order.effect,
+                action=order.action,
+                order_type=order.order_type,
+                saved_rec_id=saved_rec_id,
+                gate="manual",
+                broker=broker,
+                tif=order.tif,
+                kind="option" if order.sec_type == "OPT" else "stock",
+                conid=order.conid,
+            )
+            exposure_held = True
+        except LinkedExposureRefused as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ExposureRefused as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Exposure admission refused opening order: {exc}") from exc
+        try:
+            _reserve_open_budget(
+                hooks, attempt_id, instrument=instrument, quantity=order.quantity,
+                source=source, multiplier=multiplier, order_type=order.order_type,
+                limit_price=order.limit_price, price=price,
+            )
             reserved = True
         except Exception as exc:
+            if exposure_held and exposure_hooks is not None:
+                exposure_hooks.release(attempt_id)
             raise HTTPException(status_code=422, detail=f"Daily risk budget refused opening order: {exc}") from exc
     try:
         result = adapter.place_order(order)
     except OrderAdmissionRefusedError:
-        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted", exposure_hooks, exposure_held)
         raise
     except OrderBeforeSubmissionError:
-        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted", exposure_hooks, exposure_held)
         raise
     except OrderPreflightRefusedError:
-        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted")
+        _release_open_risk(order, hooks, attempt_id, reserved, True, "not_submitted", exposure_hooks, exposure_held)
         raise
     except Exception:
-        _release_open_risk(order, hooks, attempt_id, reserved, False, "dispatch_error")
+        _release_open_risk(order, hooks, attempt_id, reserved, False, "dispatch_error", exposure_hooks, exposure_held)
         raise
     if order.effect == "OPEN":
         from app.services.auto_trader import _is_rejected_status
         rejected = _is_rejected_status(result.status) or getattr(result, "awaiting_confirmation", False) is True
-        _release_open_risk(order, hooks, attempt_id, reserved, rejected, str(result.status))
+        _release_open_risk(order, hooks, attempt_id, reserved, rejected, str(result.status), exposure_hooks, exposure_held)
     return result
 
 
@@ -482,7 +555,7 @@ async def _replay_claim(service, claim, explicit: bool):
     return JSONResponse(status_code=502, content={"detail": "submission outcome unknown"})
 
 
-async def _lead_submission(kind, req, order, service, claim, rec_id):
+async def _lead_submission(kind, req, order, service, claim, rec_id, exposure_sessions=None):
     fields = {
         "kind": kind, "broker": req.broker, "symbol": req.symbol,
         "action": req.action, "quantity": req.quantity,
@@ -504,9 +577,12 @@ async def _lead_submission(kind, req, order, service, claim, rec_id):
         await _record_attempt(service, claim, "proven-not-submitted", 503, body)
         return 503, body
     from app.services.daily_risk_hooks import capture_daily_risk_hooks
+    from app.services.portfolio_exposure_hooks import capture_exposure_hooks
     hooks = capture_daily_risk_hooks() if order.effect == "OPEN" else None
+    exposure_hooks = capture_exposure_hooks(exposure_sessions) if order.effect == "OPEN" else None
     result = await asyncio.to_thread(
         _dispatch_order, router_, req.broker, order, hooks, claim.attempt_id,
+        req.saved_rec_id, exposure_hooks,
     )
     if _confirmation_question(result) is not None:
         _raise_if_awaiting_confirmation(result, rec_id, kind, req.symbol)
@@ -536,7 +612,9 @@ def _failure_response(exc: Exception) -> tuple[int, str, dict]:
 
 async def _submit(kind: str, req, order: BrokerOrder, db: AsyncSession):
     """Claim one durable attempt, then dispatch at most once."""
+    from app.services.portfolio_exposure_hooks import sessions_for
     rec_id = new_rec_id()
+    exposure_sessions = sessions_for(db)
     service = _attempt_service(db)
     explicit = req.attempt_id is not None
     try:
@@ -564,7 +642,9 @@ async def _submit(kind: str, req, order: BrokerOrder, db: AsyncSession):
     holder = {"status": 502, "body": {"detail": "submission outcome unknown"}}
     try:
         try:
-            status, body = await _lead_submission(kind, req, order, service, claim, rec_id)
+            status, body = await _lead_submission(
+                kind, req, order, service, claim, rec_id, exposure_sessions,
+            )
             holder["status"] = status
             holder["body"] = body
         except HTTPException as exc:

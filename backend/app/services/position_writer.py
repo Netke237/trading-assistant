@@ -103,7 +103,7 @@ from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
 from app.services.portfolio_exposure import (
-    capacity_positions, load_holds, lock_exposure, restart_read,
+    capacity_positions, load_holds, lock_exposure, restart_read, transfer_hold,
 )
 from app.services.portfolio_performance import _contract_multiplier
 from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
@@ -226,6 +226,27 @@ def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
     ]
 
 
+def _prepared_marker(body: PortfolioPositionCreate, stored_qty: int) -> dict:
+    """Gates-on save-before-order identity. Gates-off booking must not call this."""
+    from decimal import Decimal
+    if str(body.contract).endswith("|STOCK") and body.direction == "Bearish":
+        action = "SELL"
+    else:
+        action = "BUY"
+    limit = None
+    if body.orderType == "LMT" and body.orderLimitPrice is not None:
+        limit = format(Decimal(str(body.orderLimitPrice)).normalize(), "f")
+    return {
+        "instrument": body.contract,
+        "symbol": body.symbol,
+        "action": action,
+        "effect": "OPEN",
+        "quantity": int(stored_qty),
+        "order_type": body.orderType,
+        "limit": limit,
+    }
+
+
 async def create_position(
     body: PortfolioPositionCreate,
     db: AsyncSession,
@@ -237,6 +258,7 @@ async def create_position(
     stop_required: bool = False,
     cap_basis: Optional[float] = None,
     cap_basis_floor: Optional[float] = None,
+    exposure_attempt_id: Optional[str] = None,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring.
 
@@ -477,6 +499,10 @@ async def create_position(
         result = await db.execute(select(PortfolioPositionModel))
         db_positions = result.scalars().all()
         holds = await load_holds(db)
+        if exposure_attempt_id:
+            # This booking is the held order. Counting the hold beside it would
+            # treat one fill as two exposures; the transfer below keeps the hold.
+            holds = [hold for hold in holds if hold.attempt_id != exposure_attempt_id]
         portfolio = capacity_positions(db_positions, holds)
 
         # Audit round 1, F1: the cap is judged at the price the order this
@@ -750,6 +776,11 @@ async def create_position(
                 datetime.now(timezone.utc) if resolved_tp_price is not None else None
             ),
         )
+        if enforce_pre_trade_gates and body.orderType:
+            position.prepared_order = _prepared_marker(body, stored_qty)
+        if exposure_attempt_id:
+            position.order_attempt_id = exposure_attempt_id
+            await transfer_hold(db, exposure_attempt_id, body.recId, stored_qty)
         db.add(position)
         try:
             await db.commit()
