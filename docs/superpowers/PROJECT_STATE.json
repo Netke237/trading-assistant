@@ -4053,7 +4053,7 @@
       ],
       "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery.",
       "status": "built",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
@@ -4089,6 +4089,21 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "code_round": 1,
+          "reviewer": "/root/t4_code_audit_1",
+          "scope": "afbd292f221eb0383e7fd736e20ecd0c52f24f69..154de52c84700ff8fb7fffe407b13c11068876b2 (all 16 original files plus boundary-path second pass)",
+          "findings": [
+            "CA1-01: setup_entries.py level_at divides depth/100 instead of authoritative _FIB_RATIOS; flat touched closes can falsely confirm due to one-ULP drift. Independent public adapter reproduction fabricated five trades on flat88.76 closes for low20/high110/level23.6/EMA0."
+          ],
+          "fixes": [],
+          "outstanding": [
+            "CA1-01"
+          ],
+          "clean": false
         }
       ],
       "plan_audit_clean": true,
@@ -4113,7 +4128,7 @@
         "closure_evidence": "Fresh /root/t4_plan_audit_2 reviewed efff82b8..80c9fa35 and legacy equity cropping interactions; zero gate findings."
       },
       "code_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false,
         "closed_by": null
       },
