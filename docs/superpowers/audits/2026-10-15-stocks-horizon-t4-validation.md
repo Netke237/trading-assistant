@@ -78,3 +78,11 @@ Netke237/trading-assistant as public; the review required explicit user
 authorization for public disclosure of the audited code/tests. No workaround
 was attempted. Implementation and independent audits are complete locally.
 Exact-head CI and self-merge remain pending publication approval.
+
+
+## Publication authorization
+
+On 2026-10-15 the user explicitly authorized the public branch push and PR
+creation only. The automatic-review publication block is resolved for those
+actions. Do not merge automatically. Exact-head CI will be checked on the PR;
+historical tuning and adoption remain separate.
