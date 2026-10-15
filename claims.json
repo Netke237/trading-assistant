@@ -2,17 +2,9 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/candidate-backtest-chart-40fc1ac9",
-      "claimed_at": "2026-10-14T21:13:07Z",
-      "expires_at": "2026-10-15T00:26:10Z",
-      "note": "Implement approved original backtest curves and fills",
-      "task": "CANDIDATE-BACKTEST-CHART"
-    },
-    {
-      "agent": "claude",
       "branch": "board/broker-path-residuals-3f35b8cf",
       "claimed_at": "2026-10-14T21:14:30Z",
-      "expires_at": "2026-10-15T03:25:48Z",
+      "expires_at": "2026-10-15T03:56:10Z",
       "note": "Resume #165 at #270 portfolio exposure serialization",
       "task": "BROKER-PATH-RESIDUALS"
     },
