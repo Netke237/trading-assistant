@@ -4172,8 +4172,8 @@
       "id": "CANDIDATE-BACKTEST-CHART",
       "name": "Original candidate backtest candles, trade markers and indexed equity comparison",
       "status": "built",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "depends_on": [
         "PREBREAKOUT-PRESENTATION-V2"
       ],
@@ -4195,11 +4195,10 @@
         "closure_evidence": "Fresh independent /root/backtest_chart_plan_r1 reviewed exact plan at 72dc64f6d5752033e48e6553d1de25308fc70760 against actual sources; two passes; zero numeric/persistence gate findings."
       },
       "code_stage": {
-        "rounds": 1,
-        "clean": false,
-        "closure_evidence": "Fresh independent /root/backtest_code_audit_r1 reviewed complete exact 64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f against approved plan; two source passes, independent Python3.11 matrix12cases all six fresh strategies/both directions, zero numeric/persistence gate findings.",
-        "last_clean_head": "bc81207942574257eb123f3479ce37da668dfc4f",
-        "pending": "Bounded inventory/docs/HTTP-regression follow-up after full backend identified new FreshBacktestRequest.params untyped leaf; preserve independent clean code round1, re-audit only follow-up within remaining cap."
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent /root/backtest_code_audit_r2 reviewed only bc81207942574257eb123f3479ce37da668dfc4f..413e1e4a2556dc5845bc99785c83d469a086aea4 and validation interactions. Zero gate findings;22 targeted tests,220 invalid configurations rejected,12 finite accepted. Previous complete-feature code round1 clean preserved."
       },
       "audit_history": [
         {
@@ -4225,9 +4224,21 @@
           "outstanding": [],
           "clean": true,
           "verification": "Independent BMad adversarial review, two complete source passes plus synthetic Python3.11 12-case fresh strategy/direction matrix. Original engine summary/epoch/equity/fills, immutable persistence/cache/report linkage, UI stale/provenance, exact fresh configuration agreement and isolation checked. No real provider/order/alert/save calls."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "reviewer": "/root/backtest_code_audit_r2",
+          "reviewed": "Shrinking follow-up only:bc81207942574257eb123f3479ce37da668dfc4f..413e1e4a2556dc5845bc99785c83d469a086aea4, finite inventory/HTTP tests and documentation with strict validator/middleware interactions. No production-code changes.",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Independent BMad second scope pass; preserved all original34 inventory tuples, added only guarded fresh params(total35);22 targeted tests passed,220 invalid configurations rejected,12 finite direct/multi accepted. Typed-float walker/probes unchanged; refusals before history/engine; finite controls reach history. Full backend not rerun after test/docs-only fix accurately documented."
         }
       ],
-      "notes": "BUILT LOCAL, NOT MERGED. Complete application diff bc812079 independently code round1clean, matrix12pass. Full backend9084pass9skip1inventory failure; test/docs-only fix2625a73f registers guarded fresh params,20HTTP probes reject nonfinite before history/engine. All4affected suites84pass; no production changes. Full backend not repeated after test/docs-only update. Frontend5344/typecheck/build/browser10 passed. Fresh shrinking code audit round2 pending; plan1 preserved, code rounds run1. Publication/issue closure blocked autoapproval pending explicit user authorization.",
+      "notes": "BUILT LOCAL, NOT MERGED. Plan1clean/code2clean, continuous3; complete feature reviewed64b9d53f..bc812079, bounded test/docs follow-up reviewedbc812079..413e1e4a, zero gate findings. Frontend5344/typecheck/build/browser10 pass. Full backend9084pass9skip1inventory failure; test/docs-only fix2625a73f, all4affected suites84pass. No full rerun after that nonproduction fix. Independent matrices12cases initial; follow-up22tests/220invalid-rejected/12finite-accepted. No application code changed after initial clean audit. New code remains local: automatic approval rejected GitHub publication/child closure pending explicit user authorization. Exact-head hosted CI and merge not attempted.",
       "tickets": [
         289,
         290,

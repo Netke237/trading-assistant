@@ -143,3 +143,32 @@ test/documentation-only correction; every other test had already passed, and
 the sole failed check now passes in the affected suites. Exact-head hosted CI
 still must pass after authorized publication and before any merge. Fresh
 shrinking follow-up audit is pending; no application code changed.
+
+## Follow-up audit and final checkpoint
+
+Continuous round3, code round2 of3: fresh independent reviewer
+`/root/backtest_code_audit_r2` applied BMad adversarial to only
+`bc81207942574257eb123f3479ce37da668dfc4f..413e1e4a2556dc5845bc99785c83d469a086aea4`
+and its interactions with the existing strict parameter validator, whole-body
+JSON guard and real app registration. **Zero gate findings**, no fixes or
+outstanding findings. Original34 tuples preserved, sole new tuple total35,
+float probes unchanged. Independent22 targeted tests passed;220 invalid
+configurations rejected;12 finite direct/multi configurations accepted.
+Second pass checked anti-vacuity, nested mutation, middleware/model rejection,
+strict keys/types/ranges/nulls, selected-variant recursion and mechanism claims.
+No reviewer edits or real provider/order/alert/save calls.
+
+Plan1/code2 independently clean; continuous total3 within per-stage caps.
+Application code remains unchanged after the first whole-feature clean audit.
+The entire local implementation is built and reviewed. The full backend run
+had9084passed/9skipped/1inventoryfailure; the sole failure was corrected by the
+test/documentation-only change and all84 affected checks passed. No second
+full backend run was made. Frontend5344, typecheck, production build and10
+mocked browser checks passed. Hosted CI must still pass on the published exact
+head before merge. Nothing is merged or recorded shipped.
+
+Publication/child-ticket closure is pending explicit user authorization after
+automatic approval review rejected those external writes. New commits are
+local; the remote continuation branch still contains the recovered checkpoint.
+A local continuation bundle is prepared alongside the repository for recovery
+if publication stays blocked.
