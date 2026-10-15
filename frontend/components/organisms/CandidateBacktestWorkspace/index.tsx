@@ -9,6 +9,7 @@ import styles from './CandidateBacktestWorkspace.module.css';
 /** Frozen evidence owns its series and never subscribes to quotes or live strategy overlays. */
 function Evidence({artifact}:{artifact:BacktestArtifact}) {
  const {detail,identity}=artifact;
+ const runLabel=artifact.provenance==='fresh'?'Fresh backtest (separate result)':'Original backtest';
  const priceRef=useRef<HTMLDivElement>(null);
  const equityRef=useRef<HTMLDivElement>(null);
  const [selected,setSelected]=useState<string|null>(null);
@@ -64,12 +65,12 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
  },[detail]);
  useEffect(()=>{restyle.current?.();},[theme]);
  const trade=detail.trades.find(t=>t.id===selected);
- return <section className={styles.workspace} aria-label="Original backtest evidence">
-  <h1>{identity.symbol} — Original backtest</h1>
-  <p>{identity.strategy} · {identity.direction} · {identity.horizon} · Original interval: {identity.interval}</p>
+ return <section className={styles.workspace} aria-label={artifact.provenance==='fresh'?'Fresh backtest evidence':'Original backtest evidence'}>
+  <h1>{identity.symbol} — {runLabel}</h1>
+  <p>{identity.strategy} · {identity.direction} · {identity.horizon} · {artifact.provenance==='fresh'?'Fresh':'Original'} interval: {identity.interval}</p>
   <p>Frozen historical evidence. Live overlays are separate. Time basis: {detail.time_basis}.</p>
   <div ref={priceRef} aria-label="Historical candles" className={styles.price}/>
-  <p>Strategy equity (index) · Long buy-and-hold (gross; excludes fees). Both use the original evaluation baseline of 100.</p>
+  <p>Strategy equity (index) · Long buy-and-hold (gross; excludes fees). Both use the recorded evaluation baseline of 100.</p>
   <div ref={equityRef} aria-label="Indexed equity comparison" className={styles.equity}/>
   <p>Indexed ending change: {detail.equity.length?detail.equity[detail.equity.length-1].strategy_index-100:'Unavailable'}%. Engine total return: {detail.summary.total_return_pct}%. Summary metrics retain engine rounding and definitions.</p>
   {detail.trades.length===0&&<p>Successful result: zero closed trades. The recorded equity and benchmark remain visible.</p>}
@@ -85,12 +86,12 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
   <p>Equity includes mark-to-market of open positions; closed-trade counts exclude them. No exit is assumed.</p>
   {detail.open_positions.length===0?<p>No recorded open positions.</p>:<ul>{detail.open_positions.map(p=><li key={p.id}>{p.id} · {p.direction} · Entry {utc(p.entry_time)} @ {p.entry_price} · Size {p.size} · Unrealized P&amp;L {p.unrealized_pnl}</li>)}</ul>}
   {fillEvents(detail).some(f=>f.candleTime===null)&&<p>Some fills have no exact original candle timestamp. Their recorded timestamps and prices remain in the inspector; no marker is snapped to another session.</p>}
-  <details><summary>Recorded configuration and provenance</summary><p>Artifact {artifact.artifact_id} · Scan {identity.scan_id} · Created {utc(artifact.created_at)}</p>
+  <details><summary>Recorded configuration and provenance</summary><p>Provenance: {artifact.provenance} · Artifact {artifact.artifact_id} · Run {identity.scan_id} · Created {utc(artifact.created_at)}</p>
    <p>Evaluation: {detail.candles.length?`${utc(detail.candles[0].time)} — ${utc(detail.candles[detail.candles.length-1].time)}`:'Unavailable'}.</p>
    <p>Strategy commission: {detail.configuration.commission} ({detail.configuration.commission_basis}). Benchmark is gross and excludes fees. Currency was not recorded.</p>
    <h3>Full recorded engine configuration</h3><pre>{JSON.stringify(detail.configuration,null,2)}</pre>
    <h3>Effective strategy parameters</h3><pre>{JSON.stringify(detail.effective_params,null,2)}</pre>
-   <h3>Run identity</h3><pre>{JSON.stringify(identity,null,2)}</pre><h3>Original summary</h3><pre>{JSON.stringify(detail.summary,null,2)}</pre>
+   <h3>Run identity</h3><pre>{JSON.stringify(identity,null,2)}</pre><h3>Recorded summary</h3><pre>{JSON.stringify(detail.summary,null,2)}</pre>
   </details>
  </section>;
 }
@@ -111,6 +112,6 @@ function EvidenceScope({artifact}:{artifact:BacktestArtifact}) {
    </select></label>
    <a href={`/chart?symbol=${encodeURIComponent(symbol)}`}>Open live chart and overlays</a>
   </nav>
-  {compatible?<Evidence artifact={artifact}/>:<p role="status">Original evidence hidden: the selected symbol or interval differs from this recorded run. No backtest was rerun. Restore the original symbol and interval to inspect its frozen evidence.</p>}
+  {compatible?<Evidence artifact={artifact}/>:<p role="status">{artifact.provenance==='fresh'?'Fresh':'Original'} evidence hidden: the selected symbol or interval differs from this recorded run. No backtest was rerun. Restore the recorded symbol and interval to inspect its frozen evidence.</p>}
  </div>;
 }

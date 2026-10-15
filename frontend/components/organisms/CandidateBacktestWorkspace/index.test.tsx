@@ -67,3 +67,12 @@ it('resets incompatible symbol or interval without making a new run', () => {
  expect(screen.queryByLabelText('Historical candles')).not.toBeInTheDocument();
  expect(mockCharts[0].remove).toHaveBeenCalled();
 });
+
+
+it('labels the distinct fresh result and keeps fresh provenance after interval changes', () => {
+ render(<CandidateBacktestWorkspace artifact={{...artifact,artifact_id:'fresh-b',provenance:'fresh'}}/>);
+ expect(screen.getByRole('heading',{name:'AAPL — Fresh backtest (separate result)'})).toBeInTheDocument();
+ expect(screen.getByLabelText('Fresh backtest evidence')).toBeInTheDocument();
+ fireEvent.change(screen.getByLabelText('Evidence interval'),{target:{value:'1d'}});
+ expect(screen.getByText(/Fresh evidence hidden/)).toBeInTheDocument();
+});

@@ -18,11 +18,13 @@ class ArtifactExpired(Exception):
     pass
 
 
-async def save_artifact(db, *, detail, identity):
+async def save_artifact(db, *, detail, identity, provenance="original"):
+    if provenance not in {'original', 'fresh'}:
+        raise ValueError('Invalid artifact provenance')
     if detail.status != 'success':
         raise ValueError('Only successful engine evidence can be saved')
     now = time.time()
-    artifact = dict(schema_version=1, artifact_id=str(uuid4()), provenance='original',
+    artifact = dict(schema_version=1, artifact_id=str(uuid4()), provenance=provenance,
                     identity=identity, created_at=now, expires_at=now + RETENTION_SECONDS,
                     currency=None, detail=asdict(detail))
     # allow_nan=False recursively rejects invalid numbers, including nested config.

@@ -41,7 +41,7 @@ export interface DetailedBacktestResult {
   engine_contract_version: string; time_basis: string;
 }
 export interface BacktestArtifact {
-  schema_version: 1; artifact_id: string; provenance: 'original';
+  schema_version: 1; artifact_id: string; provenance: 'original' | 'fresh';
   identity: {
     scan_id: string; report_run_id: string | null; symbol: string; strategy: string;
     direction: string; horizon: string; interval: '1d' | '15m'; bars_basis_version: string;
@@ -52,3 +52,21 @@ export interface BacktestArtifact {
 export type OriginalBacktestUnavailableReason = Exclude<BacktestArtifactStatus, 'available'> | 'missing' | 'expired' | 'context_mismatch';
 export type OriginalBacktestState = {status: 'idle'} | {status: 'loading'} |
   {status: 'ready'; artifact: BacktestArtifact} | {status: 'unavailable'; reason: OriginalBacktestUnavailableReason};
+
+export interface FreshBacktestConfiguration {
+  strategies: string[];
+  parameters: Record<string, Record<string, string>>;
+  multi_fields: string[];
+}
+export interface FreshBacktestRequest {
+  symbol: string; strategy: string; direction: 'Bullish' | 'Bearish';
+  params: Record<string, unknown>; start: string; end: string; commission: number;
+  hold_max_days: number | null; min_trades: number; min_win_rate: number;
+  initial_cash: 100000; order_size: 0.9999999999999998; margin: 1; spread: 0;
+  exclusive_orders: true; trade_on_close: false; finalize_trades: false;
+  sizing: 'fraction of available equity; whole units'; confirmed: true;
+}
+export interface FreshBacktestResponse {
+  status: 'success' | 'insufficient_history' | 'invalid_input' | 'unsupported' | 'failed' | 'invalid_evidence' | 'storage_unavailable';
+  artifact: BacktestArtifact | null;
+}
