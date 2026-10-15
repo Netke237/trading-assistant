@@ -4053,11 +4053,11 @@
       ],
       "summary": "Pre-Breakout scanner: design its exits, then tune it per horizon with the T1 machinery.",
       "status": "built",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "branch": "board/stocks-horizon-t4-a4153a02",
       "plan": "docs/superpowers/plans/2026-10-14-stocks-horizon-t4-plan.md",
-      "notes": "Built; code round2 reviewing CA1-01 fix b77fb014 and interactions. Plan clean in2 rounds. Original full backend8,960passed/9skipped; frontend255suites/5,273tests and864-case parity passed. Fix validation215focusedtests passed. Not ready to merge until fresh audit and exact-headCI clear.",
+      "notes": "Built, independently clean: plan2 rounds/code2 rounds, one finding fixed in each. Audited application head b77fb014. Full original backend8,960passed/9skipped; frontend255suites/5,273tests;864-case parity passed. Fix215focused tests passed and independent89setup tests passed. PR/exact-headCI/self-merge pending; historical evidence/adoption not performed.",
       "name": "Pre-Breakout/Fibonacci backtests and per-horizon tuning",
       "verify": {
         "kind": "present",
@@ -4102,10 +4102,21 @@
           "fixes": [
             "b77fb014 uses canonical _FIB_RATIOS for configured levels and exact frozen origin for 100%;32 boundary regressions added (17 failed on old code);215 focused tests and typecheck pass."
           ],
-          "outstanding": [
-            "CA1-01"
-          ],
+          "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "code_round": 2,
+          "reviewer": "/root/t4_code_audit_2",
+          "scope": "c4126c55..b77fb014; setup_entries.py/test_setup_backtest.py and interactions with already-reviewed adapter, simulator, cache and CLI",
+          "reviewed_head": "b77fb01488df14225aef7e48666fa883b0fb8474",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "validation": "Independent Python3.11:89 setup tests passed including32 new regressions."
         }
       ],
       "plan_audit_clean": true,
@@ -4130,9 +4141,10 @@
         "closure_evidence": "Fresh /root/t4_plan_audit_2 reviewed efff82b8..80c9fa35 and legacy equity cropping interactions; zero gate findings."
       },
       "code_stage": {
-        "rounds": 1,
-        "clean": false,
-        "closed_by": null
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/t4_code_audit_2 reviewed c4126c55..b77fb014 and canonical detector, frozen geometry, adapter/simulator and cache/resume interactions; zero gate findings;89 setup tests passed independently."
       },
       "validation": "docs/superpowers/audits/2026-10-15-stocks-horizon-t4-validation.md"
     }

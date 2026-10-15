@@ -42,9 +42,14 @@ public-adapter trades. Old-code RED: 17 failed / 15 passed. Post-fix focused
 setup/tuning/T1 checks: **215 passed**; frontend typecheck passed. Legacy
 simulator and existing stock signal code are unchanged by this fix.
 
-Code round 2: fresh independent review of c4126c55..b77fb014 and interactions
-is pending. The build remains unfinished and not ready to merge until that
-review and exact-head CI pass.
+Code round 2: fresh reviewer /root/t4_code_audit_2 independently reviewed
+c4126c55..b77fb014 and interactions with the public adapter/simulator, frozen
+geometry and cache/CLI source identities. **Zero gate findings.** Independent
+Python 3.11 check: **89 setup tests passed**, including all 32 new regressions.
+Audited application head: b77fb01488df14225aef7e48666fa883b0fb8474.
+
+Plan and code stages are clean after two rounds each. Exact-head CI and
+self-merge conditions remain pending; the phase is built and unmerged.
 
 ## Historical evidence
 
