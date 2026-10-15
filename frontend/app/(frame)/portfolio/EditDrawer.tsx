@@ -126,39 +126,23 @@ export function EditDrawer({
   // "(global)".
   const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
-  // Mirrors backend/app/routers/stock_scan.py's own directional validation for
-  // /api/stocks/first-passage (the stop must be on the correct side of the
-  // current price for the trade's direction) — a stop on the wrong side is a
-  // genuine data problem (the position should have been stopped out already),
-  // unlike a crossed target above, which is filtered out rather than treated
-  // as invalid.
-  const stockDirectionValid = isStock && position.stop
-    ? position.direction === 'Bullish'
-      ? position.stop < position.currentPrice
-      : position.stop > position.currentPrice
-    : true;
+  // Match scanPortfolio's underlying-price comparisons, independently of
+  // notification enable overrides. An option premium is never a reference
+  // price for either underlying stop; a missing quote cannot breach a level.
+  const referencePrice = isStock ? position.currentPrice : position.currentStockPrice;
+  const hasReferencePrice = referencePrice != null && referencePrice > 0;
+  const hasStop = position.stop != null && position.stop > 0;
+  const isBreached = (stop: number | null | undefined) =>
+    hasReferencePrice && stop != null && stop > 0 &&
+    (position.direction === 'Bearish' ? referencePrice! >= stop : referencePrice! <= stop);
+  const stopBreached = isBreached(position.stop);
+  const structuralStopBreached = isBreached(position.structuralStop);
 
-  // The explicit `> 0` checks below (stock: currentPrice, the underlying
-  // price; option: currentPrice, the premium, AND currentStockPrice, the
-  // underlying) mirror the backend's own `Field(..., gt=0)` on
-  // `stock_price`/`premium` in the first-passage request schemas. A live
-  // quote with no price sets the field to `0.0`, not null — `currentPrice`
-  // via `quote.get("price") or 0.0` (portfolio.py), `currentStockPrice` via
-  // `stock_prices.get(schema.symbol)` landing on a `0.0` from
-  // `fetch_price_async` for a bad/halted quote — both real states for
-  // illiquid/deep-OTM contracts, not hypotheticals, and both would otherwise
-  // reach the backend as a raw 422 instead of the button going disabled.
-  // `currentStockPrice`'s existing `== null` check alone let a `0` value
-  // straight through, since `0 != null`. On the stock side this is mostly
-  // "belt and suspenders": `stockDirectionValid` already rejects
-  // `currentPrice = 0` for a Bullish position incidentally (a 0 price can
-  // never be above a positive stop), and a Bearish position instead falls
-  // through the empty-`stockTargetPrices` branch — but neither of those is
-  // an intentional guard against this specific case, so it's checked
-  // explicitly here too rather than relying on the incidental backstop.
-  const estimateDisabled = isStock
-    ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)
-    : optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0);
+  // Keep the existing request-schema guards: stocks need a remaining target
+  // and live stock price; options need a strike, live underlying and premium.
+  const estimateDisabled = !hasStop || stopBreached || structuralStopBreached || (isStock
+    ? stockTargetPrices.length === 0 || !(position.currentPrice > 0)
+    : optionStrike == null || !hasReferencePrice || !(position.currentPrice > 0));
 
   // Same AbortController pattern as StockPositionCard's onEstimate/estimateReq
   // (the template this section mirrors): abort a still-in-flight request when
@@ -289,7 +273,7 @@ export function EditDrawer({
     setPriceEditedSinceEstimate(false);
     try {
       if (isStock) {
-        if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)) throw new Error('missing target/stop');
+        if (estimateDisabled || !position.stop) throw new Error('missing target/stop');
         // A position minted with no snapshot (the after-scan auto-execute path
         // deliberately omits one — see paperTrade.ts/step-4-stocks's own
         // comment) has no real strategy name to send. An empty string just
@@ -321,7 +305,7 @@ export function EditDrawer({
         });
         restampIfActive('monte_carlo', mcRung(targets, stampedLabel)?.price ?? null);
       } else {
-        if (optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0)) {
+        if (estimateDisabled || optionStrike == null || position.currentStockPrice == null || !position.stop) {
           throw new Error('missing option context');
         }
         const res = await api.getFirstPassageEstimate({
@@ -579,12 +563,18 @@ export function EditDrawer({
             No live current price yet — can&apos;t estimate until a price is available.
           </Text>
         )}
-        {isStock && position.currentPrice > 0 && !stockDirectionValid && (
+        {!hasStop && <Text size={11} tone="dim">No stop set</Text>}
+        {stopBreached && (
           <Text size={11} tone="dim">
             The stop is already on the wrong side of the current price — sync the position&apos;s stop before estimating.
           </Text>
         )}
-        {isStock && position.currentPrice > 0 && stockDirectionValid && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
+        {structuralStopBreached && (
+          <Text size={11} tone="dim">
+            The structural stop is already on the wrong side of the current price — sync the position&apos;s structural stop before estimating.
+          </Text>
+        )}
+        {isStock && position.currentPrice > 0 && !stopBreached && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
           <Text size={11} tone="dim">
             Every target has already been reached — add a new target to estimate further upside.
           </Text>

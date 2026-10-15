@@ -1977,13 +1977,12 @@ describe('Current price on a position without a quote', () => {
 // Bullish quote 120, entry 100. Bearish quote 80, entry 100.
 // A stop above the bullish entry (110) is a trailing stop: the stock drawer
 // does not call it wrong-side, and the in-app alert does not fire.
-// Equality with the quote does. The option drawer does not apply that check.
+// Equality with the quote is breached for both main and structural stops.
 describe('broker-path stop direction boundaries', () => {
   const noop = () => {};
 
   function levelAlerts(position: PortfolioPosition): string[] {
-    return scanPortfolio([position])
-      .filter((a) => a.alertType === 'STOP_REACHED' || a.alertType === 'STRUCTURAL_STOP_BREACHED')
+    return scanPortfolio([position], { enabledTypes: ['STOP_REACHED', 'STRUCTURAL_STOP_BREACHED'] })
       .map((a) => a.alertType);
   }
 
@@ -2013,7 +2012,8 @@ describe('broker-path stop direction boundaries', () => {
   function option(overrides: Partial<PortfolioPosition> = {}): PortfolioPosition {
     return makeOptionPosition({
       entryPrice: 8,
-      currentPrice: 4.5,
+      scanStockPrice: 100,
+      currentPrice: 8.25,
       currentStockPrice: 120,
       stop: 110,
       structuralStop: null,
@@ -2034,48 +2034,105 @@ describe('broker-path stop direction boundaries', () => {
   function shown(position: PortfolioPosition) {
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     return {
-      warned: screen.queryByText(/stop is already on the wrong side/) !== null,
+      mainWarned: screen.queryByText(/The stop is already on the wrong side/) !== null,
+      structuralWarned: screen.queryByText(/The structural stop is already on the wrong side/) !== null,
       estimateEnabled: !screen.getByRole('button', { name: 'Estimate' }).hasAttribute('disabled'),
       alerts: levelAlerts(position),
     };
   }
 
-  it.each<[string, PortfolioPosition, boolean, boolean, string[]]>([
-    ['bullish trailing stop above entry', stock({ stop: 110 }), false, true, []],
-    ['bullish stop equal to the quote', stock({ stop: 120 }), true, false, ['STOP_REACHED']],
-    ['bullish stop above the quote', stock({ stop: 130 }), true, false, ['STOP_REACHED']],
-    ['bullish stop below entry', stock({ stop: 90 }), false, true, []],
-    ['bearish trailing stop below entry', bearishStock({ stop: 90 }), false, true, []],
-    ['bearish stop equal to the quote', bearishStock({ stop: 80 }), true, false, ['STOP_REACHED']],
-    ['bearish stop below the quote', bearishStock({ stop: 70 }), true, false, ['STOP_REACHED']],
-    ['bearish stop above entry', bearishStock({ stop: 110 }), false, true, []],
-    ['stock with no live quote', stock({ currentPrice: 0, currentStockPrice: 0, stop: 130 }), false, false, []],
-    ['unset stock stop', stock({ stop: null }), false, false, []],
-    ['structural stop above the quote while the stop is valid', stock({ stop: 110, structuralStop: 130 }), false, true, ['STRUCTURAL_STOP_BREACHED']],
-    ['option stop above the underlying', option({ stop: 130 }), false, true, ['STOP_REACHED']],
-    ['option stop equal to the underlying', option({ stop: 120 }), false, true, ['STOP_REACHED']],
-    ['option trailing stop above the premium entry', option({ stop: 110 }), false, true, []],
-    ['option bearish stop below the underlying', option({ direction: 'Bearish', currentStockPrice: 80, stop: 70 }), false, true, ['STOP_REACHED']],
-    ['option bearish stop above the underlying', option({ direction: 'Bearish', currentStockPrice: 80, stop: 90 }), false, true, []],
-    ['option with no underlying quote', option({ currentStockPrice: 0, stop: 130 }), false, false, []],
-    ['unset option stop', option({ stop: null }), false, false, []],
-  ])('%s', (_name, position, warned, estimateEnabled, alerts) => {
-    const view = shown(position);
-    expect(view.warned).toBe(warned);
-    expect(view.estimateEnabled).toBe(estimateEnabled);
-    expect(view.alerts).toEqual(alerts);
+  const contexts = [
+    { name: 'bullish stock', make: stock, safe: 110, equal: 120, crossed: 130 },
+    { name: 'bearish stock', make: bearishStock, safe: 90, equal: 80, crossed: 70 },
+    { name: 'bullish option', make: option, safe: 110, equal: 120, crossed: 130 },
+    { name: 'bearish option', make: (patch: Partial<PortfolioPosition> = {}) => option({ direction: 'Bearish', currentStockPrice: 80, ...patch }), safe: 90, equal: 80, crossed: 70 },
+  ];
+
+  describe.each(contexts)('$name drawer / browser alert parity', ({ make, safe, equal, crossed }) => {
+    it.each([
+      ['profitable trailing stop', 'main', safe, false],
+      ['main stop equals live underlying', 'main', equal, true],
+      ['main stop crossed live underlying', 'main', crossed, true],
+      ['profitable structural trailing stop', 'structural', safe, false],
+      ['structural stop equals live underlying', 'structural', equal, true],
+      ['structural stop crossed live underlying', 'structural', crossed, true],
+    ] as const)('%s', (_name, field, level, breached) => {
+      const position = make({ stop: field === 'main' ? level : safe, structuralStop: field === 'structural' ? level : null });
+      expect(shown(position)).toEqual({
+        mainWarned: field === 'main' && breached,
+        structuralWarned: field === 'structural' && breached,
+        estimateEnabled: !breached,
+        alerts: breached ? [field === 'main' ? 'STOP_REACHED' : 'STRUCTURAL_STOP_BREACHED'] : [],
+      });
+    });
+
+    it('warns independently for both breached stops', () => {
+      expect(shown(make({ stop: equal, structuralStop: crossed }))).toEqual({
+        mainWarned: true, structuralWarned: true, estimateEnabled: false,
+        alerts: ['STOP_REACHED', 'STRUCTURAL_STOP_BREACHED'],
+      });
+    });
+
+    it('does not use alert overrides to validate the estimate', () => {
+      expect(shown(make({ stop: equal, structuralStop: crossed, alertOverrides: { STOP_REACHED: false, STRUCTURAL_STOP_BREACHED: false } }))).toEqual({
+        mainWarned: true, structuralWarned: true, estimateEnabled: false, alerts: [],
+      });
+    });
+
+    it.each([0, -1])('keeps breach warnings and alerts silent with an unusable quote %s', (quote) => {
+      const base = make();
+      // Leave the OTHER price positive: neither options' premium nor stocks'
+      // supplemental currentStockPrice may substitute for a live quote.
+      const position = { ...base, stop: crossed, structuralStop: crossed,
+        ...(base.contract.endsWith('|STOCK') ? { currentPrice: quote } : { currentStockPrice: quote }) };
+      expect(shown(position)).toEqual({ mainWarned: false, structuralWarned: false, estimateEnabled: false, alerts: [] });
+    });
+
+    if (!make().contract.endsWith('|STOCK')) {
+      it('keeps an absent option underlying silent', () => {
+        expect(shown(make({ currentStockPrice: undefined, stop: crossed, structuralStop: crossed }))).toEqual({
+          mainWarned: false, structuralWarned: false, estimateEnabled: false, alerts: [],
+        });
+      });
+    }
+
+    it('shows an explicit no-stop label for an unset main stop', () => {
+      expect(shown(make({ stop: null }))).toEqual({ mainWarned: false, structuralWarned: false, estimateEnabled: false, alerts: [] });
+      expect(screen.getByText('No stop set')).toBeInTheDocument();
+      expect(levelInput('Stop').value).toBe('0');
+    });
+
+    it.each([0, -1])('treats a legacy nonpositive main stop %s as unset', (stop) => {
+      render(<EditDrawer position={make({ stop })} onClose={noop} onChange={noop} onRemove={noop} />);
+      expect(screen.getByText('No stop set')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Estimate' })).toBeDisabled();
+    });
+
+    it('allows an optional unset structural stop', () => {
+      expect(shown(make({ stop: safe, structuralStop: null }))).toEqual({
+        mainWarned: false, structuralWarned: false, estimateEnabled: true, alerts: [],
+      });
+      expect(screen.queryByText('No stop set')).not.toBeInTheDocument();
+    });
+
+    it.each(['Stop', 'Structural stop'] as const)('keeps %s editable across the quote and clearable to null', (label) => {
+      const onChange = jest.fn();
+      render(<EditDrawer position={make({ stop: safe, structuralStop: safe })} onClose={noop} onChange={onChange} onRemove={noop} />);
+      const input = levelInput(label);
+      const key = label === 'Stop' ? 'stop' : 'structuralStop';
+      fireEvent.change(input, { target: { value: String(crossed) } });
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith({ [key]: crossed });
+      fireEvent.change(input, { target: { value: '0' } });
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith({ [key]: null });
+    });
   });
 
   it('a stock with no live quote names the missing price, not a wrong-side stop', () => {
-    const position = stock({ currentPrice: 0, currentStockPrice: 0, stop: 130 });
-    shown(position);
+    shown(stock({ currentPrice: 0, stop: 130 }));
     expect(screen.getByText(/No live current price yet/)).toBeInTheDocument();
     expect(screen.queryByText(/stop is already on the wrong side/)).not.toBeInTheDocument();
-  });
-
-  it('an unset stop is shown as 0', () => {
-    shown(stock({ stop: null }));
-    expect(levelInput('Stop').value).toBe('0');
   });
 
   it.each([
