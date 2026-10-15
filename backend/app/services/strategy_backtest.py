@@ -238,7 +238,7 @@ def _run_backtest(
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
-        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal,
+        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal, _multi_variant_fns,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -427,7 +427,10 @@ def _run_backtest(
             detail = collect_details(result, stats, df, source_bars=bars, entry_start=entry_start,
                                      entry_end=entry_end, hold_max_days=hold_max_days,
                                      commission=commission, effective_params=effective_params,
-                                     time_closed=time_closed)
+                                     time_closed=time_closed, signal_fn=fn,
+                                     variant_fns=(_multi_variant_fns() if strategy == "mean_reversion_multi" else None),
+                                     min_trades=min_trades, min_win_rate=min_win_rate,
+                                     min_expectancy=_MIN_EXPECTANCY, signal_window_bars=_window)
         except Exception as exc:
             # Optional evidence must never change ranking/gates/aggregate results.
             detail = DetailedBacktestResult(result, "invalid_evidence", str(exc))

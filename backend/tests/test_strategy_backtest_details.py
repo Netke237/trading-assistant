@@ -296,3 +296,68 @@ def test_equity_index_is_checked_before_source_positional_mapping(monkeypatch):
     detail = service.run_strategy_backtest_detailed(data, strategy='pullback_ema', direction='Bullish')
     assert detail.status == 'invalid_evidence'
     assert 'timestamp mismatch' in detail.reason
+
+
+@pytest.mark.parametrize('strategy,params,expected', [
+    ('pullback_ema', {}, {'ma_type': 'EMA', 'require_reversal': False, 'ema_period': 50}),
+    ('pullback_ema', {'ma_type': 'SMA', 'require_reversal': True, 'ema_period': 25},
+     {'ma_type': 'SMA', 'require_reversal': True, 'ema_period': 25}),
+    ('ma_crossover', {}, {'lookback': 10, 'fast': 20, 'slow': 50}),
+    ('ma_crossover', {'lookback': 4}, {'lookback': 4, 'fast': 20, 'slow': 50}),
+])
+def test_complete_effective_signature_defaults_and_overrides(strategy, params, expected):
+    data = bars()
+    kw = dict(strategy=strategy, direction='Bearish', params=params,
+              min_trades=7, min_win_rate=.61)
+    aggregate = service.run_strategy_backtest(data, **kw)
+    detail = service.run_strategy_backtest_detailed(data, **kw)
+    assert detail.status == 'success', detail.reason
+    assert detail.summary == aggregate
+    assert all(detail.effective_params[key] == value for key, value in expected.items())
+    assert detail.effective_params['current_price'] is None
+    assert 'bars' not in detail.effective_params and 'direction' not in detail.effective_params
+    assert detail.configuration['min_trades'] == 7
+    assert detail.configuration['min_win_rate'] == .61
+    assert detail.configuration['min_expectancy'] == service._MIN_EXPECTANCY
+    assert detail.configuration['signal_window_bars'] == engine.SIGNAL_WINDOW_BARS
+
+
+def test_multi_effective_defaults_are_resolved_per_selected_variant_and_detached():
+    params = dict(variants=['pullback_ema', 'ma_crossover'], min_confirmations=2,
+                  variant_params={'pullback_ema': {'ma_type': 'SMA'}, 'ma_crossover': {'lookback': 3}})
+    kw = dict(strategy='mean_reversion_multi', direction='Bullish', params=params)
+    aggregate = service.run_strategy_backtest(bars(), **kw)
+    detail = service.run_strategy_backtest_detailed(bars(), **kw)
+    assert detail.status == 'success', detail.reason
+    assert detail.summary == aggregate
+    actual = detail.effective_params
+    assert actual['variants'] == params['variants']
+    assert actual['min_confirmations'] == 2
+    assert actual['variant_params']['pullback_ema']['ma_type'] == 'SMA'
+    assert actual['variant_params']['pullback_ema']['require_reversal'] is False
+    assert actual['variant_params']['ma_crossover']['lookback'] == 3
+    assert actual['variant_params']['ma_crossover']['slow'] == 50
+    assert set(actual['variant_params']) == set(params['variants'])
+    params['variants'].clear()
+    params['variant_params']['ma_crossover']['slow'] = 999
+    assert actual['variants'] == ['pullback_ema', 'ma_crossover']
+    assert actual['variant_params']['ma_crossover']['slow'] == 50
+
+
+def test_intraday_signal_window_configuration_is_actual_engine_window():
+    detail = service.run_strategy_backtest_detailed(bars('15min'), strategy='mean_reversion_vwap', direction='Bullish')
+    assert detail.status == 'success'
+    assert detail.configuration['signal_window_bars'] == service._INTRADAY_SIGNAL_WINDOW
+
+
+def test_metadata_signature_failure_is_optional_evidence_failure(monkeypatch):
+    import app.services.strategy_backtest_details as details
+    expected = service.run_strategy_backtest(bars(), strategy='pullback_ema', direction='Bullish')
+    def fail(*a, **kw):
+        raise ValueError('unreadable signal signature')
+    monkeypatch.setattr(details, 'complete_effective_params', fail, raising=False)
+    captured = []
+    actual = service.run_strategy_backtest(bars(), strategy='pullback_ema', direction='Bullish', detail_collector=captured)
+    assert actual == expected
+    assert captured[0].status == 'invalid_evidence'
+    assert captured[0].summary == expected

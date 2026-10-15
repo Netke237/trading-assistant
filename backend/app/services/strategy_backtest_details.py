@@ -8,6 +8,7 @@ mark-to-market open positions, while summary trade counts include closed trades.
 from __future__ import annotations
 
 import copy
+import inspect
 import math
 from numbers import Real
 from dataclasses import dataclass, field
@@ -130,8 +131,36 @@ def source_frame(bars):
     return frame, times, all(numeric)
 
 
+def complete_effective_params(signal_fn, effective_params, *, variant_fns=None):
+    """Freeze defaults actually used by the signal, without changing engine kwargs."""
+    def resolved(fn, overrides):
+        defaults = {
+            name: parameter.default
+            for name, parameter in inspect.signature(fn).parameters.items()
+            if name not in {"bars", "direction"}
+            and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                   inspect.Parameter.KEYWORD_ONLY)
+            and parameter.default is not inspect.Parameter.empty
+        }
+        return {**defaults, **overrides}
+
+    if variant_fns is None:
+        return copy.deepcopy(resolved(signal_fn, effective_params))
+    # Multi's top-level configuration is explicit in the actual engine call;
+    # only selected variants' function defaults supplement their frozen kwargs.
+    result = copy.deepcopy(effective_params)
+    variant_params = effective_params.get("variant_params") or {}
+    result["variant_params"] = {
+        name: (resolved(variant_fns[name], variant_params.get(name) or {})
+               if name in variant_fns else dict(variant_params.get(name) or {}))
+        for name in effective_params["variants"]
+    }
+    return copy.deepcopy(result)
+
+
 def collect_details(summary, stats, df, *, source_bars, entry_start, entry_end, hold_max_days,
-                    commission, effective_params, time_closed):
+                    commission, effective_params, time_closed, signal_fn, variant_fns,
+                    min_trades, min_win_rate, min_expectancy, signal_window_bars):
     """Read this run's real equity/fills; any invalid evidence fails as a unit."""
     source, source_times, numeric = source_frame(source_bars)
     input_candles = tuple(BacktestCandle(t, *(float(v) for v in row))
@@ -209,9 +238,12 @@ def collect_details(summary, stats, df, *, source_bars, entry_start, entry_end, 
                            order_size=float(Strategy.buy.__kwdefaults__["size"]),
                            sizing="fraction of available equity; whole units", margin=1., spread=0.,
                            exclusive_orders=True, trade_on_close=False, finalize_trades=False,
-                           hold_max_days=hold_max_days,
+                           hold_max_days=hold_max_days, min_trades=min_trades,
+                           min_win_rate=min_win_rate, min_expectancy=min_expectancy,
+                           signal_window_bars=signal_window_bars,
                            entry_start=entry_start.isoformat() if entry_start is not None else None,
                            entry_end=entry_end.isoformat() if entry_end is not None else None),
-        effective_params=copy.deepcopy(effective_params),
+        effective_params=complete_effective_params(signal_fn, effective_params,
+                                                  variant_fns=variant_fns),
         time_basis=("UTC epoch seconds from source bars; fills/equity mapped by actual engine bar position; "
                     "legacy engine timestamp interpretation unchanged; naive input interpreted UTC"))
