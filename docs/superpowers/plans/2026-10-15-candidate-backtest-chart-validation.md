@@ -80,3 +80,39 @@ are unchanged. No real orders, arms, alerts or saves were performed.
 Current main remains `64b9d53f21f92e0266cb7dd7790c66e3f19f1397`, fetched again
 before the integrated independent audit. Full backend/frontend/build outcomes
 and the exact reviewed head are pending below.
+
+## Independent integrated code audit
+
+Continuous round 2, code round 1 of 3. Fresh independent reviewer
+`/root/backtest_code_audit_r1` applied the BMad adversarial skill to the complete
+exact diff `64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f`
+against the approved plan and current callers. Two source passes returned
+**zero numeric/persistence gate findings**. No fixes or outstanding findings.
+
+Reviewed engine/detail collection, model/service/router/migration, fresh
+validation/service, scan capture/cache/linkage, report projection, frontend
+route/navigation/stale guards, historical series/fills/inspection, fresh
+controls/API/types and associated tests/documents. Second pass checked summary
+preservation, epoch mapping, actual fills, equity/return reconciliation, gross
+long benchmark, open/zero/unavailable states, complete parameters, cache
+collisions, expiry, opposite directions, stale replies, fresh request agreement
+and original/report/trading-state isolation.
+
+Independent Python 3.11 matrix: 12 cases across all six supported fresh strategies
+and both directions passed explicit parameter validation, effective-parameter
+parity, ending-return reconciliation and benchmark baseline. No real provider,
+order, alert or save calls. Auditor made no edits. Plan1/code1 clean; total2.
+
+## Final local checks
+
+- Frontend: 261 suites / **5344 tests passed**, 326 seconds, stable source.
+- Typecheck: passed.
+- Production build: passed with the actual Google Fonts fetch in this environment.
+- Mocked Chromium: **10 cases passed** (9 matrix/availability + 1 fresh separation).
+- Focused backend: **76 passed**, including 15 fresh-run tests.
+- Full Python 3.11 backend: still running; final outcome pending.
+- Exact-head hosted CI: not started because publication authorization is pending.
+
+No application code changed after the clean audit. This documentation records
+its verdict only. Local audit-clean/built does not mean shipped or merge-ready:
+full backend completion, publication authorization and exact-head CI remain.

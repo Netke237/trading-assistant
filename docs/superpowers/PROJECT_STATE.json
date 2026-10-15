@@ -4172,8 +4172,8 @@
       "id": "CANDIDATE-BACKTEST-CHART",
       "name": "Original candidate backtest candles, trade markers and indexed equity comparison",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "depends_on": [
         "PREBREAKOUT-PRESENTATION-V2"
       ],
@@ -4195,8 +4195,10 @@
         "closure_evidence": "Fresh independent /root/backtest_chart_plan_r1 reviewed exact plan at 72dc64f6d5752033e48e6553d1de25308fc70760 against actual sources; two passes; zero numeric/persistence gate findings."
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent /root/backtest_code_audit_r1 reviewed complete exact 64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f against approved plan; two source passes, independent Python3.11 matrix12cases all six fresh strategies/both directions, zero numeric/persistence gate findings."
       },
       "audit_history": [
         {
@@ -4210,9 +4212,21 @@
           "outstanding": [],
           "clean": true,
           "verification": "Auditor applied bmad adversarial; independently re-read committed whole plan and checked adjacent cache consumers, all setup modes, normalization, provenance; plan only."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "/root/backtest_code_audit_r1",
+          "reviewed": "Whole feature diff64b9d53f21f92e0266cb7dd7790c66e3f19f1397..bc81207942574257eb123f3479ce37da668dfc4f against approved plan and current callers",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "verification": "Independent BMad adversarial review, two complete source passes plus synthetic Python3.11 12-case fresh strategy/direction matrix. Original engine summary/epoch/equity/fills, immutable persistence/cache/report linkage, UI stale/provenance, exact fresh configuration agreement and isolation checked. No real provider/order/alert/save calls."
         }
       ],
-      "notes": "BT01-03 recovered f3441005; BT04 fresh implementation30ea2236; main64b9d53f merged at b3c29593; BT05 fresh implementation6193551f. Backend76focused/typecheck/frontend23focused pass. Browser9 matrix cases and1 fresh-separation case passed, both themes/directions daily/intraday1280/1920; no real orders/arms/alerts/saves. Full final backend/frontend/build running. Plan1clean/code0 pending; built not ready to merge. Automatic approval review rejected new-code publication pending explicit user authorization; new commits retained locally.",
+      "notes": "BUILT LOCAL, NOT MERGED. Plan1clean/code1clean (continuous rounds2), reviewed exact feature64b9d53f..bc812079; zero gate findings, independent matrix12pass. Frontend261suites/5344tests, typecheck, production build passed. Mocked browser9matrix/availability plus1fresh-separation pass. Full final Python3.11 backend still running; targeted76pass. New-code publication and child-issue closure rejected by automatic approval review pending explicit user authorization; no PR/CI/merge attempted. Application code unchanged since clean audit.",
       "tickets": [
         289,
         290,
