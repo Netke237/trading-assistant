@@ -4401,7 +4401,7 @@
     {
       "id": "STOP-ALERT-DRAWER-PARITY",
       "name": "Stop alert, stored stop and Portfolio drawer agree",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "depends_on": [
@@ -4450,7 +4450,7 @@
           "verification": "BMad plus second complete scope pass. Traced drawer/browser/backend alerts, generated flooring/reanchor, preserved user gates, PATCH/storage normalization, stop_required and booking wrapper. Independent73drawer+178backend tests passed; full logs inspected. No working-tree edits."
         }
       ],
-      "notes": "SELF-MERGE PENDING, PR #340, audited head 856abb52e6e5cb721f1a7701945b1648f47cce33. Built/unmerged; independent plan1/code1 clean (continuous2rounds). Full frontend265suites/5443tests, backend9297passed/9skipped, typecheck/statecheck green. Await exact PR head CI and all board step7 conditions. Actual main record preserved; no merge claimed.",
+      "notes": "SHIPPED: PR #340 verified MERGED at c2fbae35e3eb1f38579b37c1574251ee570fb48e on 2026-10-15T17:16:47Z. User explicitly authorized merge in this chat. Exact head 3aaadc7fbf6693d8a548503d884515db69e75d76 passed backend/frontend/browser CI. Independent plan 1/code 1 clean (continuous 2 rounds), histories preserved; local frontend 5443 passed, backend 9297 passed/9 skipped. Documentation-only record of the verified feature merge.",
       "tickets": [
         338,
         339
@@ -4484,7 +4484,17 @@
         }
       },
       "audited_head": "856abb52e6e5cb721f1a7701945b1648f47cce33",
-      "pr": 340
+      "pr": 340,
+      "merged_commit": "c2fbae35e3eb1f38579b37c1574251ee570fb48e",
+      "ci": {
+        "head": "3aaadc7fbf6693d8a548503d884515db69e75d76",
+        "backend": "SUCCESS",
+        "frontend": "SUCCESS",
+        "browser": "SUCCESS",
+        "run": "https://github.com/Netke237/trading-assistant/actions/runs/38771695040",
+        "browser_run": "https://github.com/Netke237/trading-assistant/actions/runs/38771695186"
+      },
+      "merge_record_branch": "board/stop-alert-drawer-parity-merge-record-8e84a41a"
     }
   ],
   "already_shipped": [
