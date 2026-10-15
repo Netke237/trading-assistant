@@ -1,10 +1,13 @@
 """Explicit simulations create separate frozen evidence, never scan mutations."""
 import inspect
+import json
 from copy import deepcopy
 from datetime import date
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from app.database import get_db
 from tests.test_backtest_artifacts import store
@@ -22,6 +25,51 @@ def request_body():
                 initial_cash=100000, order_size=.9999999999999998, margin=1, spread=0,
                 exclusive_orders=True, trade_on_close=False, finalize_trades=False,
                 sizing='fraction of available equity; whole units', confirmed=True)
+
+
+@pytest.mark.parametrize('multi', [False, True], ids=['direct', 'multi-nested'])
+@pytest.mark.parametrize('token', [
+    'NaN', 'Infinity', '-Infinity', '1e999', '-1e999',
+    '"NaN"', '"inf"', '"-inf"', '"1e999"', '"-1e999"',
+])
+def test_nonfinite_params_rejected_before_history_or_engine(monkeypatch, multi, token):
+    from app.main import create_app
+    from app.services import fresh_backtest
+
+    history = AsyncMock(return_value=[])
+    engine = Mock(side_effect=AssertionError('invalid params reached the engine'))
+    monkeypatch.setattr(fresh_backtest, 'get_historical_bars', history)
+    monkeypatch.setattr(fresh_backtest, 'run_strategy_backtest_detailed', engine)
+    app = create_app()
+    async def no_db():
+        yield None
+    app.dependency_overrides[get_db] = no_db
+    # No lifespan: no scheduler, provider, or database activity.
+    client = TestClient(app, raise_server_exceptions=False)
+    body = request_body()
+    params = body['params']
+    if multi:
+        body.update(strategy='mean_reversion_multi', params={
+            'variants': ['pullback_ema'], 'min_confirmations': 1,
+            'variant_params': {'pullback_ema': params},
+        })
+    params['tolerance'] = '__nonfinite_probe__'
+    response = client.post('/api/backtest-artifacts/fresh',
+        content=json.dumps(body).replace('"__nonfinite_probe__"', token),
+        headers={'content-type': 'application/json'})
+    assert response.status_code == 422, response.text
+    assert response.json()['detail'][0]['type'] == (
+        'value_error' if token.startswith('"') else 'finite_number')
+    history.assert_not_awaited()
+    engine.assert_not_called()
+
+    # Anti-vacuity: the same complete finite configuration reaches history.
+    params['tolerance'] = 0
+    response = client.post('/api/backtest-artifacts/fresh', json=body)
+    assert response.status_code == 200, response.text
+    assert response.json() == {'status': 'insufficient_history', 'artifact': None}
+    history.assert_awaited_once()
+    engine.assert_not_called()
 
 
 @pytest.fixture
