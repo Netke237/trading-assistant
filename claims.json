@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/stocks-horizon-t4-a4153a02",
       "claimed_at": "2026-10-15T04:32:24Z",
-      "expires_at": "2026-10-15T07:35:31Z",
+      "expires_at": "2026-10-15T07:36:45Z",
       "note": "Continue issue118 verification and independent code audit fix",
       "task": "STOCKS-HORIZON-T4"
     }
