@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/kenneth-a2-p0b-market-hours-check-bf069dbd",
       "claimed_at": "2026-10-15T19:58:04Z",
-      "expires_at": "2026-10-15T22:58:04Z",
+      "expires_at": "2026-10-15T23:01:56Z",
       "note": "Continue issue 107 UI verification after session interruption",
       "task": "KENNETH-A2-P0B-MARKET-HOURS-CHECK"
     },
