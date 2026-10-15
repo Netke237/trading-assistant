@@ -90,7 +90,7 @@ from app.routers.stock_scan import (
 from app.services.unvalidated import BEARISH_UNVALIDATED_MESSAGE
 from app.services.audit import new_rec_id, log_event
 from app.scoring.spread_builder import choose_primary, build_bear_put, build_bear_call
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 # Kill switch: calibrating Heston changes every trade card's headline R/R number,
 # so this can be turned off without a code deploy if it misbehaves in
@@ -1616,7 +1616,15 @@ async def restore_from_db() -> str | None:
             else:
                 _last_result = _restored
         if row.last_request_json:
-            _last_request = ScanRequest.model_validate_json(row.last_request_json)
+            try:
+                _last_request = ScanRequest.model_validate_json(row.last_request_json)
+            except ValidationError:
+                _last_request = None
+                # Validation errors can contain the saved input; log no body.
+                _log.warning(
+                    "restore_from_db: saved options request no longer validates "
+                    "and was dropped; valid saved results remain available.",
+                )
         if _refused:
             _last_status = "idle"
             _last_updated_at = None

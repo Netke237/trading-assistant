@@ -1,5 +1,13 @@
 .main { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5); }
 .header { display: flex; flex-direction: column; gap: var(--space-2); }
+.pageExplanation { font-size: 12px; color: var(--text-secondary); }
+.pageExplanation > summary { cursor: pointer; color: var(--accent); }
+.pageExplanation[open] > summary { margin-bottom: var(--space-2); }
+.summaryStrip {
+  display: flex; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-3);
+  border: 1px solid var(--border-subtle); background: var(--bg-surface);
+}
+.summaryItem { display: flex; flex-direction: column; gap: var(--space-1); }
 .results { display: flex; flex-direction: column; gap: 4px; overflow-x: auto; }
 .tableHeader, .row {
   display: grid;

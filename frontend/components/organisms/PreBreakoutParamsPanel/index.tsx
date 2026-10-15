@@ -51,7 +51,7 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
         <label className={styles.paramLabel}>
           <Text size={11} tone="dim">ATR compression ratio</Text>
           <Text size={10} tone="dim">
-            Current ATR must be below this fraction of the 20-bar average ATR.
+            Current ATR must be below this fraction of the {Math.trunc(params.atrAvgLookback)}-bar average ATR.
             ↑ Higher → less compression required (more results) · ↓ Lower → very tight squeezes only
           </Text>
           <div className={styles.paramInput}>
@@ -157,7 +157,7 @@ export function PreBreakoutParamsPanel({ params, setParams, onReset }: Props) {
           <div className={styles.paramInput}>
             <input
               type="number"
-              value={Math.round(params.resistanceProximityPct * 100 * 10) / 10}
+              value={Number((params.resistanceProximityPct * 100).toFixed(6))}
               min={1} max={20} step={0.5}
               onChange={(e) =>
                 setParams((p) => ({ ...p, resistanceProximityPct: Number(e.target.value) / 100 }))

@@ -1,5 +1,6 @@
 'use client';
 import { Text, Data } from '@/components/primitives';
+import { formatRegimeAverage } from '@/lib/regimeDuration';
 import type { SentimentData } from '@/types/domain';
 import styles from './MarketSentiment.module.css';
 
@@ -32,15 +33,18 @@ export function MarketSentiment({ s, compact = false }: {
       <Text size={12}>{s.conviction_label} — {s.interpretation}</Text>
       <div className={styles.row}>
         <Text size={11} tone="dim">
-          State {s.state} · sticky {Math.round(s.p_stay * 100)}% · ~{s.avg_regime_duration}d
+          State {s.state} · sticky {Math.round(s.p_stay * 100)}% · {formatRegimeAverage(s.avg_regime_duration, s.duration_stride_bars)}
         </Text>
-        <span className={
-          s.alignment === 'Aligned' ? styles.aligned :
-          s.alignment === 'Diverging' ? styles.diverging :
-          styles.unavail
-        }>
-          {s.alignment === 'Unavailable' ? 'OMM only' : `OMM/HMM ${s.alignment}`}
-        </span>
+        <div className={styles.alignment}>
+          <Text size={11} tone="dim">Alignment</Text>
+          <span className={
+            s.alignment === 'Aligned' ? styles.aligned :
+            s.alignment === 'Diverging' ? styles.diverging :
+            styles.unavail
+          }>
+            {s.alignment === 'Unavailable' ? 'OMM only' : `OMM/HMM ${s.alignment}`}
+          </span>
+        </div>
       </div>
     </div>
   );

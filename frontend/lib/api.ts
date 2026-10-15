@@ -2,7 +2,7 @@ import { useScanReportUpdates, type LatestScanReport, type ScanReport, type Scan
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
-              ContractGrading } from '@/types/domain';
+              ContractGrading, StockExplanation } from '@/types/domain';
 import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
@@ -365,6 +365,7 @@ export interface StockAnalysis {
   price: number;
   direction: string;
   stock_score: number;
+  stock_explanation?: StockExplanation | null;
   stock_status: 'PASS' | 'CAUTION' | 'REJECT';
   is_index: boolean;
   strategy: AnalysisStrategySignal | null;
