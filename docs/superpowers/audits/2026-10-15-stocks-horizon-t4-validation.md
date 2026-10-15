@@ -68,3 +68,13 @@ per-leg stress results. No active horizon profiles are adopted by this run.
 The existing six-strategy default run is unchanged; these setup cells must be
 selected explicitly. Their fire rates count gated confirmed entry events,
 not raw scanner setup rows. Scanner UI, broker and watch behavior are unchanged.
+
+
+## Publication block
+
+Automatic approval review rejected the branch push and PR creation even after
+verifying that origin is the same repository linked in #118. GitHub reports
+Netke237/trading-assistant as public; the review required explicit user
+authorization for public disclosure of the audited code/tests. No workaround
+was attempted. Implementation and independent audits are complete locally.
+Exact-head CI and self-merge remain pending publication approval.
