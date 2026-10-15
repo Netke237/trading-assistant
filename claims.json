@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/history-single-provider-rebuild-570085af",
-      "claimed_at": "2026-10-15T06:22:53Z",
-      "expires_at": "2026-10-15T11:25:10Z",
-      "note": "Single-provider rebuild of seam-refused symbols (#324)",
-      "task": "HISTORY-SINGLE-PROVIDER-REBUILD"
-    },
-    {
-      "agent": "claude",
       "branch": "board/candidate-backtest-chart-3c95ac9e",
       "claimed_at": "2026-10-15T07:01:40Z",
       "expires_at": "2026-10-15T10:37:29Z",
