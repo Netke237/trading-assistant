@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/history-single-provider-rebuild-1096bfbb",
       "claimed_at": "2026-10-15T16:21:30Z",
-      "expires_at": "2026-10-15T19:27:22Z",
+      "expires_at": "2026-10-15T19:28:42Z",
       "note": "Bring main into #324 and finish the merge Kenneth asked for",
       "task": "HISTORY-SINGLE-PROVIDER-REBUILD"
     }
