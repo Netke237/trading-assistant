@@ -1,0 +1,144 @@
+[
+  {
+    "id": "primary-link:/screener",
+    "status": "observed",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/NavItems/index.tsx#NavItems"
+    ],
+    "fixture_identity": "primary-link:/screener",
+    "assertion": "actual Primary anchor click reaches final URL and visible expected heading",
+    "storage_before": {
+      "local": {},
+      "session": {}
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}"
+      },
+      "session": {}
+    },
+    "state": {
+      "url": "/screener/step-1-regime",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nIDLE\nPASS\nPRE\n·\n1h 27m\nConfig OK · 10 checks\n1\nMarket Regime\n2\nUniverse\n3\nDirection + Horizon\n4\nStock Ranking\n5\nVol + Events\n6\nContracts\n7\nTrade Card\n← Exit Workflow\nIDLE\nOptions\nStocks\nPre-Breakout\nSTEP 1 OF 7\nMarket Regime\nMacro snapshot — advisory. REJECT prompts confirmation before proceeding.\nREGIME PASS\nMarket conditions favourable for directional trades\nWhat this measures\nBroad-market health of the US indices (SPX & NDX) — not your watchlist. The regime answers: “is the tide with or against a fresh directional trade?”\nHow it affects this scan\nPASS — proceed as scanned. CAUTION — position-size smaller, tighten stops. REJECT — wait or fade: a confirmation dialog will block Step 4.\nS&P 500 (SPY)\n548.25\n+0.04%\n\t\n\t\n\n\t\n\t\nNasdaq 100 (QQQ)\n108.89\n-0.09%\n\t\n\t\n\n\t\n\t\nEMA / VIX\nSPX & NDX vs 200-day EMA, plus VIX level\nSPX Trend\n4,185.22\n↑\nPASS\nNDX Trend\n14,221.55\n↑\nPASS\nVIX\n14.2\n↓\nPASS\nRegime by Horizon\nSame macro signal — emphasis varies by timeframe\nINTRADAY\nCalculating…\nSWING\n↑ Bull\n10 bars · avg ≈15 strides · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nPOSITION\n↑ Bull\n10 bars · avg ≈15 strides · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nMarket Sentiment\nSwing · daily\nConviction\n0%\nNeutral — Market conviction: Neutral\nState Bull · sticky 80% · ≈15 strides\nAlignment\nOMM only\nSector heatmap\n2 up · 1 down · today\nXLK\n+1.25%\nTechnology\nXLF\n-0.42%\nFinancials\nXLE\n+0.88%\nEnergy\nMARKET NEWS\nApple announces new product line\nReuters · 898d ago\nMicrosoft earnings beat expectations\nBloomberg · 897d ago\nRun Scan\n←\nBack\nSTEP 1 OF 7\nNext: Universe\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Market Regime"
+      ],
+      "rails": [
+        {
+          "text": "1\nMarket Regime\n2\nUniverse\n3\nDirection + Horizon\n4\nStock Ranking\n5\nVol + Events\n6\nContracts\n7\nTrade Card\n← Exit Workflow\nIDLE"
+        },
+        {
+          "text": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ]
+    },
+    "network_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36
+    ]
+  },
+  {
+    "id": "primary-link:/strategy-watch",
+    "status": "observed",
+    "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/NavItems/index.tsx#NavItems"
+    ],
+    "fixture_identity": "primary-link:/strategy-watch",
+    "assertion": "actual Primary anchor click reaches final URL and visible expected heading",
+    "storage_before": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}"
+      },
+      "session": {}
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}"
+      },
+      "session": {}
+    },
+    "state": {
+      "url": "/strategy-watch",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nIDLE\nPENDING\nPRE\n·\n1h 27m\nConfig OK · 10 checks\nDASHBOARD\nSCREENER\nANALYSIS\nWATCHLIST\nPORTFOLIO\nCALENDAR\nCHART\nALERTS\nSTRATEGY WATCH\nJOURNAL\nSETTINGS\nIDLE\nStrategy Watch\nFailed to fetch\nAdd a watch\nPullback EMA\nBreakout Base\nMA Crossover\nMean Reversion RSI\nMean Reversion BB\nBullish\nBearish\nNone\nSwing\nPosition\nQuarterly\nSemiAnnual\nAnnual\nAdd\nPullback EMA\nBreakout Base\nMA Crossover\nMean Reversion RSI\nMean Reversion BB\nBullish\nBearish\nNone\nSwing\nPosition\nQuarterly\nSemiAnnual\nAnnual\nBulk add\nSchedule\nWatched (0)\n\tSymbol\tName\tStrategy\tDirection\tHorizon\tState\tEnabled\t\nLAST SCAN\nOption scan\nIDLE\n—\n—\nStock scan\n—\nMARKET REGIME\nRun Step 1 to assess regime.\nLATEST ALERT\nUPCOMING EVENTS\nPORTFOLIO RISK\nDeployed\n$0\nOpen P&L\n$0\nPositions\n0\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Strategy Watch"
+      ],
+      "rails": [
+        {
+          "text": "DASHBOARD\nSCREENER\nANALYSIS\nWATCHLIST\nPORTFOLIO\nCALENDAR\nCHART\nALERTS\nSTRATEGY WATCH\nJOURNAL\nSETTINGS\nIDLE"
+        },
+        {
+          "text": "LAST SCAN\nOption scan\nIDLE\n—\n—\nStock scan\n—\nMARKET REGIME\nRun Step 1 to assess regime.\nLATEST ALERT\nUPCOMING EVENTS\nPORTFOLIO RISK\nDeployed\n$0\nOpen P&L\n$0\nPositions\n0\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ]
+    },
+    "network_indices": [
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57
+    ]
+  }
+]

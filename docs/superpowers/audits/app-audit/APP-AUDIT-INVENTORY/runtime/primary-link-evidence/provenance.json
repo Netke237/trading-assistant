@@ -1,0 +1,15 @@
+{
+  "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "real_backend_requests_allowed": 0,
+  "backend_mode": "browser fixtures; unmatched egress denied",
+  "browser": "155.0.8059.41",
+  "playwright": "1.62.1",
+  "next": "15.5.23",
+  "node": "v22.23.2",
+  "date": "2026-10-16T12:04:01.173Z",
+  "harness_start_sha256": {
+    "primary-link-proof.cjs": "51c3d8b0bf1bed3a58ae04a5ba5ba9827c441b79d6ff1d5312e102f694627604"
+  },
+  "observation_count": 2,
+  "failure_count": 0
+}
