@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/app-audit-options-baa5a15a",
       "claimed_at": "2026-10-16T11:49:41Z",
-      "expires_at": "2026-10-16T14:58:01Z",
+      "expires_at": "2026-10-16T15:00:43Z",
       "note": "Audit #351 Options arithmetic, reports and persistence on pinned main",
       "task": "APP-AUDIT-OPTIONS"
     }
