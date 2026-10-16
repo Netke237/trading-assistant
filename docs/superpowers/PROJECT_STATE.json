@@ -4645,7 +4645,7 @@
       "tracking_issue": 349,
       "plan": "docs/superpowers/plans/2026-10-16-app-audit-inventory-plan.md",
       "source_sha": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": true,
       "plan_stage": {
@@ -4680,9 +4680,32 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/inventory_code_r1 (fresh independent bmad-review-adversarial-general)",
+          "scope": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336..2c1e0b3eaba6a74f523ec4ff8ea35efc897c89d6; all76 docs files; binary diff SHA25656ca8c5b897e7ee58fcc2cdd22733d11198dc1f38eaf4f434d572047f352bb8b",
+          "findings": [],
+          "coverage_findings": [
+            "Reachable supplemental renderless/HOC capability IDs lack normalized route/state IDs and source-backed state/fixture contracts; ChartOverlays/DrawingOverlays concrete paths absent. Final verifier accepts omission."
+          ],
+          "fixes": [],
+          "outstanding": [
+            "Coverage correction ticket397; fresh independent code2 review required."
+          ],
+          "clean": false,
+          "numeric_gate_clean": true,
+          "checks": [
+            "generator --check",
+            "source verifier",
+            "final verifier including frozen historical runtime"
+          ],
+          "scope_verified": "Reviewer inspected actual diff, every runtime script and structured JSON; sampled actual ChartWorkspace/ChartOverlays/TradeCard/StatusBadge/Data/RawEvidence. Gate0 after scope recheck; acceptance1."
         }
       ],
-      "notes": "Execution artifacts built; tasks361/362/363 complete. Source integrated against main00b4; original runtime27fe preserved, targeted integrated replay12 observed/zero unavailable. Two rail UI defects separately filed395. Plan2 clean; independent code stage not started; audit_clean false and not ready to merge. Domain B-I and presentation J acceptance remain pending.",
+      "notes": "Built report/tooling; plan2clean; code1 gate0/coverage1. Reachable supplemental capability state IDs missing; correction397 underway. audit_clean false; not ready to merge. Domain B-I/J acceptance pending, two UI rail findings395 remain separately open.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/report.md",
@@ -4704,6 +4727,11 @@
           "issue": 363,
           "status": "closed",
           "commit": "73af16ae3a8ba3546f49d07d3817bfb0cdf84dc9"
+        },
+        {
+          "issue": 397,
+          "status": "in_progress",
+          "purpose": "Independent review coverage correction"
         }
       ],
       "source_inventory_commit": "6309c063",
