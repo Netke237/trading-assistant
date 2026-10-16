@@ -15,6 +15,14 @@
       "expires_at": "2026-10-16T08:20:12Z",
       "note": "D3 #114: evidence + exclusions PR #347; nightly run observation",
       "task": "KENNETH-D3-BACKFILL"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-settings-profiles-350",
+      "claimed_at": "2026-10-16T05:58:58Z",
+      "expires_at": "2026-10-16T08:58:58Z",
+      "note": "Issue #350 scan controls, Search Profiles, settings persistence and regime audit",
+      "task": "APP-AUDIT-SETTINGS-PROFILES"
     }
   ]
 }
