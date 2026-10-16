@@ -23,14 +23,6 @@
       "expires_at": "2026-10-16T15:00:43Z",
       "note": "Audit #351 Options arithmetic, reports and persistence on pinned main",
       "task": "APP-AUDIT-OPTIONS"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/elated-jemison-c30f32",
-      "claimed_at": "2026-10-16T12:01:29Z",
-      "expires_at": "2026-10-16T15:01:29Z",
-      "note": "#114 follow-ups: dot-class tickers, single-provider error reasons in ingest status, SPY in nightly",
-      "task": "HISTORY-INGEST-GAPS"
     }
   ]
 }
