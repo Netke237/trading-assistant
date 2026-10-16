@@ -278,6 +278,66 @@ async def test_spy_rebuilt_and_current_does_not_trigger_startup_catch_up(env):
     assert job._should_ingest(last) is False
 
 
+def test_ingestion_universe_puts_reference_first_without_duplicates(monkeypatch):
+    """HISTORY-INGEST-GAPS piece 3: SPY is refreshed by every nightly/startup run."""
+    from app.data import universe_presets
+    presets = {"SP500": ["AAA", "BBB"], "NDX100": ["BBB", "CCC"], "DOW30": ["SPY", "AAA"]}
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: presets[keys[0]])
+    assert job.STALENESS_REFERENCE == "SPY"
+    assert job.ingestion_universe() == ["SPY", "AAA", "BBB", "CCC"]
+
+
+def test_ingestion_universe_falls_back_to_reference(monkeypatch):
+    from app.data import universe_presets
+
+    def boom(keys):
+        raise RuntimeError("csv missing")
+
+    monkeypatch.setattr(universe_presets, "expand_universe", boom)
+    assert job.ingestion_universe() == ["SPY"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale, started", [(True, True), (False, False)])
+async def test_startup_catch_up_includes_reference(env, monkeypatch, stale, started):
+    from app.data import universe_presets
+    factory = env["factory"]
+    await seed_alpaca(factory, "SPY", end=STALE if stale else date(2026, 10, 12))
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: ["TEST"])
+    start = MagicMock(return_value=True)
+    monkeypatch.setattr(job, "start_ingestion_task", start)
+    assert await job.startup_catch_up() is started
+    if started:
+        start.assert_called_once_with(["SPY", "TEST"], years=6)
+    else:
+        start.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_nightly_run_refreshes_single_provider_reference(env, monkeypatch):
+    from app.data import universe_presets
+    from app.services import ingestion_scheduler
+    factory = env["factory"]
+    await seed_alpaca(factory, "SPY")
+    await job.run_ingestion(["SPY"])          # SPY becomes single-provider (Tiingo)
+    env["clock"]["now"] = NOW2
+    async with factory() as db:
+        assert job._should_ingest(await hs._last_stored_date("SPY", db)) is True
+    await seed_alpaca(factory, "TEST", end=date(2026, 10, 13))
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: ["TEST"])
+    monkeypatch.setattr(ingestion_scheduler, "_run_nightly_maintenance", AsyncMock())
+    monkeypatch.setattr(job, "_task", None)
+    await ingestion_scheduler._run_nightly()
+    await job._task
+    state = job.get_ingestion_state()
+    assert state["status"] == "completed" and state["failed"] == 0
+    assert state["single_provider_updated"] == 1
+    async with factory() as db:
+        last = await hs._last_stored_date("SPY", db)
+    assert last == date(2026, 10, 13)
+    assert job._should_ingest(last) is False
+
+
 @pytest.mark.asyncio
 async def test_state_has_new_keys_before_any_run():
     state = job.get_ingestion_state()

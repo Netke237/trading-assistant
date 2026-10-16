@@ -25,7 +25,7 @@ from sqlalchemy import delete, select
 from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
 from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
-from app.services.historical_store import most_recent_trading_day
+from app.services.historical_store import _last_stored_date, most_recent_trading_day
 from app.services.history_backfill import (
     HistorySeamMismatch,
     SingleProviderRefused,
@@ -62,6 +62,9 @@ _state: dict[str, Any] = {
 }
 _task: asyncio.Task | None = None
 _ALPACA_CHUNK = 100
+
+# Startup decides "the DB is stale" from this symbol, so every run must refresh it.
+STALENESS_REFERENCE = "SPY"
 
 
 @dataclass
@@ -136,6 +139,34 @@ def _record_rebuild_refused(sym: str, exc: SingleProviderRefused) -> None:
     _state["rebuild_refused"] += 1
     _state["rebuild_refused_symbols"].append(sym)
     _state["rebuild_errors"][sym] = str(exc)
+
+
+def ingestion_universe() -> list[str]:
+    """Nightly and startup universe: the staleness reference, then SP500+NDX100+DOW30.
+
+    The reference goes first so the Tiingo symbol budget is not spent before it.
+    """
+    try:
+        from app.data.universe_presets import expand_universe
+        presets = expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
+    except Exception:
+        presets = []
+    return list(dict.fromkeys([STALENESS_REFERENCE, *presets]))
+
+
+async def startup_catch_up() -> bool:
+    """Start an ingestion run if the staleness reference is stale; True if one started."""
+    async with AsyncSessionLocal() as db:
+        last = await _last_stored_date(STALENESS_REFERENCE, db)
+    if not _should_ingest(last):
+        return False
+    universe = ingestion_universe()
+    start_ingestion_task(universe, years=6)
+    logger.info(
+        "startup: DB stale (last %s date=%s), started ingestion for %d symbols",
+        STALENESS_REFERENCE, last, len(universe),
+    )
+    return True
 
 
 def _should_ingest(last_date: date | None) -> bool:

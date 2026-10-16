@@ -23,16 +23,9 @@ def _get() -> AsyncIOScheduler:
 
 async def _run_nightly() -> None:
     logger.info("ingestion_scheduler: nightly run starting")
-    try:
-        from app.data.universe_presets import expand_universe
-        universe = list(dict.fromkeys(
-            expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
-        ))
-    except Exception:
-        universe = ["SPY"]
-    from app.services.ingestion_job import start_ingestion_task
+    from app.services.ingestion_job import ingestion_universe, start_ingestion_task
     from app.services.history_retention import history_years
-    start_ingestion_task(universe, years=history_years())
+    start_ingestion_task(ingestion_universe(), years=history_years())
     # Piggyback the audit.log rotation/pruning and the scheduled-scan-run
     # retention sweep onto this same nightly tick — neither needs its own
     # cron slot (Part 0/Part 3's resolved decision: a few hundred audit
