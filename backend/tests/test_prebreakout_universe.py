@@ -129,7 +129,7 @@ async def test_prebreakout_fib_unknown_key_still_rejected():
 #
 # Pre-breakout returns a bare list of setups and has no `rejected` list, so a
 # `scope: scan` symbol is skipped and named in one INFO log line. The shipped
-# config/universe_exclusions.yaml lists CTVA with scope scan.
+# config/universe_exclusions.yaml lists PXD with scope scan.
 
 
 @pytest.mark.asyncio
@@ -139,7 +139,7 @@ async def test_prebreakout_skips_an_excluded_symbol_from_a_preset(caplog):
     caplog.set_level(logging.INFO, logger="app.routers.stock_scan")
     with patch(
         "app.routers.stock_scan.expand_universe",
-        return_value=["AAPL", "CTVA"],
+        return_value=["AAPL", "PXD"],
     ), patch(
         "app.routers.stock_scan.get_historical_bars",
         new_callable=AsyncMock,
@@ -151,9 +151,9 @@ async def test_prebreakout_skips_an_excluded_symbol_from_a_preset(caplog):
                 "direction": "Bullish",
             })
     assert resp.status_code == 200, resp.text
-    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "CTVA was processed"
+    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "PXD was processed"
     skipped = [r for r in caplog.records
-               if r.levelno == logging.INFO and "CTVA" in r.getMessage()]
+               if r.levelno == logging.INFO and "PXD" in r.getMessage()]
     assert len(skipped) == 1, [r.getMessage() for r in caplog.records]
 
 
