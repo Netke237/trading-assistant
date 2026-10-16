@@ -4671,13 +4671,18 @@
         "board item #351",
         "programme #348 lane C"
       ],
-      "notes": "Plan stage clean; execution pending. Evidence review not started; audit_clean remains false. Viewport execution follows MinWidthGate:1280 for Steps4\u20136/inspector,1200 for Step7.",
+      "notes": "Independent plan round1 clean. Execution #376/#378/#379 underway. Partial A increment6309c063 gives515 C-handoff candidate instances/4635 pending states; semantic/final reconciliation not complete. No numeric/persistence verdict yet.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report.md",
         "pattern": "Evidence integrated",
         "note": "Report presence only; no correctness or completion certification."
-      }
+      },
+      "tickets": [
+        376,
+        378,
+        379
+      ]
     }
   ],
   "already_shipped": [
