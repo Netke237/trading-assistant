@@ -1,0 +1,17 @@
+[
+  {
+    "id": "integrated:prebreakout",
+    "status": "unavailable",
+    "error": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Pre-Breakout', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"screenerLayout_modeBtn__zYceE screenerLayout_modeBtnActive__fu_Cc\">Pre-Breakout</button> aka getByRole('button', { name: 'Pre-Breakout' }).nth(1)\n    2) <button type=\"button\" aria-pressed=\"true\" class=\"page_modeBtn__wa_x_ page_modeBtnActive__RL6_H\">Pre-Breakout</button> aka getByRole('button', { name: 'Pre-Breakout' }).nth(2)\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Pre-Breakout', exact: true })\u001b[22m\n"
+  },
+  {
+    "id": "integrated:pullback",
+    "status": "unavailable",
+    "error": "locator.waitFor: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('MSFT', { exact: true }).first() to be visible\u001b[22m\n"
+  },
+  {
+    "id": "integrated:fib",
+    "status": "unavailable",
+    "error": "locator.click: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Fib Pullback', exact: true })\u001b[22m\n"
+  }
+]

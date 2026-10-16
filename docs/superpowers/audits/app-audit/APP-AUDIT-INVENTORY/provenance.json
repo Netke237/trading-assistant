@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
-  "source_baseline_resolved": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "source_baseline_resolved": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
   "tooling": {
     "node": "v22.23.2",
     "typescript": "5.9.3",
@@ -17,7 +17,7 @@
     "count": 45,
     "match": true
   },
-  "generator_sha256": "f0b1d356af280294e22743280425bb3f7319b21630fe1894903ee4664d53fb09",
+  "generator_sha256": "42f3f1842c2c6af9cdccceb056bf415e611a8e568b07839cb213bdd9bc801609",
   "source_and_config_hashes": [
     {
       "source": ".python-version",
@@ -49,11 +49,11 @@
     },
     {
       "source": "backend/config/universe_exclusions.yaml",
-      "sha256": "d02730c29fefd1b4bf9eaa00ddfa8d24492f607bf736728b07b43a7cee0d680d"
+      "sha256": "b53770f23203e3d8c39d17742056f3acdd00ed678078235ceda21953a9960d45"
     },
     {
       "source": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/source-annotations.json",
-      "sha256": "569f76c07bdb1301ed3dac254b326e50dc34b4c344ccbdd7cd8a3e105c326959"
+      "sha256": "e43f3fffc18b25b96def93661f9a4e09acc977d5ed0e2c5b263c8aa57cb1f4ce"
     },
     {
       "source": "frontend/app/(frame)/@contextRail/alerts/default.tsx",
@@ -237,7 +237,11 @@
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
-      "sha256": "710fab17c7657aa31f82e332b4203786ab569c9e9052c8dd1742f10e1c0fe4c0"
+      "sha256": "83400d2254e6244ce28a9834d563df55c5f72b3782446234921a638f7981752c"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "sha256": "ae5a8039be27bdb87042cae2d2fb8117ee6e824cf8358e3e3d9ca23b36027440"
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
@@ -245,7 +249,7 @@
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
-      "sha256": "2f551b53a277f64fa8d281092dfacebb12613444fe53637c5ffb8f712e01a576"
+      "sha256": "9724ef1bf9b7e430ec14a03dc9a9ddefb6e19268a678eb1f2a1640722b9d80c1"
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
@@ -253,7 +257,7 @@
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.module.css",
-      "sha256": "2323e3441d9193e86c53ad17556f8f9e087f5b509c2c3d3f895f46edefbe357c"
+      "sha256": "e1239b5191e2177d4b2f3d8b8a41fe787e0182146d7e8ed01742da87c6a2899c"
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
@@ -1811,7 +1815,7 @@
   "numeric_correctness": "Not evaluated: source evidence is discovery and lane handoff, never arithmetic/persistence certification.",
   "baseline_file_validation": {
     "method": "Each tracked source/config byte sequence is compared to the baseline Git blob SHA-1; Windows CRLF-to-LF canonicalization accepted only when it produces the exact baseline blob. SHA-256 records retain actual checkout bytes.",
-    "validated_files": 446,
+    "validated_files": 447,
     "crlf_canonicalized_files": [
       ".python-version",
       "backend/config/contract_rules.yaml",
@@ -1867,6 +1871,7 @@
       "frontend/app/(frame)/screener/step-3-direction/page.tsx",
       "frontend/app/(frame)/screener/step-3-direction/scanLogTotals.ts",
       "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
       "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
       "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
       "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",

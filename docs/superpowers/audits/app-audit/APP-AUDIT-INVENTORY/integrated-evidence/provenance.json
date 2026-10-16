@@ -1,0 +1,13 @@
+{
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "browser": "155.0.8059.41",
+  "playwright": "1.62.1",
+  "next": "15.5.23",
+  "node": "v22.23.2",
+  "date": "2026-10-16T20:33:52.555Z",
+  "harness_start_sha256": {
+    "integrated-probe.cjs": "1a835a849c75a69d84b95d95db919531189b7eb8dd0f04c551e09a8f9cd1beff",
+    "integrated-actions.cjs": "a152f6866a02709387a82c07e3498025d52dd542e74451dbfbae1c156d30c1c2"
+  },
+  "real_backend_requests_allowed": 0
+}

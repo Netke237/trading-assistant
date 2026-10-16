@@ -55,5 +55,5 @@ assert.equal(inventory.counts.native_route_requirement_instances_normalized,nati
 assert.equal(inventory.counts.native_state_requirement_ids_normalized,nativeInstances*9);
 assert(provenance.source_and_config_hashes.some(h=>h.source==='frontend/components/atoms/Tooltip/Tooltip.module.css'));
 assert.equal(inventory.completion_claim,false);
-assert(inventory.pending_discovery.some(p=>p.id==='pending:semantic-closure'));
+assert(inventory.pending_discovery.every(p=>p.owner!=='A'));
 console.log('PASS: independent filesystem census, redirects/private route, slot/standalone roots, native identities, portal/imperative/CSS fixtures, Settings components, lifecycle definitions and normalized state joins.');

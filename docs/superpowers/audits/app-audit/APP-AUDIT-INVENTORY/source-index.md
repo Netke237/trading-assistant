@@ -1,8 +1,8 @@
 # APP-AUDIT-INVENTORY source index
 
-Source baseline `27fe5182a90ae1b40bee53bdf01484b92dab136c`. Generated with TypeScript AST, import resolution and independent Git-tree route census. Read `provenance.json` for exact input hashes and tool versions.
+Source baseline `00b4ab54069e2a43e0a66cd1f183f5fa2347f336`. Generated with TypeScript AST, import resolution and independent Git-tree route census. Read `provenance.json` for exact input hashes and tool versions.
 
-**Incomplete:** structural discovery is reproducible; semantic reachability, dynamic instances and runtime state reconciliation remain pending. This report does not certify displayed numbers, orders or persistence. No exclusion is user-approved.
+**Execution classification recorded:** semantic-classification.json and reconciliation.json distinguish source capabilities, actual fixture observations and pending domain correctness. Independent final evidence review remains pending. This report does not certify displayed numbers, orders or persistence. No exclusion is user-approved.
 
 ## Counts (distinct units)
 
@@ -28,20 +28,20 @@ Source baseline `27fe5182a90ae1b40bee53bdf01484b92dab136c`. Generated with TypeS
     "not-found": 1,
     "page": 34
   },
-  "reachable_source_modules": 298,
-  "component_definitions": 282,
-  "component_route_requirement_instances": 2268,
-  "jsx_custom_component_calls": 2810,
-  "native_surface_candidates": 977,
-  "native_route_requirement_instances_normalized": 2898,
+  "reachable_source_modules": 299,
+  "component_definitions": 283,
+  "component_route_requirement_instances": 2269,
+  "jsx_custom_component_calls": 2813,
+  "native_surface_candidates": 979,
+  "native_route_requirement_instances_normalized": 2900,
   "state_rows_normalized": 9,
-  "component_state_requirement_ids": 20412,
-  "native_state_requirement_ids_normalized": 26082,
+  "component_state_requirement_ids": 20421,
+  "native_state_requirement_ids_normalized": 26100,
   "settings_sections": 9,
   "screener_modes": 3,
   "prebreakout_submodes": 3,
   "component_files_not_reached": 4,
-  "unresolved_discovery_items": 8
+  "unresolved_discovery_items": 1
 }
 ```
 
@@ -226,7 +226,7 @@ All local module edges and per-entry closures are in `inventory.json.import_grap
 - `frontend/app/(frame)/screener/step-1-regime/page.tsx`: 83 modules; 57 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-1-regime/page.tsx`, `frontend/app/layout.tsx`
 - `frontend/app/(frame)/screener/step-2-universe/page.tsx`: 72 modules; 50 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-2-universe/page.tsx`, `frontend/app/layout.tsx`
 - `frontend/app/(frame)/screener/step-3-direction/page.tsx`: 95 modules; 69 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-3-direction/page.tsx`, `frontend/app/layout.tsx`
-- `frontend/app/(frame)/screener/step-4-prebreakout/page.tsx`: 103 modules; 74 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-4-prebreakout/page.tsx`, `frontend/app/layout.tsx`
+- `frontend/app/(frame)/screener/step-4-prebreakout/page.tsx`: 104 modules; 75 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-4-prebreakout/page.tsx`, `frontend/app/layout.tsx`
 - `frontend/app/(frame)/screener/step-4-ranking/page.tsx`: 119 modules; 97 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-4-ranking/page.tsx`, `frontend/app/layout.tsx`
 - `frontend/app/(frame)/screener/step-4-stocks/page.tsx`: 100 modules; 67 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-4-stocks/page.tsx`, `frontend/app/layout.tsx`
 - `frontend/app/(frame)/screener/step-5-strategy/page.tsx`: 71 modules; 49 candidate component definitions; roots `frontend/app/(frame)/@contextRail/screener/default.tsx`, `frontend/app/(frame)/layout.tsx`, `frontend/app/(frame)/screener/layout.tsx`, `frontend/app/(frame)/screener/step-5-strategy/page.tsx`, `frontend/app/layout.tsx`
@@ -249,16 +249,9 @@ All local module edges and per-entry closures are in `inventory.json.import_grap
 
 ## Outstanding discovery
 
-Every item below prevents an exhaustive/completed inventory claim. The full machine-readable list includes source evidence and disposition.
+Remaining checks belong to the recorded lane; source/runtime classification does not certify domain correctness or shipping approval. The full machine-readable list includes source evidence and disposition.
 
-- `pending:semantic-closure` — Module closure includes all reachable imports/re-exports and co-located JSX functions; symbol-level use and condition feasibility require reconciliation. No claim that every candidate renders on every associated route.
-- `pending:dynamic-identities` — AST map callsites enumerate repeated source definitions, not each data-dependent row, tab option, chart series or nested tree node. Runtime must attach fixture row/node identity and parent conditions; no finite production instance count claimed.
-- `pending:conditional-disclosure-exhaustiveness` — Native role/title/details and class hints plus custom JSX calls discover candidates, not proof of semantic disclosure exhaustiveness. Manually reconcile CSS hover/focus tooltips, DOM portals, imperative charts/context menus, non-JSX render factories and dynamically chosen component registries.
-- `pending:state-applicability` — Nine-state template is conservatively pending for all instances. Domain lanes B-I must split zero/false/null/absent and cancel/error scenarios, provide fixtures and source-backed N/A where appropriate; no universal fixture or state pass claimed.
-- `pending:slot-history` — Each primary route has applicable exact slot page or nearest default in roots. Soft navigation may retain earlier slot content; Task 2 must map retained instances to their source entry instead of treating current URL closure as exhaustive history.
-- `pending:private-crash-exposure` — Resolve private underscore source against actual Next route manifest and dev/prod response; do not claim Frame error-boundary coverage from this source. (`frontend/app/__test-crash/page.tsx:5`)
-- `pending:backend-restart` — No backend run/restart performed in source task. Recovery mock plus browser reload coverage is not a real database/process restart certification.
-- `pending:shared-component-ownership` — Definition owners use domain/path defaults and explicit Settings section handoff. Reused chart/report/portfolio widgets can require multiple numeric lanes in route context; owning lanes must confirm interactions and do not infer one owner is sole arithmetic authority.
+- `pending:backend-restart` — Browser storage reload and backend recovery mocks exist; no actual backend process/database restart performed or certified. Source config hash update is provenance only.
 
 ## Regeneration and focused verification
 
@@ -271,7 +264,7 @@ node docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/generate-source-inven
 
 `--check` compares all three generated files byte-for-byte, checks IDs/source ranges, the independently obtained baseline route census and normalized state cardinality. It does not convert pending semantic/runtime checks into passes. Read `source-annotations.json` for reviewed semantic statements and state fixtures.
 
-Runtime Task 2 owns separate artifacts and observations mapped to IDs, avoiding edits to generated files. A source-only component/instance record remains pending until evidence reconciles its entry conditions and states.
+Original Task 2 evidence remains pinned to its original application SHA. The final semantic classification overlay resolves source capability/entry/state contracts without claiming every conservative candidate is actual DOM or every state has passed. Integrated evidence records changed-source execution separately.
 
 Native candidates each have stable IDs, source ranges, owners, entry actions/conditions and state templates. Expand native route/state requirements using `native_instance_expansion` on each route-instance. Fixture rows still need data identity suffixes; source occurrences are not production row counts.
 

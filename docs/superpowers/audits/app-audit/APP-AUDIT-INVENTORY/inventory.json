@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "phase": "APP-AUDIT-INVENTORY",
-  "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
-  "coverage_status": "incomplete-source-structural-discovery; semantic and runtime reconciliation pending",
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "coverage_status": "source/runtime capability inventory executed; domain correctness and independent final review pending",
   "completion_claim": false,
   "counting_contract": {
     "definitions": "Named JSX-producing component functions in the transitive local module graph, including inline co-located components and SVG icons. One definition per file#component; not a count of dialogs.",
@@ -33,20 +33,20 @@
       "not-found": 1,
       "page": 34
     },
-    "reachable_source_modules": 298,
-    "component_definitions": 282,
-    "component_route_requirement_instances": 2268,
-    "jsx_custom_component_calls": 2810,
-    "native_surface_candidates": 977,
-    "native_route_requirement_instances_normalized": 2898,
+    "reachable_source_modules": 299,
+    "component_definitions": 283,
+    "component_route_requirement_instances": 2269,
+    "jsx_custom_component_calls": 2813,
+    "native_surface_candidates": 979,
+    "native_route_requirement_instances_normalized": 2900,
     "state_rows_normalized": 9,
-    "component_state_requirement_ids": 20412,
-    "native_state_requirement_ids_normalized": 26082,
+    "component_state_requirement_ids": 20421,
+    "native_state_requirement_ids_normalized": 26100,
     "settings_sections": 9,
     "screener_modes": 3,
     "prebreakout_submodes": 3,
     "component_files_not_reached": 4,
-    "unresolved_discovery_items": 8
+    "unresolved_discovery_items": 1
   },
   "owners": {
     "A": {
@@ -95,55 +95,55 @@
       {
         "key": "normal",
         "status": "pending",
-        "applicability": "required",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Valid deterministic populated data and default/current config; reconcile rendered values in owning domain lane"
       },
       {
         "key": "expanded-nested",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Traverse all source native_surfaces/jsx_calls conditions including nested child disclosure; >=2 distinct rows where repeated; N/A only with source-backed no disclosure justification"
       },
       {
         "key": "empty",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Empty collections and unselected symbols/candidates; preserve shell and capture empty output; inspect parent props before N/A"
       },
       {
         "key": "loading",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Delay isolated API mocks and hydration; inspect fallback/null/pending rendering; inspect parent-controlled loading before N/A"
       },
       {
         "key": "failed-cancelled",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Rejected API/mock errors, cancelled dialog and interrupted request; distinguish cancel from failure; block real mutations"
       },
       {
         "key": "legacy-unsupported",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Legacy persisted/report shape, unsupported mode/broker/strategy and missing source provenance; no storage key rename"
       },
       {
         "key": "zero-false-null-absent",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Distinct zero, false, null and omitted-field cases; validate required shape before mounting; domain lane independently checks numbers"
       },
       {
         "key": "stale-async",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "fixture": "Reorder isolated delayed responses across symbol/mode selection and unmount; include parent async props and hydration recovery before N/A"
       },
       {
         "key": "reload-restart",
         "status": "pending",
-        "applicability": "requires-semantic-reconciliation",
+        "applicability": "See semantic-classification.json per-definition intrinsic or ancestor/prop-controlled entry contract; domain execution/correctness pending",
         "owner_override": "I",
         "fixture": "Isolated current/legacy/corrupt storage plus backend recovery mocks; sanitized before/after reload read-back and soft/hard history; actual backend restart remains untested"
       }
@@ -2816,6 +2816,7 @@
         "frontend/app/(frame)/layout.tsx",
         "frontend/app/(frame)/screener/layout.tsx",
         "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+        "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
         "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
         "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
         "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
@@ -4989,7 +4990,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -5023,7 +5024,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -5124,7 +5125,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "named-chart",
         "tooltip-or-description"
@@ -5226,7 +5227,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -5778,7 +5779,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -5812,7 +5813,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -6103,7 +6104,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -6130,7 +6131,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -6164,7 +6165,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -6391,7 +6392,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -6418,7 +6419,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -6700,7 +6701,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -6865,7 +6866,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -8493,7 +8494,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -8544,7 +8545,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -8618,7 +8619,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -9728,7 +9729,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -10099,7 +10100,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -10223,7 +10224,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "named-chart"
       ],
@@ -10265,7 +10266,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -11551,7 +11552,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -11591,7 +11592,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -11707,7 +11708,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -12314,7 +12315,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -12410,7 +12411,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -12444,7 +12445,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -12563,7 +12564,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -13287,7 +13288,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -13437,7 +13438,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -13693,7 +13694,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -14027,7 +14028,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -14120,7 +14121,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -14294,7 +14295,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -14450,7 +14451,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -14570,7 +14571,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -14665,7 +14666,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -14744,7 +14745,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -14797,7 +14798,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -16438,7 +16439,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -16583,7 +16584,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -17431,7 +17432,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tabs",
@@ -18642,7 +18643,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -19148,7 +19149,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -19248,7 +19249,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -19998,7 +19999,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -20129,7 +20130,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -22528,8 +22529,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
       "component": "Fields",
-      "line": 18,
-      "end_line": 20,
+      "line": 19,
+      "end_line": 28,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -22537,12 +22538,87 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
-      "categories": [],
-      "jsx_calls": [],
-      "native_surfaces": [],
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
+      "categories": [
+        "entry-or-control",
+        "nested-disclosure"
+      ],
+      "jsx_calls": [
+        {
+          "component": "Fields",
+          "line": 25,
+          "conditions": [
+            "value!==null && typeof value==='object'",
+            "repeated: entries.map"
+          ],
+          "props": []
+        }
+      ],
+      "native_surfaces": [
+        {
+          "tag": "details",
+          "categories": [
+            "nested-disclosure"
+          ],
+          "line": 25,
+          "attributes": [],
+          "text": " {Array.isArray(value)?`${value.length} items`:'View fields'} ",
+          "conditions": [
+            "value!==null && typeof value==='object'",
+            "repeated: entries.map"
+          ],
+          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields::native:details:ed7732d2fc96",
+          "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields",
+          "owners": {
+            "numeric": "E",
+            "persistence": "I",
+            "presentation": "J",
+            "navigation": "A"
+          },
+          "observation": "source-observed candidate",
+          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
+          "state_matrix_template": "conservative-nine-state-v1",
+          "runtime_status": "pending"
+        },
+        {
+          "tag": "summary",
+          "categories": [
+            "entry-or-control"
+          ],
+          "line": 25,
+          "attributes": [],
+          "text": " {Array.isArray(value)?`${value.length} items`:'View fields'} ",
+          "conditions": [
+            "value!==null && typeof value==='object'",
+            "repeated: entries.map"
+          ],
+          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields::native:summary:60abbb0389a1",
+          "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields",
+          "owners": {
+            "numeric": "E",
+            "persistence": "I",
+            "presentation": "J",
+            "navigation": "A"
+          },
+          "observation": "source-observed candidate",
+          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
+          "state_matrix_template": "conservative-nine-state-v1",
+          "runtime_status": "pending"
+        }
+      ],
       "hooks": [],
-      "render_conditions": [],
+      "render_conditions": [
+        {
+          "line": 21,
+          "condition": "!entries.length"
+        },
+        {
+          "line": 24,
+          "condition": "value!==null && typeof value==='object'"
+        }
+      ],
       "state_matrix_template": "conservative-nine-state-v1",
       "fixture_requirements": {
         "base": "Deterministic route/store/API seed; render this component and all source-listed conditions; repeated rows require >=2 distinct identities",
@@ -22555,8 +22631,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#SelectedRowEvidence",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
       "component": "SelectedRowEvidence",
-      "line": 25,
-      "end_line": 49,
+      "line": 33,
+      "end_line": 58,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -22564,7 +22640,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -22572,7 +22648,7 @@
       "jsx_calls": [
         {
           "component": "Fields",
-          "line": 36,
+          "line": 44,
           "conditions": [
             "pre"
           ],
@@ -22580,7 +22656,7 @@
         },
         {
           "component": "Fields",
-          "line": 41,
+          "line": 49,
           "conditions": [
             "pre.confidence_breakdown",
             "pre"
@@ -22589,7 +22665,7 @@
         },
         {
           "component": "Swing",
-          "line": 43,
+          "line": 51,
           "conditions": [
             "pre"
           ],
@@ -22597,7 +22673,7 @@
         },
         {
           "component": "Swing",
-          "line": 45,
+          "line": 53,
           "conditions": [
             "fib"
           ],
@@ -22605,9 +22681,21 @@
         },
         {
           "component": "Fields",
-          "line": 47,
+          "line": 55,
           "conditions": [],
           "props": []
+        },
+        {
+          "component": "RawEvidence",
+          "line": 56,
+          "conditions": [],
+          "props": [
+            {
+              "name": "label",
+              "value": "\"complete returned evidence\"",
+              "line": 56
+            }
+          ]
         }
       ],
       "native_surfaces": [
@@ -22616,12 +22704,12 @@
           "categories": [
             "nested-disclosure"
           ],
-          "line": 30,
+          "line": 38,
           "attributes": [
             {
               "name": "key",
               "value": "{`${mode}-${row.symbol}`}",
-              "line": 30
+              "line": 38
             }
           ],
           "text": " {row.symbol} · Setup evidence {pre && <> Why it’s a setup ATR ratio = current ATR(14) / configured average ATR. Range ratio = N-bar high–low / current ATR. Volume ratio = last bar / preceding 20-bar volume average. ATR and range ratios ...",
@@ -22645,7 +22733,7 @@
           "categories": [
             "entry-or-control"
           ],
-          "line": 30,
+          "line": 38,
           "attributes": [],
           "text": " {row.symbol} · Setup evidence ",
           "conditions": [],
@@ -22667,19 +22755,19 @@
       "hooks": [],
       "render_conditions": [
         {
-          "line": 31,
+          "line": 39,
           "condition": "pre"
         },
         {
-          "line": 38,
+          "line": 46,
           "condition": "pre.confidence_breakdown"
         },
         {
-          "line": 45,
+          "line": 53,
           "condition": "fib"
         },
         {
-          "line": 46,
+          "line": 54,
           "condition": "mode==='pullback'"
         }
       ],
@@ -22695,8 +22783,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Swing",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
       "component": "Swing",
-      "line": 21,
-      "end_line": 24,
+      "line": 29,
+      "end_line": 32,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -22704,7 +22792,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -22714,6 +22802,100 @@
       "fixture_requirements": {
         "base": "Deterministic route/store/API seed; render this component and all source-listed conditions; repeated rows require >=2 distinct identities",
         "async": "Inspect parent async props before marking async states N/A",
+        "persistence": "Isolated storage seed including current/legacy/invalid; sanitized before/after reload read-back; no unrelated storage"
+      },
+      "runtime_status": "pending"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "component": "RawEvidence",
+      "line": 5,
+      "end_line": 12,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "observation": "source-observed",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
+      "categories": [
+        "class-named-surface-candidate",
+        "entry-or-control",
+        "nested-disclosure"
+      ],
+      "jsx_calls": [],
+      "native_surfaces": [
+        {
+          "tag": "details",
+          "categories": [
+            "nested-disclosure",
+            "class-named-surface-candidate"
+          ],
+          "line": 8,
+          "attributes": [
+            {
+              "name": "ref",
+              "value": "{ref}",
+              "line": 8
+            }
+          ],
+          "text": " Raw data: {label} {JSON.stringify(value, null, 2) ?? 'Unavailable'} ",
+          "conditions": [],
+          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::native:details:bd84840bc378",
+          "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+          "owners": {
+            "numeric": "E",
+            "persistence": "I",
+            "presentation": "J",
+            "navigation": "A"
+          },
+          "observation": "source-observed candidate",
+          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
+          "state_matrix_template": "conservative-nine-state-v1",
+          "runtime_status": "pending"
+        },
+        {
+          "tag": "summary",
+          "categories": [
+            "entry-or-control"
+          ],
+          "line": 9,
+          "attributes": [],
+          "text": " Raw data: {label} ",
+          "conditions": [],
+          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::native:summary:ea71011c5099",
+          "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+          "owners": {
+            "numeric": "E",
+            "persistence": "I",
+            "presentation": "J",
+            "navigation": "A"
+          },
+          "observation": "source-observed candidate",
+          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
+          "state_matrix_template": "conservative-nine-state-v1",
+          "runtime_status": "pending"
+        }
+      ],
+      "hooks": [
+        {
+          "line": 6,
+          "call": "useRef<HTMLDetailsElement>(null)"
+        },
+        {
+          "line": 7,
+          "call": "useEffect(() => { if (ref.current) ref.current.open = false; }, [value])"
+        }
+      ],
+      "render_conditions": [],
+      "state_matrix_template": "conservative-nine-state-v1",
+      "fixture_requirements": {
+        "base": "Deterministic route/store/API seed; render this component and all source-listed conditions; repeated rows require >=2 distinct identities",
+        "async": "Delayed/success/error/out-of-order/cancelled mock responses; no live requests",
         "persistence": "Isolated storage seed including current/legacy/invalid; sanitized before/after reload read-back; no unrelated storage"
       },
       "runtime_status": "pending"
@@ -22731,7 +22913,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "named-chart"
@@ -22905,8 +23087,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#LiveScope",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
       "component": "LiveScope",
-      "line": 61,
-      "end_line": 61,
+      "line": 62,
+      "end_line": 62,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -22914,24 +23096,24 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
           "component": "Text",
-          "line": 61,
+          "line": 62,
           "conditions": [],
           "props": []
         },
         {
           "component": "Raw",
-          "line": 61,
+          "line": 62,
           "conditions": [],
           "props": [
             {
               "name": "label",
               "value": "\"Supplementary analysis request scope\"",
-              "line": 61
+              "line": 62
             }
           ]
         }
@@ -22951,8 +23133,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
       "component": "Raw",
-      "line": 22,
-      "end_line": 22,
+      "line": 23,
+      "end_line": 23,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -22960,62 +23142,23 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
-      "categories": [
-        "class-named-surface-candidate",
-        "entry-or-control",
-        "nested-disclosure"
-      ],
-      "jsx_calls": [],
-      "native_surfaces": [
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
+      "categories": [],
+      "jsx_calls": [
         {
-          "tag": "details",
-          "categories": [
-            "nested-disclosure",
-            "class-named-surface-candidate"
-          ],
-          "line": 22,
-          "attributes": [],
-          "text": " {label} {JSON.stringify(value, null, 2) ?? 'Unavailable'} ",
+          "component": "RawEvidence",
+          "line": 23,
           "conditions": [],
-          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw::native:details:1cab43f09056",
-          "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
-          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw",
-          "owners": {
-            "numeric": "E",
-            "persistence": "I",
-            "presentation": "J",
-            "navigation": "A"
-          },
-          "observation": "source-observed candidate",
-          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
-          "state_matrix_template": "conservative-nine-state-v1",
-          "runtime_status": "pending"
-        },
-        {
-          "tag": "summary",
-          "categories": [
-            "entry-or-control"
-          ],
-          "line": 22,
-          "attributes": [],
-          "text": " {label} ",
-          "conditions": [],
-          "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw::native:summary:52e29d9d2902",
-          "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
-          "parent_definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw",
-          "owners": {
-            "numeric": "E",
-            "persistence": "I",
-            "presentation": "J",
-            "navigation": "A"
-          },
-          "observation": "source-observed candidate",
-          "entry_action": "Reveal parent component and satisfy enclosing conditions; tooltip hover/focus where applicable",
-          "state_matrix_template": "conservative-nine-state-v1",
-          "runtime_status": "pending"
+          "props": [
+            {
+              "name": "label",
+              "value": "{label}",
+              "line": 23
+            }
+          ]
         }
       ],
+      "native_surfaces": [],
       "hooks": [],
       "render_conditions": [],
       "state_matrix_template": "conservative-nine-state-v1",
@@ -23030,8 +23173,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#SelectedSentimentFundamentals",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
       "component": "SelectedSentimentFundamentals",
-      "line": 62,
-      "end_line": 89,
+      "line": 63,
+      "end_line": 90,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -23039,18 +23182,18 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
           "component": "Text",
-          "line": 74,
+          "line": 75,
           "conditions": [],
           "props": []
         },
         {
           "component": "Text",
-          "line": 75,
+          "line": 76,
           "conditions": [
             "original"
           ],
@@ -23058,7 +23201,7 @@
         },
         {
           "component": "LiveScope",
-          "line": 75,
+          "line": 76,
           "conditions": [
             "c.live",
             "original"
@@ -23067,7 +23210,7 @@
         },
         {
           "component": "Text",
-          "line": 75,
+          "line": 76,
           "conditions": [
             "c.live",
             "original"
@@ -23076,13 +23219,13 @@
         },
         {
           "component": "Text",
-          "line": 77,
+          "line": 78,
           "conditions": [],
           "props": []
         },
         {
           "component": "Text",
-          "line": 78,
+          "line": 79,
           "conditions": [
             "supplementarySentiment && c.live"
           ],
@@ -23090,7 +23233,7 @@
         },
         {
           "component": "LiveScope",
-          "line": 78,
+          "line": 79,
           "conditions": [
             "supplementarySentiment && c.live"
           ],
@@ -23098,7 +23241,7 @@
         },
         {
           "component": "Text",
-          "line": 79,
+          "line": 80,
           "conditions": [
             "s && !s.insufficient_data"
           ],
@@ -23106,7 +23249,7 @@
         },
         {
           "component": "Text",
-          "line": 79,
+          "line": 80,
           "conditions": [
             "s && !s.insufficient_data"
           ],
@@ -23114,7 +23257,7 @@
         },
         {
           "component": "Text",
-          "line": 79,
+          "line": 80,
           "conditions": [
             "s && !s.insufficient_data"
           ],
@@ -23122,7 +23265,7 @@
         },
         {
           "component": "Raw",
-          "line": 79,
+          "line": 80,
           "conditions": [
             "s && !s.insufficient_data"
           ],
@@ -23130,13 +23273,13 @@
             {
               "name": "label",
               "value": "\"Complete selected-stock sentiment evidence\"",
-              "line": 79
+              "line": 80
             }
           ]
         },
         {
           "component": "Text",
-          "line": 79,
+          "line": 80,
           "conditions": [
             "s && !s.insufficient_data"
           ],
@@ -23144,7 +23287,7 @@
         },
         {
           "component": "LiveScope",
-          "line": 80,
+          "line": 81,
           "conditions": [
             "original && c.live"
           ],
@@ -23152,7 +23295,7 @@
         },
         {
           "component": "Text",
-          "line": 81,
+          "line": 82,
           "conditions": [
             "c.live"
           ],
@@ -23160,13 +23303,13 @@
         },
         {
           "component": "Text",
-          "line": 83,
+          "line": 84,
           "conditions": [],
           "props": []
         },
         {
           "component": "Text",
-          "line": 84,
+          "line": 85,
           "conditions": [
             "supplementaryFundamentals && c.live"
           ],
@@ -23174,7 +23317,7 @@
         },
         {
           "component": "LiveScope",
-          "line": 84,
+          "line": 85,
           "conditions": [
             "supplementaryFundamentals && c.live"
           ],
@@ -23182,7 +23325,7 @@
         },
         {
           "component": "FundamentalHealthCard",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "supportedFundamentals(f)",
             "f"
@@ -23191,7 +23334,7 @@
         },
         {
           "component": "Data",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "supportedFundamentals(f)",
             "f"
@@ -23200,7 +23343,7 @@
         },
         {
           "component": "Text",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "supportedFundamentals(f)",
             "f"
@@ -23209,7 +23352,7 @@
         },
         {
           "component": "Text",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "supportedFundamentals(f)",
             "f"
@@ -23218,7 +23361,7 @@
         },
         {
           "component": "Text",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "repeated: (f.safety_flags??[]).map",
             "supportedFundamentals(f)",
@@ -23228,7 +23371,7 @@
         },
         {
           "component": "Raw",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "f"
           ],
@@ -23236,13 +23379,13 @@
             {
               "name": "label",
               "value": "\"Complete fundamental evidence and safety flags\"",
-              "line": 85
+              "line": 86
             }
           ]
         },
         {
           "component": "Text",
-          "line": 85,
+          "line": 86,
           "conditions": [
             "f"
           ],
@@ -23253,39 +23396,39 @@
       "hooks": [],
       "render_conditions": [
         {
-          "line": 75,
+          "line": 76,
           "condition": "original"
         },
         {
-          "line": 75,
+          "line": 76,
           "condition": "c.live"
-        },
-        {
-          "line": 78,
-          "condition": "supplementarySentiment && c.live"
         },
         {
           "line": 79,
-          "condition": "s && !s.insufficient_data"
+          "condition": "supplementarySentiment && c.live"
         },
         {
           "line": 80,
-          "condition": "original && c.live"
+          "condition": "s && !s.insufficient_data"
         },
         {
           "line": 81,
+          "condition": "original && c.live"
+        },
+        {
+          "line": 82,
           "condition": "c.live"
         },
         {
-          "line": 84,
+          "line": 85,
           "condition": "supplementaryFundamentals && c.live"
         },
         {
-          "line": 85,
+          "line": 86,
           "condition": "f"
         },
         {
-          "line": 85,
+          "line": 86,
           "condition": "supportedFundamentals(f)"
         }
       ],
@@ -23301,8 +23444,8 @@
       "id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#SelectedStockScores",
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
       "component": "SelectedStockScores",
-      "line": 90,
-      "end_line": 112,
+      "line": 91,
+      "end_line": 114,
       "owners": {
         "numeric": "E",
         "persistence": "I",
@@ -23310,18 +23453,18 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
           "component": "Text",
-          "line": 97,
+          "line": 99,
           "conditions": [],
           "props": []
         },
         {
           "component": "Text",
-          "line": 98,
+          "line": 100,
           "conditions": [
             "original"
           ],
@@ -23329,7 +23472,7 @@
         },
         {
           "component": "LiveScope",
-          "line": 98,
+          "line": 100,
           "conditions": [
             "c.live",
             "original"
@@ -23338,7 +23481,7 @@
         },
         {
           "component": "Text",
-          "line": 98,
+          "line": 100,
           "conditions": [
             "c.live",
             "original"
@@ -23347,7 +23490,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23355,7 +23498,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23363,7 +23506,7 @@
         },
         {
           "component": "Data",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23371,7 +23514,7 @@
         },
         {
           "component": "StatusBadge",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23379,7 +23522,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23387,7 +23530,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "source"
           ],
@@ -23395,7 +23538,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "signalKnown",
             "source"
@@ -23404,7 +23547,7 @@
         },
         {
           "component": "Text",
-          "line": 99,
+          "line": 101,
           "conditions": [
             "!signalKnown",
             "source"
@@ -23413,7 +23556,7 @@
         },
         {
           "component": "Text",
-          "line": 100,
+          "line": 102,
           "conditions": [
             "repeated: (source.gate_flags??[]).map",
             "source"
@@ -23422,7 +23565,7 @@
         },
         {
           "component": "Text",
-          "line": 101,
+          "line": 103,
           "conditions": [
             "!source.gate_flags?.length",
             "source"
@@ -23431,7 +23574,7 @@
         },
         {
           "component": "Text",
-          "line": 102,
+          "line": 104,
           "conditions": [
             "source"
           ],
@@ -23439,23 +23582,7 @@
         },
         {
           "component": "Text",
-          "line": 104,
-          "conditions": [
-            "e"
-          ],
-          "props": []
-        },
-        {
-          "component": "Text",
-          "line": 104,
-          "conditions": [
-            "e"
-          ],
-          "props": []
-        },
-        {
-          "component": "Text",
-          "line": 104,
+          "line": 106,
           "conditions": [
             "e"
           ],
@@ -23464,6 +23591,22 @@
         {
           "component": "Text",
           "line": 106,
+          "conditions": [
+            "e"
+          ],
+          "props": []
+        },
+        {
+          "component": "Text",
+          "line": 106,
+          "conditions": [
+            "e"
+          ],
+          "props": []
+        },
+        {
+          "component": "Text",
+          "line": 108,
           "conditions": [
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
           ],
@@ -23471,7 +23614,7 @@
         },
         {
           "component": "Data",
-          "line": 106,
+          "line": 108,
           "conditions": [
             "component",
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
@@ -23480,7 +23623,7 @@
         },
         {
           "component": "Text",
-          "line": 106,
+          "line": 108,
           "conditions": [
             "component",
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
@@ -23489,7 +23632,7 @@
         },
         {
           "component": "Text",
-          "line": 106,
+          "line": 108,
           "conditions": [
             "component",
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
@@ -23498,7 +23641,7 @@
         },
         {
           "component": "Raw",
-          "line": 106,
+          "line": 108,
           "conditions": [
             "component",
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
@@ -23507,13 +23650,13 @@
             {
               "name": "label",
               "value": "{`${key} notes, observations and configuration`}",
-              "line": 106
+              "line": 108
             }
           ]
         },
         {
           "component": "Text",
-          "line": 106,
+          "line": 108,
           "conditions": [
             "component",
             "repeated: (['trend','pullback','trigger','event','vol'] as const).map"
@@ -23522,7 +23665,7 @@
         },
         {
           "component": "Raw",
-          "line": 108,
+          "line": 110,
           "conditions": [
             "e"
           ],
@@ -23530,13 +23673,13 @@
             {
               "name": "label",
               "value": "\"Scorer caps and safety explanations\"",
-              "line": 108
+              "line": 110
             }
           ]
         },
         {
           "component": "Raw",
-          "line": 108,
+          "line": 110,
           "conditions": [
             "e"
           ],
@@ -23544,13 +23687,13 @@
             {
               "name": "label",
               "value": "\"Applied gate configuration\"",
-              "line": 108
+              "line": 110
             }
           ]
         },
         {
           "component": "Raw",
-          "line": 108,
+          "line": 110,
           "conditions": [
             "e"
           ],
@@ -23558,13 +23701,13 @@
             {
               "name": "label",
               "value": "\"Complete authoritative score evidence\"",
-              "line": 108
+              "line": 110
             }
           ]
         },
         {
           "component": "Raw",
-          "line": 109,
+          "line": 111,
           "conditions": [
             "source"
           ],
@@ -23572,13 +23715,13 @@
             {
               "name": "label",
               "value": "{original?'Complete original Pullback disclosure':'Complete live score rules and qualification flags'}",
-              "line": 109
+              "line": 111
             }
           ]
         },
         {
           "component": "SelectedStockScores",
-          "line": 110,
+          "line": 112,
           "conditions": [
             "original && !e && c.live"
           ],
@@ -23586,50 +23729,55 @@
         }
       ],
       "native_surfaces": [],
-      "hooks": [],
+      "hooks": [
+        {
+          "line": 97,
+          "call": "useMemo(()=>original??(source?{rules:c.live?.data.rules,gate_flags:source.gate_flags,backtest:signalKnown?source.backtest:null,confidence:signalKnown?source.confidence:null,confidence_text:signalKnown?source.confidence_text:null,earnings..."
+        }
+      ],
       "render_conditions": [
         {
-          "line": 98,
+          "line": 100,
           "condition": "original"
         },
         {
-          "line": 98,
+          "line": 100,
           "condition": "c.live"
         },
         {
-          "line": 99,
+          "line": 101,
           "condition": "source"
-        },
-        {
-          "line": 99,
-          "condition": "signalKnown"
-        },
-        {
-          "line": 99,
-          "condition": "!signalKnown"
         },
         {
           "line": 101,
+          "condition": "signalKnown"
+        },
+        {
+          "line": 101,
+          "condition": "!signalKnown"
+        },
+        {
+          "line": 103,
           "condition": "!source.gate_flags?.length"
         },
         {
-          "line": 104,
-          "condition": "e"
-        },
-        {
           "line": 106,
-          "condition": "component"
+          "condition": "e"
         },
         {
           "line": 108,
-          "condition": "e"
-        },
-        {
-          "line": 109,
-          "condition": "source"
+          "condition": "component"
         },
         {
           "line": 110,
+          "condition": "e"
+        },
+        {
+          "line": 111,
+          "condition": "source"
+        },
+        {
+          "line": 112,
           "condition": "original && !e && c.live"
         }
       ],
@@ -23654,7 +23802,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -23864,7 +24012,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -23935,7 +24083,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -24983,7 +25131,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -25093,7 +25241,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure",
@@ -25678,7 +25826,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -25767,7 +25915,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -27134,7 +27282,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -27334,7 +27482,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -28477,7 +28625,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -28567,7 +28715,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -28631,7 +28779,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -30090,7 +30238,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -30386,7 +30534,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure",
@@ -31463,7 +31611,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -31743,7 +31891,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -31913,7 +32061,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -33268,7 +33416,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -33638,7 +33786,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -33718,7 +33866,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -33830,7 +33978,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -34135,7 +34283,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -34886,7 +35034,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -35075,7 +35223,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -35222,7 +35370,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -35287,7 +35435,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "table"
@@ -35423,7 +35571,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -35752,7 +35900,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -36757,7 +36905,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -36831,7 +36979,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -37486,7 +37634,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -37685,7 +37833,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -37941,7 +38089,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -38470,7 +38618,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -38875,7 +39023,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -39123,7 +39271,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -39235,7 +39383,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -39764,7 +39912,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -40098,7 +40246,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -40413,7 +40561,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -40560,7 +40708,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -40643,7 +40791,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -40728,7 +40876,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -40768,7 +40916,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -40795,7 +40943,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -41634,7 +41782,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -41817,7 +41965,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control"
@@ -42199,7 +42347,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -42289,7 +42437,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -42402,7 +42550,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -42519,7 +42667,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -42583,7 +42731,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -43968,7 +44116,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -43995,7 +44143,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -44035,7 +44183,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -45021,7 +45169,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -45110,7 +45258,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -45199,7 +45347,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -45245,7 +45393,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -45303,7 +45451,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -45343,7 +45491,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -45434,7 +45582,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg",
         "entry-or-control",
@@ -45565,7 +45713,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -45654,7 +45802,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -45720,7 +45868,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -45779,7 +45927,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -45877,7 +46025,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -45966,7 +46114,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -46055,7 +46203,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -46130,7 +46278,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -46204,7 +46352,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -46299,7 +46447,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46340,7 +46488,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46387,7 +46535,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46427,7 +46575,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46468,7 +46616,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46509,7 +46657,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "named-tooltip",
         "tooltip-or-description"
@@ -46569,7 +46717,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg",
         "entry-or-control",
@@ -46700,7 +46848,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -46736,7 +46884,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog"
       ],
@@ -46838,7 +46986,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -46927,7 +47075,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -46979,7 +47127,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -47103,7 +47251,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -47143,7 +47291,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -47408,7 +47556,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -47608,7 +47756,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg",
         "entry-or-control",
@@ -47773,7 +47921,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -47883,7 +48031,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -48044,7 +48192,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -48219,7 +48367,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -48760,7 +48908,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -48794,7 +48942,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -49025,7 +49173,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -49057,7 +49205,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -49097,7 +49245,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -49165,7 +49313,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -49248,7 +49396,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -49541,7 +49689,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -49884,7 +50032,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -49945,7 +50093,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -50120,7 +50268,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -50264,7 +50412,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -50352,7 +50500,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -50576,7 +50724,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -50693,7 +50841,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -50746,7 +50894,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -50897,7 +51045,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -51127,7 +51275,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -51237,7 +51385,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -51513,7 +51661,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -51603,7 +51751,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -51692,7 +51840,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -51776,7 +51924,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -51810,7 +51958,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -51887,7 +52035,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -52064,7 +52212,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -52143,7 +52291,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control"
@@ -52360,7 +52508,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg",
         "entry-or-control"
@@ -52527,7 +52675,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -52626,7 +52774,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -52660,7 +52808,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -52712,7 +52860,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -53016,7 +53164,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -54301,7 +54449,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -54343,7 +54491,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -54430,7 +54578,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -54921,7 +55069,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -55746,7 +55894,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -55786,7 +55934,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -55820,7 +55968,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -55852,7 +56000,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -56203,7 +56351,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -56315,7 +56463,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -56349,7 +56497,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -56504,7 +56652,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -56664,7 +56812,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "named-chart"
       ],
@@ -56706,7 +56854,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -56874,7 +57022,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -57110,7 +57258,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "crosshair",
         "imperative-chart",
@@ -57231,7 +57379,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "named-chart",
@@ -57792,7 +57940,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -58249,7 +58397,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "drawing-interaction",
@@ -58790,7 +58938,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -59240,7 +59388,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -60451,7 +60599,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "controlled-disclosure",
         "entry-or-control"
@@ -60675,7 +60823,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -60702,7 +60850,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -60736,7 +60884,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -60799,7 +60947,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -60871,7 +61019,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -61267,7 +61415,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -61294,7 +61442,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -61388,7 +61536,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -61569,7 +61717,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "named-chart"
@@ -61638,7 +61786,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -62038,7 +62186,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -62072,7 +62220,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -62781,7 +62929,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -63104,7 +63252,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "named-chart"
@@ -63237,7 +63385,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -64377,7 +64525,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -64463,7 +64611,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -65162,7 +65310,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -65226,7 +65374,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -65310,7 +65458,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65363,7 +65511,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65416,7 +65564,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65469,7 +65617,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg",
         "named-chart"
@@ -65523,7 +65671,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65576,7 +65724,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65629,7 +65777,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -65678,7 +65826,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65731,7 +65879,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65784,7 +65932,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65837,7 +65985,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65890,7 +66038,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -65943,7 +66091,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -65998,7 +66146,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -66800,7 +66948,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -67096,7 +67244,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -67270,7 +67418,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -67516,7 +67664,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -68156,7 +68304,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -68230,7 +68378,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -68465,7 +68613,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "canvas-or-svg"
       ],
@@ -68539,7 +68687,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "dialog",
@@ -69190,7 +69338,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -69346,7 +69494,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -69533,7 +69681,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "table"
@@ -69674,7 +69822,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -69706,7 +69854,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -69850,7 +69998,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -69894,7 +70042,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -70287,7 +70435,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -70384,7 +70532,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "dialog",
@@ -70959,7 +71107,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "dialog",
         "entry-or-control",
@@ -71251,7 +71399,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -71359,7 +71507,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -71617,7 +71765,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -71788,7 +71936,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -71820,7 +71968,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -71906,7 +72054,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -71945,7 +72093,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -75512,7 +75660,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -75731,7 +75879,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure"
@@ -76066,7 +76214,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "dialog",
@@ -76756,7 +76904,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -76883,7 +77031,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -76952,7 +77100,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -77005,7 +77153,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "nested-disclosure",
@@ -77966,7 +78114,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control",
         "tooltip-or-description"
@@ -78159,7 +78307,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -78206,7 +78354,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -78316,7 +78464,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -78371,7 +78519,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "entry-or-control",
@@ -78627,7 +78775,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -78941,7 +79089,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -78996,7 +79144,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "entry-or-control"
       ],
@@ -79354,7 +79502,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -79460,7 +79608,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -79597,7 +79745,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "controlled-disclosure",
@@ -83302,7 +83450,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "class-named-surface-candidate",
         "tooltip-or-description"
@@ -83664,7 +83812,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [
         "tooltip-or-description"
       ],
@@ -83736,7 +83884,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -83770,7 +83918,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [
         {
@@ -83804,7 +83952,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -83836,7 +83984,7 @@
         "navigation": "A"
       },
       "observation": "source-observed",
-      "discovery_review": "AST structural extraction; semantic reachability pending except source-annotations readbacks",
+      "discovery_review": "Structural source capability; semantic-classification.json provides binding/entry/state contracts; runtime correctness pending",
       "categories": [],
       "jsx_calls": [],
       "native_surfaces": [],
@@ -120425,6 +120573,35 @@
       "runtime_status": "pending"
     },
     {
+      "id": "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+      "route_entry_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+      "route": "/screener/step-4-prebreakout",
+      "modes": [
+        "prebreakout:prebreakout",
+        "prebreakout:pullback",
+        "prebreakout:fib"
+      ],
+      "numeric_lane_handoff": [
+        "E"
+      ],
+      "source_reachability": "transitive-module candidate; conditional and symbol-level execution not certified",
+      "entry_action": "Visit /screener/step-4-prebreakout; traverse jsx_calls/native_surfaces conditions from attached entries",
+      "state_ids": [
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:normal",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:expanded-nested",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:empty",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:loading",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:failed-cancelled",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:legacy-unsupported",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:zero-false-null-absent",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:stale-async",
+        "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence::state:reload-restart"
+      ],
+      "native_instance_expansion": "For each definition.native_surfaces n: ID = this.id + \"::\" + n.id; inherit route, conditions, fixture requirements and n.owners. State ID = native instance ID + \"::state:\" + template key. All remain pending.",
+      "runtime_status": "pending"
+    },
+    {
       "id": "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx#SelectedSetupChart",
       "route_entry_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
       "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx#SelectedSetupChart",
@@ -148521,8 +148698,17 @@
           "target": "frontend/app/(frame)/screener/step-4-prebreakout/scanThresholds.ts",
           "kind": "import",
           "line": 6
+        },
+        {
+          "target": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+          "kind": "import",
+          "line": 7
         }
       ]
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "edges": []
     },
     {
       "source": "frontend/app/(frame)/screener/step-4-prebreakout/scanChartLines.ts",
@@ -148594,6 +148780,11 @@
           "target": "frontend/lib/status.ts",
           "kind": "import",
           "line": 11
+        },
+        {
+          "target": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+          "kind": "import",
+          "line": 14
         }
       ]
     },
@@ -153646,46 +153837,13 @@
   ],
   "pending_discovery": [
     {
-      "id": "pending:semantic-closure",
-      "owner": "A",
-      "detail": "Module closure includes all reachable imports/re-exports and co-located JSX functions; symbol-level use and condition feasibility require reconciliation. No claim that every candidate renders on every associated route."
-    },
-    {
-      "id": "pending:dynamic-identities",
-      "owner": "A",
-      "detail": "AST map callsites enumerate repeated source definitions, not each data-dependent row, tab option, chart series or nested tree node. Runtime must attach fixture row/node identity and parent conditions; no finite production instance count claimed."
-    },
-    {
-      "id": "pending:conditional-disclosure-exhaustiveness",
-      "owner": "A",
-      "detail": "Native role/title/details and class hints plus custom JSX calls discover candidates, not proof of semantic disclosure exhaustiveness. Manually reconcile CSS hover/focus tooltips, DOM portals, imperative charts/context menus, non-JSX render factories and dynamically chosen component registries."
-    },
-    {
-      "id": "pending:state-applicability",
-      "owner": "A",
-      "detail": "Nine-state template is conservatively pending for all instances. Domain lanes B-I must split zero/false/null/absent and cancel/error scenarios, provide fixtures and source-backed N/A where appropriate; no universal fixture or state pass claimed."
-    },
-    {
-      "id": "pending:slot-history",
-      "owner": "A",
-      "detail": "Each primary route has applicable exact slot page or nearest default in roots. Soft navigation may retain earlier slot content; Task 2 must map retained instances to their source entry instead of treating current URL closure as exhaustive history."
-    },
-    {
-      "id": "pending:private-crash-exposure",
-      "owner": "A",
-      "source": "frontend/app/__test-crash/page.tsx",
-      "line": 5,
-      "detail": "Resolve private underscore source against actual Next route manifest and dev/prod response; do not claim Frame error-boundary coverage from this source."
-    },
-    {
       "id": "pending:backend-restart",
       "owner": "I",
-      "detail": "No backend run/restart performed in source task. Recovery mock plus browser reload coverage is not a real database/process restart certification."
-    },
-    {
-      "id": "pending:shared-component-ownership",
-      "owner": "A",
-      "detail": "Definition owners use domain/path defaults and explicit Settings section handoff. Reused chart/report/portfolio widgets can require multiple numeric lanes in route context; owning lanes must confirm interactions and do not infer one owner is sole arithmetic authority."
+      "detail": "Browser storage reload and backend recovery mocks exist; no actual backend process/database restart performed or certified. Source config hash update is provenance only.",
+      "status": "pending",
+      "evidence": [
+        "runtime/README.md; runtime/observation-source-links.json"
+      ]
     }
   ],
   "component_files_not_reached": [
