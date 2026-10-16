@@ -1,0 +1,513 @@
+{
+  "source_sha": "All B-owned definition files byte-identical between A baseline 27fe5182 and B baseline 880c8441; this establishes ID/source compatibility, not runtime coverage.",
+  "A_inventory_sha": "6309c0636f8021e212d8014e3df2fe15394c0659",
+  "A_inventory_status": "incomplete-source-structural-discovery; semantic and runtime reconciliation pending",
+  "definition_count": 36,
+  "definitions": [
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-1-regime/page.tsx#Step1RegimePage",
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "component": "Step1RegimePage",
+      "presentation_owner": "J",
+      "evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Regime page calculations, selected states and gates tested; shared indicator variants only where explicitly captured."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-2-universe/page.tsx#Step2Page",
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "component": "Step2Page",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#ParamRow",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "ParamRow",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SectionBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "SectionBlock",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#Step3Page",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "Step3Page",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SubGroupBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "SubGroupBlock",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/IvThresholdsSection.tsx#IvThresholdsSection",
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "component": "IvThresholdsSection",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#AtrPairRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "AtrPairRow",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#DaysOfWeekPicker",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "DaysOfWeekPicker",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#FundamentalsGateSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "FundamentalsGateSection",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OperatorTimezoneSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "OperatorTimezoneSection",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OverrideInput",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "OverrideInput",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#PremiumStopSettingNotes",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "PremiumStopSettingNotes",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "RegimeForm",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SaveButton",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SaveButton",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScanForm",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleEntryRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScheduleEntryRow",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScheduleSection",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SettingsPage",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SpreadsSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SpreadsSection",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "StrategyScanForm",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ThemeForm",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#Toggle",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "Toggle",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#Row",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "component": "Row",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#SectionIntro",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "component": "SectionIntro",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/components/molecules/ConfigHealthChip/index.tsx#ConfigHealthChip",
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "component": "ConfigHealthChip",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/components/molecules/RegimeIndicator/index.tsx#RegimeIndicator",
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "component": "RegimeIndicator",
+      "presentation_owner": "J",
+      "evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Regime page calculations, selected states and gates tested; shared indicator variants only where explicitly captured."
+    },
+    {
+      "id": "surface:frontend/components/molecules/RenameProfileDialog/index.tsx#RenameProfileDialog",
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "component": "RenameProfileDialog",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/components/molecules/SaveProfileDialog/index.tsx#SaveProfileDialog",
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "component": "SaveProfileDialog",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/components/organisms/ConfigHealthBanner/index.tsx#ConfigHealthBanner",
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "component": "ConfigHealthBanner",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/components/organisms/NavItems/index.tsx#SettingsIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "component": "SettingsIcon",
+      "presentation_owner": "J",
+      "evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Nine Settings sections inventoried; selected save/state cases tested. Broker operations and conditional jobs/health tiers remain explicitly unverified."
+    },
+    {
+      "id": "surface:frontend/components/organisms/SearchProfileBar/index.tsx#SearchProfileBar",
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "component": "SearchProfileBar",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Controls/profile normal, expanded, empty, errors, boundaries and restart observations are detailed in the linked reports; no blanket per-component pass."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#NumField",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "NumField",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Saved strategy snapshot/store/request mapping covered; full Step4 strategy panel UI/state checks require D/#352 and final A ownership reconciliation."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#ResetToProfile",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "ResetToProfile",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Saved strategy snapshot/store/request mapping covered; full Step4 strategy panel UI/state checks require D/#352 and final A ownership reconciliation."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#SectionHeader",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "SectionHeader",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Saved strategy snapshot/store/request mapping covered; full Step4 strategy panel UI/state checks require D/#352 and final A ownership reconciliation."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "StrategyParamsPanel",
+      "presentation_owner": "J",
+      "evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "reconciled to evidence family; completion is per explicitly observed state only",
+      "limits": "Saved strategy snapshot/store/request mapping covered; full Step4 strategy panel UI/state checks require D/#352 and final A ownership reconciliation."
+    }
+  ],
+  "closure": "increment only; final A inventory and all unrun state obligations remain open; counts are not completion",
+  "open_cross_lane_boundaries": [
+    "A final source/runtime semantic reconciliation (#349)",
+    "D Step4 StrategyParamsPanel and actual tuning/strategy execution (#352)",
+    "F broker credential save/probe and risk/order enforcement (#354)",
+    "G actual notification delivery and scheduled execution (#355)",
+    "H real ingestion/provider/job behavior (#356)",
+    "I cross-store/concurrent-writer recovery (#357)",
+    "J complete presentation state matrix (#358)",
+    "Real frozen 15-minute provider fixture/model accuracy; existing provider-bar work #173"
+  ]
+}

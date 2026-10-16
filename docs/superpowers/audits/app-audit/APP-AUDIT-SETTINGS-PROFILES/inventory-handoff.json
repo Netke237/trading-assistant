@@ -303,5 +303,92 @@
       "detail": "Definition owners use domain/path defaults and explicit Settings section handoff. Reused chart/report/portfolio widgets can require multiple numeric lanes in route context; owning lanes must confirm interactions and do not infer one owner is sole arithmetic authority."
     }
   ],
-  "scope_status": "pending evidence; no correctness claim"
+  "scope_status": "pending evidence; no correctness claim",
+  "source_compatibility": [
+    {
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "A_baseline_sha256": "325e1aed8a66f63ff381aa12457c0dd4715d92a40ece201c28edf1c6da7e4c24",
+      "B_baseline_sha256": "325e1aed8a66f63ff381aa12457c0dd4715d92a40ece201c28edf1c6da7e4c24",
+      "same_source": true
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "A_baseline_sha256": "5787681aeb6972932da38c3ea0a30f7f1abfdae6abfa44cc66c9d4900cb8c5e0",
+      "B_baseline_sha256": "5787681aeb6972932da38c3ea0a30f7f1abfdae6abfa44cc66c9d4900cb8c5e0",
+      "same_source": true
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "A_baseline_sha256": "6ec29199030a5c8a7327d4c0cf7f24578d0e597ac434bc18c5c800d102c7d655",
+      "B_baseline_sha256": "6ec29199030a5c8a7327d4c0cf7f24578d0e597ac434bc18c5c800d102c7d655",
+      "same_source": true
+    },
+    {
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "A_baseline_sha256": "e5d97abeb61b457b3b2cb29326fdae2b0fcdbb504b4cbb7d38b942ed0eefaa75",
+      "B_baseline_sha256": "e5d97abeb61b457b3b2cb29326fdae2b0fcdbb504b4cbb7d38b942ed0eefaa75",
+      "same_source": true
+    },
+    {
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "A_baseline_sha256": "a2c5eaead7795a11600cae0a954582080856d036983dfd710a696725ce1fc08a",
+      "B_baseline_sha256": "a2c5eaead7795a11600cae0a954582080856d036983dfd710a696725ce1fc08a",
+      "same_source": true
+    },
+    {
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "A_baseline_sha256": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+      "B_baseline_sha256": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "A_baseline_sha256": "c12fa60cf7f87b8e1da637f22a47f34799a16a3ac4ed38639c58f0c460da6ce5",
+      "B_baseline_sha256": "c12fa60cf7f87b8e1da637f22a47f34799a16a3ac4ed38639c58f0c460da6ce5",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "A_baseline_sha256": "0308cc90e10a2fbbf632457ca8c99f5d75709b04910f3fa53150adbd4f4151c8",
+      "B_baseline_sha256": "0308cc90e10a2fbbf632457ca8c99f5d75709b04910f3fa53150adbd4f4151c8",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "A_baseline_sha256": "462dd3ce44eba5b401792b4bdb8a1fab8aad49d98a65a960c53c17a266956379",
+      "B_baseline_sha256": "462dd3ce44eba5b401792b4bdb8a1fab8aad49d98a65a960c53c17a266956379",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "A_baseline_sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "B_baseline_sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "A_baseline_sha256": "8f7f893c5380d41f1b0e3c83f9ccfab382de9f3ecd8d293666cf3a433ee1bc18",
+      "B_baseline_sha256": "8f7f893c5380d41f1b0e3c83f9ccfab382de9f3ecd8d293666cf3a433ee1bc18",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "A_baseline_sha256": "1f24d4f1c97fbe2f72f311a258fa1a2c6fd5655f2f1ef35e8a589429dc03701a",
+      "B_baseline_sha256": "1f24d4f1c97fbe2f72f311a258fa1a2c6fd5655f2f1ef35e8a589429dc03701a",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "A_baseline_sha256": "8f3fd8543b1c68c47bc99178f28122410098fad9e85d1a290ebc03a72ddca2fb",
+      "B_baseline_sha256": "8f3fd8543b1c68c47bc99178f28122410098fad9e85d1a290ebc03a72ddca2fb",
+      "same_source": true
+    },
+    {
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "A_baseline_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "B_baseline_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "same_source": true
+    }
+  ],
+  "source_compatibility_note": "All B-owned definition files byte-identical between A baseline 27fe5182 and B baseline 880c8441; this establishes ID/source compatibility, not runtime coverage."
 }

@@ -2,7 +2,7 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "in_progress",
+  "status": "built evidence; independent artifact review pending; application acceptance open",
   "application_audit_clean": false,
   "plan_audit_clean": true,
   "code_audit_clean": false,
@@ -22,5 +22,36 @@
       "outstanding": []
     }
   ],
-  "central_state": "Not edited concurrently with lane A; lane-specific state is authoritative for this evidence work until coordinated reconciliation."
+  "central_state": "Not edited concurrently with lane A; lane-specific state is authoritative for this evidence work until coordinated reconciliation.",
+  "defect_issues": [
+    368,
+    369,
+    370,
+    371,
+    372,
+    373,
+    374,
+    375,
+    377,
+    380,
+    381,
+    382,
+    383,
+    384,
+    385,
+    386,
+    387,
+    388
+  ],
+  "capture_tasks": {
+    "365": "completed evidence; closure pending push",
+    "366": "closed after 6ac38762 push",
+    "367": "completed evidence in 6e850b66"
+  },
+  "residuals": [
+    "Final Lane A runtime/state reconciliation",
+    "Defect remediation and regression retests",
+    "Frozen real15-minute provider/model fixture",
+    "Explicit per-family not-run and cross-lane integration boundaries"
+  ]
 }
