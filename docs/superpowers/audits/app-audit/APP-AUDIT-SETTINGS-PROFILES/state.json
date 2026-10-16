@@ -2,7 +2,7 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "evidence independently reviewed; PR publication; application acceptance open",
+  "status": "evidence published in draft PR #392; independent artifact review clean; application acceptance open",
   "application_audit_clean": false,
   "plan_audit_clean": true,
   "code_audit_clean": true,
@@ -69,5 +69,13 @@
     "Explicit per-family not-run and cross-lane integration boundaries"
   ],
   "integrated_main_sha": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
-  "verification": "resume-verification.json"
+  "verification": "resume-verification.json",
+  "publication": {
+    "pr": "https://github.com/Netke237/trading-assistant/pull/392",
+    "draft": true,
+    "parent_notice": "https://github.com/Netke237/trading-assistant/issues/350#issuecomment-6222855023",
+    "programme_notice": "https://github.com/Netke237/trading-assistant/issues/348#issuecomment-6222855797",
+    "lane_A_notice": "https://github.com/Netke237/trading-assistant/issues/349#issuecomment-6222856551",
+    "merge": "not requested; application acceptance and final reconciliation remain open"
+  }
 }
