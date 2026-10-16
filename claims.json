@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-settings-profiles-9e622f43",
       "claimed_at": "2026-10-16T11:44:55Z",
-      "expires_at": "2026-10-16T14:58:42Z",
+      "expires_at": "2026-10-16T14:58:45Z",
       "note": "Continue #350 audit evidence and defect publication",
       "task": "APP-AUDIT-SETTINGS-PROFILES"
     },
