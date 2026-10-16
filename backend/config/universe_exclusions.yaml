@@ -4,7 +4,7 @@
 # Edit by hand; read fresh on every scan (no restart needed). Decision STOCKS-PARAMS-PER-HORIZON-2026-10-05.
 # Evidence: docs/superpowers/measurements/2026-10-05-phase-c-evidence/bar_basis.md (the 29 symbols
 # stale_reasons flags) plus each symbol's last stored bar in ohlcv_daily, read 2026-10-05 (data end 2026-10-02).
-# 2026-10-16 update (decision D3-EXCLUSIONS-2026-10-16, Kenneth on #114): evidence
+# 2026-10-16 update (decision D3-EXCLUSIONS-2026-10-16: proposal on #114, approved by Kenneth in chat 2026-10-16): evidence
 # docs/superpowers/measurements/2026-10-15-d3-history-recovery/ (single-provider rebuild + full-span
 # bar-basis check, data end 2026-10-15). CTVA and DOC removed; 7 ended feeds, BCB, MAA and MU added.
 # Quote any ticker YAML would read as a boolean (ON, NO, Y, ...).
@@ -28,7 +28,7 @@ symbols:
   EA:   {scope: scan, reason: "price feed ended 2026-08-10 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
   EQR:  {scope: scan, reason: "price feed ended 2026-08-21 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
 
-  # scope: scan — price feed ended (no bars in the 30+ days before 2026-10-15; Tiingo and yfinance return none later)
+  # scope: scan — price feed ended (last stored bar 30+ days before 2026-10-15; FBHS, PKI, MMC, AXL: the 2026-10-15 rebuild found no later bars at Tiingo or yfinance)
   FBHS: {scope: scan, reason: "price feed ended 2022-12-14 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
   PKI:  {scope: scan, reason: "price feed ended 2023-05-15 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
   DFS:  {scope: scan, reason: "price feed ended 2025-05-16 (no bars in the 30+ days before 2026-10-15); likely delisted", added: 2026-10-16}
