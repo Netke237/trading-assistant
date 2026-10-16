@@ -7,6 +7,14 @@
       "expires_at": "2026-10-16T23:26:57Z",
       "note": "Resumed evidence review and PR publication; application acceptance remains open",
       "task": "APP-AUDIT-SETTINGS-PROFILES"
+    },
+    {
+      "agent": "codex",
+      "branch": "board/app-audit-inventory-8842811f",
+      "claimed_at": "2026-10-16T20:28:10Z",
+      "expires_at": "2026-10-16T23:28:10Z",
+      "note": "Resume #349 final inventory reconciliation and independent review",
+      "task": "APP-AUDIT-INVENTORY"
     }
   ]
 }
