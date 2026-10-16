@@ -208,7 +208,7 @@ async def test_fib_pullback_rejects_lookback_below_minimum():
 #
 # Fib pullback returns a bare list of setups and has no `rejected` list, so a
 # `scope: scan` symbol is skipped and named in one INFO log line. The shipped
-# config/universe_exclusions.yaml lists CTVA with scope scan.
+# config/universe_exclusions.yaml lists PXD with scope scan.
 
 
 @pytest.mark.asyncio
@@ -220,13 +220,13 @@ async def test_fib_pullback_skips_a_typed_excluded_symbol(caplog):
         mock_bars.return_value = []
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/fib-pullback", json={
-                "symbols": ["AAPL", "ctva"],
+                "symbols": ["AAPL", "pxd"],
                 "direction": "Bullish",
             })
     assert resp.status_code == 200, resp.text
-    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "CTVA was processed"
+    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "PXD was processed"
     skipped = [r for r in caplog.records
-               if r.levelno == logging.INFO and "CTVA" in r.getMessage()]
+               if r.levelno == logging.INFO and "PXD" in r.getMessage()]
     assert len(skipped) == 1, [r.getMessage() for r in caplog.records]
 
 
