@@ -1,0 +1,26 @@
+{
+  "phase": "APP-AUDIT-SETTINGS-PROFILES",
+  "issue": 350,
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "status": "in_progress",
+  "application_audit_clean": false,
+  "plan_audit_clean": true,
+  "code_audit_clean": false,
+  "audit_rounds": 1,
+  "plan_rounds": 1,
+  "code_rounds": 0,
+  "reviews": [
+    {
+      "stage": "plan",
+      "round": 1,
+      "reviewer": "/root/settings_profiles_plan_r1",
+      "scope": "plan.md SHA256 3350e499922759bbb4b6912c459addca5d65a8bc94119774a7282798a7b0f7c4 vs issue #350 and actual source",
+      "gate_findings": 0,
+      "coverage_findings": 0,
+      "scope_verified": true,
+      "fixes": [],
+      "outstanding": []
+    }
+  ],
+  "central_state": "Not edited concurrently with lane A; lane-specific state is authoritative for this evidence work until coordinated reconciliation."
+}

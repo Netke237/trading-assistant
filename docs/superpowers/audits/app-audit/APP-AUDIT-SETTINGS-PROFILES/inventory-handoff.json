@@ -1,0 +1,307 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "inventory_sha": "6309c0636f8021e212d8014e3df2fe15394c0659",
+  "inventory_source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "inventory_status": "incomplete-source-structural-discovery; semantic and runtime reconciliation pending",
+  "B_definitions": [
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-1-regime/page.tsx#Step1RegimePage",
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "component": "Step1RegimePage"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-2-universe/page.tsx#Step2Page",
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "component": "Step2Page"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#ParamRow",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "ParamRow"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SectionBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "SectionBlock"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#Step3Page",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "Step3Page"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SubGroupBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "component": "SubGroupBlock"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/IvThresholdsSection.tsx#IvThresholdsSection",
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "component": "IvThresholdsSection"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#AtrPairRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "AtrPairRow"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#DaysOfWeekPicker",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "DaysOfWeekPicker"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#FundamentalsGateSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "FundamentalsGateSection"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OperatorTimezoneSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "OperatorTimezoneSection"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OverrideInput",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "OverrideInput"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#PremiumStopSettingNotes",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "PremiumStopSettingNotes"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "RegimeForm"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SaveButton",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SaveButton"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScanForm"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleEntryRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScheduleEntryRow"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ScheduleSection"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SettingsPage"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SpreadsSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "SpreadsSection"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "StrategyScanForm"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "ThemeForm"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#Toggle",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "component": "Toggle"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#Row",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "component": "Row"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#SectionIntro",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "component": "SectionIntro"
+    },
+    {
+      "id": "surface:frontend/components/molecules/ConfigHealthChip/index.tsx#ConfigHealthChip",
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "component": "ConfigHealthChip"
+    },
+    {
+      "id": "surface:frontend/components/molecules/RegimeIndicator/index.tsx#RegimeIndicator",
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "component": "RegimeIndicator"
+    },
+    {
+      "id": "surface:frontend/components/molecules/RenameProfileDialog/index.tsx#RenameProfileDialog",
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "component": "RenameProfileDialog"
+    },
+    {
+      "id": "surface:frontend/components/molecules/SaveProfileDialog/index.tsx#SaveProfileDialog",
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "component": "SaveProfileDialog"
+    },
+    {
+      "id": "surface:frontend/components/organisms/ConfigHealthBanner/index.tsx#ConfigHealthBanner",
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "component": "ConfigHealthBanner"
+    },
+    {
+      "id": "surface:frontend/components/organisms/NavItems/index.tsx#SettingsIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "component": "SettingsIcon"
+    },
+    {
+      "id": "surface:frontend/components/organisms/SearchProfileBar/index.tsx#SearchProfileBar",
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "component": "SearchProfileBar"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#NumField",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "NumField"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#ResetToProfile",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "ResetToProfile"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#SectionHeader",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "SectionHeader"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "component": "StrategyParamsPanel"
+    }
+  ],
+  "settings_sections": [
+    {
+      "key": "theme",
+      "component": "ThemeForm",
+      "owner": "B",
+      "entry_action": "Settings > Appearance; local active='theme'",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 75
+    },
+    {
+      "key": "scan",
+      "component": "ScanForm",
+      "owner": "B",
+      "entry_action": "Settings > Scan; includes thresholds, spreads, scheduled scans and retention/timezone children",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 76
+    },
+    {
+      "key": "strategy",
+      "component": "StrategyScanForm",
+      "owner": "B",
+      "entry_action": "Settings > Strategy scan",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 81
+    },
+    {
+      "key": "brokers",
+      "component": "BrokersForm",
+      "owner": "F",
+      "entry_action": "Settings initial section or Brokers; paper/live locked states; fake credentials only",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 77
+    },
+    {
+      "key": "risk",
+      "component": "RiskForm",
+      "owner": "F",
+      "entry_action": "Settings > Risk; local draft and backend hydration",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 78
+    },
+    {
+      "key": "regime",
+      "component": "RegimeForm",
+      "owner": "B",
+      "entry_action": "Settings > Regime; markov presets and editable inputs",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 79
+    },
+    {
+      "key": "notifications",
+      "component": "NotificationForm",
+      "owner": "G",
+      "entry_action": "Settings > Notifications; Gmail/Telegram + retention; all sends blocked/mocked",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 80
+    },
+    {
+      "key": "data",
+      "component": "DataForm",
+      "owner": "H",
+      "entry_action": "Settings > Data; ingestion, EDGAR and SP500 schedules; all jobs blocked/mocked",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 82
+    },
+    {
+      "key": "tuning",
+      "component": "StrategyTuningForm",
+      "owner": "D",
+      "entry_action": "Settings > Strategy Tuning; job progress/proposals/expanded folds; all start/adopt/clear mocked",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 83
+    }
+  ],
+  "pending_A_discovery": [
+    {
+      "id": "pending:semantic-closure",
+      "owner": "A",
+      "detail": "Module closure includes all reachable imports/re-exports and co-located JSX functions; symbol-level use and condition feasibility require reconciliation. No claim that every candidate renders on every associated route."
+    },
+    {
+      "id": "pending:dynamic-identities",
+      "owner": "A",
+      "detail": "AST map callsites enumerate repeated source definitions, not each data-dependent row, tab option, chart series or nested tree node. Runtime must attach fixture row/node identity and parent conditions; no finite production instance count claimed."
+    },
+    {
+      "id": "pending:conditional-disclosure-exhaustiveness",
+      "owner": "A",
+      "detail": "Native role/title/details and class hints plus custom JSX calls discover candidates, not proof of semantic disclosure exhaustiveness. Manually reconcile CSS hover/focus tooltips, DOM portals, imperative charts/context menus, non-JSX render factories and dynamically chosen component registries."
+    },
+    {
+      "id": "pending:state-applicability",
+      "owner": "A",
+      "detail": "Nine-state template is conservatively pending for all instances. Domain lanes B-I must split zero/false/null/absent and cancel/error scenarios, provide fixtures and source-backed N/A where appropriate; no universal fixture or state pass claimed."
+    },
+    {
+      "id": "pending:slot-history",
+      "owner": "A",
+      "detail": "Each primary route has applicable exact slot page or nearest default in roots. Soft navigation may retain earlier slot content; Task 2 must map retained instances to their source entry instead of treating current URL closure as exhaustive history."
+    },
+    {
+      "id": "pending:private-crash-exposure",
+      "owner": "A",
+      "source": "frontend/app/__test-crash/page.tsx",
+      "line": 5,
+      "detail": "Resolve private underscore source against actual Next route manifest and dev/prod response; do not claim Frame error-boundary coverage from this source."
+    },
+    {
+      "id": "pending:backend-restart",
+      "owner": "I",
+      "detail": "No backend run/restart performed in source task. Recovery mock plus browser reload coverage is not a real database/process restart certification."
+    },
+    {
+      "id": "pending:shared-component-ownership",
+      "owner": "A",
+      "detail": "Definition owners use domain/path defaults and explicit Settings section handoff. Reused chart/report/portfolio widgets can require multiple numeric lanes in route context; owning lanes must confirm interactions and do not infer one owner is sole arithmetic authority."
+    }
+  ],
+  "scope_status": "pending evidence; no correctness claim"
+}

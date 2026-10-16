@@ -1,0 +1,398 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "python": "Python 3.11.16",
+  "node": "v24.19.0",
+  "browser": "Chromium 151.0.7922.173 built on Debian GNU/Linux 13 (trixie)",
+  "frontend": {
+    "framer-motion": "^11.15.0",
+    "lightweight-charts": "^5.0.0",
+    "next": "15.5.23",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.2"
+  },
+  "backend_packages": [
+    {
+      "name": "aiosqlite",
+      "version": "0.22.1"
+    },
+    {
+      "name": "alembic",
+      "version": "1.19.1"
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.5"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0"
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1"
+    },
+    {
+      "name": "APScheduler",
+      "version": "3.11.3"
+    },
+    {
+      "name": "asyncpg",
+      "version": "0.31.0"
+    },
+    {
+      "name": "backtesting",
+      "version": "0.6.6"
+    },
+    {
+      "name": "beautifulsoup4",
+      "version": "4.15.0"
+    },
+    {
+      "name": "bokeh",
+      "version": "3.9.2"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22"
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2"
+    },
+    {
+      "name": "click",
+      "version": "8.5.0"
+    },
+    {
+      "name": "cloudpickle",
+      "version": "3.1.2"
+    },
+    {
+      "name": "contourpy",
+      "version": "1.3.3"
+    },
+    {
+      "name": "curl_cffi",
+      "version": "0.16.3"
+    },
+    {
+      "name": "cycler",
+      "version": "0.12.1"
+    },
+    {
+      "name": "exchange_calendars",
+      "version": "4.13.2"
+    },
+    {
+      "name": "fastapi",
+      "version": "0.141.1"
+    },
+    {
+      "name": "fonttools",
+      "version": "4.66.1"
+    },
+    {
+      "name": "greenlet",
+      "version": "3.5.6"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0"
+    },
+    {
+      "name": "hmmlearn",
+      "version": "0.3.3"
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9"
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.13.1"
+    },
+    {
+      "name": "httptools",
+      "version": "0.8.0"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1"
+    },
+    {
+      "name": "httpx2",
+      "version": "2.13.1"
+    },
+    {
+      "name": "idna",
+      "version": "3.20"
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.1"
+    },
+    {
+      "name": "Jinja2",
+      "version": "3.1.6"
+    },
+    {
+      "name": "joblib",
+      "version": "1.6.0"
+    },
+    {
+      "name": "kiwisolver",
+      "version": "1.5.1"
+    },
+    {
+      "name": "korean_lunar_calendar",
+      "version": "0.4.0"
+    },
+    {
+      "name": "Mako",
+      "version": "1.4.3"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.4"
+    },
+    {
+      "name": "matplotlib",
+      "version": "3.11.2"
+    },
+    {
+      "name": "multitasking",
+      "version": "0.0.13"
+    },
+    {
+      "name": "narwhals",
+      "version": "2.26.0"
+    },
+    {
+      "name": "numpy",
+      "version": "2.4.6"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3"
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.6"
+    },
+    {
+      "name": "pandas_market_calendars",
+      "version": "5.5.0"
+    },
+    {
+      "name": "peewee",
+      "version": "4.5.3"
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0"
+    },
+    {
+      "name": "pip",
+      "version": "24.0"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.12.4"
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0"
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2"
+    },
+    {
+      "name": "pycparser",
+      "version": "3.1"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.46.4"
+    },
+    {
+      "name": "pydantic-settings",
+      "version": "2.15.0"
+    },
+    {
+      "name": "pyluach",
+      "version": "2.3.0"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.3"
+    },
+    {
+      "name": "pytest",
+      "version": "8.1.1"
+    },
+    {
+      "name": "pytest-asyncio",
+      "version": "0.23.8"
+    },
+    {
+      "name": "pytest-mock",
+      "version": "3.15.1"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.2.2"
+    },
+    {
+      "name": "pytz",
+      "version": "2026.5"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.1"
+    },
+    {
+      "name": "quantstats",
+      "version": "0.0.81"
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2"
+    },
+    {
+      "name": "respx",
+      "version": "0.23.1"
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.9.1"
+    },
+    {
+      "name": "scipy",
+      "version": "1.17.1"
+    },
+    {
+      "name": "seaborn",
+      "version": "0.13.2"
+    },
+    {
+      "name": "setuptools",
+      "version": "79.0.1"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0"
+    },
+    {
+      "name": "soupsieve",
+      "version": "2.10"
+    },
+    {
+      "name": "SQLAlchemy",
+      "version": "2.0.52"
+    },
+    {
+      "name": "starlette",
+      "version": "1.7.0"
+    },
+    {
+      "name": "tabulate",
+      "version": "0.10.0"
+    },
+    {
+      "name": "tastytrade",
+      "version": "13.2.3"
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.7.0"
+    },
+    {
+      "name": "toolz",
+      "version": "1.2.0"
+    },
+    {
+      "name": "tornado",
+      "version": "6.5.10"
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.4"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4"
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.5"
+    },
+    {
+      "name": "tzlocal",
+      "version": "5.4.4"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0"
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.52.1"
+    },
+    {
+      "name": "uvloop",
+      "version": "0.23.0"
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.3.0"
+    },
+    {
+      "name": "websockets",
+      "version": "17.2"
+    },
+    {
+      "name": "wsproto",
+      "version": "1.3.2"
+    },
+    {
+      "name": "xyzservices",
+      "version": "2026.9.1"
+    },
+    {
+      "name": "yfinance",
+      "version": "1.5.2"
+    }
+  ],
+  "input_sha256": {
+    "backend/config/contract_rules.yaml": "79e2ecb99848022ec9d912ee0e5812637a578bc5d8893161ae7b94e1822a4346",
+    "backend/config/risk_rules.yaml": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968",
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/config/settings.example.yaml": "3d6a4080a8f57fa1abe2b928e794661ce30a04829881a53eb6e2c849f9ee66dc",
+    "backend/config/strategy_params.yaml": "6c0eb765bd79ea155fbea8288e46e2b7ac9ff1432c4843b5856827b033a35f3c",
+    "backend/config/strategy_watches.yaml": "b6c55622832b2a9f471394269c367db2adb3c31ba719b12bc58ab9a217d2dd20",
+    "backend/config/universe_exclusions.yaml": "b02aa95512ec048e9cc78dfc174fb5c582f1ba8d77bae5886c95b8efac041acb",
+    "frontend/package-lock.json": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+    "docs/search-profiles/search-profiles-export.json": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+    "docs/search-profiles/import-search-profiles.js": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6"
+  },
+  "execution": "isolated synthetic/fixture checks unless explicitly labelled otherwise; no live provider assertion"
+}
