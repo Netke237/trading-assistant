@@ -58,6 +58,7 @@ _state: dict[str, Any] = {
     "rebuild_errors": {},
     "single_provider_updated": 0,
     "single_provider_failed_symbols": [],
+    "single_provider_errors": {},
 }
 _task: asyncio.Task | None = None
 _ALPACA_CHUNK = 100
@@ -86,6 +87,7 @@ class IngestionResult:
     rebuild_errors: dict[str, str] = field(default_factory=dict)
     single_provider_updated: int = 0
     single_provider_failed_symbols: list[str] = field(default_factory=list)
+    single_provider_errors: dict[str, str] = field(default_factory=dict)
 
 
 def get_ingestion_state() -> dict:
@@ -198,6 +200,7 @@ async def run_ingestion(
         "rebuild_errors": {},
         "single_provider_updated": 0,
         "single_provider_failed_symbols": [],
+        "single_provider_errors": {},
     })
 
     errors: list[str] = []
@@ -270,6 +273,8 @@ async def run_ingestion(
                 # A single-provider symbol's own update; never rebuilt in the same pass.
                 _state["failed"] += 1
                 _state["single_provider_failed_symbols"].append(sym)
+                _state["single_provider_errors"][sym] = str(exc)
+                logger.warning("ingestion: single-provider update refused for %s — %s", sym, exc)
                 errors.append(f"{sym}: single-provider update refused — {exc}")
             except Exception as exc:
                 logger.warning("ingestion: history failed for %s — %s", sym, exc)
@@ -326,6 +331,7 @@ async def run_ingestion(
         rebuild_errors=dict(_state["rebuild_errors"]),
         single_provider_updated=_state["single_provider_updated"],
         single_provider_failed_symbols=list(_state["single_provider_failed_symbols"]),
+        single_provider_errors=dict(_state["single_provider_errors"]),
     )
 
 

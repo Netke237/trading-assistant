@@ -74,7 +74,7 @@ async def env(monkeypatch):
     monkeypatch.setattr(job, "get_alpaca_client", AsyncMock(return_value=object()))
     monkeypatch.setattr(job, "fetch_daily_bars_batch", batch_mock)
     yield {"factory": factory, "clock": clock, "provider": provider,
-           "tiingo": tiingo_mock, "yfinance": yf_mock, "batch": batch_mock}
+           "tiingo": tiingo_mock, "tiingo_fetch": tiingo_fetch, "yfinance": yf_mock, "batch": batch_mock}
     await engine.dispose()
 
 
@@ -128,7 +128,7 @@ async def test_seam_refused_symbol_is_counted_and_rebuilt_not_failed(env):
     assert first == days(fetch_start, fetch_end)[0]
     for key in ("rebuilt", "rebuilt_symbols", "rebuild_details", "rebuild_refused",
                 "rebuild_refused_symbols", "rebuild_errors", "single_provider_updated",
-                "single_provider_failed_symbols"):
+                "single_provider_failed_symbols", "single_provider_errors"):
         assert state[key] == getattr(result, key)
     assert result.alpaca_count == 0 and result.single_provider_updated == 0
     assert result.errors == []
@@ -204,6 +204,37 @@ async def test_single_provider_update_refused_is_reported_without_rebuild(env):
 
 
 @pytest.mark.asyncio
+async def test_single_provider_refusal_reason_is_in_status_and_log(env, app, caplog):
+    """HISTORY-INGEST-GAPS piece 2: the reason is visible per symbol, then reset."""
+    factory = env["factory"]
+    await seed_alpaca(factory, "TEST")
+    await seed_alpaca(factory, "OTHER")
+    await job.run_ingestion(["TEST", "OTHER"])
+    env["clock"]["now"] = NOW2
+    env["tiingo"].side_effect = RuntimeError("tiingo down")
+    with caplog.at_level("WARNING", logger="app.services.ingestion_job"):
+        result = await job.run_ingestion(["TEST", "OTHER"])
+    reasons = {"TEST": "tiingo: tiingo down", "OTHER": "tiingo: tiingo down"}
+    assert result.single_provider_failed_symbols == ["TEST", "OTHER"]
+    assert result.single_provider_errors == reasons
+    assert job.get_ingestion_state()["single_provider_errors"] == reasons
+    logged = [r.getMessage() for r in caplog.records if r.name == "app.services.ingestion_job"]
+    assert "ingestion: single-provider update refused for TEST — tiingo: tiingo down" in logged
+    assert "ingestion: single-provider update refused for OTHER — tiingo: tiingo down" in logged
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        status = (await ac.get("/api/data/ingest/status")).json()
+    assert status["single_provider_errors"] == reasons
+    assert status["single_provider_failed_symbols"] == ["TEST", "OTHER"]
+    assert set(status["single_provider_symbols"]) == {"TEST", "OTHER"}
+
+    env["tiingo"].side_effect = env["tiingo_fetch"]
+    after = await job.run_ingestion(["TEST", "OTHER"])
+    assert after.failed == 0 and after.single_provider_updated == 2
+    assert after.single_provider_errors == {}
+    assert job.get_ingestion_state()["single_provider_errors"] == {}
+
+
+@pytest.mark.asyncio
 async def test_rebuild_request_rebuilds_symbol_that_is_not_seam_refused(env, monkeypatch):
     factory = env["factory"]
     env["provider"]["tiingo_factor"] = 1.0
@@ -252,7 +283,7 @@ async def test_state_has_new_keys_before_any_run():
     state = job.get_ingestion_state()
     for key in ("rebuilt", "rebuilt_symbols", "rebuild_details", "rebuild_refused",
                 "rebuild_refused_symbols", "rebuild_errors", "single_provider_updated",
-                "single_provider_failed_symbols"):
+                "single_provider_failed_symbols", "single_provider_errors"):
         assert key in state
 
 
