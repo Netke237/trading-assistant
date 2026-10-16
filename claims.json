@@ -7,6 +7,14 @@
       "expires_at": "2026-10-16T07:24:36Z",
       "note": "Readable setup evidence and explicit bounded raw disclosures",
       "task": "PREBREAKOUT-READABLE-EVIDENCE"
+    },
+    {
+      "agent": "codex",
+      "branch": "board/app-audit-inventory-8842811f",
+      "claimed_at": "2026-10-16T04:27:54Z",
+      "expires_at": "2026-10-16T07:27:54Z",
+      "note": "Execute APP-AUDIT lane A inventory and navigation evidence for #349",
+      "task": "APP-AUDIT-INVENTORY"
     }
   ]
 }
