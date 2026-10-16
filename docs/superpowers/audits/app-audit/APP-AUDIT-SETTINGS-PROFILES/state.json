@@ -2,13 +2,13 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "built evidence; independent artifact review pending; application acceptance open",
+  "status": "evidence independently reviewed; PR publication; application acceptance open",
   "application_audit_clean": false,
   "plan_audit_clean": true,
-  "code_audit_clean": false,
-  "audit_rounds": 1,
+  "code_audit_clean": true,
+  "audit_rounds": 2,
   "plan_rounds": 1,
-  "code_rounds": 0,
+  "code_rounds": 1,
   "reviews": [
     {
       "stage": "plan",
@@ -20,6 +20,20 @@
       "scope_verified": true,
       "fixes": [],
       "outstanding": []
+    },
+    {
+      "stage": "code/artifact",
+      "round": 1,
+      "reviewer": "/root/settings_profiles_artifact_r1",
+      "scope": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336...c3945a4024f8bc767c8608a99ee0b59988fac03e; 74 lane-only files; binary diff SHA256 470b9005769f51f65856d1416aea74c3d0725005d6e8fd8fcfad334140eee602",
+      "gate_findings": 0,
+      "coverage_findings": 0,
+      "scope_verified": true,
+      "fixes": [],
+      "outstanding": [],
+      "existing_coverage_obligations": "Real15-minute provider fixture, final A runtime/state reconciliation, explicitly unrun per-family/integration boundaries; application acceptance remains open.",
+      "record": "review-code-r1.md",
+      "file_hashes": "review-code-r1.json"
     }
   ],
   "central_state": "Not edited concurrently with lane A; lane-specific state is authoritative for this evidence work until coordinated reconciliation.",
@@ -44,14 +58,16 @@
     388
   ],
   "capture_tasks": {
-    "365": "completed evidence; closure pending push",
+    "365": "closed after published c869084d/0ebc851d evidence verified; closure 2026-10-16",
     "366": "closed after 6ac38762 push",
-    "367": "completed evidence in 6e850b66"
+    "367": "closed after 6e850b66 push"
   },
   "residuals": [
     "Final Lane A runtime/state reconciliation",
     "Defect remediation and regression retests",
     "Frozen real15-minute provider/model fixture",
     "Explicit per-family not-run and cross-lane integration boundaries"
-  ]
+  ],
+  "integrated_main_sha": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "verification": "resume-verification.json"
 }

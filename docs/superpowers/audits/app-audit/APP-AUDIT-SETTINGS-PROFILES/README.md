@@ -5,7 +5,8 @@ Source frozen at `880c8441841cc22d5090cdc5f984e4cf7e3d9a8d`.
 Application correctness is not clean; no product fixes or calibration changes
 are included. This branch publishes reproducible evidence and separately
 claimable remediation issues. #350 remains open for remediation retests,
-unverified boundaries and final Lane A reconciliation. No merge is requested.
+unverified boundaries and final Lane A reconciliation. This evidence publication
+does not request application acceptance or closure of #350.
 
 ## Evidence and checks
 
@@ -102,7 +103,21 @@ Plan stage: one fresh independent reviewer, `/root/settings_profiles_plan_r1`,
 reviewed plan SHA256
 `3350e499922759bbb4b6912c459addca5d65a8bc94119774a7282798a7b0f7c4`:
 zero numeric/persistence and requested-coverage findings after scope recheck.
-Artifact code/evidence review is pending; application-code implementation stage
-is N/A because no application code changed. Executable evidence scripts still
-require that independent artifact review. Known product failures are not a
-clean application gate and do not authorize merging or closing #350.
+Artifact code/evidence stage: one fresh independent reviewer,
+`/root/settings_profiles_artifact_r1`, reviewed the complete 74-file evidence
+diff after merging main `00b4ab54`: zero gate findings and zero concealed
+coverage/evidence-integrity findings. [Review record](review-code-r1.md) and
+[exact scope/file hashes](review-code-r1.json) record independent replays and
+limitations. No fixes were required. Application-code implementation is N/A
+because this PR changes no application files.
+
+[Post-merge verification](resume-verification.json): typecheck and all 268
+frontend suites / 5,477 tests passed. The isolated supplemental backend subset
+passed 89 tests with the same four exclusions; the original 3 failures / 88
+passes remain recorded. All frozen input hashes match the frozen baseline.
+Current main changed `universe_exclusions.yaml`; old captures remain frozen,
+and the new verification is separately labelled. Lane A's remote inventory
+remains at `6309c063`, with final runtime/state reconciliation unavailable.
+Capture children #365, #366 and #367 are closed. Known product failures and
+coverage obligations remain open in #350; a clean evidence review does not
+establish a clean application gate.
