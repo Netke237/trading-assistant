@@ -4648,18 +4648,33 @@
       "summary": "Class-share tickers in Tiingo/yfinance spelling, single-provider failure reasons in the ingest status and log, and the startup staleness reference (SPY) in the nightly universe.",
       "name": "History ingestion gaps (#114 follow-ups)",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "branch": "claude/elated-jemison-c30f32",
       "plan": "docs/superpowers/plans/2026-10-16-history-ingest-gaps-plan.md",
-      "notes": "Plan written; plan audit pending.",
+      "notes": "Plan round 1 clean at dc8dc94b (plan stage closed). Code stage not started; audit_clean stays false until a code round is clean.",
       "verify": {
         "kind": "present",
         "path": "backend/app/data/provider_symbols.py",
         "pattern": "def dash_class_ticker",
         "note": "PRESENCE ONLY of the class-share ticker mapping. Correctness requires tests and the independent phase audit."
       },
-      "audit_history": []
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent a32781a0739f981c7 (fresh, bmad-review-adversarial-general)",
+          "scope": "dc8dc94b docs/superpowers/plans/2026-10-16-history-ingest-gaps-plan.md (whole plan) against tiingo.py, governor.py, universe_presets.py, sp500.csv, market.py yfinance paths, historical_store.py, history_backfill.py, ingestion_job.py, ingestion_scheduler.py, history_retention.py, main.py startup",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "below_gate_logged": [
+            "A user-entered foreign-suffix symbol (e.g. VOD.L) would become VOD-L for Tiingo/yfinance and stop refreshing there (loss of refresh, not wrong data; no such symbols in use)",
+            "get_ingestion_state() is a shallow copy, so nested status dicts are shared with live state (pre-existing for rebuild_errors)"
+          ]
+        }
+      ]
     }
   ],
   "already_shipped": [
