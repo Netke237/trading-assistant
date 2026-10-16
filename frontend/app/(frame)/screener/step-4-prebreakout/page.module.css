@@ -168,6 +168,8 @@
 .evidenceFields { display: flex; flex-direction: column; gap: 8px; }
 .evidenceFields dt { color: var(--text-primary); }
 .evidenceFields dd { margin: 2px 0 0; white-space: pre-wrap; font-family: var(--font-mono); }
+.evidenceGroup { padding-left: var(--space-2); border-left: 1px solid var(--border-subtle); }
+.evidenceGroup > .evidenceFields { margin: var(--space-2) 0; }
 
 .pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 90px 60px; }
 .selectedChart { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -178,7 +180,7 @@
 .scoreContextGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .contextCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; }
 .contextDisclosure { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
-.contextDisclosure pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
+.contextDisclosure pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); }
 @media (max-width: 1100px) { .scoreContextGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .contextGrid, .scoreContextGrid { grid-template-columns: 1fr; } }
 .resultsHeading { display: flex; flex-direction: column; gap: 4px; }
