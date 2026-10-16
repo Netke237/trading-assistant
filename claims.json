@@ -12,7 +12,7 @@
       "agent": "codex",
       "branch": "board/app-audit-inventory-8842811f",
       "claimed_at": "2026-10-16T11:45:45Z",
-      "expires_at": "2026-10-16T14:50:29Z",
+      "expires_at": "2026-10-16T14:59:20Z",
       "note": "Resume #349 runtime evidence after worker usage-limit interruption",
       "task": "APP-AUDIT-INVENTORY"
     },
