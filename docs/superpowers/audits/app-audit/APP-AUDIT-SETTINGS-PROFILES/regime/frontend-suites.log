@@ -1,0 +1,96 @@
+
+> bamendjou-frontend@0.1.0 test
+> jest --runInBand --runTestsByPath lib/__tests__/regimeDuration.test.ts lib/__tests__/regimeAlignment.test.ts lib/__tests__/regimeGateOverrides.test.ts components/organisms/RunScanButton/__tests__/regimeGate.test.tsx app/(frame)/screener/step-1-regime/__tests__/regimeSentimentWrite.test.tsx
+
+PASS app/(frame)/screener/step-1-regime/__tests__/regimeSentimentWrite.test.tsx
+PASS components/organisms/RunScanButton/__tests__/regimeGate.test.tsx
+  ● Console
+
+    console.error
+      An update to RunScanButton inside a test was not wrapped in act(...).
+      
+      When testing, code that causes React state updates should be wrapped into act(...):
+      
+      act(() => {
+        /* fire events that update state */
+      });
+      /* assert on the output */
+      
+      This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+      485 |       pickedContracts:    {},
+      486 |       contractsBySymbol:  {},
+    > 487 |       setScanState:    (s, at, durationMs) => set({ scanState: s, scanAt: at ?? null, scanDurationMs: durationMs ?? null }),
+          |                                               ^
+      488 |       setContext:      (c) => set((state) => {
+      489 |         if (c === null) return { context: null };
+      490 |         const prev = state.context;
+
+      at node_modules/react-dom/cjs/react-dom-client.development.js:18758:19
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18757:9)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at forceStoreRerender (node_modules/react-dom/cjs/react-dom-client.development.js:8262:24)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:8247:11
+      at node_modules/zustand/vanilla.js:11:39
+          at Set.forEach (<anonymous>)
+      at setState (node_modules/zustand/vanilla.js:11:17)
+      at node_modules/zustand/middleware.js:374:7
+      at setScanState (lib/scanStore.ts:487:47)
+      at components/organisms/RunScanButton/index.tsx:200:9
+
+    console.error
+      [RunScanButton] scan failed, is backend running on port 8000?
+
+      208 |       })
+      209 |       .catch(() => {
+    > 210 |         console.error('[RunScanButton] scan failed, is backend running on port 8000?');
+          |                 ^
+      211 |         useScanStore.getState().setRejectedLog([]);
+      212 |         setScanState('FAILED', startISO, Date.now() - t0);
+      213 |         useAlertStore.getState().addToast({
+
+      at components/organisms/RunScanButton/index.tsx:210:17
+
+    console.error
+      An update to RunScanButton inside a test was not wrapped in act(...).
+      
+      When testing, code that causes React state updates should be wrapped into act(...):
+      
+      act(() => {
+        /* fire events that update state */
+      });
+      /* assert on the output */
+      
+      This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+      485 |       pickedContracts:    {},
+      486 |       contractsBySymbol:  {},
+    > 487 |       setScanState:    (s, at, durationMs) => set({ scanState: s, scanAt: at ?? null, scanDurationMs: durationMs ?? null }),
+          |                                               ^
+      488 |       setContext:      (c) => set((state) => {
+      489 |         if (c === null) return { context: null };
+      490 |         const prev = state.context;
+
+      at node_modules/react-dom/cjs/react-dom-client.development.js:18758:19
+      at runWithFiberInDEV (node_modules/react-dom/cjs/react-dom-client.development.js:874:13)
+      at warnIfUpdatesNotWrappedWithActDEV (node_modules/react-dom/cjs/react-dom-client.development.js:18757:9)
+      at scheduleUpdateOnFiber (node_modules/react-dom/cjs/react-dom-client.development.js:16409:11)
+      at forceStoreRerender (node_modules/react-dom/cjs/react-dom-client.development.js:8262:24)
+      at node_modules/react-dom/cjs/react-dom-client.development.js:8247:11
+      at node_modules/zustand/vanilla.js:11:39
+          at Set.forEach (<anonymous>)
+      at setState (node_modules/zustand/vanilla.js:11:17)
+      at node_modules/zustand/middleware.js:374:7
+      at setScanState (lib/scanStore.ts:487:47)
+      at components/organisms/RunScanButton/index.tsx:212:9
+
+PASS lib/__tests__/regimeGateOverrides.test.ts
+PASS lib/__tests__/regimeAlignment.test.ts
+PASS lib/__tests__/regimeDuration.test.ts
+
+Test Suites: 5 passed, 5 total
+Tests:       32 passed, 32 total
+Snapshots:   0 total
+Time:        3.704 s
+Ran all test suites within paths "lib/__tests__/regimeDuration.test.ts", "lib/__tests__/regimeAlignment.test.ts", "lib/__tests__/regimeGateOverrides.test.ts", "components/organisms/RunScanButton/__tests__/regimeGate.test.tsx", "app/(frame)/screener/step-1-regime/__tests__/regimeSentimentWrite.test.tsx".
