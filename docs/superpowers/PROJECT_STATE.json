@@ -4692,9 +4692,11 @@
           "coverage_findings": [
             "Reachable supplemental renderless/HOC capability IDs lack normalized route/state IDs and source-backed state/fixture contracts; ChartOverlays/DrawingOverlays concrete paths absent. Final verifier accepts omission."
           ],
-          "fixes": [],
+          "fixes": [
+            "Correction397 committed8d997da1: identified source-backed supplemental capability route/state/fixture contracts and native inheritance; omission validator9 mutations; historical evidence unchanged."
+          ],
           "outstanding": [
-            "Coverage correction ticket397; fresh independent code2 review required."
+            "Fresh independent code2 review of correction/interactions pending."
           ],
           "clean": false,
           "numeric_gate_clean": true,
@@ -4706,7 +4708,7 @@
           "scope_verified": "Reviewer inspected actual diff, every runtime script and structured JSON; sampled actual ChartWorkspace/ChartOverlays/TradeCard/StatusBadge/Data/RawEvidence. Gate0 after scope recheck; acceptance1."
         }
       ],
-      "notes": "Built report/tooling; plan2clean; code1 gate0/coverage1. Reachable supplemental capability state IDs missing; correction397 underway. audit_clean false; not ready to merge. Domain B-I/J acceptance pending, two UI rail findings395 remain separately open.",
+      "notes": "Built report/tooling; plan2clean; code1 gate0/coverage1, correction397 built8d997da1. Supplemental contracts77states/11instances/198route-state rows; verifier rejects omissions. Independent code2 pending; audit_clean false, not ready to merge. Domain B-I/J and two UI rail findings395 remain pending.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/report.md",
@@ -4731,8 +4733,9 @@
         },
         {
           "issue": 397,
-          "status": "in_progress",
-          "purpose": "Independent review coverage correction"
+          "status": "closed",
+          "purpose": "Independent review coverage correction",
+          "commit": "8d997da1b54edbb12dd2911e3b9101d44d2c0e25"
         }
       ],
       "source_inventory_commit": "6309c063",
