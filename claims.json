@@ -52,7 +52,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-regime-race-c553ef3a",
       "claimed_at": "2026-10-17T04:34:13Z",
-      "expires_at": "2026-10-17T07:34:18Z",
+      "expires_at": "2026-10-17T07:34:25Z",
       "note": "User-authorized #350 remediation: issue#386",
       "task": "APP-AUDIT-B-REGIME-RACE"
     }
