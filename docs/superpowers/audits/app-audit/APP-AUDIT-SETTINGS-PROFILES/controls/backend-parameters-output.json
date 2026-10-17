@@ -1,0 +1,1458 @@
+{
+  "source": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "python": "3.11.16",
+  "scope": "real backend helpers and schema; mocked fixed component scores for weight-unit isolation; not provider integration",
+  "checks": [
+    {
+      "id": "weight baseline independently summed",
+      "status": "pass",
+      "expected": 59,
+      "actual": 59
+    },
+    {
+      "id": "40 percent trend weight unit",
+      "status": "fail",
+      "expected": 67,
+      "actual": 3235
+    },
+    {
+      "id": "regime zero is explicit",
+      "status": "pass",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "id": "regime null follows config",
+      "status": "pass",
+      "expected": -15,
+      "actual": -15
+    },
+    {
+      "id": "bearish fundamentals zero explicit",
+      "status": "pass",
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "id": "bearish fundamentals maximum explicit",
+      "status": "pass",
+      "expected": 100,
+      "actual": 100.0
+    },
+    {
+      "id": "bullish ignores bearish-only override",
+      "status": "pass",
+      "expected": 70,
+      "actual": 70
+    },
+    {
+      "id": "event zero overrides backend default",
+      "status": "pass",
+      "expected": [
+        0,
+        0
+      ],
+      "actual": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "event null follows config",
+      "status": "pass",
+      "expected": [
+        21,
+        45
+      ],
+      "actual": [
+        21,
+        45
+      ]
+    },
+    {
+      "id": "IV null preserves absent ceiling",
+      "status": "pass",
+      "expected": null,
+      "actual": null
+    },
+    {
+      "id": "contract preferred 0.5 does not disable",
+      "status": "pass",
+      "expected": 1,
+      "actual": 1
+    },
+    {
+      "id": "contract zero retains off semantics",
+      "status": "pass",
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "id": "RR null means no override",
+      "status": "pass",
+      "expected": {},
+      "actual": {}
+    },
+    {
+      "id": "RR custom fraction stays fraction",
+      "status": "pass",
+      "expected": {
+        "rr_bullish_invalidation_pct": 0.05
+      },
+      "actual": {
+        "rr_bullish_invalidation_pct": 0.05
+      }
+    },
+    {
+      "id": "entry minimum premium override changes verdict",
+      "status": "fail",
+      "expected": "REJECT",
+      "actual": "PASS"
+    },
+    {
+      "id": "entry zero slippage override changes max fill",
+      "status": "fail",
+      "expected": 1,
+      "actual": 1.03
+    },
+    {
+      "id": "zero strategy tolerance is rejected by schema",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "backend map all definitions",
+      "status": "pass",
+      "expected": 66,
+      "actual": 66
+    }
+  ],
+  "effective": [
+    {
+      "key": "weight_trend",
+      "family": "Score Weights",
+      "effectiveReader": "stock_scorer.score_stock explanation.weights.trend",
+      "horizonDefaults": {
+        "Intraday": 0.35,
+        "Swing": 0.3,
+        "Position": 0.3
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "weight_pullback",
+      "family": "Score Weights",
+      "effectiveReader": "stock_scorer.score_stock explanation.weights.pullback",
+      "horizonDefaults": {
+        "Intraday": 0.2,
+        "Swing": 0.2,
+        "Position": 0.2
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "weight_trigger",
+      "family": "Score Weights",
+      "effectiveReader": "stock_scorer.score_stock explanation.weights.trigger",
+      "horizonDefaults": {
+        "Intraday": 0.3,
+        "Swing": 0.25,
+        "Position": 0.2
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "weight_event",
+      "family": "Score Weights",
+      "effectiveReader": "stock_scorer.score_stock explanation.weights.event",
+      "horizonDefaults": {
+        "Intraday": 0.05,
+        "Swing": 0.15,
+        "Position": 0.2
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "weight_vol",
+      "family": "Score Weights",
+      "effectiveReader": "stock_scorer.score_stock explanation.weights.vol",
+      "horizonDefaults": {
+        "Intraday": 0.1,
+        "Swing": 0.1,
+        "Position": 0.1
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "min_stock_score",
+      "family": "Score Gate",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 35,
+          "effective": 35
+        },
+        {
+          "input": 100,
+          "effective": 100
+        },
+        {
+          "input": 0.5,
+          "effective": 0
+        }
+      ]
+    },
+    {
+      "key": "trend_method",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.method",
+      "horizonDefaults": {
+        "Intraday": "additive",
+        "Swing": "additive",
+        "Position": "additive"
+      }
+    },
+    {
+      "key": "ma_type",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.crossover.ma_type",
+      "horizonDefaults": {
+        "Intraday": "EMA",
+        "Swing": "EMA",
+        "Position": "EMA"
+      }
+    },
+    {
+      "key": "fast_ema",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.crossover.fast_ema",
+      "horizonDefaults": {
+        "Intraday": 20,
+        "Swing": 50,
+        "Position": 50
+      },
+      "customInput": 70,
+      "customEffective": 70
+    },
+    {
+      "key": "slow_ema",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.crossover.slow_ema",
+      "horizonDefaults": {
+        "Intraday": 50,
+        "Swing": 200,
+        "Position": 200
+      },
+      "customInput": 173.33333333333334,
+      "customEffective": 173
+    },
+    {
+      "key": "additive_ma_type",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.ma_type",
+      "horizonDefaults": {
+        "Intraday": "EMA",
+        "Swing": "SMA",
+        "Position": "SMA"
+      }
+    },
+    {
+      "key": "additive_ma_period",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.ma_period",
+      "horizonDefaults": {
+        "Intraday": 9,
+        "Swing": 20,
+        "Position": 50
+      },
+      "customInput": 70,
+      "customEffective": 70
+    },
+    {
+      "key": "additive_slope_lookback",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.slope_lookback",
+      "horizonDefaults": {
+        "Intraday": 3,
+        "Swing": 10,
+        "Position": 20
+      },
+      "customInput": 17.333333333333332,
+      "customEffective": 17
+    },
+    {
+      "key": "additive_adx_period",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.adx_period",
+      "horizonDefaults": {
+        "Intraday": 7,
+        "Swing": 14,
+        "Position": 14
+      },
+      "customInput": 13.333333333333334,
+      "customEffective": 13
+    },
+    {
+      "key": "additive_adx_pass",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.adx_pass",
+      "horizonDefaults": {
+        "Intraday": 20,
+        "Swing": 25,
+        "Position": 25
+      },
+      "customInput": 20,
+      "customEffective": 20.0
+    },
+    {
+      "key": "additive_adx_caution",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.adx_caution",
+      "horizonDefaults": {
+        "Intraday": 15,
+        "Swing": 20,
+        "Position": 15
+      },
+      "customInput": 16.666666666666668,
+      "customEffective": 16.666666666666668
+    },
+    {
+      "key": "additive_price_max",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.price_max",
+      "horizonDefaults": {
+        "Intraday": 40,
+        "Swing": 40,
+        "Position": 40
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33
+    },
+    {
+      "key": "additive_slope_max",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.slope_max",
+      "horizonDefaults": {
+        "Intraday": 30,
+        "Swing": 30,
+        "Position": 30
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33
+    },
+    {
+      "key": "additive_adx_max",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.additive.adx_max",
+      "horizonDefaults": {
+        "Intraday": 30,
+        "Swing": 30,
+        "Position": 30
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33
+    },
+    {
+      "key": "rs_period",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.relative_strength.rs_period",
+      "horizonDefaults": {
+        "Intraday": 2,
+        "Swing": 20,
+        "Position": 50
+      },
+      "customInput": 84.66666666666667,
+      "customEffective": 84
+    },
+    {
+      "key": "rs_pass_threshold",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.relative_strength.rs_pass_threshold",
+      "horizonDefaults": {
+        "Intraday": 1.0,
+        "Swing": 2.0,
+        "Position": 3.0
+      },
+      "customInput": 0,
+      "customEffective": 0.0
+    },
+    {
+      "key": "rs_caution_threshold",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.relative_strength.rs_caution_threshold",
+      "horizonDefaults": {
+        "Intraday": -0.5,
+        "Swing": -1.0,
+        "Position": -1.5
+      },
+      "customInput": -3.333333333333333,
+      "customEffective": -3.333333333333333
+    },
+    {
+      "key": "rs_benchmark",
+      "family": "Trend",
+      "effectiveReader": "stock_scorer.score_stock explanation.trend.relative_strength.benchmark",
+      "horizonDefaults": {
+        "Intraday": "NDX",
+        "Swing": "NDX",
+        "Position": "SPX"
+      }
+    },
+    {
+      "key": "rsi_period",
+      "family": "Pullback",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.rsi_period",
+      "horizonDefaults": {
+        "Intraday": 14,
+        "Swing": 14,
+        "Position": 14
+      }
+    },
+    {
+      "key": "swing_high_lookback_bars",
+      "family": "Pullback",
+      "effectiveReader": "stock_scorer.score_stock explanation.pullback.swing_high_lookback_bars",
+      "horizonDefaults": {
+        "Intraday": 20,
+        "Swing": 40,
+        "Position": 75
+      },
+      "customInput": 68,
+      "customEffective": 68
+    },
+    {
+      "key": "atr_caution_max",
+      "family": "Pullback",
+      "effectiveReader": "stock_scorer.score_stock explanation.pullback.atr_caution_max",
+      "horizonDefaults": {
+        "Intraday": 2.5,
+        "Swing": 2.5,
+        "Position": 2.5
+      },
+      "customInput": 3.3333333333333335,
+      "customEffective": 3.3333333333333335
+    },
+    {
+      "key": "pullback_require_reversal",
+      "family": "Pullback",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "macd_fast",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.macd_fast",
+      "horizonDefaults": {
+        "Intraday": 5,
+        "Swing": 8,
+        "Position": 12
+      },
+      "customInput": 18,
+      "customEffective": 18
+    },
+    {
+      "key": "macd_slow",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.macd_slow",
+      "horizonDefaults": {
+        "Intraday": 13,
+        "Swing": 21,
+        "Position": 26
+      },
+      "customInput": 34.666666666666664,
+      "customEffective": 34
+    },
+    {
+      "key": "macd_signal",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.macd_signal",
+      "horizonDefaults": {
+        "Intraday": 3,
+        "Swing": 5,
+        "Position": 9
+      },
+      "customInput": 18,
+      "customEffective": 18
+    },
+    {
+      "key": "rsi_floor",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.rsi_floor",
+      "horizonDefaults": {
+        "Intraday": 40,
+        "Swing": 38,
+        "Position": 37
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "volume_lookback_bars",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.volume_lookback_bars",
+      "horizonDefaults": {
+        "Intraday": 20,
+        "Swing": 20,
+        "Position": 20
+      }
+    },
+    {
+      "key": "volume_multiplier",
+      "family": "Trigger",
+      "effectiveReader": "stock_scorer.score_stock explanation.trigger.volume_multiplier",
+      "horizonDefaults": {
+        "Intraday": 1.2,
+        "Swing": 1.5,
+        "Position": 1.5
+      }
+    },
+    {
+      "key": "event_reject_days",
+      "family": "Event",
+      "effectiveReader": "stock_scorer.score_stock explanation.event.reject_days",
+      "horizonDefaults": {
+        "Intraday": 1,
+        "Swing": 21,
+        "Position": 30
+      },
+      "customInput": 30,
+      "customEffective": 30
+    },
+    {
+      "key": "event_caution_days",
+      "family": "Event",
+      "effectiveReader": "stock_scorer.score_stock explanation.event.caution_days",
+      "horizonDefaults": {
+        "Intraday": 3,
+        "Swing": 45,
+        "Position": 60
+      },
+      "customInput": 40,
+      "customEffective": 40
+    },
+    {
+      "key": "earnings_buffer_days",
+      "family": "Event",
+      "effectiveReader": "display only / redundant; not directly editable"
+    },
+    {
+      "key": "fomc_buffer_days",
+      "family": "Event",
+      "effectiveReader": "display only / redundant; not directly editable"
+    },
+    {
+      "key": "div_buffer_days",
+      "family": "Event",
+      "effectiveReader": "display only / redundant; not directly editable"
+    },
+    {
+      "key": "iv_abs_pass_max",
+      "family": "Volatility",
+      "effectiveReader": "stock_scorer.score_stock explanation.vol.iv_abs_pass_max",
+      "horizonDefaults": {
+        "Intraday": null,
+        "Swing": 34,
+        "Position": 44
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "iv_rank_pass_max",
+      "family": "Volatility",
+      "effectiveReader": "stock_scorer.score_stock explanation.vol.iv_rank_pass_max",
+      "horizonDefaults": {
+        "Intraday": null,
+        "Swing": 34,
+        "Position": 44
+      },
+      "customInput": 33.333333333333336,
+      "customEffective": 33.333333333333336
+    },
+    {
+      "key": "iv_rank_lookback",
+      "family": "Volatility",
+      "effectiveReader": "display only / redundant; not directly editable"
+    },
+    {
+      "key": "hv_lookback",
+      "family": "Volatility",
+      "effectiveReader": "display only / redundant; not directly editable"
+    },
+    {
+      "key": "confidence_caution_below",
+      "family": "Confidence",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "confidence_reject_below",
+      "family": "Confidence",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "confidence_atr_mult_target",
+      "family": "Confidence",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "confidence_atr_mult_stop",
+      "family": "Confidence",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "max_delta",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 1,
+          "effective": 1.0
+        },
+        {
+          "input": 0.5,
+          "effective": 0.5
+        }
+      ]
+    },
+    {
+      "key": "max_bid_ask_spread_pct",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 1,
+          "effective": 1.0
+        },
+        {
+          "input": 0.5,
+          "effective": 0.5
+        }
+      ]
+    },
+    {
+      "key": "min_volume",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 10000,
+          "effective": 10000
+        },
+        {
+          "input": 0.5,
+          "effective": 0
+        }
+      ]
+    },
+    {
+      "key": "min_open_interest",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 10000,
+          "effective": 10000
+        },
+        {
+          "input": 0.5,
+          "effective": 0
+        }
+      ]
+    },
+    {
+      "key": "min_delta",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 1,
+          "effective": 1.0
+        },
+        {
+          "input": 0.5,
+          "effective": 0.5
+        }
+      ]
+    },
+    {
+      "key": "min_dte",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0.5,
+          "effective": 0
+        }
+      ]
+    },
+    {
+      "key": "max_dte",
+      "family": "Contract",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0.5,
+          "effective": 0
+        }
+      ]
+    },
+    {
+      "key": "preferred_volume_min",
+      "family": "Preferred Liquidity",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 10000,
+          "effective": 10000
+        },
+        {
+          "input": 0.5,
+          "effective": 1
+        }
+      ]
+    },
+    {
+      "key": "preferred_oi_min",
+      "family": "Preferred Liquidity",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 0,
+          "effective": 0
+        },
+        {
+          "input": 10000,
+          "effective": 10000
+        },
+        {
+          "input": 0.5,
+          "effective": 1
+        }
+      ]
+    },
+    {
+      "key": "preferred_spread_pct_max",
+      "family": "Preferred Liquidity",
+      "effectiveReader": "contract_validator.effective_contract_overrides",
+      "observations": [
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 0,
+          "effective": 0.0
+        },
+        {
+          "input": 1,
+          "effective": 1.0
+        },
+        {
+          "input": 0.5,
+          "effective": 0.5
+        }
+      ]
+    },
+    {
+      "key": "regime_headwind_caution_pct",
+      "family": "Regime Gate",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "regime_headwind_reject_pct",
+      "family": "Regime Gate",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "fundamentals_caution_above",
+      "family": "Fundamentals Bearish",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "fundamentals_reject_above",
+      "family": "Fundamentals Bearish",
+      "effectiveReader": "top-level request; see requestTrace and per-family source map in coverage.md"
+    },
+    {
+      "key": "entry_spread_tolerance_pct",
+      "family": "Entry Quality",
+      "effectiveReader": "NONE: Step 3 override keys have no backend consumer; trade_plan.build_trade_plan invokes assess_entry without config"
+    },
+    {
+      "key": "entry_max_slippage_pct",
+      "family": "Entry Quality",
+      "effectiveReader": "NONE: Step 3 override keys have no backend consumer; trade_plan.build_trade_plan invokes assess_entry without config"
+    },
+    {
+      "key": "entry_min_premium",
+      "family": "Entry Quality",
+      "effectiveReader": "NONE: Step 3 override keys have no backend consumer; trade_plan.build_trade_plan invokes assess_entry without config"
+    },
+    {
+      "key": "rr_target_r_multiple",
+      "family": "Reward/Risk",
+      "effectiveReader": "config_loader.effective_rr_overrides / resolve_target_r_multiple",
+      "observations": [
+        {
+          "input": null,
+          "effective": {}
+        },
+        {
+          "input": 0,
+          "error": "ValueError: rr_target_r_multiple must be finite and in (0, 10]"
+        },
+        {
+          "input": 0.5,
+          "effective": {
+            "rr_target_r_multiple": 0.5
+          }
+        },
+        {
+          "input": 10,
+          "effective": {
+            "rr_target_r_multiple": 10.0
+          }
+        }
+      ]
+    },
+    {
+      "key": "rr_bullish_invalidation_pct",
+      "family": "Reward/Risk",
+      "effectiveReader": "config_loader.effective_rr_overrides / resolve_target_r_multiple",
+      "observations": [
+        {
+          "input": null,
+          "effective": {}
+        },
+        {
+          "input": 0,
+          "error": "ValueError: invalid rr_bullish_invalidation_pct=0.0: must be a finite number in (0, 1.0]"
+        },
+        {
+          "input": 0.005,
+          "effective": {
+            "rr_bullish_invalidation_pct": 0.005
+          }
+        },
+        {
+          "input": 1,
+          "effective": {
+            "rr_bullish_invalidation_pct": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "key": "rr_bearish_invalidation_pct",
+      "family": "Reward/Risk",
+      "effectiveReader": "config_loader.effective_rr_overrides / resolve_target_r_multiple",
+      "observations": [
+        {
+          "input": null,
+          "effective": {}
+        },
+        {
+          "input": 0,
+          "error": "ValueError: invalid rr_bearish_invalidation_pct=0.0: must be a finite number in (0, 1.0]"
+        },
+        {
+          "input": 0.005,
+          "effective": {
+            "rr_bearish_invalidation_pct": 0.005
+          }
+        },
+        {
+          "input": 1,
+          "effective": {
+            "rr_bearish_invalidation_pct": 1.0
+          }
+        }
+      ]
+    }
+  ],
+  "hashes": {
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/config/contract_rules.yaml": "79e2ecb99848022ec9d912ee0e5812637a578bc5d8893161ae7b94e1822a4346",
+    "backend/config/risk_rules.yaml": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968",
+    "backend/config/strategy_params.yaml": "6c0eb765bd79ea155fbea8288e46e2b7ac9ff1432c4843b5856827b033a35f3c",
+    "backend/app/scoring/stock_scorer.py": "a7c2f331cb8cd7773177ff3d1552696554663afa779e3aa16830496b393b6c3e",
+    "backend/app/scoring/trade_plan.py": "d48e1965fefe9ad140ff2960015dc72337fe1249bd1837632ab16553e8c05dd0",
+    "backend/app/scoring/entry_quality.py": "c25e6545376f02f2b04f6d93d43dbaf3480a40a709f20e1c937cbdb59eede79c",
+    "backend/app/schemas/stock_scan.py": "6244baa32d5d13c768cf256a43004d696097b4fe624075b846090c719fb428a5"
+  },
+  "weightFixture": {
+    "fixed_components": {
+      "trend": 80,
+      "pullback": 60,
+      "trigger": 40,
+      "event": 20,
+      "vol": 100
+    },
+    "baseline": {
+      "version": 1,
+      "symbol": "FIXTURE",
+      "direction": "Bullish",
+      "horizon": "Swing",
+      "scoring_mode": "options",
+      "iv_basis": "absolute",
+      "evaluated_at": "2026-10-16T11:57:56.045136+00:00",
+      "score": 59,
+      "status": "PASS",
+      "raw_status": "PASS",
+      "unrounded_score": 59.0,
+      "rounding": "python_round_ties_to_even",
+      "pass_threshold": 55,
+      "caution_threshold": 35,
+      "weights": {
+        "trend": 0.3,
+        "pullback": 0.2,
+        "trigger": 0.25,
+        "event": 0.15,
+        "vol": 0.1
+      },
+      "components": {
+        "trend": {
+          "name": "trend",
+          "wire_name": "trend",
+          "raw_score": 80,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.3,
+          "contribution": 24.0,
+          "detail": {},
+          "config": {
+            "method": "additive",
+            "crossover": {
+              "fast_ema": 50,
+              "slow_ema": 200,
+              "slow_slope_required": true,
+              "fast_slope_required": false,
+              "ma_type": "EMA"
+            },
+            "additive": {
+              "ma_period": 20,
+              "ma_type": "SMA",
+              "slope_lookback": 10,
+              "adx_period": 14,
+              "adx_pass": 25,
+              "adx_caution": 20,
+              "price_max": 40,
+              "slope_max": 30,
+              "adx_max": 30,
+              "status_pass": 70,
+              "status_caution": 40
+            },
+            "relative_strength": {
+              "rs_period": 20,
+              "rs_pass_threshold": 2.0,
+              "rs_caution_threshold": -1.0,
+              "benchmark": "NDX"
+            }
+          }
+        },
+        "pullback": {
+          "name": "pullback",
+          "wire_name": "pullback",
+          "raw_score": 60,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.2,
+          "contribution": 12.0,
+          "detail": {},
+          "config": {
+            "fib_shallow_min": 0.236,
+            "fib_shallow_max": 0.382,
+            "fib_standard_min": 0.382,
+            "fib_standard_max": 0.5,
+            "fib_golden_min": 0.5,
+            "fib_golden_max": 0.618,
+            "swing_high_lookback_bars": 40,
+            "swing_high_min_bars_ago": 5,
+            "max_days_in_pullback": 20,
+            "theta_caution_days": 15,
+            "atr_period": 14,
+            "atr_pass_min": 1.0,
+            "atr_pass_max": 2.0,
+            "atr_caution_max": 2.5
+          }
+        },
+        "trigger": {
+          "name": "trigger",
+          "wire_name": "trigger",
+          "raw_score": 40,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.25,
+          "contribution": 10.0,
+          "detail": {},
+          "config": {
+            "macd_fast": 8,
+            "macd_slow": 21,
+            "macd_signal": 5,
+            "macd_histogram_rising": true,
+            "rsi_period": 14,
+            "rsi_floor": 38,
+            "rsi_div_window_bars": 15,
+            "stoch_k": 14,
+            "stoch_d": 3,
+            "stoch_smooth": 3,
+            "stoch_oversold": 30,
+            "stoch_tolerance_pct": 5,
+            "rsi_ceiling": 60,
+            "stoch_overbought": 70,
+            "setup_window_bars": 8,
+            "momentum_signals_for_pass": 2,
+            "volume_lookback_bars": 20,
+            "volume_multiplier": 1.5,
+            "volume_bonus_pts": 10
+          }
+        },
+        "event": {
+          "name": "event",
+          "wire_name": "event",
+          "raw_score": 20,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.15,
+          "contribution": 3.0,
+          "detail": {},
+          "config": {
+            "reject_days": 21,
+            "caution_days": 45
+          }
+        },
+        "vol": {
+          "name": "vol",
+          "wire_name": "volatility",
+          "raw_score": 100,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.1,
+          "contribution": 10.0,
+          "detail": {},
+          "config": {
+            "iv_abs_compressed_caution": 5,
+            "iv_abs_pass_max": 34,
+            "iv_abs_caution_max": 55,
+            "iv_rank_compressed_caution": 5,
+            "iv_rank_pass_max": 34,
+            "iv_rank_caution_max": 55
+          }
+        }
+      },
+      "caps": [],
+      "gate_config": {
+        "confidence": null,
+        "regime": null,
+        "fundamentals": null
+      }
+    },
+    "panel40": {
+      "version": 1,
+      "symbol": "FIXTURE",
+      "direction": "Bullish",
+      "horizon": "Swing",
+      "scoring_mode": "options",
+      "iv_basis": "absolute",
+      "evaluated_at": "2026-10-16T11:57:56.045351+00:00",
+      "score": 3235,
+      "status": "PASS",
+      "raw_status": "PASS",
+      "unrounded_score": 3235.0,
+      "rounding": "python_round_ties_to_even",
+      "pass_threshold": 55,
+      "caution_threshold": 35,
+      "weights": {
+        "trend": 40.0,
+        "pullback": 0.2,
+        "trigger": 0.25,
+        "event": 0.15,
+        "vol": 0.1
+      },
+      "components": {
+        "trend": {
+          "name": "trend",
+          "wire_name": "trend",
+          "raw_score": 80,
+          "status": "PASS",
+          "measured": true,
+          "weight": 40.0,
+          "contribution": 3200.0,
+          "detail": {},
+          "config": {
+            "method": "additive",
+            "crossover": {
+              "fast_ema": 50,
+              "slow_ema": 200,
+              "slow_slope_required": true,
+              "fast_slope_required": false,
+              "ma_type": "EMA"
+            },
+            "additive": {
+              "ma_period": 20,
+              "ma_type": "SMA",
+              "slope_lookback": 10,
+              "adx_period": 14,
+              "adx_pass": 25,
+              "adx_caution": 20,
+              "price_max": 40,
+              "slope_max": 30,
+              "adx_max": 30,
+              "status_pass": 70,
+              "status_caution": 40
+            },
+            "relative_strength": {
+              "rs_period": 20,
+              "rs_pass_threshold": 2.0,
+              "rs_caution_threshold": -1.0,
+              "benchmark": "NDX"
+            }
+          }
+        },
+        "pullback": {
+          "name": "pullback",
+          "wire_name": "pullback",
+          "raw_score": 60,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.2,
+          "contribution": 12.0,
+          "detail": {},
+          "config": {
+            "fib_shallow_min": 0.236,
+            "fib_shallow_max": 0.382,
+            "fib_standard_min": 0.382,
+            "fib_standard_max": 0.5,
+            "fib_golden_min": 0.5,
+            "fib_golden_max": 0.618,
+            "swing_high_lookback_bars": 40,
+            "swing_high_min_bars_ago": 5,
+            "max_days_in_pullback": 20,
+            "theta_caution_days": 15,
+            "atr_period": 14,
+            "atr_pass_min": 1.0,
+            "atr_pass_max": 2.0,
+            "atr_caution_max": 2.5
+          }
+        },
+        "trigger": {
+          "name": "trigger",
+          "wire_name": "trigger",
+          "raw_score": 40,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.25,
+          "contribution": 10.0,
+          "detail": {},
+          "config": {
+            "macd_fast": 8,
+            "macd_slow": 21,
+            "macd_signal": 5,
+            "macd_histogram_rising": true,
+            "rsi_period": 14,
+            "rsi_floor": 38,
+            "rsi_div_window_bars": 15,
+            "stoch_k": 14,
+            "stoch_d": 3,
+            "stoch_smooth": 3,
+            "stoch_oversold": 30,
+            "stoch_tolerance_pct": 5,
+            "rsi_ceiling": 60,
+            "stoch_overbought": 70,
+            "setup_window_bars": 8,
+            "momentum_signals_for_pass": 2,
+            "volume_lookback_bars": 20,
+            "volume_multiplier": 1.5,
+            "volume_bonus_pts": 10
+          }
+        },
+        "event": {
+          "name": "event",
+          "wire_name": "event",
+          "raw_score": 20,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.15,
+          "contribution": 3.0,
+          "detail": {},
+          "config": {
+            "reject_days": 21,
+            "caution_days": 45
+          }
+        },
+        "vol": {
+          "name": "vol",
+          "wire_name": "volatility",
+          "raw_score": 100,
+          "status": "PASS",
+          "measured": true,
+          "weight": 0.1,
+          "contribution": 10.0,
+          "detail": {},
+          "config": {
+            "iv_abs_compressed_caution": 5,
+            "iv_abs_pass_max": 34,
+            "iv_abs_caution_max": 55,
+            "iv_rank_compressed_caution": 5,
+            "iv_rank_pass_max": 34,
+            "iv_rank_caution_max": 55
+          }
+        }
+      },
+      "caps": [],
+      "gate_config": {
+        "confidence": null,
+        "regime": null,
+        "fundamentals": null
+      }
+    },
+    "independentExpected": 67,
+    "assumption": "UI percent 40 is 0.40; no recalibration of other weights"
+  },
+  "entryFixture": {
+    "wireOverrides": {
+      "entry_min_premium": 5,
+      "entry_max_slippage_pct": 0,
+      "entry_spread_tolerance_pct": 0,
+      "shortlist_max_candidates": 10
+    },
+    "sharedPlanSignature": "(*, direction: 'str', stock_price: 'float', strike: 'float', dte: 'int', premium: 'float', entry_bid: 'float', entry_ask: 'float', entry_mid: 'float', rr_cfg: 'dict', final_stop_price: 'float', target_price: 'float', stop_cost_fraction: 'float | None', target_source: 'str' = 'arithmetic', heston_params: 'HestonParams | None' = None, horizon_preset: 'str | None' = None, hold_min: 'float | None' = None, hold_max: 'float | None' = None, reprice_cfg: 'dict | None' = None, quote_live: 'bool | None' = None) -> 'TradePlan'",
+    "actualDefaultConfig": {
+      "spread_tolerance_pct": 0.1,
+      "max_slippage_pct": 0.03,
+      "min_premium": 0.1
+    },
+    "actualSharedPlanEntry": {
+      "limit_price": 1,
+      "max_fill": 1.03,
+      "order_type": "Limit",
+      "quality_status": "PASS",
+      "quality_reasons": []
+    },
+    "expectedEditedConfigEntry": {
+      "limit_price": 1,
+      "max_fill": 1,
+      "order_type": "Limit",
+      "quality_status": "REJECT",
+      "quality_reasons": [
+        "premium too low",
+        "wide spread",
+        "elevated spread"
+      ]
+    }
+  },
+  "requestTrace": [
+    {
+      "id": "stocks-panel-confidence_caution_below",
+      "validated": {
+        "category": "stocks",
+        "universe": [
+          "SP500"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "strategy": "pullback_ema",
+        "pullback_require_reversal": false,
+        "account_size": 100000.0,
+        "risk_pct": 0.0375,
+        "hold_max_days": 2,
+        "bt_min_trades": 5,
+        "bt_min_win_rate": 0.45,
+        "shortlist_max_candidates": 10,
+        "regime_filter": false,
+        "overrides": {},
+        "confidence_caution_below": 50.0,
+        "confidence_reject_below": 35.0,
+        "confidence_atr_mult_target": 2.0,
+        "confidence_atr_mult_stop": 1.5
+      }
+    },
+    {
+      "id": "stocks-panel-confidence_reject_below",
+      "validated": {
+        "category": "stocks",
+        "universe": [
+          "SP500"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "strategy": "pullback_ema",
+        "pullback_require_reversal": false,
+        "account_size": 100000.0,
+        "risk_pct": 0.0375,
+        "hold_max_days": 2,
+        "bt_min_trades": 5,
+        "bt_min_win_rate": 0.45,
+        "shortlist_max_candidates": 10,
+        "regime_filter": false,
+        "overrides": {},
+        "confidence_caution_below": 50.0,
+        "confidence_reject_below": 35.0,
+        "confidence_atr_mult_target": 2.0,
+        "confidence_atr_mult_stop": 1.5
+      }
+    },
+    {
+      "id": "entry-quality-knobs",
+      "validated": {
+        "universe": [
+          "SP500"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "overrides": {
+          "entry_min_premium": 5,
+          "entry_max_slippage_pct": 0,
+          "entry_spread_tolerance_pct": 0,
+          "shortlist_max_candidates": 10
+        },
+        "hold_min_days": 0,
+        "hold_max_days": 2,
+        "horizon_preset": "Intraday",
+        "confidence_caution_below": 50,
+        "confidence_reject_below": 35,
+        "confidence_atr_mult_target": 2.0,
+        "confidence_atr_mult_stop": 1.5,
+        "fundamentals_enabled": true,
+        "fundamentals_caution_below": 45.0,
+        "fundamentals_reject_below": 30.0,
+        "fundamentals_de_reject": 3.0,
+        "spread_width": 5.0,
+        "short_leg_delta": 0.3,
+        "iv_rank_threshold": 50.0,
+        "iv_abs_threshold": 50.0,
+        "min_credit": 0.5,
+        "max_debit_pct": 40.0
+      }
+    },
+    {
+      "id": "percent-weight",
+      "validated": {
+        "universe": [
+          "SP500"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "overrides": {
+          "weight_trend": 40,
+          "shortlist_max_candidates": 10
+        },
+        "hold_min_days": 0,
+        "hold_max_days": 2,
+        "horizon_preset": "Intraday",
+        "confidence_caution_below": 50,
+        "confidence_reject_below": 35,
+        "confidence_atr_mult_target": 2.0,
+        "confidence_atr_mult_stop": 1.5,
+        "fundamentals_enabled": true,
+        "fundamentals_caution_below": 45.0,
+        "fundamentals_reject_below": 30.0,
+        "fundamentals_de_reject": 3.0,
+        "spread_width": 5.0,
+        "short_leg_delta": 0.3,
+        "iv_rank_threshold": 50.0,
+        "iv_abs_threshold": 50.0,
+        "min_credit": 0.5,
+        "max_debit_pct": 40.0
+      }
+    }
+  ],
+  "unsupportedStrategyZero": {
+    "request": {
+      "universe": [
+        "SP500"
+      ],
+      "direction": "Bullish",
+      "horizon": "Intraday",
+      "strategy": "pullback_ema",
+      "pullback_tolerance_pct": 0,
+      "pullback_require_reversal": false,
+      "require_choppy_regime": false,
+      "bt_min_trades": 0,
+      "bt_min_win_rate": 0,
+      "account_size": 100000,
+      "risk_pct": 0.0375,
+      "shortlist_max_candidates": 10,
+      "overrides": {},
+      "confidence_caution_below": 50,
+      "confidence_reject_below": 35,
+      "confidence_atr_mult_target": 2,
+      "confidence_atr_mult_stop": 1.5,
+      "hold_max_days": 2
+    },
+    "rejectedFields": [
+      [
+        "pullback_tolerance_pct"
+      ]
+    ]
+  }
+}

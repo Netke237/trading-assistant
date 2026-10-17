@@ -1,0 +1,2892 @@
+{
+  "source": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "boundary": "ALL API MOCKED",
+  "requests": [
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/health",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data-sources",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/risk",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/risk",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/risk",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/risk",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/risk",
+      "method": "POST",
+      "body": {
+        "premiumStopPct": 0.6,
+        "portfolioValue": 234567,
+        "maxSinglePositionPct": 0.05,
+        "maxLossPerTradePct": 0.01,
+        "maxTotalExposurePct": 0.25,
+        "maxSingleStockPositionPct": 0.1,
+        "maxTotalStockExposurePct": 0.5,
+        "maxConcurrentPositions": 10,
+        "maxDailyRecommendations": 5,
+        "targetT1Pct": 0.2,
+        "targetT2Pct": 0.35,
+        "targetT3Pct": 0.5
+      }
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/health",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data-sources",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "PUT",
+      "body": {
+        "timezone": "Asia/Tokyo"
+      }
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "PUT",
+      "body": {
+        "timezone": "Invalid/Zone"
+      }
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "POST",
+      "body": {
+        "scheduledScanRunRetentionDays": 120
+      }
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/health",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data-sources",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/health",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data-sources",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/iv-thresholds",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduling",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/scheduled-scan-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan-schedule",
+      "method": "GET",
+      "body": null
+    }
+  ],
+  "checks": [
+    {
+      "id": "density-remount",
+      "expected": "Compact persists per-browser, as intro promises",
+      "observed": {
+        "before": "Compact",
+        "after": "Comfortable"
+      },
+      "status": "fail"
+    },
+    {
+      "id": "global-save-risk",
+      "expected": "failed Risk save does not display Saved globally",
+      "observed": {
+        "visible": "234567",
+        "backend": 100000,
+        "requests": [
+          {
+            "path": "/settings/risk",
+            "method": "POST",
+            "body": {
+              "premiumStopPct": 0.6,
+              "portfolioValue": 234567,
+              "maxSinglePositionPct": 0.05,
+              "maxLossPerTradePct": 0.01,
+              "maxTotalExposurePct": 0.25,
+              "maxSingleStockPositionPct": 0.1,
+              "maxTotalStockExposurePct": 0.5,
+              "maxConcurrentPositions": 10,
+              "maxDailyRecommendations": 5,
+              "targetT1Pct": 0.2,
+              "targetT2Pct": 0.35,
+              "targetT3Pct": 0.5
+            }
+          }
+        ],
+        "confirmation": 1
+      },
+      "status": "fail"
+    },
+    {
+      "id": "global-save-backend-draft",
+      "expected": "Save changes persists visible timezone draft",
+      "observed": {
+        "visible": "Asia/Tokyo",
+        "server": "Europe/Berlin",
+        "requests": [],
+        "confirmation": 1
+      },
+      "status": "fail"
+    },
+    {
+      "id": "timezone-explicit-save",
+      "expected": "backend reflects explicit save",
+      "observed": "Asia/Tokyo",
+      "status": "pass"
+    },
+    {
+      "id": "timezone-invalid-save",
+      "expected": "failure shown, backend unchanged",
+      "observed": {
+        "server": "Asia/Tokyo",
+        "text": "Timezone\nIANA timezone name, e.g. Europe/Berlin\nDefault: Europe/Berlin\nSave\nSave failed — check the timezone name"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "retention-failed-save",
+      "expected": "backend readback unchanged and error visible",
+      "observed": {
+        "server": 90,
+        "visible": "120",
+        "text": "Retention (days)\n1-3650\nDefault: 90\nSave\nSave failed"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "regime-reload",
+      "expected": "local persisted conservative lookback 60 and smoothing 0.5",
+      "observed": [
+        "60",
+        "0.03",
+        "0.5"
+      ],
+      "status": "pass"
+    },
+    {
+      "id": "strategy-native-min",
+      "expected": "out-of-range override rejected or clamped",
+      "observed": {
+        "visible": "0",
+        "storage": {
+          "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+          "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+          "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":0,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+          "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+          "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":10,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+        }
+      },
+      "status": "fail"
+    },
+    {
+      "id": "scan-zero-clamp",
+      "expected": "zero shortlist clamps to 1",
+      "observed": {
+        "visible": "1",
+        "storage": {
+          "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+          "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+          "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+          "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+          "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":1,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "confidence-false",
+      "expected": "false gate stored and threshold inputs disabled",
+      "observed": {
+        "checked": "false",
+        "disabled": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "iv-invalid",
+      "expected": "zero refused with inline error",
+      "observed": {
+        "error": "Not applied — enter a number from 1 to 100."
+      },
+      "status": "pass"
+    },
+    {
+      "id": "iv-session-remount",
+      "expected": "override survives section remount",
+      "observed": "40",
+      "status": "pass"
+    },
+    {
+      "id": "iv-reload",
+      "expected": "session override intentionally resets on reload",
+      "observed": "34",
+      "status": "pass"
+    },
+    {
+      "id": "timezone-stale-load",
+      "expected": "late initial GET preserves operator edit",
+      "observed": {
+        "before": "America/New_York",
+        "after": "Europe/Berlin"
+      },
+      "status": "fail"
+    }
+  ],
+  "inventory": {
+    "Appearance": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "SELECT",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "ComfortableCompact",
+        "value": "Comfortable",
+        "disabled": false,
+        "options": [
+          "Comfortable",
+          "Compact"
+        ]
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Scan": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "10",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "10",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "50",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "50",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "35",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "2",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "1.5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "3",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "1.5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "2.5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "target /stop",
+        "value": "1.5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "45",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "30",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "3",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "0–1",
+        "value": "0.3",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "pts",
+        "value": "5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "%",
+        "value": "50",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "%",
+        "value": "50",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "$",
+        "value": "0.5",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "%",
+        "value": "40",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": "Swing pass max",
+        "text": "%",
+        "value": "34",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": "Position pass max",
+        "text": "%",
+        "value": "34",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Apply thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset to scoring_rules.yaml",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "text",
+        "role": null,
+        "label": null,
+        "text": "Save",
+        "value": "Europe/Berlin",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "Save",
+        "value": "90",
+        "disabled": false,
+        "min": "1",
+        "max": "3650"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "+ Add options entry",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "+ Add stocks entry",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Strategy scan": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": "Pullback tolerance",
+        "text": "%",
+        "value": "",
+        "disabled": false,
+        "min": "0.5",
+        "max": "15"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": "MA crossover lookback",
+        "text": "bars",
+        "value": "",
+        "disabled": false,
+        "min": "1",
+        "max": "30"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": "Breakout volume multiplier",
+        "text": "×",
+        "value": "",
+        "disabled": false,
+        "min": "1",
+        "max": "3"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "trades",
+        "value": "5",
+        "disabled": false,
+        "min": "1",
+        "max": "50"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "%",
+        "value": "45",
+        "disabled": false,
+        "min": "10",
+        "max": "80"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset to defaults",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Brokers": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "https://localhost:7499/v1/api",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Save IBKR Paper",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Save Tradier Live",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Save Tradier Paper",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Save Alpaca Paper",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Save Tastytrade Paper",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Activate live IBKR",
+        "value": "",
+        "disabled": true
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Activate live Alpaca",
+        "value": "",
+        "disabled": true
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Activate live Tastytrade",
+        "value": "",
+        "disabled": true
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Risk": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "100000",
+        "disabled": false,
+        "min": "1000",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "5",
+        "disabled": false,
+        "min": "1",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "1",
+        "disabled": false,
+        "min": "0",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "25",
+        "disabled": false,
+        "min": "1",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": "Max single stock position %",
+        "text": "",
+        "value": "10",
+        "disabled": false,
+        "min": "1",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": "Max total stock exposure %",
+        "text": "",
+        "value": "50",
+        "disabled": false,
+        "min": "1",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "10",
+        "disabled": false,
+        "min": "1",
+        "max": "50"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "5",
+        "disabled": false,
+        "min": "1",
+        "max": "50"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "At 60%, for long positions and options an entry below $0.03 puts the stop threshold below $0.01 — it can never fire.For short stock positions this is how far the price may RISE above entry.",
+        "value": "0.6",
+        "disabled": false,
+        "min": "0.1",
+        "max": "0.99"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "0.2",
+        "disabled": false,
+        "min": "0.01",
+        "max": "5"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "0.35",
+        "disabled": false,
+        "min": "0.01",
+        "max": "5"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "0.5",
+        "disabled": false,
+        "min": "0.01",
+        "max": "5"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Regime": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Default",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Conservative",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Aggressive",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "20",
+        "disabled": false,
+        "min": "5",
+        "max": "252"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "0.02",
+        "disabled": false,
+        "min": "0.001",
+        "max": "0.1"
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "0",
+        "disabled": false,
+        "min": "0",
+        "max": "0.99"
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Notifications": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "number",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "10",
+        "disabled": false,
+        "min": "1",
+        "max": "100"
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "password",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "[redacted]",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save settings",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Data": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "time",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "03:00",
+        "disabled": true,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Run now",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "time",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "03:00",
+        "disabled": true,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Run now",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "time",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "03:00",
+        "disabled": true,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Run now",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ],
+    "Strategy Tuning": [
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Config OK · 1 check",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": "Switch to light mode",
+        "text": "",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "AppearanceTheme + density",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "ScanContinuous scan + cadence",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy scanSignal tolerances + backtest thresholds",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "BrokersPaper trading accounts + live Tradier market-data token (other Live sections locked)",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RiskExposure limits and portfolio value",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "RegimeDaily OMM parameters",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "NotificationsGmail + Telegram alert delivery",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "DataNightly OHLCV ingestion schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Strategy TuningWalk-forward parameter optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "INPUT",
+        "type": "time",
+        "role": null,
+        "label": null,
+        "text": "",
+        "value": "03:00",
+        "disabled": true,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "INPUT",
+        "type": "checkbox",
+        "role": null,
+        "label": null,
+        "text": "MonTueWedThuFriSatSun",
+        "value": "on",
+        "disabled": false,
+        "min": "",
+        "max": ""
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save schedule",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Clear history",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": null,
+        "text": "Run Optimization",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Reset",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": "button",
+        "role": null,
+        "label": null,
+        "text": "Save changes",
+        "value": "",
+        "disabled": false
+      },
+      {
+        "tag": "BUTTON",
+        "type": null,
+        "role": null,
+        "label": "Open Next.js Dev Tools",
+        "text": "",
+        "value": "",
+        "disabled": false
+      }
+    ]
+  },
+  "browser": "151.0.7922.173",
+  "regimeStorage": {
+    "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":10,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+  },
+  "strategyZero": {
+    "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":0,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+    "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":10,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+  },
+  "strategyNull": {
+    "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+    "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":10,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+  },
+  "disabledConfidence": {
+    "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+    "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":1,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":false,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+  },
+  "storage": {
+    "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+    "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":1,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":false,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "historical_output": "../settings/output.json",
+  "historical_not_run_count": 18,
+  "source_head": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "historical_artifacts_unchanged": true,
+  "dispositions": [
+    {
+      "id": "appearance-theme-sync",
+      "previous_reason": "Theme interaction/cross-tab sync not run in settings harness",
+      "status": "observed failure",
+      "evidence": "storage/output.json",
+      "limits": "Advertised theme synchronization fails despite native storage events; actual process restart passes."
+    },
+    {
+      "id": "scan-consumer-trace",
+      "previous_reason": "Complete request/consumer trace owned by controls helper",
+      "status": "partial; prior controls evidence",
+      "evidence": "../controls/coverage.md",
+      "limits": "Requests and selected consumers traced; complete downstream card/results consumers remain C/D/E integration work."
+    },
+    {
+      "id": "iv-error-reset",
+      "previous_reason": "IV loading/error/Reset runtime not run",
+      "status": "observed scoped pass",
+      "evidence": "settings-states/output.json",
+      "limits": "Loading/failure/Reset paths covered; Step5/7 score/gate recomputation remains outside this supplement."
+    },
+    {
+      "id": "timezone-load-error",
+      "previous_reason": "Initial timezone GET error not explicitly exercised",
+      "status": "observed failure",
+      "evidence": "settings-states/output.json",
+      "limits": "Initial503 shows an unconfirmed default; scheduler conversion and PUT cancellation not run."
+    },
+    {
+      "id": "scheduled-row-runtime",
+      "previous_reason": "Fixed/loop schedule conditional row runtime owned by controls helper",
+      "status": "partial; observed UI failures",
+      "evidence": "settings-states/output.json",
+      "limits": "Mocked fixed/loop CRUD and resolved profile payloads captured; real execution, run history, DB, next-run arithmetic and concurrency unrun."
+    },
+    {
+      "id": "strategy-other-boundaries",
+      "previous_reason": "Strategy ranges beyond proven zero and clear not run",
+      "status": "partial; observed failures",
+      "evidence": "settings-states/schema-output.json",
+      "limits": "Browser MA0 and breakout1 persist but real schema rejects; breakout4 is schema-valid UI-range-only. Other boundaries remain unrun."
+    },
+    {
+      "id": "broker-save-failure",
+      "previous_reason": "Credential save/failure/probes handed to lane F; no credentials sent",
+      "status": "not run; lane F",
+      "evidence": "settings-states/coverage.md",
+      "limits": "No credentials, probes or broker saves sent."
+    },
+    {
+      "id": "risk-enforcement",
+      "previous_reason": "Risk arithmetic/enforcement owned by F; no order submitted",
+      "status": "not run; lane F",
+      "evidence": "../settings/coverage.md",
+      "limits": "Original save evidence is not a certification of risk arithmetic or order enforcement."
+    },
+    {
+      "id": "regime-computation",
+      "previous_reason": "Regime numbers/gates owned by regime helper",
+      "status": "partial; numerical scope passes with known defects elsewhere",
+      "evidence": "intraday/output.json",
+      "limits": "New real15min fixture complements original daily/synthetic evidence; independent inference conditional on fitted parameters only, no predictive/calibration certification. Original VIX/gate defects remain."
+    },
+    {
+      "id": "notifications-delivery",
+      "previous_reason": "Send/test endpoints intentionally never invoked; G owns dispatch",
+      "status": "not run; lane G",
+      "evidence": "settings-states/coverage.md",
+      "limits": "No send/test endpoints invoked."
+    },
+    {
+      "id": "data-job-provider",
+      "previous_reason": "Ingestion/EDGAR/SP500 job/provider computation not run; H owns",
+      "status": "not run; lane H",
+      "evidence": "settings-states/coverage.md",
+      "limits": "No ingestion/EDGAR/SP500 job execution."
+    },
+    {
+      "id": "tuning-job-proposals",
+      "previous_reason": "Optimizer/job/proposal/adoption runtime not run; D owns",
+      "status": "not run; lane D",
+      "evidence": "settings-states/coverage.md",
+      "limits": "No optimizer, proposals or adoption executed."
+    },
+    {
+      "id": "confighealth-nonclean",
+      "previous_reason": "ConfigHealth error/stale/warning/unknown/multiworker runtime not run",
+      "status": "partial; scoped UI passes",
+      "evidence": "settings-states/output.json",
+      "limits": "Checking/clean/warning/error/stale/unknown and disclosures covered with mocks; real multiworker/restart,70s aging and provider correctness remain unrun."
+    },
+    {
+      "id": "request-unmount-cancel",
+      "previous_reason": "Backend in-flight unmount/cancellation not run",
+      "status": "partial",
+      "evidence": "settings-states/output.json",
+      "limits": "Timezone GET pending during section unmount/reply/remount covered. No actual request abortion, PUT cancellation or all-section claim."
+    },
+    {
+      "id": "real-scheduler",
+      "previous_reason": "Scheduler configure recorded with stubs; timezone/next-run/actual execution not certified",
+      "status": "not run; lanes G/H/D",
+      "evidence": "settings-states/coverage.md",
+      "limits": "Configure arguments previously observed with stubs; actual timezone/next-run/execution remains unverified."
+    },
+    {
+      "id": "browser-process-restart",
+      "previous_reason": "Fresh browser-process storage recovery not run; same-origin reload/remount only",
+      "status": "observed scoped pass",
+      "evidence": "storage/output.json",
+      "limits": "Real browser-process close/reopen preserves exact theme/Markov/confidence bytes and UI; other browser keys not certified."
+    },
+    {
+      "id": "multiworker-concurrent-settings",
+      "previous_reason": "Multiworker and concurrent-writer behavior not run",
+      "status": "partial; normal two-tab failure",
+      "evidence": "storage/output.json",
+      "limits": "Ordinary stale-tab confidence edit overwrites newer Markov value. Multiworker/backend concurrent writes and crash recovery remain unrun."
+    },
+    {
+      "id": "legacy-malformed-schedule",
+      "previous_reason": "Legacy/malformed YAML loading not run",
+      "status": "partial; observed preservation failure",
+      "evidence": "settings-states/yaml-output.json",
+      "limits": "Real temp YAML v1 migration/backup and store-instance readback covered. Three invalid-load then next-write variants destroy recovery bytes. No actual DB/scheduler/process restart claimed."
+    }
+  ]
+}

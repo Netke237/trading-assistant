@@ -1,0 +1,21 @@
+{
+  "prior_publication_head": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "plan": "../plan.md Tasks1\u20133; remaining states already in original scope",
+  "tickets": [
+    {
+      "kind": "storage",
+      "number": 393,
+      "url": "https://github.com/Netke237/trading-assistant/issues/393"
+    },
+    {
+      "kind": "settings-states",
+      "number": 394,
+      "url": "https://github.com/Netke237/trading-assistant/issues/394"
+    },
+    {
+      "kind": "intraday",
+      "number": 396,
+      "url": "https://github.com/Netke237/trading-assistant/issues/396"
+    }
+  ]
+}

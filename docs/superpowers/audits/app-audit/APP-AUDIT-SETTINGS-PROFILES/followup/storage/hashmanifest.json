@@ -1,0 +1,131 @@
+{
+  "captured_source_sha": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "original_source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "versions": {
+    "browser": "151.0.7922.173",
+    "node": "v24.19.0",
+    "playwright": "1.62.1",
+    "next": "15.5.23"
+  },
+  "totals": {
+    "pass": 65,
+    "fail": 23
+  },
+  "sourceFiles": [
+    {
+      "path": "frontend/lib/searchProfilesStore.ts",
+      "sha256": "2a7d1d3daebc6c556b2f6e062e68c1d02c3123a59e52acc740ffb07c41b0f9dc",
+      "captured_commit_sha256": "2a7d1d3daebc6c556b2f6e062e68c1d02c3123a59e52acc740ffb07c41b0f9dc",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "2a7d1d3daebc6c556b2f6e062e68c1d02c3123a59e52acc740ffb07c41b0f9dc",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/lib/settingsStore.ts",
+      "sha256": "2f116c44d02f4ea5a558a81edfc1054389280559269028a686ae3ff29c5230f6",
+      "captured_commit_sha256": "2f116c44d02f4ea5a558a81edfc1054389280559269028a686ae3ff29c5230f6",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "2f116c44d02f4ea5a558a81edfc1054389280559269028a686ae3ff29c5230f6",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/lib/theme.ts",
+      "sha256": "bc364929e6d4f116d718177159be015694864b77e6b4ce8afbadd64992182b7e",
+      "captured_commit_sha256": "bc364929e6d4f116d718177159be015694864b77e6b4ce8afbadd64992182b7e",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "bc364929e6d4f116d718177159be015694864b77e6b4ce8afbadd64992182b7e",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/components/ThemeProvider/index.tsx",
+      "sha256": "06aca62b80ead623120f170e46d80c3015e5d79f1b0ffe3ba4a08999d21c309d",
+      "captured_commit_sha256": "06aca62b80ead623120f170e46d80c3015e5d79f1b0ffe3ba4a08999d21c309d",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "06aca62b80ead623120f170e46d80c3015e5d79f1b0ffe3ba4a08999d21c309d",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/components/StoreHydration/index.tsx",
+      "sha256": "ee9f8acbf8ab2c5e5f9326fe292c6b693f52e386031c73aa243f5bcf1322f1f9",
+      "captured_commit_sha256": "ee9f8acbf8ab2c5e5f9326fe292c6b693f52e386031c73aa243f5bcf1322f1f9",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "ee9f8acbf8ab2c5e5f9326fe292c6b693f52e386031c73aa243f5bcf1322f1f9",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/components/atoms/ModeToggle/index.tsx",
+      "sha256": "f7079f881c6fe11b4c564034fb91541d240b36886fb703e4981573d2f9e5f38b",
+      "captured_commit_sha256": "f7079f881c6fe11b4c564034fb91541d240b36886fb703e4981573d2f9e5f38b",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "f7079f881c6fe11b4c564034fb91541d240b36886fb703e4981573d2f9e5f38b",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "sha256": "8f3fd8543b1c68c47bc99178f28122410098fad9e85d1a290ebc03a72ddca2fb",
+      "captured_commit_sha256": "8f3fd8543b1c68c47bc99178f28122410098fad9e85d1a290ebc03a72ddca2fb",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "8f3fd8543b1c68c47bc99178f28122410098fad9e85d1a290ebc03a72ddca2fb",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "captured_commit_sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/app/(frame)/settings/page.tsx",
+      "sha256": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+      "captured_commit_sha256": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+      "matches_original_commit": true
+    },
+    {
+      "path": "docs/search-profiles/import-search-profiles.js",
+      "sha256": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6",
+      "captured_commit_sha256": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6",
+      "matches_original_commit": true
+    },
+    {
+      "path": "docs/search-profiles/search-profiles-export.json",
+      "sha256": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+      "captured_commit_sha256": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+      "matches_captured_commit": true,
+      "original_commit_sha256": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+      "matches_original_commit": true
+    },
+    {
+      "path": "frontend/node_modules/zustand/middleware.js",
+      "sha256": "255f34d0f8872c4f928459482f384a24c07502351fdea7e961dfd0e3bd3248ef"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "browser.cjs",
+      "sha256": "e97a9baedfc91aa91e613e0fcb35b7fb3a235bb9f56ddd67405aaad5c3b04d2d"
+    },
+    {
+      "path": "manifest.cjs",
+      "sha256": "adad8afb284b550c4f71d44e7091c902b650101fec9bba4e0bacd643a64fd340"
+    },
+    {
+      "path": "output.json",
+      "sha256": "5636f27f3cd5bbf36ba0f654caaf36b579c15c357efd44d57262731f0b52190c"
+    },
+    {
+      "path": "coverage.md",
+      "sha256": "5c868b79737a5a3ec7bffa681a756ba5f42ac646165142a17cc91b3362d58df2"
+    },
+    {
+      "path": "findings.md",
+      "sha256": "2f971edb946a1d1053cf4dee247ece2e1deb661029c1f6658d5b1e58405370e3"
+    }
+  ],
+  "note": "Manifest excludes its own hash. Source worktree hashes must match captured commit; original hash comparisons disclose the baseline difference. No product files changed by this ticket."
+}
