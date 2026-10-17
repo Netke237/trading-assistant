@@ -4728,7 +4728,7 @@
           "scope_verified": "Actual diff and ChartWorkspace/CandlestickChart callers, ChartOverlays/DrawingOverlays, drawing diff helper, ContractScoreExplanationContent/memo, Step6 callers, phasePill inheritance inspected.4capabilities/77states/11instances/198route-state IDs valid. Original inventory IDs/application/historical harness blobs unchanged; zero verdict independently rechecked."
         }
       ],
-      "notes": "Built report/tooling; independent plan2clean and code2clean (continuous4), coverage gap fixed397. Ready for PR/self-merge checks only; no merged/shipped claim yet. Domain B-I/J correctness acceptance remains pending; rail UI defects395 remain open. Full review evidence: independent-review.md in LaneA report folder.",
+      "notes": "SELF-MERGE PENDING, PR #405, audited head3e02f28198b85422881e7e1ca1754ba50f6c81c0. Built only; plan2/code2clean. Preserve actual main record until verified merge. B-I/J correctness remains pending; rail UI defects395 open.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/report.md",
@@ -4766,6 +4766,14 @@
         "rounds": 2,
         "clean": true,
         "reviewed_head": "3e02f28198b85422881e7e1ca1754ba50f6c81c0"
+      },
+      "pull_request": 405,
+      "merge_record": {
+        "status": "SELF-MERGE PENDING",
+        "pull_request": 405,
+        "audited_head": "3e02f28198b85422881e7e1ca1754ba50f6c81c0",
+        "conditions": "Own live claim; non-draft open405 MERGEABLE; no blocked/needs-kenneth/user hold; plan2/code2clean; post-audit changes only verdict/pending records. All PR paths docs/**: existing ci.yml/playwright.yml intentionally path-filtered, exact head check-runs0/statuses0, no applicable CI checks, local required validation passed. Exact pending head rechecked before merge.",
+        "merged": false
       }
     }
   ],
