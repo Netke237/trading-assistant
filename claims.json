@@ -28,7 +28,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-save-feedback-685245db",
       "claimed_at": "2026-10-17T04:32:53Z",
-      "expires_at": "2026-10-17T07:33:05Z",
+      "expires_at": "2026-10-17T07:37:44Z",
       "note": "User-authorized #350 remediation: issue#371",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
     },
