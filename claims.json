@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-cap-units-96e70c96",
       "claimed_at": "2026-10-17T04:30:50Z",
-      "expires_at": "2026-10-17T07:39:46Z",
+      "expires_at": "2026-10-17T07:39:57Z",
       "note": "User-authorized #350 remediation: issue#368",
       "task": "APP-AUDIT-B-CAP-UNITS"
     },
