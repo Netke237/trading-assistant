@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-inventory-8842811f",
       "claimed_at": "2026-10-17T03:06:13Z",
-      "expires_at": "2026-10-17T06:17:05Z",
+      "expires_at": "2026-10-17T06:17:46Z",
       "note": "Resume review correction397 and fresh code2 audit",
       "task": "APP-AUDIT-INVENTORY"
     },
