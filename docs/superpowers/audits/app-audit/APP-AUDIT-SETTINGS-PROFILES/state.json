@@ -2,10 +2,10 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "evidence published in draft PR #392; independent artifact review clean; application acceptance open",
+  "status": "follow-up capture of disclosed remaining states; prior PR publication/review preserved",
   "application_audit_clean": false,
   "plan_audit_clean": true,
-  "code_audit_clean": true,
+  "code_audit_clean": false,
   "audit_rounds": 2,
   "plan_rounds": 1,
   "code_rounds": 1,
@@ -55,7 +55,14 @@
     385,
     386,
     387,
-    388
+    388,
+    398,
+    399,
+    400,
+    401,
+    402,
+    403,
+    404
   ],
   "capture_tasks": {
     "365": "closed after published c869084d/0ebc851d evidence verified; closure 2026-10-16",
@@ -63,9 +70,8 @@
     "367": "closed after 6e850b66 push"
   },
   "residuals": [
-    "Final Lane A runtime/state reconciliation",
+    "Final independently reviewed Lane A runtime/state reconciliation",
     "Defect remediation and regression retests",
-    "Frozen real15-minute provider/model fixture",
     "Explicit per-family not-run and cross-lane integration boundaries"
   ],
   "integrated_main_sha": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
@@ -77,5 +83,31 @@
     "programme_notice": "https://github.com/Netke237/trading-assistant/issues/348#issuecomment-6222855797",
     "lane_A_notice": "https://github.com/Netke237/trading-assistant/issues/349#issuecomment-6222856551",
     "merge": "not requested; application acceptance and final reconciliation remain open"
+  },
+  "followup": {
+    "source_head": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+    "scope": "Existing plan Tasks1\u20133 remaining storage/settings states and frozen provider15min data; old captures remain immutable",
+    "review_status": "new delta not yet independently reviewed",
+    "planned_code_round": 2,
+    "code_round_cap": 3,
+    "capture_complete": true,
+    "real15min_fixture": "followup/intraday/provenance.json",
+    "coverage_dispositions": "followup/coverage-dispositions.json",
+    "A_increment": "e72b15a58b69267150143c0922d37ca92272c844",
+    "A_final_review_pending": true,
+    "new_defects": [
+      398,
+      399,
+      400,
+      401,
+      402,
+      403,
+      404
+    ],
+    "extended_defects": [
+      371,
+      381,
+      373
+    ]
   }
 }

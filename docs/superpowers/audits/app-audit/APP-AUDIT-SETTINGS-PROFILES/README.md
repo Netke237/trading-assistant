@@ -1,6 +1,8 @@
 # Lane B audit evidence — issue #350
 
-Source frozen at `880c8441841cc22d5090cdc5f984e4cf7e3d9a8d`.
+Original evidence frozen at `880c8441841cc22d5090cdc5f984e4cf7e3d9a8d`.
+[Follow-up evidence](followup/README.md) is separately pinned to source
+`4b1f6b86e8137f499da0c4c430f23b9c250fd8de`.
 **Numbers/persistence: defects found. Presentation/usability: defects found.**
 Application correctness is not clean; no product fixes or calibration changes
 are included. This branch publishes reproducible evidence and separately
@@ -14,7 +16,7 @@ does not request application acceptance or closure of #350.
 | --- | --- | --- |
 | [Controls and profiles](controls/coverage.md) | 312 authoritative assertions: 297 pass, 15 overlapping failure checks | All 66 execution definitions mapped; 110 browser parameter checks pass. Complete lifecycle has 56 observations, including 18-pack apply, UI custom CRUD, restore/backup, reload, real browser-process restart and origin isolation. |
 | [Settings](settings/coverage.md) | 61 assertions: 51 pass, 10 fail; 18 boundaries not run here, 3 N/A | All nine sections inventoried; selected UI save/failure/stale-load checks plus real minimal-router/temp-YAML saves, effective readback and process restart. Additional family UI subset is 16/16 pass, not 16 extra unique assertions. |
-| [Regime](regime/coverage.md) | Independent OMM/HMM inference matches; VIX window fails; stale gate and mode differences reproduced | Synthetic boundaries and committed daily SPY bars; supplied-model and actual seed-42 fit inference independently derived. Nine browser state observations pass. No frozen real 15-minute provider fixture. |
+| [Regime](regime/coverage.md) | Independent OMM/HMM inference matches; VIX window fails; stale gate and mode differences reproduced | Synthetic boundaries and committed daily SPY bars; supplied-model and actual seed-42 fit inference independently derived. Nine browser state observations pass. Original run had no real15-minute fixture; [follow-up](followup/intraday/README.md) supplies one. |
 | Existing frontend baseline | Typecheck and 268 suites / 5,477 tests pass | Unchanged application source. The 32 focused regime frontend tests are a subset, not additional unique tests. |
 | Existing backend regime suites | Original isolated-copy run: 3 failed / 88 passed / 2 deselected; supplemental: 89 passed / 4 deselected | Original quote-guard and relocated-config failures retained; supplemental restores layout and excludes two quote-precondition cases and two app.main tests. No full-backend pass is claimed. |
 
@@ -33,7 +35,7 @@ versions, inputs and commands. Python 3.11.16, Node 24.19.0, Chromium
 production-build or real-provider certification. The committed SPY fixture's
 original provider/retrieval timestamp are unknown and explicitly recorded.
 
-All browser business API traffic is intercepted in isolated storage; backend
+All browser business API traffic is intercepted in isolated storage; the follow-up separately captures one read-only real Tradier timesales response. Original backend
 harnesses call actual functions/minimal routers with frozen inputs and temporary
 stores. No app.main lifespan, live broker orders, real notification sends or
 shared/destructive jobs were executed. Config/profile input hashes stayed
@@ -56,8 +58,9 @@ in-flight request was captured independently of later control edits. These
 checks do not certify every result/card consumer's frozen settings; those
 integration paths remain owned by C/D/E. Browser-process restart and isolated
 backend config-process restart are distinct checks. Broker credential saves,
-actual deliveries, job execution, concurrent writers and full DB recovery are
-not passed here.
+actual deliveries, job execution and full DB recovery are not passed here.
+The follow-up tests a normal two-tab browser writer and finds a lost update;
+backend multiworker/concurrent-write correctness remains unverified.
 
 ## Published defects
 
@@ -117,7 +120,30 @@ passed 89 tests with the same four exclusions; the original 3 failures / 88
 passes remain recorded. All frozen input hashes match the frozen baseline.
 Current main changed `universe_exclusions.yaml`; old captures remain frozen,
 and the new verification is separately labelled. Lane A's remote inventory
-remains at `6309c063`, with final runtime/state reconciliation unavailable.
+was at `6309c063` for that review. The [follow-up increment](followup/reconciliation/runtime-links.json) pins `e72b15a5`; final independently reviewed runtime/state reconciliation remains pending.
 Capture children #365, #366 and #367 are closed. Known product failures and
 coverage obligations remain open in #350; a clean evidence review does not
 establish a clean application gate.
+
+## Follow-up capture
+
+[Follow-up report](followup/README.md) preserves the original results and adds
+88 storage assertions (65 pass/23 fail),69 Settings assertions (57 pass/12 fail),
+and30 real15-minute numerical checks (all pass). These are overlapping
+observations. The new source is labelled separately; no application code changed.
+The original18 Settings not-run entries have [explicit current dispositions](followup/coverage-dispositions.json).
+New defects and extensions remain unfixed. Fresh delta review is pending.
+
+The follow-up adds the separately claimable defects below; #371, #381 and #373
+receive supplemental evidence rather than duplicate issues.
+
+| Issue | New defect |
+| --- | --- |
+
+| [#398](https://github.com/Netke237/trading-assistant/issues/398) | Failed Search Profile writes leave changed profiles active until reload |
+| [#399](https://github.com/Netke237/trading-assistant/issues/399) | Theme changes do not synchronize across tabs as Settings promises |
+| [#400](https://github.com/Netke237/trading-assistant/issues/400) | An ordinary Settings edit in a stale tab overwrites unrelated saved values |
+| [#401](https://github.com/Netke237/trading-assistant/issues/401) | Saving after invalid scan schedule YAML overwrites the only recovery bytes |
+| [#402](https://github.com/Netke237/trading-assistant/issues/402) | Scheduled scan failures and unresolvable profile selections give no explanation |
+| [#403](https://github.com/Netke237/trading-assistant/issues/403) | A schedule with a missing profile visually selects a different saved profile |
+| [#404](https://github.com/Netke237/trading-assistant/issues/404) | An unavailable timezone readback displays an editable default without an error |

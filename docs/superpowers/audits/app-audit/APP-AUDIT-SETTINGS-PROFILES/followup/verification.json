@@ -1,0 +1,18 @@
+{
+  "source_head": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "checked_at_utc": "2026-10-17T03:08:36.800059+00:00",
+  "checks": {
+    "frontend_typecheck": "pass: npm run typecheck; unchanged application source",
+    "javascript_python_syntax": "pass",
+    "followup_json": "pass",
+    "storage_artifact_hashes": "5/5 match",
+    "settings_state_artifact_hashes": "19/19 match",
+    "intraday_script_fixture_receipt_hashes": "3/3 match",
+    "original_capture_files": "unchanged from source head",
+    "full_frontend_tests": "not rerun for evidence-only additions; prior same-application-source268 suites/5477pass recorded in resume-verification.json",
+    "full_backend_tests": "not claimed; historical3 failures/88passes and supplemental89passes/4deselected retained"
+  },
+  "typecheck_log": "\n> bamendjou-frontend@0.1.0 typecheck\n> tsc --noEmit\n\n",
+  "state_check": "script ran; shared-state verdict is not a Lane B application acceptance",
+  "scope": "evidence scripts/docs/fixtures only; no product fixes or calibration"
+}
