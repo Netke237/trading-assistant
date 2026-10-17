@@ -9,6 +9,7 @@ from email.utils import parsedate_to_datetime
 import httpx
 
 from app.data.governor import get_governor, RateLimited, ProviderUnavailable
+from app.data.provider_symbols import dash_class_ticker
 
 TIINGO_BASE_URL = "https://api.tiingo.com"
 TIINGO_TOKEN = os.getenv("TIINGO_API_TOKEN", "")
@@ -57,7 +58,7 @@ async def fetch_historical_candles(
     Strict mode also rejects the whole reply if any row lacks finite positive
     raw and adjusted closes; missing adjusted prices are never synthesized.
     """
-    symbol = symbol.strip().upper()
+    symbol = dash_class_ticker(symbol)   # BRK.B -> BRK-B: Tiingo's spelling
 
     async def request():
         resp = await asyncio.to_thread(
