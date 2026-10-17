@@ -1,0 +1,2269 @@
+{
+  "schema_version": 1,
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "source_baseline_resolved": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "tooling": {
+    "node": "v22.23.2",
+    "typescript": "5.9.3",
+    "next": "15.5.23",
+    "react": "19.2.5",
+    "python": "3.11.9 (python --version observed before generation; no backend execution)",
+    "browser": "Not used by source discovery; Task 2 records its own browser/build provenance",
+    "backend_mode": "Not started or contacted by source discovery; Task 2 isolated mocked API only"
+  },
+  "fixture_provenance": "No runtime fixture consumed by source discovery. Source/config bytes are hashed only; no credential/config payload values copied. Task 2 must hash actual fixtures separately.",
+  "independent_route_census": {
+    "method": "git ls-tree baseline frontend/app, filter entry basenames and exclude __tests__; compare exact ordered set with filesystem/AST census",
+    "count": 45,
+    "match": true
+  },
+  "generator_sha256": "42f3f1842c2c6af9cdccceb056bf415e611a8e568b07839cb213bdd9bc801609",
+  "source_and_config_hashes": [
+    {
+      "source": ".python-version",
+      "sha256": "ceba8fa5c10f40fbed8feb7eb5238b63dda568908acfd874ee413747b29936c8"
+    },
+    {
+      "source": "backend/config/contract_rules.yaml",
+      "sha256": "1b658c4e78a4a4f44fe2f58a7d8878fd53cb8c6dc9a835fd3ef8dc3d166e6784"
+    },
+    {
+      "source": "backend/config/risk_rules.yaml",
+      "sha256": "c961cdec2db7a776cfd45f2cddae8d229d9c4089e05d82a20ec92f0c2726434d"
+    },
+    {
+      "source": "backend/config/scoring_rules.yaml",
+      "sha256": "5d556a1aaf2b5fc188815a81ca3884c2a58e55920652ed8428c310cd19209b76"
+    },
+    {
+      "source": "backend/config/settings.example.yaml",
+      "sha256": "93e4b2ff917c4fd68ccb8fbadd452c822b109c7a198bf9cc2ebdef595ceedd0b"
+    },
+    {
+      "source": "backend/config/strategy_params.yaml",
+      "sha256": "b79933a983821ae2a3260cd3a47ddf1c6231a06c93fc1dad71a22886691cf808"
+    },
+    {
+      "source": "backend/config/strategy_watches.yaml",
+      "sha256": "aeb394f1f283b7ee63b60bd1f346494687386cb2badff1d3baf76825315dafee"
+    },
+    {
+      "source": "backend/config/universe_exclusions.yaml",
+      "sha256": "b53770f23203e3d8c39d17742056f3acdd00ed678078235ceda21953a9960d45"
+    },
+    {
+      "source": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/source-annotations.json",
+      "sha256": "e43f3fffc18b25b96def93661f9a4e09acc977d5ed0e2c5b263c8aa57cb1f4ce"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/alerts/default.tsx",
+      "sha256": "c5ed2737525944a82e3ad2f17fa93ac9074c4ff120913ec04aa381c162d380ae"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/analysis/page.tsx",
+      "sha256": "ce2cdb111964a20c7a0dfdda061d2b027e7ca214e5a79261c2e8f22c6cbabdc9"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/chart/page.tsx",
+      "sha256": "2ee74859676d688889b744391e5761f31bca25edfc0e235cd3e4be12c2fe1d40"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/dashboard/page.module.css",
+      "sha256": "e03deedd52fcbbfa0af5ed402016e28cf5bdd370610ba142f197193516c1a732"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+      "sha256": "effeeec7883c834a955c15d28cfde31eef2daf99683801b7a4f1d1f81ea3b26f"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/default.tsx",
+      "sha256": "af1d2ab0ebac5f7b93f557f8fc9f652ba60cde37294a619935417f0096130832"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/portfolio/page.module.css",
+      "sha256": "ef60083fc11cbe460eaf5b7334bc8c2d2b93eb70b04cc9ad92f93f21335f14a4"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "sha256": "33a1d7353c9ac507d7e687146b7dfaf580fdf7db775251e90f3423f177fed753"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/screener/default.tsx",
+      "sha256": "58bebbf1a739e62fe9fdb5844089746a6771d1ca721aecd7d796470246e98372"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+      "sha256": "b40d8f31131595702c46e0d5dcf41948315329e909e1d37d3ee0e5b51535d15d"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.module.css",
+      "sha256": "09868957477eddf76474d854fc0322858a026bb8522248c207320e1157ba8ed4"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "sha256": "ce5ad3e299a04604584d1f3af0dedfb1ad3f79554f57d169dc04113ddad32fc6"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/watchlist/page.module.css",
+      "sha256": "d2fe4460f353a1153b8fb67e330c27e99f7a083fc4403782e9f703f544df1e21"
+    },
+    {
+      "source": "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "sha256": "fbec5b4a8859fbe80add55121eaf552adf0d0a2f765420d3c54a895e19d26b93"
+    },
+    {
+      "source": "frontend/app/(frame)/alerts/page.module.css",
+      "sha256": "13b1a410f7051a160027346af7ec2fb75bac3311ac0dcef5fb8d4caa1fb9f673"
+    },
+    {
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "sha256": "9ce3293e1f48b7463c576de23f43d1446c1a9b26c2779c5b92a1b1ce2f9f0b29"
+    },
+    {
+      "source": "frontend/app/(frame)/analysis/page.module.css",
+      "sha256": "4a8d1e619b358d58f5998cc849d0f34f4cd7b267e44171e666ebf2e169e06168"
+    },
+    {
+      "source": "frontend/app/(frame)/analysis/page.tsx",
+      "sha256": "f92b2de16c3f8ddc61037d9349916549ca367189bf84074751b4374b2119c4d4"
+    },
+    {
+      "source": "frontend/app/(frame)/calendar/page.module.css",
+      "sha256": "9d18717201d132beb94adf7edd8dee1660e91608d5a93ffdd4e23ca06d7245ac"
+    },
+    {
+      "source": "frontend/app/(frame)/calendar/page.tsx",
+      "sha256": "2fdedc4ce39db78baf09edcdb25f2db67053aa5b61e34531656e99c722a7c622"
+    },
+    {
+      "source": "frontend/app/(frame)/chart/page.module.css",
+      "sha256": "f4d031c46fdc7805d3835e1f864d25de5e7c06173e87496e7ee1dc937c097a1a"
+    },
+    {
+      "source": "frontend/app/(frame)/chart/page.tsx",
+      "sha256": "1c0c5e9da4643b8f984bb9543dffe1dbf62e6c1aad22fdf49d5cf46b2c2429cd"
+    },
+    {
+      "source": "frontend/app/(frame)/dashboard/page.module.css",
+      "sha256": "72ee949c24df39abbf2da007a26224782b0bf40eeac813d57e8f1efb3fa63ccb"
+    },
+    {
+      "source": "frontend/app/(frame)/dashboard/page.tsx",
+      "sha256": "866a58f9e8b37a00c94308fd0d2aaba2df64f81e61a62973adccca8d7a66f358"
+    },
+    {
+      "source": "frontend/app/(frame)/error.module.css",
+      "sha256": "71ee12d811428f242c68b6178ea903d989f67aa4a43385fc213fec08a6a4d10f"
+    },
+    {
+      "source": "frontend/app/(frame)/error.tsx",
+      "sha256": "ff2643dcb06358cf3ec26a904a73a30f4085939148745dd8ba12fe5ac211bc4b"
+    },
+    {
+      "source": "frontend/app/(frame)/journal/page.module.css",
+      "sha256": "68c4ce44428950175ef3bb17bb9844b969abda14065820b046e888b8fb9ca3c6"
+    },
+    {
+      "source": "frontend/app/(frame)/journal/page.tsx",
+      "sha256": "142a79fdfa08af1ab423bdf84f96e30acacc7c223dbd1bf28fb645ca4a5e163f"
+    },
+    {
+      "source": "frontend/app/(frame)/layout.tsx",
+      "sha256": "6f35827f064956f5defc7a1e5096138b0f19e06e2ff3ed0cd4fd7e025dfbbfd5"
+    },
+    {
+      "source": "frontend/app/(frame)/loading.module.css",
+      "sha256": "650417294b8cc15202ef8c3acbdc9e97bd808973e9c82e602c9f136a0dd7e43d"
+    },
+    {
+      "source": "frontend/app/(frame)/loading.tsx",
+      "sha256": "f60027d54ab773c249f7176e7736b2b3d8151674d29e6bd43effde019de06234"
+    },
+    {
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "sha256": "a47fb1cfb8b74fe288ad93945f4ff4948feb821d28bbdcff13691ab94dceaf40"
+    },
+    {
+      "source": "frontend/app/(frame)/portfolio/page.module.css",
+      "sha256": "a5bbeae960d6e3dc942006275520b0a7d535baedfa54009178b83ac727a64865"
+    },
+    {
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "sha256": "0b5893bf8920dfa9af32084150dfb816adfbd8802cafc2fd888704619a4ae9b2"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/layout.tsx",
+      "sha256": "52de81200d4a3c683e8ed19d06af7ba5d05dc7272e6f58e61d346a15fe079c08"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/page.tsx",
+      "sha256": "b05f0b4a26edd50a6488584dd2140c146f2b43d4c39eaba37fb978d77628c9df"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/screener.module.css",
+      "sha256": "ce6738f11d527bdae1cbbf474ba8f4438b998bb76838d9267f88d758a214a8b1"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/screenerLayout.module.css",
+      "sha256": "282a4cdfaeff6b64f1f60da9caad85913978b7a9f3bb9977cd8e4a4a634c6b30"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.module.css",
+      "sha256": "1eba27f9bffd2a04a8009a4aa4bba41b498048fa5fe4f11023e0f01de7d97888"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "sha256": "09fd27b5e51607499ac00a4f7fe01b2a0669769d474423bf846cc5fc21d63f0e"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.module.css",
+      "sha256": "2be35d6a6d2d8b7715e115a1b87b8e40551c204a3d2e406b28e448e9840e66e3"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "sha256": "99a27f6201f9a5b444905a051cbe0e45973df4e84e5a24c8d57f9ae358918757"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.module.css",
+      "sha256": "292bf48c18cf37f600211f8b4d1b4d0b181dcd9d7b45362b9c3b9cca06bf45f7"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "sha256": "4c4755cb1fb918794c11ae008d08f6a901a8954ceb7c2044c1ab3e0e550189db"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-3-direction/scanLogTotals.ts",
+      "sha256": "55fd2e2eb9c8a5bb6a1b0c69c9e6f3d91a2b1d1d070f8c20f22fe669f916d77a"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "sha256": "83400d2254e6244ce28a9834d563df55c5f72b3782446234921a638f7981752c"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "sha256": "ae5a8039be27bdb87042cae2d2fb8117ee6e824cf8358e3e3d9ca23b36027440"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
+      "sha256": "921762a5589ca4a3e86cc13fa1baa2292eb0898621f0ebe1ab9b29b61c38f4bf"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "sha256": "9724ef1bf9b7e430ec14a03dc9a9ddefb6e19268a678eb1f2a1640722b9d80c1"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
+      "sha256": "17ab36696c0ac9061ffb7021c9893c0b2a4836ce9649c26e5a8d9d471b23af0f"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.module.css",
+      "sha256": "e1239b5191e2177d4b2f3d8b8a41fe787e0182146d7e8ed01742da87c6a2899c"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "sha256": "5afb2659e39a53a43742dc717a66563370a06ce74acec2e24147bd7281100518"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/scanChartLines.ts",
+      "sha256": "8609fd473a2523d8896fc13d07b7e8b044f17518a55b69f312df54bc76b04807"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/scanThresholds.ts",
+      "sha256": "7167eff60856956898067a7a5714a2d0847ac125a8d64341a005f10a005d4451"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-ranking/cardToRow.ts",
+      "sha256": "e2a3dbdc4c93c4c0ab4ac66a3fe7820eb7eb36ef7a8cc4d864af2010fbb2f04e"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-ranking/page.module.css",
+      "sha256": "5b22804ae8bb58d6fc860263c356cbb9f93244ecb1e0976ecdce3c8bbf134d42"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "sha256": "a98ca3c1d6d2e8ba4655c26de4032d0a9af73ed5dab27209e9557c8275e23c59"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-stocks/HistoryPrefetchRow.tsx",
+      "sha256": "0e0679b9695ec718c253ae3cb7ed9d63ba356ffd2405914a5c7d720c58c6664c"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-stocks/page.module.css",
+      "sha256": "11a3f84923d7c4e82555f934c2b230bb9fe3eaed0410ea6494e3672e511a2091"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "sha256": "be12e7f3442af77ebbb7b80674fefff1f939e18536b62357459158e8d92a5532"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+      "sha256": "9db0172d37a3b2ae25e4fb117dc7f825970958f9e46e15b239607ab654775451"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/gateSummary.ts",
+      "sha256": "768a8335709a838a2c7cc2fb874d9fcbbc1bbdf01c76094c3e99c883d1f60dbe"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/page.module.css",
+      "sha256": "1be0a7f2f48da7c25fd9b87e9f18fab33abaca3d633c90352a977aff57698d63"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "sha256": "974a4f6ff48a7704a0bdb3439bcf3aa7b295cd258645114ccad220a592bd92f3"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.module.css",
+      "sha256": "aa91cc6efce99ac516dde0f23ad167af445a1de43cc89a9bedbca07e70150473"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "sha256": "3e53848cdde10fd4ca46ea8ad40b0b3bfb586ea03a4d58022f3e4810e60cf31c"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-6-contracts/contracts.module.css",
+      "sha256": "f85239d8ec8d5d96c08b0978ad76e19cc244d011fb56f499f84ada27e148895f"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "sha256": "410be93471d546ce97c113f24bb1de9f09e5f7b04c9bf536da870cd1d5f31759"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-position-card/page.module.css",
+      "sha256": "a710e4e5dcb44ee8fe94bc6bd44460ed53a07894677099bd46a8b1ebcc80e94a"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "sha256": "2d20975c6c65f917af4a0c41f7c068ae94dbe14b1c1850483f7d6324ad03474b"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/directOrder.ts",
+      "sha256": "ba7e6d40dff2ce217b9060e4e9173edcfaebe4f666c15f932bae1008e4b726db"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/page.module.css",
+      "sha256": "3664dfb1de87ef16521c5cbb0daf0f1fe29909e8e7d97809e5b2ec66d2d1e0a8"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "sha256": "36a5a3b569b42bffb1e9f5196f361ccbf1a3e3322be8c2acd3303094410a1df1"
+    },
+    {
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/toast.module.css",
+      "sha256": "1071feb8130ea4dd1f4cb785342d67110c1b8a3a919f74549e5bf5caee4aba17"
+    },
+    {
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "sha256": "240c09e0871d560bc55a91438cc361523ec320bddc4ae97918d2e09c7bf69f63"
+    },
+    {
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "sha256": "be0bfcac4a650b9000a0bd6fbc98546ce35c99ed5db474b80b382bb94b3345f6"
+    },
+    {
+      "source": "frontend/app/(frame)/settings/page.module.css",
+      "sha256": "48006eed3a2d5968130cee5a68ed1502fee40343edcdaefaf35aa12cc3cb17e8"
+    },
+    {
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "sha256": "511217fe7b435950e7e280d2c68a120cc6c7cbdf9716c3ae629a2ebd1df0d730"
+    },
+    {
+      "source": "frontend/app/(frame)/strategy-watch/page.module.css",
+      "sha256": "a34100955a41866a3a2f2adff7ec6a983ab10eaa381f5ade13eaeac5c24ce75d"
+    },
+    {
+      "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+      "sha256": "06b5f1b7518f20aa28c6e490e74a088d0a637a21adf399c3f78a124fd05e0c68"
+    },
+    {
+      "source": "frontend/app/(frame)/validation/page.module.css",
+      "sha256": "1671600a619747b583e7394d7f5cc662ef86264771181004722f7fd2c4ca6a9a"
+    },
+    {
+      "source": "frontend/app/(frame)/validation/page.tsx",
+      "sha256": "ab30dd929ab930f2e62ef4932ca37ad9ee48fcdf3ab2fe8cf7dcd1b2120ec684"
+    },
+    {
+      "source": "frontend/app/(frame)/watchlist/page.module.css",
+      "sha256": "28dd6d87b73ae5ce5f3cedda73ccc9d785dd1e0d3e8178e1ef6bae7f0d5e5db4"
+    },
+    {
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "sha256": "16b26347b04a14bdccd5849f1fd6ba065be7bc02ae4a78245e8e9c8a1ef98cfe"
+    },
+    {
+      "source": "frontend/app/__test-crash/page.tsx",
+      "sha256": "9f3373ce5a8f88f99f0db573114a0d7524b872d78a2deb74aae27bc2dfb7ae62"
+    },
+    {
+      "source": "frontend/app/chart/standalone/layout.tsx",
+      "sha256": "f5f24c69f666c071d341d9fb612025ca43bbb17bb6e74f58f5815e777afd4d26"
+    },
+    {
+      "source": "frontend/app/chart/standalone/page.tsx",
+      "sha256": "f203f663167cd52a845d73dedf24d35e60573e8c01cc67f4abdabdff7e81c611"
+    },
+    {
+      "source": "frontend/app/dev/components/page.module.css",
+      "sha256": "01778fdeee3e19e4901e6186741b3e657921adef3c717f1c2a29fb32fa7c3578"
+    },
+    {
+      "source": "frontend/app/dev/components/page.tsx",
+      "sha256": "a534b4742f1b5a5befb37ce1a461dd7f6b2c633188faeb0987d61441e4d86e07"
+    },
+    {
+      "source": "frontend/app/globals.css",
+      "sha256": "f96fba4ca88ca238059d3bd825110633747feff97abc5036f2e1ae37e5bda8a9"
+    },
+    {
+      "source": "frontend/app/layout.tsx",
+      "sha256": "cd43a26adfc38ccea7eafa0ed6aea649befe392eb540525d29716c9d9fdfb689"
+    },
+    {
+      "source": "frontend/app/not-found.module.css",
+      "sha256": "b7b5c29403e34e5cc7f464d2d30a2e2bad045051819fd35f7625159cbd1e2ec3"
+    },
+    {
+      "source": "frontend/app/not-found.tsx",
+      "sha256": "0df138d0213b22a91b67d7109d56927a06aca7cd99b1b42430f1e4007586c4a9"
+    },
+    {
+      "source": "frontend/app/page.tsx",
+      "sha256": "dda67b99752c4469d50e9c7a21392bbadc7dcc54ad7429887a80230a9c08dc00"
+    },
+    {
+      "source": "frontend/components/KeyboardShortcuts/index.tsx",
+      "sha256": "66e375b4e6ac6936762e5e5b7f31afce91e46e189a5e68c5f1e93677582a1113"
+    },
+    {
+      "source": "frontend/components/MinWidthGate/MinWidthGate.module.css",
+      "sha256": "7b9c18a292ae2538db9591b424f8e6041cb4385223be3ec7608de2c81d6c0eb5"
+    },
+    {
+      "source": "frontend/components/MinWidthGate/index.tsx",
+      "sha256": "9812e5210b66bc09869b4df3513f979afc1ebc5b510e5b9bb306104c00b8e388"
+    },
+    {
+      "source": "frontend/components/StoreHydration/index.tsx",
+      "sha256": "595d16df9e70de2e1958840da0b0592091d6fafd2dde2435c720332ccc9b329c"
+    },
+    {
+      "source": "frontend/components/ThemeProvider/index.tsx",
+      "sha256": "e5c4f813e7852fb505467d94af2b1d4a930997a1d1a380fe63bfcb488f679ec3"
+    },
+    {
+      "source": "frontend/components/atoms/ConfidenceBadge/ConfidenceBadge.module.css",
+      "sha256": "57bfe2a2ec0535cbfa159d1aa7c20a6edacf07d03e674c183026b40d3d587968"
+    },
+    {
+      "source": "frontend/components/atoms/ConfidenceBadge/index.tsx",
+      "sha256": "9547a764907da34b05d1e38ed46a9ef0d3d0d8fc7f1f14ae89e9dd80b25ec237"
+    },
+    {
+      "source": "frontend/components/atoms/ContractExplanationToggle/ContractExplanationToggle.module.css",
+      "sha256": "c28d4846f0213cfc8c8138b18692b8d613fdaa8ccf1b4c3c32f5b59864b415fd"
+    },
+    {
+      "source": "frontend/components/atoms/ContractExplanationToggle/index.tsx",
+      "sha256": "1c585ea70c72e1b152ac6c82776af331352b40ab29a8f26c7d9d7634cb94fc85"
+    },
+    {
+      "source": "frontend/components/atoms/ContractStar/index.tsx",
+      "sha256": "8bd6ba860c55787f4332f43607a4dc984dda166ad7cc0a7f35b992adec3e7764"
+    },
+    {
+      "source": "frontend/components/atoms/EventFlag/EventFlag.module.css",
+      "sha256": "d4aca13294d176b9325b68826ca730c8d07cf533768fa66dbfd86e050a24abd8"
+    },
+    {
+      "source": "frontend/components/atoms/EventFlag/index.tsx",
+      "sha256": "33fa317118e12f4684ed862daeea9bac0f010bfdbbdbc72e49b10b716c75f734"
+    },
+    {
+      "source": "frontend/components/atoms/IconButton/IconButton.module.css",
+      "sha256": "beeff91cf59e6265bf202c6cd8317bf06cf9f496eaea0b1823dcdcc88a20b313"
+    },
+    {
+      "source": "frontend/components/atoms/IconButton/index.tsx",
+      "sha256": "37b64753dce5a8a7f471ac02bec9c0139fe65803787dd8c0a054d2c77f28b24d"
+    },
+    {
+      "source": "frontend/components/atoms/ModeToggle/ModeToggle.module.css",
+      "sha256": "96ccd01f3a1548f5732d7fd4f93d10df6591f7671df666cbf992f00cedaa1c2f"
+    },
+    {
+      "source": "frontend/components/atoms/ModeToggle/index.tsx",
+      "sha256": "051835257da229c439aa8a53c04ca36245333e6674e4eeac141c4f8b7c4981d1"
+    },
+    {
+      "source": "frontend/components/atoms/NoLiveQuoteTag/index.tsx",
+      "sha256": "3a9923df483777afabba8af879faaff911ac9f3e2af225151505fb5f02223e5f"
+    },
+    {
+      "source": "frontend/components/atoms/OpenChartButton/OpenChartButton.module.css",
+      "sha256": "13209c583499f15bb770ba5015d00a7ca70f068834947fa2133b4c2b90ed6668"
+    },
+    {
+      "source": "frontend/components/atoms/OpenChartButton/index.tsx",
+      "sha256": "8d4a344cbd9df93dab57137f546e9fcdd4b2d0d5cf08a38d05299da720f9aeee"
+    },
+    {
+      "source": "frontend/components/atoms/RMultipleBadge/RMultipleBadge.module.css",
+      "sha256": "e6c1a1d81fe8b3f962c77a517d19491e507cb78feff17e40bbc3be771c36ec2d"
+    },
+    {
+      "source": "frontend/components/atoms/RMultipleBadge/index.tsx",
+      "sha256": "d8817f034d6a7e68c0aa176a385ba8cf529965cfe3bb08788adae2a8b26d4b09"
+    },
+    {
+      "source": "frontend/components/atoms/RankDelta/RankDelta.module.css",
+      "sha256": "f3d76792963efbc1ec1ebbed65b41d9dbaee7fa58ce8c9d7514add0d70bfab65"
+    },
+    {
+      "source": "frontend/components/atoms/RankDelta/index.tsx",
+      "sha256": "8a30d4e1479fbb13db24e749d0f6294e27ba74515d0c42fc44e62718382ef0ee"
+    },
+    {
+      "source": "frontend/components/atoms/RiskBadge/RiskBadge.module.css",
+      "sha256": "aaca097f369c1338e2dbbdc52144ea40607540ba4e6c64a1654a6b0a45dc09b5"
+    },
+    {
+      "source": "frontend/components/atoms/RiskBadge/index.tsx",
+      "sha256": "eeb1c28976bcd58b14616d5c6078101700ccea59f3a94632e69e9744e5bd14d3"
+    },
+    {
+      "source": "frontend/components/atoms/ScoreBar/ScoreBar.module.css",
+      "sha256": "a03741ead17fc55feeb98c1036b4b5d55ca7198abebe6823d0ec1530ebd18ca4"
+    },
+    {
+      "source": "frontend/components/atoms/ScoreBar/index.tsx",
+      "sha256": "5a526550c46791f80742d7d1e50ca5d88432839ab4bf575542bbf37731447063"
+    },
+    {
+      "source": "frontend/components/atoms/StatusBadge/StatusBadge.module.css",
+      "sha256": "4107c7f15fe74edc1b39b53598b65fec252306fa6487d254f9e34676b68387bb"
+    },
+    {
+      "source": "frontend/components/atoms/StatusBadge/index.tsx",
+      "sha256": "3aa3668aaaaa208aeb6c7192db44181f0e8f649245779f497e47eefe57a558f1"
+    },
+    {
+      "source": "frontend/components/atoms/StatusDot/StatusDot.module.css",
+      "sha256": "b75bea1e67d695935beb4a441c2e480a3b794c281c27e006c2c28b7553d03349"
+    },
+    {
+      "source": "frontend/components/atoms/StatusDot/index.tsx",
+      "sha256": "701182c734885a3172deb50d074e0051664c6a136f8e9514446f8df14d4d72f3"
+    },
+    {
+      "source": "frontend/components/atoms/Tooltip/Tooltip.module.css",
+      "sha256": "50fc679e6dde9b9f22364c7aa13d44d4e4584532ad07a8d838c8c25cf759c8ba"
+    },
+    {
+      "source": "frontend/components/atoms/Tooltip/index.tsx",
+      "sha256": "57fb5f17b99e8acd0009d37a2c5f17456720d2fec8804882a63b226e1b5781b5"
+    },
+    {
+      "source": "frontend/components/atoms/WatchStar/WatchStar.module.css",
+      "sha256": "40a1f6e0584b8969308daed353ab13373703ff9edf732b944b929ae84e48e167"
+    },
+    {
+      "source": "frontend/components/atoms/WatchStar/index.tsx",
+      "sha256": "aef332cc51fc030b5547f327beb9f8634e02a8c96f61af18914f985d97fcea4d"
+    },
+    {
+      "source": "frontend/components/molecules/AlertRow/AlertRow.module.css",
+      "sha256": "e63be82603b2b0dadc123dbe95ab689ec8f6ecaecddba019b931a6a5f80b1942"
+    },
+    {
+      "source": "frontend/components/molecules/AlertRow/index.tsx",
+      "sha256": "6ce265c3e78317a105f0da7eb0dc3ecc08070db47fe9e87eb377a65f54e9d461"
+    },
+    {
+      "source": "frontend/components/molecules/AlternativeContractRow/AlternativeContractRow.module.css",
+      "sha256": "e8d5639d3e566c4adbc05eddb6ce1804ff6e1325472f96e4d5d0f59054fed2d8"
+    },
+    {
+      "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+      "sha256": "638a8a2827a2101f0c011c625a08440e78f8628a168f602c2c39a684dacbc222"
+    },
+    {
+      "source": "frontend/components/molecules/CandidateNav/CandidateNav.module.css",
+      "sha256": "053201829db097c6512a0c2e7004da144bdf20bc9ea46b216cd55039a7ac42ee"
+    },
+    {
+      "source": "frontend/components/molecules/CandidateNav/index.tsx",
+      "sha256": "d90a21c897af9e9d9cc255e4aace34c2d48a64e6c01948d36dcbdb27cd2ecbda"
+    },
+    {
+      "source": "frontend/components/molecules/ChartClickPopover/ChartClickPopover.module.css",
+      "sha256": "51334696e41fe2e17e317548782e97107591a4f7a372b3029ac5ed4588b9a2b1"
+    },
+    {
+      "source": "frontend/components/molecules/ChartClickPopover/index.tsx",
+      "sha256": "8025af2019c5b9a4150a132305a5e4a6a10ea5bb63b30c7bd49ad5bee50bf3f0"
+    },
+    {
+      "source": "frontend/components/molecules/ChartPanelHeader/ChartPanelHeader.module.css",
+      "sha256": "fcb7fc456f2c8b95eb390fec13b3a1a8a1fbf0332e5c68c69347afba6714c4c3"
+    },
+    {
+      "source": "frontend/components/molecules/ChartPanelHeader/index.tsx",
+      "sha256": "1c91afbe93ced3d36def292cfe8ebd4065524500a060814724787d290015c7ec"
+    },
+    {
+      "source": "frontend/components/molecules/CollapsibleSection/CollapsibleSection.module.css",
+      "sha256": "4d3c707e408dbfea35cea0dc1cbaa21530e9a0bbca12281d41083ee1a2c8fdd5"
+    },
+    {
+      "source": "frontend/components/molecules/CollapsibleSection/index.tsx",
+      "sha256": "c1310505caf5ce9bc3b6c41312bc09691df76e857e4537de46599ae9ca44469f"
+    },
+    {
+      "source": "frontend/components/molecules/ConfigHealthChip/ConfigHealthChip.module.css",
+      "sha256": "2903016d29b6b4ec991553f10ac60a8f24f2ba102a61a2f3cf9833e6b899cafb"
+    },
+    {
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "sha256": "6c4ddd484dc4a5b9c297fdc9c4f0d1b8e55939eb8bcfd333eab52125be5f9366"
+    },
+    {
+      "source": "frontend/components/molecules/ConfirmDialog/ConfirmDialog.module.css",
+      "sha256": "ab9a7666b54b8b764a358b85eb4dc8a981cb23de27e28efcd2bb87627fe8c09b"
+    },
+    {
+      "source": "frontend/components/molecules/ConfirmDialog/index.tsx",
+      "sha256": "dfe260bd1131c0b6e24958a4b18354a531c6070d15b750ebf931c8050d36c1d5"
+    },
+    {
+      "source": "frontend/components/molecules/ContractScoreExplanation/ContractScoreExplanation.module.css",
+      "sha256": "8fdf9cc1206502f116703ea96273958415c98867e56158e10fcc644010d430fa"
+    },
+    {
+      "source": "frontend/components/molecules/ContractScoreExplanation/index.tsx",
+      "sha256": "438b4563222454362604ea1252fe81cbf7908361644665da1f9b3ec1d7b7003e"
+    },
+    {
+      "source": "frontend/components/molecules/DTEProgressBar/DTEProgressBar.module.css",
+      "sha256": "cdf1f565e30cbd4dafe31ae9c5df0fde3fd0ec92de1a61645d41d41d99a5feee"
+    },
+    {
+      "source": "frontend/components/molecules/DTEProgressBar/index.tsx",
+      "sha256": "091f889e3b485a56a3ed94966a17edbfbc79d0d8551bfdd94644ac3941c67b90"
+    },
+    {
+      "source": "frontend/components/molecules/FundamentalHealthCard/FundamentalHealthCard.module.css",
+      "sha256": "761cb3bedb75034d16b9e53367286c1c05af0965887f5e2eba89baceb2f45c4f"
+    },
+    {
+      "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+      "sha256": "1953eaa4894e661042da304f2aa232d267250ea438abf0ec844690e15b80edff"
+    },
+    {
+      "source": "frontend/components/molecules/IndicatorPanel/IndicatorPanel.module.css",
+      "sha256": "f973002793383f2f91ae7d227fab894b8636597c54d369f6a25c1da246fbe07d"
+    },
+    {
+      "source": "frontend/components/molecules/IndicatorPanel/index.tsx",
+      "sha256": "9420548cb4c432166096601ce72bad15f617755362104165336d8d89593f1d08"
+    },
+    {
+      "source": "frontend/components/molecules/InitStores/index.tsx",
+      "sha256": "7bd9d96af0c2067a4f9ce90df383cd6dcbf2411bad75026cf9f24255b9de002b"
+    },
+    {
+      "source": "frontend/components/molecules/LabeledStatusBadge/LabeledStatusBadge.module.css",
+      "sha256": "d29d7bf68250c7751b53e2d6e507e6f3786d7f03f5a0a1c5de5dff0f9ea0c8be"
+    },
+    {
+      "source": "frontend/components/molecules/LabeledStatusBadge/index.tsx",
+      "sha256": "2b3f4fb07384da3990b4ffd9fa1415c182c3dc45d41cbbd0af638459aeadfa13"
+    },
+    {
+      "source": "frontend/components/molecules/MarketClock/MarketClock.module.css",
+      "sha256": "67a9a8d36b939011f90103bab51d56761a303fa085aa80f84fb5f9a9e5544b43"
+    },
+    {
+      "source": "frontend/components/molecules/MarketClock/index.tsx",
+      "sha256": "8fc1162c057595e17cb8aa0d13d1835de1572b91fac74682ca638cccd7a7410e"
+    },
+    {
+      "source": "frontend/components/molecules/MarketSentiment/MarketSentiment.module.css",
+      "sha256": "7dff10648b255d2b9f8a40d72b425903b99783cd0a48999c1de14ae13eba06b5"
+    },
+    {
+      "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+      "sha256": "a4373ea282caee1dba7ecd5aad1d34d151c517a711b6e79600b18e90b284a48c"
+    },
+    {
+      "source": "frontend/components/molecules/MeanReversionConfirmPanel/MeanReversionConfirmPanel.module.css",
+      "sha256": "9b49ff2d50e47f70e76a5079a5eb72a28bfb814575268bcdf888268fade3435f"
+    },
+    {
+      "source": "frontend/components/molecules/MeanReversionConfirmPanel/index.tsx",
+      "sha256": "6a1432751ab2c7297cd10ea728bf98f6a49b5cbbd7ee44c003209b7ce9862c27"
+    },
+    {
+      "source": "frontend/components/molecules/MethodPickSelector/MethodPickSelector.module.css",
+      "sha256": "3a1ddf3558cfa486e3eb592c77652f446f4561944ff4f70025c47427f6203b80"
+    },
+    {
+      "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+      "sha256": "5b3c6202db70882887df8f069177917af2b6c5dbc758f4c832667d448ee94765"
+    },
+    {
+      "source": "frontend/components/molecules/NewsCard/index.module.css",
+      "sha256": "8204e8740c862322941762f05c0934a3d1d7eb3901b7f480111ec52ace273da2"
+    },
+    {
+      "source": "frontend/components/molecules/NewsCard/index.tsx",
+      "sha256": "a982224067976ec8c89a46519bbb8a96474c5455381647b95ceaf0c0dc2e5a7e"
+    },
+    {
+      "source": "frontend/components/molecules/Pagination/Pagination.module.css",
+      "sha256": "a7cc98652f52b7e0c730b0e67217588e1270384c0f2f8d8fddf5b687ab774ee4"
+    },
+    {
+      "source": "frontend/components/molecules/Pagination/index.tsx",
+      "sha256": "4434d0d97a6865c4b0b417650acabb5d117a089751fc46bb354388952ded9fe5"
+    },
+    {
+      "source": "frontend/components/molecules/QuickLookRow/QuickLookRow.module.css",
+      "sha256": "5703b33600e4fe4267399583bc307ea7b810fbe18e713273321a0708fc961667"
+    },
+    {
+      "source": "frontend/components/molecules/QuickLookRow/index.tsx",
+      "sha256": "dac12c1d70f71e9209e8c20852ae390a0bfc5afa460523d38657bee8fdd67264"
+    },
+    {
+      "source": "frontend/components/molecules/RegimeIndicator/RegimeIndicator.module.css",
+      "sha256": "88757429acc0853f9adfeadb41f75b6b8db11723872d20ec89985f52ce1a5e5a"
+    },
+    {
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "sha256": "bcbe3cf8786253d233ef1d12961fea2625eabf72b31a2f4180b42e1c0a7fbe1e"
+    },
+    {
+      "source": "frontend/components/molecules/RenameProfileDialog/RenameProfileDialog.module.css",
+      "sha256": "f27778d7b16ff91c80b2ee4fc1e9f3333ef19d41547da84ecc2a9c08a082551f"
+    },
+    {
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "sha256": "53300b4697a3788003d4b7ab112663bafda26626e18e80775c50718f2f314bc3"
+    },
+    {
+      "source": "frontend/components/molecules/RiskPanel/RiskPanel.module.css",
+      "sha256": "71e53cdf0ee1833098061b41a3dbf54888676017f6d07ab5bcb5c7d570f89841"
+    },
+    {
+      "source": "frontend/components/molecules/RiskPanel/index.tsx",
+      "sha256": "213c937e16750ab86fbcdc0152a890f9f09fc2389851f1cdf246b29e59558fe1"
+    },
+    {
+      "source": "frontend/components/molecules/SaveProfileDialog/SaveProfileDialog.module.css",
+      "sha256": "f27778d7b16ff91c80b2ee4fc1e9f3333ef19d41547da84ecc2a9c08a082551f"
+    },
+    {
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "sha256": "1a33a9b5d6faa989838d190611fd003ce2c41d07a8dd68be0cdf203052c2c3a0"
+    },
+    {
+      "source": "frontend/components/molecules/SavedScanResultsTable/SavedScanResultsTable.module.css",
+      "sha256": "635509f947974e29a6accd103106399fe117d5aaee2744864f94bcc9b6f26077"
+    },
+    {
+      "source": "frontend/components/molecules/SavedScanResultsTable/index.tsx",
+      "sha256": "95e6c6ab2bcf2a8d389ddc4208cd25ee6db475d924a063c9038497698b20c058"
+    },
+    {
+      "source": "frontend/components/molecules/ScanIndicator/ScanIndicator.module.css",
+      "sha256": "88757429acc0853f9adfeadb41f75b6b8db11723872d20ec89985f52ce1a5e5a"
+    },
+    {
+      "source": "frontend/components/molecules/ScanIndicator/index.tsx",
+      "sha256": "8ff5801c7e06713933445669f8037f0c129903ff0d48a36b570311faa215c788"
+    },
+    {
+      "source": "frontend/components/molecules/ScoreCardPanel/ScoreCardPanel.module.css",
+      "sha256": "5b248a2e8a0ffeb35c3319d11c6c685e33bbec7314c82a2706f1f0eafe88b5e9"
+    },
+    {
+      "source": "frontend/components/molecules/ScoreCardPanel/index.tsx",
+      "sha256": "6b1d0b886e8150032d69aeba5f7cb78f7c2fd2d20399ef70c7f6a9402bc30dc8"
+    },
+    {
+      "source": "frontend/components/molecules/SectionCard/SectionCard.module.css",
+      "sha256": "ce4e28e49b3c8326f73c53d0648dceb7dde97868ec50d29396eca59942c07987"
+    },
+    {
+      "source": "frontend/components/molecules/SectionCard/index.tsx",
+      "sha256": "79e9042dd9d9e85e860c6a396522081316384522ffe99f91d7b68842269ee54f"
+    },
+    {
+      "source": "frontend/components/molecules/StepIndicator/StepIndicator.module.css",
+      "sha256": "694ba91cc535366efa3e56a4e77fd5fb097ce618130667e9cc035816f870594f"
+    },
+    {
+      "source": "frontend/components/molecules/StepIndicator/index.tsx",
+      "sha256": "730bd7ee5d6ff06b8d052c6f631d4431372d15ed573cd519152b0802e808928a"
+    },
+    {
+      "source": "frontend/components/molecules/SymbolHeader/SymbolHeader.module.css",
+      "sha256": "b2e2d05c45615c1fa2f217ce2521163b5a7ccaf60c40623afc47b98d0a27a7e7"
+    },
+    {
+      "source": "frontend/components/molecules/SymbolHeader/index.tsx",
+      "sha256": "8e025968de534b3a1b1aab0e25c1eb1bdbf05ddcd63da9b6143425ab4515d76f"
+    },
+    {
+      "source": "frontend/components/molecules/SymbolNotes/SymbolNotes.module.css",
+      "sha256": "540e6f77be8c27ab0858d0265c04dcf69ce8def3e4d2c9f1961bf8f98aee4198"
+    },
+    {
+      "source": "frontend/components/molecules/SymbolNotes/index.tsx",
+      "sha256": "eac94d295218ab2fa460dee1761b40942abfdb001c2726bacfa8f4258cb10b9d"
+    },
+    {
+      "source": "frontend/components/molecules/TableRow/TableRow.module.css",
+      "sha256": "8655da0a5479345fd2bd45ee9f9d2b4ee8f4e447a8e7799ac8d966fce39ed0d9"
+    },
+    {
+      "source": "frontend/components/molecules/TableRow/index.tsx",
+      "sha256": "31a3ea89107ab366ab2ff545504eb7ed1a564fe245305d5cb08460661248d208"
+    },
+    {
+      "source": "frontend/components/molecules/TextInputPopover/TextInputPopover.module.css",
+      "sha256": "6c36d668fa721c5188e086988f7a5ed181bcc5b243dbe5c8041c8aa61643b8ac"
+    },
+    {
+      "source": "frontend/components/molecules/TextInputPopover/index.tsx",
+      "sha256": "dfd3668311ad5de603dbb423938b2d3c20b2d71f81377d697f6acd3cedef25ce"
+    },
+    {
+      "source": "frontend/components/molecules/Toast/Toast.module.css",
+      "sha256": "b3c39ea1be8f601ed15ed2a6a08672d6fbaeef37377cd99a27a591035b36325b"
+    },
+    {
+      "source": "frontend/components/molecules/Toast/index.tsx",
+      "sha256": "056efbb97eae6edc25a06cc226ec5e525c6254443d90eb1ef17b94ceac272257"
+    },
+    {
+      "source": "frontend/components/molecules/TopBarActions/TopBarActions.module.css",
+      "sha256": "88757429acc0853f9adfeadb41f75b6b8db11723872d20ec89985f52ce1a5e5a"
+    },
+    {
+      "source": "frontend/components/molecules/TopBarActions/index.tsx",
+      "sha256": "6fdb0e7962208ad33a1790855e46dd5440d5722ea76b64f2aa955d1f2c732ab3"
+    },
+    {
+      "source": "frontend/components/molecules/TradeCardQualification/TradeCardQualification.module.css",
+      "sha256": "ff72de6ed4e1e0c647f3c7a05d736d9344344888ed127e097f89985231fb6b20"
+    },
+    {
+      "source": "frontend/components/molecules/TradeCardQualification/index.tsx",
+      "sha256": "a7cb4bfadaa67aefbb51a61060b0631900ba4d648be893d3eee97361ad76148a"
+    },
+    {
+      "source": "frontend/components/organisms/AlertRuleBuilder/AlertRuleBuilder.module.css",
+      "sha256": "17db41ed265a11c3e3e1ab66e8c2a93af6553aa0e3ce46ddd7d87beaef6ea104"
+    },
+    {
+      "source": "frontend/components/organisms/AlertRuleBuilder/index.tsx",
+      "sha256": "9801888d98bd94243edee441dd90312cb3ec5d6723974ff0eb38308b617d4d29"
+    },
+    {
+      "source": "frontend/components/organisms/AlertRuleBuilder/regimeStates.ts",
+      "sha256": "ed6380e3388128b26ea819b71ba50b4c584790a1b947131762ba72a2f3e67a84"
+    },
+    {
+      "source": "frontend/components/organisms/AlertToast/AlertToast.module.css",
+      "sha256": "b1e4c09fcb736ab12ef1566b9299f10a7149e301a0b7bc5f253b533778f48d55"
+    },
+    {
+      "source": "frontend/components/organisms/AlertToast/index.tsx",
+      "sha256": "f0b7d6eaf2f66bbce884f6ea16ef02389b32ae1c903f6c887fe50a34b6795251"
+    },
+    {
+      "source": "frontend/components/organisms/AutoTradeArm/AutoTradeArm.module.css",
+      "sha256": "a0f0cfc90a5070c5ddd4e2e5ef5985507f6c4c616c6a62de2e2193efaa9134b7"
+    },
+    {
+      "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+      "sha256": "75edf493f693ad749a91cf36b4cd8c8bd6c18947c27cd6aa4cf46bbc2b865e59"
+    },
+    {
+      "source": "frontend/components/organisms/BarrierRaceCard/BarrierRaceCard.module.css",
+      "sha256": "1e5b3a3c0de4e0aa45845a362d211884dbe1e6ceef3da065f748e419a03fab9c"
+    },
+    {
+      "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "sha256": "00076b8e2e77b5eae053a1a77bb9492ff1392a2815de7c3352ac71162c62c74f"
+    },
+    {
+      "source": "frontend/components/organisms/BrokerAttemptPanel/BrokerAttemptPanel.module.css",
+      "sha256": "18c951f3d0ef07e5bb55387ae5358f257c2a535409338a8c3bf908e6e5985686"
+    },
+    {
+      "source": "frontend/components/organisms/BrokerAttemptPanel/index.tsx",
+      "sha256": "d6c99f9e3f783782f066c8549ea6019e090fdd0aec34de319df14094a7d97af1"
+    },
+    {
+      "source": "frontend/components/organisms/BrokerPicker/BrokerPicker.module.css",
+      "sha256": "984c2b5bfd6c55b60e1acb06ca605b63c86539c83499639d9524987288dfa120"
+    },
+    {
+      "source": "frontend/components/organisms/BrokerPicker/index.tsx",
+      "sha256": "d3c2574d709c1899b86425fdc2ff52065d909d70c381d7218609fff8ecee57ea"
+    },
+    {
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/CandidateBacktestWorkspace.module.css",
+      "sha256": "a51248b274851e21059a2839a31068a68daeba6b406c2c25342670bea04772b7"
+    },
+    {
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/chart.ts",
+      "sha256": "f846a310a90172eaa74553df64f9b778528e3e45f3c2e063d32465167dc01b05"
+    },
+    {
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+      "sha256": "903b2f5ec2d328cb8841d97191d24b6f0e031942eda75d845d30e8bcdad94420"
+    },
+    {
+      "source": "frontend/components/organisms/CandidateChartWorkspace/index.tsx",
+      "sha256": "a28a5f0040716fb4f6c2976ccbb4d5a8d4d0b7c7141d2f19050a0367b0aecb35"
+    },
+    {
+      "source": "frontend/components/organisms/CandlestickChart/CandlestickChart.module.css",
+      "sha256": "f7a3049d99ad33349e174f3661dac08215b3dd0fb14eda1c136c50f6a32a4f6e"
+    },
+    {
+      "source": "frontend/components/organisms/CandlestickChart/index.tsx",
+      "sha256": "4cea2f5148bf71df6c9ff14a2f493fe69ae628c903d07ac874d5bd9f018f9617"
+    },
+    {
+      "source": "frontend/components/organisms/ChartOverlays/index.tsx",
+      "sha256": "d7c9918f95ea223473ba0f91b0d804d325800678953dd9a243517185ef50e38d"
+    },
+    {
+      "source": "frontend/components/organisms/ChartPane/ChartPane.module.css",
+      "sha256": "a7dcf5efc2a0c30e50c7f59f7496d76b5a601ff26759f347b7fe87ebebae808f"
+    },
+    {
+      "source": "frontend/components/organisms/ChartPane/index.tsx",
+      "sha256": "eeeebe519484922fa9f8c352bf80e1c7c669358aaf2c15e051cc17d0c092a97e"
+    },
+    {
+      "source": "frontend/components/organisms/ChartRightPanel/ChartRightPanel.module.css",
+      "sha256": "47e6e535d591188e255f8e3ac1f2dc25d594983e94f5206e739ca29ff5aa5d9a"
+    },
+    {
+      "source": "frontend/components/organisms/ChartRightPanel/index.tsx",
+      "sha256": "328116654ea4c85d87c2d3d5d9d76e1ae067db3ed57b9bca742413349eaa3dd3"
+    },
+    {
+      "source": "frontend/components/organisms/ChartTopBar/ChartTopBar.module.css",
+      "sha256": "4be6307083457cfc8ffbb8bc4c22eed5e50d7843b91f4f4fddb43849ff9f9e83"
+    },
+    {
+      "source": "frontend/components/organisms/ChartTopBar/index.tsx",
+      "sha256": "87fb8f295f2c958f1089ed7e171d11e9c60f3518a18b782637e24e6f611d537c"
+    },
+    {
+      "source": "frontend/components/organisms/ChartWorkspace/ChartWorkspace.module.css",
+      "sha256": "802a721d5a4f422b8c9ef485fd3b4d7fd7dd4a171054a779345c4c87231d9f97"
+    },
+    {
+      "source": "frontend/components/organisms/ChartWorkspace/index.tsx",
+      "sha256": "e7d975a3da381402bf988e01252d957eba29997ee6ebfb1210c723ff6c596571"
+    },
+    {
+      "source": "frontend/components/organisms/ClosePositionDrawer/ClosePositionDrawer.module.css",
+      "sha256": "cf0861ddbbeb6b31211a1374408b8960f494d566424a71b21d1e37cdba67d17a"
+    },
+    {
+      "source": "frontend/components/organisms/ClosePositionDrawer/index.tsx",
+      "sha256": "0b01690183c96a3060848c4032e327d89427a4526f2a6865c81070b41608db12"
+    },
+    {
+      "source": "frontend/components/organisms/CompositeAlertDialog/CompositeAlertDialog.module.css",
+      "sha256": "83337909bbaca105a4dfe5de27f6db0fbe2f39cd72ea869654fb364c8595c71e"
+    },
+    {
+      "source": "frontend/components/organisms/CompositeAlertDialog/index.tsx",
+      "sha256": "a8c272cfe7f04bc74c6bdda498d71c7bf73ec320927eecf992bf54af6f8a3c7d"
+    },
+    {
+      "source": "frontend/components/organisms/ConfigHealthBanner/ConfigHealthBanner.module.css",
+      "sha256": "acd4eb4690259fa0c9c1f09464ce9569c4020f806bd34080060ffa64078af89d"
+    },
+    {
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "sha256": "219f47c6b52e0b01580bfb6d5de3fc47139abca7062fd53007121f2562440503"
+    },
+    {
+      "source": "frontend/components/organisms/ContextRail/ContextRail.module.css",
+      "sha256": "0d049f8109d7a54e3290954558b5eb6cee82e17c34c842ec8825864dba0b3074"
+    },
+    {
+      "source": "frontend/components/organisms/ContextRail/QuickLook.module.css",
+      "sha256": "7a2910592e14438e71c1c0cedb09017d308d327cc40abb6fcde2b7cccb302640"
+    },
+    {
+      "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "sha256": "2f27aff0cc5f81a22c7d8722aebc1dcede4c23f94420397b9a42791c8fe6d71c"
+    },
+    {
+      "source": "frontend/components/organisms/ContextRail/index.tsx",
+      "sha256": "c2d3a85343a7cdd213550eda0f7246d7c0fc46c233636e95ec04859ca60ed2cd"
+    },
+    {
+      "source": "frontend/components/organisms/DirectSendNotesPanel/DirectSendNotesPanel.module.css",
+      "sha256": "6398dde3fb95cac6c34918e437d4f8d2df1d9d4b21e96c8850f9a120b56168b6"
+    },
+    {
+      "source": "frontend/components/organisms/DirectSendNotesPanel/index.tsx",
+      "sha256": "af745a5d6ba6165fb10ab8ea2e0b6cd024c14a62214dc638206195eec7c8aaa7"
+    },
+    {
+      "source": "frontend/components/organisms/DrawingOverlays/index.tsx",
+      "sha256": "e84eccfd81020d099ee1b740eb15cb84f002e108489257cf64d0db4b7c2f94b5"
+    },
+    {
+      "source": "frontend/components/organisms/DrawingToolbar/DrawingToolbar.module.css",
+      "sha256": "239bbe517ca04e4e54313a86b4e746f933108971fd746e1d45672a7d2cb68691"
+    },
+    {
+      "source": "frontend/components/organisms/DrawingToolbar/index.tsx",
+      "sha256": "de274cc398c7289119eb31b7a191a110dea2d399d32913317ea2b978aaf8b317"
+    },
+    {
+      "source": "frontend/components/organisms/EarningsChart/EarningsChart.module.css",
+      "sha256": "50ce3c650098751ad59a77ebe3c69a728156c3d60b881a515c365bc8940b66b5"
+    },
+    {
+      "source": "frontend/components/organisms/EarningsChart/index.tsx",
+      "sha256": "175247a5f0f351c314d5fba54cb67b653eebce6ad5ec4ef7199b6eb817910341"
+    },
+    {
+      "source": "frontend/components/organisms/FibPullbackParamsPanel/FibPullbackParamsPanel.module.css",
+      "sha256": "79652426b4f62ad386d60b5d46eeaca7e18ae52d7d05850d942e9eac0dcf7f30"
+    },
+    {
+      "source": "frontend/components/organisms/FibPullbackParamsPanel/index.tsx",
+      "sha256": "4e042c4abaf67040ff8df9e665671afcb181bbfb7b1312b4d068040118ab5f6e"
+    },
+    {
+      "source": "frontend/components/organisms/Frame.module.css",
+      "sha256": "b899e47e002eae31a5cc283c29570271793e51f080eccfd589e01133e9463346"
+    },
+    {
+      "source": "frontend/components/organisms/FreshBacktestControls/FreshBacktestControls.module.css",
+      "sha256": "8fbfed3423fa97f5b71a70216ec7768d17126693a1f0aad2e3ed30e91afeee33"
+    },
+    {
+      "source": "frontend/components/organisms/FreshBacktestControls/index.tsx",
+      "sha256": "9825aee7231e4ab403dee6603720487ef49067a18631e116180b787a339778e6"
+    },
+    {
+      "source": "frontend/components/organisms/IndicatorPanel/IndicatorPanel.module.css",
+      "sha256": "d868a76ab1c9177927bff03a05131b4c51c87e49840e54c0106e2c6184e92be3"
+    },
+    {
+      "source": "frontend/components/organisms/IndicatorPanel/index.tsx",
+      "sha256": "1adcd93ef28b5400f9fd17c256cb0eb6f94b813291e73d351c30e593fd8e824c"
+    },
+    {
+      "source": "frontend/components/organisms/InlineChartPanel/InlineChartPanel.module.css",
+      "sha256": "c9a755d318821a0f9ce808423fd4f372c29151ca9a215d3a5cd911028764f143"
+    },
+    {
+      "source": "frontend/components/organisms/InlineChartPanel/index.tsx",
+      "sha256": "e27c0d1453f32cfcf6951f7925cfa79a3e94ecc01937a9b8bac1a94425796095"
+    },
+    {
+      "source": "frontend/components/organisms/JournalEntryForm/JournalEntryForm.module.css",
+      "sha256": "12bc5b62a90ffdc6e29769880c08ec4f1369d8fe57162c766876b6be83dca193"
+    },
+    {
+      "source": "frontend/components/organisms/JournalEntryForm/index.tsx",
+      "sha256": "9e6852ae6a044844b65f8dc8aba29ff4601f84f0a3d80c17e391332accec6804"
+    },
+    {
+      "source": "frontend/components/organisms/JournalEntryTable/JournalEntryTable.module.css",
+      "sha256": "5f2d21d70e457ec102eb11de85664c2940732dcbb2e3f7235a55ee738d520a7c"
+    },
+    {
+      "source": "frontend/components/organisms/JournalEntryTable/index.tsx",
+      "sha256": "467e7b9b1e4863181060604f4c965b1df2812e8641cd4986231eb39a8524e520"
+    },
+    {
+      "source": "frontend/components/organisms/MtfDashboard/MtfDashboard.module.css",
+      "sha256": "d1d2ed1cdc52b61efff2e3e679f010148b46c06da6b7456d8d7389cc7263919c"
+    },
+    {
+      "source": "frontend/components/organisms/MtfDashboard/index.tsx",
+      "sha256": "1f496bd13eb102fbcbead4a63dfae61bcb58f33eaf5dbe370046536dee35e17f"
+    },
+    {
+      "source": "frontend/components/organisms/NavItems/NavItems.module.css",
+      "sha256": "f151206ea8ab5c77315e2592f3d622088d2c294147b2064c8e6faaaf3b5ff917"
+    },
+    {
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "sha256": "a0efe627c1e72284439a10fa2ec759b8044418cc529bcc85f61108a3ccadc329"
+    },
+    {
+      "source": "frontend/components/organisms/NavRail/NavRail.module.css",
+      "sha256": "23fc104ba9db2b39604297f830f299a95907e14cadaefcc425bdb88253d03ebb"
+    },
+    {
+      "source": "frontend/components/organisms/NavRail/index.tsx",
+      "sha256": "38d4a8313cf9f5efeb036672cdf0e557da117b96a8cf39908dc5546a3cd424c0"
+    },
+    {
+      "source": "frontend/components/organisms/PipelineInspector/PipelineInspector.module.css",
+      "sha256": "d97aeea6aa08edf698c1d320094853804e40bc75844bbf24a243975095ac3f74"
+    },
+    {
+      "source": "frontend/components/organisms/PipelineInspector/index.tsx",
+      "sha256": "c2dbb9e9a3a95de5b52e9eba7c946b3509ca0981065c5e56a9cfe35d17e32dd1"
+    },
+    {
+      "source": "frontend/components/organisms/PnlChart/PnlChart.module.css",
+      "sha256": "c0a4f92378665a3b20bf1ad6510ced1e1900109beafa52b7eb372da461353acc"
+    },
+    {
+      "source": "frontend/components/organisms/PnlChart/index.tsx",
+      "sha256": "6f4a4d7de5dfe814b179a9cb401a14d97ae657f0ca101cc09ba1b24a4a904f08"
+    },
+    {
+      "source": "frontend/components/organisms/PnlHeatmap/PnlHeatmap.module.css",
+      "sha256": "4e08886544332590b832f752adf9397cb956d8e75d8477c53f14aa4c5f330556"
+    },
+    {
+      "source": "frontend/components/organisms/PnlHeatmap/index.tsx",
+      "sha256": "2eb095518517850207bab18b6d19fad2ce2b2b32c50970e8def450dff4bb8488"
+    },
+    {
+      "source": "frontend/components/organisms/PreBreakoutParamsPanel/PreBreakoutParamsPanel.module.css",
+      "sha256": "07c15c6145f040df17b1b782760ec0eca22e1ebc1d57bef5f3936977f792b031"
+    },
+    {
+      "source": "frontend/components/organisms/PreBreakoutParamsPanel/index.tsx",
+      "sha256": "5902f13e2c368629ad98e83fee82580e34feb4ab0ecc01c6da9ab43a1b490248"
+    },
+    {
+      "source": "frontend/components/organisms/RunScanButton/index.module.css",
+      "sha256": "b2ac3731869a76536b16ac5487700dcbc8107d5943f155ea9a03275f6234962f"
+    },
+    {
+      "source": "frontend/components/organisms/RunScanButton/index.tsx",
+      "sha256": "157bbc0d1ea18ec2ae729bb4b5f38158a43b16aada6e748abc3de0a4bda5a57a"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/LegacyReport.tsx",
+      "sha256": "509d0d4c719076a948a919d5e4f21336609e906c4285a52036370ccdf3927501"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx",
+      "sha256": "24fc663c6ec5c646503dd158a57c8b2863e33481f63f1f93b5fd6e51f3f4f14d"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/SavedScanReportInspector.module.css",
+      "sha256": "88be1b3c01ab7a124ed76cd4c985b09b194a1e3a1989ea5bcd01d0efaf6b01dc"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx",
+      "sha256": "44eda96c7d8354d677b27089292e29ae644d4034ddef19c8c2df37f5261cd8e0"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/UnsavedReport.tsx",
+      "sha256": "e9ce78f84be4b1af2e4d794165cedf6e8dc34d3e68938179ffb9fefb0151ab08"
+    },
+    {
+      "source": "frontend/components/organisms/SavedScanReportInspector/index.tsx",
+      "sha256": "3d0de8da41c301be059a57bed1ae09e523e0efa76b506b7f7b66a0edd9622c2c"
+    },
+    {
+      "source": "frontend/components/organisms/ScreenerStepGate/index.tsx",
+      "sha256": "b42d288f168c25b76fa3ccbb3570e8bc69c904ff9524f3c9aac08c1ea1f33db2"
+    },
+    {
+      "source": "frontend/components/organisms/SearchProfileBar/SearchProfileBar.module.css",
+      "sha256": "a95a50bda8b6773fb8b583501a62f5bdd148a052e6a1f485c401cbd9f95d123f"
+    },
+    {
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "sha256": "28cc603e6306c3ffd2afa88f7ee16693139d16401fb285a040eb32118e08fff2"
+    },
+    {
+      "source": "frontend/components/organisms/SendToBrokerDialog/SendToBrokerDialog.module.css",
+      "sha256": "f01992e04e8286ca1af6ddd7807d24a7ce50999eed5610a81f8e3c5c4c9953e2"
+    },
+    {
+      "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "sha256": "efdea1572938831cc04f90eae8a34f01134431aff9c8aedb6e2cbde0744d3a6b"
+    },
+    {
+      "source": "frontend/components/organisms/StepNavBar/StepNavBar.module.css",
+      "sha256": "566faec70edcdbe0defc619df498a1a29c7d9b42e66edd094078d680dab1cda5"
+    },
+    {
+      "source": "frontend/components/organisms/StepNavBar/index.tsx",
+      "sha256": "e20dfbe181b810a1379f371814bde6b502569a0be96d1a959ffaf8d00a4f85e1"
+    },
+    {
+      "source": "frontend/components/organisms/Stepper/Stepper.module.css",
+      "sha256": "5f45bdcf47b0d67b919ba942f7f362640b5b0bccd1aca6fbf012750e6abad1b9"
+    },
+    {
+      "source": "frontend/components/organisms/Stepper/index.tsx",
+      "sha256": "249bd2fce943d98eb31866ed7b7a919828b43a46758ee78575b32f9fb42357a4"
+    },
+    {
+      "source": "frontend/components/organisms/StockAutoTradeArm/StockAutoTradeArm.module.css",
+      "sha256": "6ef21321081d16e0bceed3e6e5e84aedc633c3be190eb7d7a985d3dec746b146"
+    },
+    {
+      "source": "frontend/components/organisms/StockAutoTradeArm/index.tsx",
+      "sha256": "d59ded22ff2c2759f12804d2759f0ba51362b3d0119a67d52c08aecca081e689"
+    },
+    {
+      "source": "frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx",
+      "sha256": "7b46d567203f6f1f084a66d1d873faf4fa63c201ed595432fef9171637b6c686"
+    },
+    {
+      "source": "frontend/components/organisms/StockPositionCard/PositionEvidence.tsx",
+      "sha256": "0d48488d6385b8794c937fd3d74ecd6a5d96e9d8a6b9a49524dc84ee614a72c7"
+    },
+    {
+      "source": "frontend/components/organisms/StockPositionCard/StockPositionCard.module.css",
+      "sha256": "a5a2607f347fcc87d3bf892b1518ef32dd70eca38b7df815d6927b4bde641b02"
+    },
+    {
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "sha256": "63a5a29dc0a06b8af46d2d5395da1c71af99b2e683d372c37ebc37115ce578e4"
+    },
+    {
+      "source": "frontend/components/organisms/StockSendDialog/StockSendDialog.module.css",
+      "sha256": "b3f0abbac32d179a78a1bde1a401555d99fd7474562225d2b3948c4558426857"
+    },
+    {
+      "source": "frontend/components/organisms/StockSendDialog/index.tsx",
+      "sha256": "ea0cef2f0867bae13b0e9031fe5a3f023ea4be462dc7174574dc6e4c5f14e11c"
+    },
+    {
+      "source": "frontend/components/organisms/StrategyParamsPanel/StrategyParamsPanel.module.css",
+      "sha256": "1a1dd4487636dd8ccb4ec6776923397d23798232c21d3423eaec158cda73a508"
+    },
+    {
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "sha256": "49e6e68514c7d8cf8e2dfc36ee34ea8ea5f08d440e8956eec224bb3bfaf34392"
+    },
+    {
+      "source": "frontend/components/organisms/StructurePanel/StructurePanel.module.css",
+      "sha256": "3d0d3273bc29877e89f1c70b2b04eb3b34912beb27e8514409e49916bbfbe466"
+    },
+    {
+      "source": "frontend/components/organisms/StructurePanel/index.tsx",
+      "sha256": "08941091b2f8e021884ac6490bd1f2235392aa048882b344c8f170ad437db30c"
+    },
+    {
+      "source": "frontend/components/organisms/ToastContainer/ToastContainer.module.css",
+      "sha256": "333c15a670db003d745b2dd76ee279ba476d5a7e61600150d2cc03a15a68bc64"
+    },
+    {
+      "source": "frontend/components/organisms/ToastContainer/index.tsx",
+      "sha256": "36a4d5d3dbb48e36c0dab44f2101e6efc1760606ad44946a43e5c6ec62336119"
+    },
+    {
+      "source": "frontend/components/organisms/TopBar/TopBar.module.css",
+      "sha256": "54fca8a491d1726978f1db5d8406e77613cbaae69535e769ef64c8d99240a5bf"
+    },
+    {
+      "source": "frontend/components/organisms/TopBar/index.tsx",
+      "sha256": "128b3c53120b4d217f941960b1cee9e0648d363583eacdda8478c184e0517143"
+    },
+    {
+      "source": "frontend/components/organisms/TradeCard/TradeCard.module.css",
+      "sha256": "44db9b91be824a7732622ba0126a0639389917c5e039311dab9297f76f4ea7a6"
+    },
+    {
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "sha256": "09b19199cd8f9ec9557bf37fbacb8d204ebd7600fa21a5ac1c057120834c76f4"
+    },
+    {
+      "source": "frontend/components/organisms/ValidationTable/ValidationTable.module.css",
+      "sha256": "de22d3eb97ee5e6f4f2bed1869f0528598c6549a814d8fa2618e88837f49d10c"
+    },
+    {
+      "source": "frontend/components/organisms/ValidationTable/index.tsx",
+      "sha256": "0bb70732d5b478121344761099c5f1799475e3ed3c10d60e5d77653a5c0222a6"
+    },
+    {
+      "source": "frontend/components/primitives/Data.module.css",
+      "sha256": "ef67639d9e4867bc6df37ebb0bc45ba8b4b51fa4341c7d451a0dc6b46a74e66a"
+    },
+    {
+      "source": "frontend/components/primitives/Data.tsx",
+      "sha256": "d5032448db0a987b0c3492040fc03a62a764fba2fa168f569c7e03e5db9d17dc"
+    },
+    {
+      "source": "frontend/components/primitives/Text.module.css",
+      "sha256": "e75faa90fe796e677397c6b6178798b87f7030e03a92c25fff9d22f45b92cfc5"
+    },
+    {
+      "source": "frontend/components/primitives/Text.tsx",
+      "sha256": "ad06d62aa8ecdbfdf228c7b3d3ffa91b7027e5a17178d94565d2106112383ec5"
+    },
+    {
+      "source": "frontend/components/primitives/Title.module.css",
+      "sha256": "9180beb9acf6793106a09b05c7b2db207f637981064f97cc157983092762bf9a"
+    },
+    {
+      "source": "frontend/components/primitives/Title.tsx",
+      "sha256": "a20acb945a2310f9d87d7738be77baa5162b0f2fc855430a5b40b1b19f9a48d3"
+    },
+    {
+      "source": "frontend/components/primitives/index.ts",
+      "sha256": "ceaaaaa069efeeb0a228a07c525ee575a69c2290f01824c7b7102fb0e19dfc14"
+    },
+    {
+      "source": "frontend/lib/alertEngine.ts",
+      "sha256": "0d95d67ad76c045c5036339b7dc0fd8cf232423a45a2003971d11b9b6f054336"
+    },
+    {
+      "source": "frontend/lib/alertIndicators.ts",
+      "sha256": "0d602dba480d16c84b76153c39485cae7aaa88c710fc54e6e184e836c01b1cb9"
+    },
+    {
+      "source": "frontend/lib/alertStore.ts",
+      "sha256": "88fd82941d752e39279f548307c20bcf755ffce44a384126d3306280b081687b"
+    },
+    {
+      "source": "frontend/lib/analysisStore.ts",
+      "sha256": "d0f24dccf83a4b7e734e16235628f1851936e63b75ca6ce0428444e09ab02e89"
+    },
+    {
+      "source": "frontend/lib/api.ts",
+      "sha256": "b1a4bd0811e2cc445a553245ef7db2f0a2d9153003eba2e7b96cbd07eeb601f2"
+    },
+    {
+      "source": "frontend/lib/apiError.ts",
+      "sha256": "c770ea86f00cb2cba80311568b52cf824cccec825beeae742cd6233fcc3e0ee8"
+    },
+    {
+      "source": "frontend/lib/armBookingFields.ts",
+      "sha256": "98b08d18e921e3a5a275737be297e2f074bdbdf4cb6281939eb121a4841b94a5"
+    },
+    {
+      "source": "frontend/lib/audit.ts",
+      "sha256": "c0529dc531a46d9cf27865df711e71cb35f077806a17df0a2e3c59bd4f975c95"
+    },
+    {
+      "source": "frontend/lib/autoTradeStore.ts",
+      "sha256": "bd61c5aedaec155dc8ca2708ed502521c9657c4551f9aaede134c5c8efa0c188"
+    },
+    {
+      "source": "frontend/lib/barrierRace.ts",
+      "sha256": "0f047f5f6e99524860461fd6287c84945d7c4bde19abdc3b1fbbfd44cb04b7f2"
+    },
+    {
+      "source": "frontend/lib/brokerAttempts.ts",
+      "sha256": "0eef485b2f9c631d95ec7998deae8d8652e5081dac90c7c5d1cfbddf47f1a9b1"
+    },
+    {
+      "source": "frontend/lib/candidateChart.ts",
+      "sha256": "90bfa5495a2729a923b3a33460376c9aafffbcf7c8261939c2680f48925684dd"
+    },
+    {
+      "source": "frontend/lib/cardEdits.ts",
+      "sha256": "b2fdceed3d8db38713b1031fc91152787d29b5e7e6c1e23a4ad4c5777b21f6c6"
+    },
+    {
+      "source": "frontend/lib/chart/drawingOverlaysDiff.ts",
+      "sha256": "881ef27b8999ca24658a777a0b5491194a018dd177d03a10545ec6cdbb3eec46"
+    },
+    {
+      "source": "frontend/lib/chart/hitTest.ts",
+      "sha256": "c93dec3eede987c8dc4274517e853c983738a82531c64c1f559b034fe1d43ee9"
+    },
+    {
+      "source": "frontend/lib/chart/indicators.ts",
+      "sha256": "d0bdc365e5425aaf66495758e0a399076ab1e90126a4c2d0b250172083370b47"
+    },
+    {
+      "source": "frontend/lib/chart/mainSeriesId.ts",
+      "sha256": "c0e0ddafc369404b40468ef0fcbe4530a0491c8c3ff4cca388fc28bdcc2935a0"
+    },
+    {
+      "source": "frontend/lib/chart/mtf.ts",
+      "sha256": "783be7c83e39003adc5b12d4d4e8eb9361677a2c712284340c8fc93e50a7b7d0"
+    },
+    {
+      "source": "frontend/lib/chart/overlays.ts",
+      "sha256": "f55dc46df773ec39aaa76eee6c17de80335af0e5409f8a0b4e7cc37b729e7d29"
+    },
+    {
+      "source": "frontend/lib/chartAlertEngine.ts",
+      "sha256": "075545cf8f2264cdd2420d14dcf07deb1ff50c9792344e937687d87c02b9ee17"
+    },
+    {
+      "source": "frontend/lib/chartAlertStore.ts",
+      "sha256": "d6da9690bc366d6a99e52390875162bee39f78045d1db0f9d958d995f428f745"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/ArrowDownPrimitive.ts",
+      "sha256": "422fa9cdd629fd2eeb8bf2c4978d7014251bbb93e61414bd245c6365b1d62380"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/ArrowPrimitive.ts",
+      "sha256": "518621ddf245fc63ff1775709c14359c4ec3924e7893e5a1570115271d495df3"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/ArrowUpPrimitive.ts",
+      "sha256": "a14f0b8d1bd63b64ac8a6e76bf41159f2c76761bc4b144bf3ddee2bd8552d853"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/BOSPrimitive.ts",
+      "sha256": "29fa3f27024064f6f2aef68323a314eaee490cf2470d7793af201c265390655d"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/CirclePrimitive.ts",
+      "sha256": "c5bdd043cd9cb99a6702698e239f64cd0d518999826903868a3ce0a5d5dc853f"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/ConfluencePrimitive.ts",
+      "sha256": "204237c16332325fda46dcddcc46be949b16739c7166749f07abaae37c2ab06c"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/DivergencePrimitive.ts",
+      "sha256": "4aa72d4f725092e27826edf600b1e80a95a71715f6000c590e089535b69757ef"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/FVGPrimitive.ts",
+      "sha256": "26945447bc6f7f8e8ce3d8dfe656cb3f51ed7f0ea05be94f366e5a18f54bc11f"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/FibPrimitive.ts",
+      "sha256": "5f7ac815f032005347e2243826c45a8204cb3e6aef50f29e3e56d08820ae156e"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/HorizontalLinePrimitive.ts",
+      "sha256": "e1554f9063acb8446cf3e3db258bf906c8004ab01e3ed0ce7f37522fabe1ed54"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/OrderBlockPrimitive.ts",
+      "sha256": "e6e91752adc665d3514d6dddaa6b4d653fc11c38e0f4a249dec7c70c5b957456"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/PathPrimitive.ts",
+      "sha256": "5f1800dbcf3ea42bab5106555e1c20f5888d32fd3673bab4b6c66866dcb89f14"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/PreviewPrimitive.ts",
+      "sha256": "0521f6bd598595fa26b60371ba188d82d7df8053e93207d356cc41e620ec700c"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/RectanglePrimitive.ts",
+      "sha256": "ef6338d666a859e213a12c367e84b13b0d363267589f27609c56e825b8ef3778"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/TextPrimitive.ts",
+      "sha256": "a80e386d3368ca1a228ad2febeacfda8e3f703762f8c7efdacda06ede1e0b1f5"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/TrendLinePrimitive.ts",
+      "sha256": "fa2e31f6ac95de12a94eab3994abbad6535503c75e6806dfc0707a71d4d3b742"
+    },
+    {
+      "source": "frontend/lib/chartPrimitives/VolumeProfilePrimitive.ts",
+      "sha256": "5c24955c19616b440ec3022d89dd33f858eec6f3727562f395205f71558569e4"
+    },
+    {
+      "source": "frontend/lib/chartStore.ts",
+      "sha256": "c85016e498efaa8075d0816e0bf9670431aef2e148c42251c24a734a53339a24"
+    },
+    {
+      "source": "frontend/lib/chartWS.ts",
+      "sha256": "7817edb3d7c44303d1a71ea2e6786eab5724f2ccfb762153ee3fad9d77dec690"
+    },
+    {
+      "source": "frontend/lib/compositeWatchSummary.ts",
+      "sha256": "69a4e0ae3055c14aefb2ddf6800d909bb611eb49f424cd41a577c8b99b62f078"
+    },
+    {
+      "source": "frontend/lib/confidenceText.ts",
+      "sha256": "4fffcfff9af55606d057940a5a45c646eed31948f9388d2c01a57348ffc12baf"
+    },
+    {
+      "source": "frontend/lib/configHealth.ts",
+      "sha256": "1fe42b84ef7dc0fc2f8b60a123922492318452c0f6a26a3fbd0321970ac7c766"
+    },
+    {
+      "source": "frontend/lib/configHealthStore.ts",
+      "sha256": "82c20b78ed00d73ccfac8bd6f1e095e478729e5fd257972e22690dfa5e9fe67a"
+    },
+    {
+      "source": "frontend/lib/contractExplanation.ts",
+      "sha256": "378608a77cb70e62292516c1474473383d7844cad6b11870a1e46cb963657d95"
+    },
+    {
+      "source": "frontend/lib/contractGrading.ts",
+      "sha256": "1bbde14a8023d3791212fe377ce5666b0353f240f8e39b22bae46acbd292ed40"
+    },
+    {
+      "source": "frontend/lib/currentScanReportInputs.ts",
+      "sha256": "1c776e29650aa61a235a1110e6d5860ab679c2a26591fbb363fd1c9dc058af97"
+    },
+    {
+      "source": "frontend/lib/date.ts",
+      "sha256": "cf8600ddb70b36080908718d1d06a66ef0cea2b0521963557a5448363f9fee21"
+    },
+    {
+      "source": "frontend/lib/directOrder.ts",
+      "sha256": "0bccdad599fe7e7ba6ecae0b2c343012fa7daf7a1c77a7963a4cd05da7224f32"
+    },
+    {
+      "source": "frontend/lib/directSendNotesStore.ts",
+      "sha256": "3de0d8fd4638110c43ec729f24aed73542bb6bb680dac4e6c6e1a3d826b9ef24"
+    },
+    {
+      "source": "frontend/lib/drawingStore.ts",
+      "sha256": "1d6a57305fd0d921985e4a5668ac43efffa6fc2a375a66697b578a0738559fb3"
+    },
+    {
+      "source": "frontend/lib/earningsGate.ts",
+      "sha256": "ce5df99d460e156ed024f110c70d91149a3b0f746bf11a9b9422f3fd96fed808"
+    },
+    {
+      "source": "frontend/lib/eventThresholdsStore.ts",
+      "sha256": "a4800446049800ee95e72fc6294846c3c5f1a7aa7202de35e841c0127309aa22"
+    },
+    {
+      "source": "frontend/lib/executionParamDefaults.ts",
+      "sha256": "b47d68bbdbdaa060166ec5ccdeab5cab07f1372917307ef8ad366fee268e17f2"
+    },
+    {
+      "source": "frontend/lib/exitPlanLabels.ts",
+      "sha256": "476019053400b68d9b304712d673cd7bf4d0690bb85033db513549a28997baaa"
+    },
+    {
+      "source": "frontend/lib/export.ts",
+      "sha256": "7928429c7b8105563ca148565e0febe8aebb16a2550ba50a98bab62194e40852"
+    },
+    {
+      "source": "frontend/lib/horizonPresets.ts",
+      "sha256": "547b412bec1abe8230100fb60fc46bdffc57868d989c0165dc8fe47d202d48b5"
+    },
+    {
+      "source": "frontend/lib/indicators.ts",
+      "sha256": "e6a9f88faf2864d627ea5caa8cc4aa468a753d3f3c6fb9266b985e8453832d59"
+    },
+    {
+      "source": "frontend/lib/ivBasis.ts",
+      "sha256": "2f9920f0305ebf9973a5d9a4a111408397ba15378ffb059ca4a157638329c6bf"
+    },
+    {
+      "source": "frontend/lib/ivThresholdsStore.ts",
+      "sha256": "6776430c9540bad9e12f2d7b1f12e612fffe11e2dc677317ed71d1e026602937"
+    },
+    {
+      "source": "frontend/lib/journalDate.ts",
+      "sha256": "9447f64eee092a835b7248ed9e92207e7d9d465811cca04449463688a5d47be6"
+    },
+    {
+      "source": "frontend/lib/journalStore.ts",
+      "sha256": "f0c05ef393863f664c50cede9c3d48e1e2774d97746315b925d9122b4fc599b4"
+    },
+    {
+      "source": "frontend/lib/marketHours.ts",
+      "sha256": "35348bb8ffa9694181c55c0de35dc6477cededdf11197eef15aad4b06fd07e10"
+    },
+    {
+      "source": "frontend/lib/notesStore.ts",
+      "sha256": "7efbaaf18b8457786f96b4eb369a81855c4896cac539b0e5bc41da295ef92d1b"
+    },
+    {
+      "source": "frontend/lib/paperTrade.ts",
+      "sha256": "b862004ce1549237bb6f3e206afbba1e132fbe195fa9ef968816690aac174f9d"
+    },
+    {
+      "source": "frontend/lib/parsePipelineDiagnostics.ts",
+      "sha256": "2ab169e5fec21a50b28e5c3b15c70e89b2f4bfd2132506f8361399a5671f93ae"
+    },
+    {
+      "source": "frontend/lib/parseStockPipelineDiagnostics.ts",
+      "sha256": "2e871646ab384228ce4d0f0f2ee721614d0e03e27efb27e4041a7ae946aa2f06"
+    },
+    {
+      "source": "frontend/lib/performanceStore.ts",
+      "sha256": "a543ad4b4269cba72552166aa45a4a23b82a432dedcfc4f474d65198587c6dbc"
+    },
+    {
+      "source": "frontend/lib/portfolioHistory.ts",
+      "sha256": "74f63bcce171c6bc7eae3ec633d11d984eeaa37d219379a5a1b4d28fcb3bd910"
+    },
+    {
+      "source": "frontend/lib/portfolioRejection.ts",
+      "sha256": "59afb16b509b45381718993f5a499a49b3d64f182314f8fec32ff78ae4418f27"
+    },
+    {
+      "source": "frontend/lib/portfolioStore.ts",
+      "sha256": "d24202342fcc3029bd76558167561fae92be389b0fae59294ca9478910472db5"
+    },
+    {
+      "source": "frontend/lib/portfolioTotals.ts",
+      "sha256": "bfa79d820031ea9f2e801565bd2d403f900f1d320af8a332071fad455c883df6"
+    },
+    {
+      "source": "frontend/lib/portfolioUiStore.ts",
+      "sha256": "b41113483c6b87da8e23482e5cf016332a7c4a50c86584ccadbb8952e7c1d38d"
+    },
+    {
+      "source": "frontend/lib/premiumStop.ts",
+      "sha256": "269056c04a5f873203f6b9cb70c784a272be48dcb5885cd5e19ca6a0f1950794"
+    },
+    {
+      "source": "frontend/lib/pydanticError.ts",
+      "sha256": "819c31c2ade82b8c7a0fda43e86ebd4b08086f2d28cf7ba25323a90e6b5a46ca"
+    },
+    {
+      "source": "frontend/lib/quoteWarning.ts",
+      "sha256": "ed5a15117aefd93eb9ac98cf4a9cd3a33f10155ff0bc5c64bb7e287e02cb9157"
+    },
+    {
+      "source": "frontend/lib/regimeAlignment.ts",
+      "sha256": "1ca5facf6c63ba62ff07d720cca735e116ddb05d4af9bfdbf2007ce701c545ab"
+    },
+    {
+      "source": "frontend/lib/regimeDuration.ts",
+      "sha256": "5e50afe119ffeb8b94a42baaf4d2463b8544bc7f4445ab7a0ff21cee060e8274"
+    },
+    {
+      "source": "frontend/lib/regimeGateOverrides.ts",
+      "sha256": "030ef24de10b24987f21bf86a5d777d49e9894eb01b7054d2d7bbffba63eef20"
+    },
+    {
+      "source": "frontend/lib/resolveOptionsScanRequest.ts",
+      "sha256": "4987c2404c3eb02d75156f924e00a4726459dc21bbf2f0f1eb515d8dbc9175b7"
+    },
+    {
+      "source": "frontend/lib/resolveStockScanRequest.ts",
+      "sha256": "13a9b60ab1d7c7af5bcb5284ff6dad1a1c040406e3b6af8537e03461eb208b1b"
+    },
+    {
+      "source": "frontend/lib/risk.ts",
+      "sha256": "d292cd238464f8be860ecd40c87ab92f867a776bc6616acf17e95e63b8047365"
+    },
+    {
+      "source": "frontend/lib/riskStore.ts",
+      "sha256": "8715c6b8ecfe4bc0445faa63055f7708696d6296d0e6e08716ac794e9962e0df"
+    },
+    {
+      "source": "frontend/lib/scanContextFromResult.ts",
+      "sha256": "6e8dbde0cd8e4214c08c3ca04d67b9de69e052988915ec3004be584dd707efc9"
+    },
+    {
+      "source": "frontend/lib/scanParamsStore.ts",
+      "sha256": "f1d12fa54223989462704b3580e8e57f7c699f6c305eecbfef0f51bef85694f1"
+    },
+    {
+      "source": "frontend/lib/scanReports.ts",
+      "sha256": "3f391919fa1af8678d1767588c59b0b908ed220a0ff71fb68bcf3fc9f9561a54"
+    },
+    {
+      "source": "frontend/lib/scanScheduleResolve.ts",
+      "sha256": "04ffa4dfeb1c0b0789d62155aedf840f3c004af225e935763a1254826408c7dd"
+    },
+    {
+      "source": "frontend/lib/scanStore.ts",
+      "sha256": "b0223aacf85cde87b5d441c85fbb7ea967613cc6cf352a884979d19f51286926"
+    },
+    {
+      "source": "frontend/lib/scoreDetailText.ts",
+      "sha256": "15673fd5df7f87aee24ab76bef8f7237f30c22f896cdb83299821439c60ffb0e"
+    },
+    {
+      "source": "frontend/lib/searchProfileSnapshot.ts",
+      "sha256": "29e4d9af5bd15649747704ba6a97975e03f948bda334f8804446cf19ed85dec5"
+    },
+    {
+      "source": "frontend/lib/searchProfilesStore.ts",
+      "sha256": "e045400ede0d5cd0f7ce1d03b4f63c02850d75d6316153b351a070006d47b6ee"
+    },
+    {
+      "source": "frontend/lib/settingsStore.ts",
+      "sha256": "81344fd84cc9c6040b23b6d213446a72d660fd53cb088a900153fdd62657563f"
+    },
+    {
+      "source": "frontend/lib/shortlistCap.ts",
+      "sha256": "2af619433d639243640e965f4fe3798c6deb1aa20519940478cd55b7a7be9aa8"
+    },
+    {
+      "source": "frontend/lib/status.ts",
+      "sha256": "806c071f77df283e25bb8cc00074b92a88ac9eddb0edc91223e2bb93a5b8d98f"
+    },
+    {
+      "source": "frontend/lib/statusTooltips.ts",
+      "sha256": "2ab76cbbebfce476cdda7ed2f1118a7c928c05bb98083c8aafdb1b6127bf283e"
+    },
+    {
+      "source": "frontend/lib/step6CardContract.ts",
+      "sha256": "2b277cd53d722b058e4a90231f8080593abc27c8db0e987392b62abed39846bd"
+    },
+    {
+      "source": "frontend/lib/stockDelta.ts",
+      "sha256": "0284d0f54cbd7366eb246ba33e406deefdf51bded14f81f2017db1bbb5afde11"
+    },
+    {
+      "source": "frontend/lib/stockDirectSend.ts",
+      "sha256": "869eabe29654def1a9dad680dd8425e7f13508aa59b4c66dd16ba0ecbe60d5ad"
+    },
+    {
+      "source": "frontend/lib/stockExecutionSession.ts",
+      "sha256": "2bdff1d16de33ee629d82314825fd1f39f12c647cc1780843555de654f584f06"
+    },
+    {
+      "source": "frontend/lib/stockScan.ts",
+      "sha256": "a77d2f041a22362ec3d563ac204ea2340801f2baac1a196f4107a9bbc5738d3a"
+    },
+    {
+      "source": "frontend/lib/stockShortlist.ts",
+      "sha256": "70fa212f61869ab2fd58e85f84c8931b8bcbc9a8b7d87d7a4a287f3896b4cf72"
+    },
+    {
+      "source": "frontend/lib/strategyProfilesStore.ts",
+      "sha256": "5fd68ed9bbe1c1ab72d0c65cfbd8fd05a490266aafe73c2233a4fc757de752d9"
+    },
+    {
+      "source": "frontend/lib/strategyWatchStore.ts",
+      "sha256": "57093a1c47082818aa5d15dc70c32e120225b8a1c8217de679f49afab596b2e5"
+    },
+    {
+      "source": "frontend/lib/structureStore.ts",
+      "sha256": "425490fff9e9f1c16f2a68601023fdb8bd07f4fe61568c1adf7a03e95aa6f8b9"
+    },
+    {
+      "source": "frontend/lib/theme.ts",
+      "sha256": "a79a727eb825da874c43baae6086693c3eb64de405e057bb7edbcafd7494fd64"
+    },
+    {
+      "source": "frontend/lib/tradeCardEdits.ts",
+      "sha256": "4a5c7107a62207375b37de669236f7de9d5c4d06f2d2f218d93290514cc613ca"
+    },
+    {
+      "source": "frontend/lib/tradeCardOverride.ts",
+      "sha256": "3284921a93e762f611f9285cf102cff01c6f0711d247d111c6d5a357e8607b36"
+    },
+    {
+      "source": "frontend/lib/tradeCardSnapshot.ts",
+      "sha256": "c16fb0676886475cec6e4107a7450de83e685eef5bd5c911e4c58d72839a5886"
+    },
+    {
+      "source": "frontend/lib/tradeCardUiStore.ts",
+      "sha256": "0a8bd880970ccd7372af9fc2ffd3e1cc9e48085c4b8856b2e55d446ee27a4b01"
+    },
+    {
+      "source": "frontend/lib/universeStore.ts",
+      "sha256": "01fb5d6adb698379c6a6d98939fdc830bdbf0767a4d723dd6a172020c87d2c46"
+    },
+    {
+      "source": "frontend/lib/unvalidated.ts",
+      "sha256": "326f2a5485a5a983b0c8fa7e316f06984ca403c17a923f5fd3d661e62a529537"
+    },
+    {
+      "source": "frontend/lib/useOriginalBacktest.ts",
+      "sha256": "9ada046432702a58b33ffff4b0cfa0642ceca13e589863f92686b0945353a288"
+    },
+    {
+      "source": "frontend/lib/useStockExecutionField.ts",
+      "sha256": "c05e1b0a72eb80873fa8bccc93eaa7f1db30c7c8d4a40245e0506d085eb6cb07"
+    },
+    {
+      "source": "frontend/lib/watchedContractsStore.ts",
+      "sha256": "2b816b8f7639530ad776d85bf66415e372e50681ffa3b0e4391d763d819786d2"
+    },
+    {
+      "source": "frontend/lib/watchlistStore.ts",
+      "sha256": "790b36222f9c80c197be61efd978560416da723d0171dff13d04500ee510ae0f"
+    },
+    {
+      "source": "frontend/lib/watchlistUiStore.ts",
+      "sha256": "b6722e2af50534b4cb267d339f0f2abf1ad47f764a8d1828bd8d6fa20bacc76f"
+    },
+    {
+      "source": "frontend/package-lock.json",
+      "sha256": "a32a496e8033c470af429ac1be5e563ed5042cb2b55cf9f4d7cc5d737714b84c"
+    },
+    {
+      "source": "frontend/package.json",
+      "sha256": "5e7bf068201e476a4f5f9c169f0f7750b8a76afcfc721af566b62c38e476bd0e"
+    },
+    {
+      "source": "frontend/tsconfig.json",
+      "sha256": "974e6115946d9027813b945200b00bd06fc9579d5b1e4336e9c3ea97197219c2"
+    },
+    {
+      "source": "frontend/types/domain.ts",
+      "sha256": "42c851e61789d5751e46c65bc62c658b8621a1b93aa0c66c43cf91da8744074a"
+    },
+    {
+      "source": "frontend/types/journal.ts",
+      "sha256": "1d51e9c08c7312e837b0353de92571bdaa259bf0505a51d77b58e791971c56df"
+    }
+  ],
+  "numeric_correctness": "Not evaluated: source evidence is discovery and lane handoff, never arithmetic/persistence certification.",
+  "baseline_file_validation": {
+    "method": "Each tracked source/config byte sequence is compared to the baseline Git blob SHA-1; Windows CRLF-to-LF canonicalization accepted only when it produces the exact baseline blob. SHA-256 records retain actual checkout bytes.",
+    "validated_files": 447,
+    "crlf_canonicalized_files": [
+      ".python-version",
+      "backend/config/contract_rules.yaml",
+      "backend/config/risk_rules.yaml",
+      "backend/config/scoring_rules.yaml",
+      "backend/config/settings.example.yaml",
+      "backend/config/strategy_params.yaml",
+      "backend/config/strategy_watches.yaml",
+      "backend/config/universe_exclusions.yaml",
+      "frontend/app/(frame)/@contextRail/alerts/default.tsx",
+      "frontend/app/(frame)/@contextRail/analysis/page.tsx",
+      "frontend/app/(frame)/@contextRail/chart/page.tsx",
+      "frontend/app/(frame)/@contextRail/dashboard/page.module.css",
+      "frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+      "frontend/app/(frame)/@contextRail/default.tsx",
+      "frontend/app/(frame)/@contextRail/portfolio/page.module.css",
+      "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "frontend/app/(frame)/@contextRail/screener/default.tsx",
+      "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+      "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.module.css",
+      "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "frontend/app/(frame)/@contextRail/watchlist/page.module.css",
+      "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "frontend/app/(frame)/alerts/page.module.css",
+      "frontend/app/(frame)/alerts/page.tsx",
+      "frontend/app/(frame)/analysis/page.module.css",
+      "frontend/app/(frame)/analysis/page.tsx",
+      "frontend/app/(frame)/calendar/page.module.css",
+      "frontend/app/(frame)/calendar/page.tsx",
+      "frontend/app/(frame)/chart/page.module.css",
+      "frontend/app/(frame)/chart/page.tsx",
+      "frontend/app/(frame)/dashboard/page.module.css",
+      "frontend/app/(frame)/dashboard/page.tsx",
+      "frontend/app/(frame)/error.module.css",
+      "frontend/app/(frame)/error.tsx",
+      "frontend/app/(frame)/journal/page.module.css",
+      "frontend/app/(frame)/journal/page.tsx",
+      "frontend/app/(frame)/layout.tsx",
+      "frontend/app/(frame)/loading.module.css",
+      "frontend/app/(frame)/loading.tsx",
+      "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "frontend/app/(frame)/portfolio/page.module.css",
+      "frontend/app/(frame)/portfolio/page.tsx",
+      "frontend/app/(frame)/screener/layout.tsx",
+      "frontend/app/(frame)/screener/page.tsx",
+      "frontend/app/(frame)/screener/screener.module.css",
+      "frontend/app/(frame)/screener/screenerLayout.module.css",
+      "frontend/app/(frame)/screener/step-1-regime/page.module.css",
+      "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "frontend/app/(frame)/screener/step-2-universe/page.module.css",
+      "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "frontend/app/(frame)/screener/step-3-direction/page.module.css",
+      "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "frontend/app/(frame)/screener/step-3-direction/scanLogTotals.ts",
+      "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/page.module.css",
+      "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "frontend/app/(frame)/screener/step-4-prebreakout/scanChartLines.ts",
+      "frontend/app/(frame)/screener/step-4-prebreakout/scanThresholds.ts",
+      "frontend/app/(frame)/screener/step-4-ranking/cardToRow.ts",
+      "frontend/app/(frame)/screener/step-4-ranking/page.module.css",
+      "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "frontend/app/(frame)/screener/step-4-stocks/HistoryPrefetchRow.tsx",
+      "frontend/app/(frame)/screener/step-4-stocks/page.module.css",
+      "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+      "frontend/app/(frame)/screener/step-5-vol-events/gateSummary.ts",
+      "frontend/app/(frame)/screener/step-5-vol-events/page.module.css",
+      "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "frontend/app/(frame)/screener/step-6-backtest/page.module.css",
+      "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "frontend/app/(frame)/screener/step-6-contracts/contracts.module.css",
+      "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "frontend/app/(frame)/screener/step-7-position-card/page.module.css",
+      "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "frontend/app/(frame)/screener/step-7-trade-card/directOrder.ts",
+      "frontend/app/(frame)/screener/step-7-trade-card/page.module.css",
+      "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "frontend/app/(frame)/screener/step-7-trade-card/toast.module.css",
+      "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "frontend/app/(frame)/settings/page.module.css",
+      "frontend/app/(frame)/settings/page.tsx",
+      "frontend/app/(frame)/strategy-watch/page.module.css",
+      "frontend/app/(frame)/strategy-watch/page.tsx",
+      "frontend/app/(frame)/validation/page.module.css",
+      "frontend/app/(frame)/validation/page.tsx",
+      "frontend/app/(frame)/watchlist/page.module.css",
+      "frontend/app/(frame)/watchlist/page.tsx",
+      "frontend/app/__test-crash/page.tsx",
+      "frontend/app/chart/standalone/layout.tsx",
+      "frontend/app/chart/standalone/page.tsx",
+      "frontend/app/dev/components/page.module.css",
+      "frontend/app/dev/components/page.tsx",
+      "frontend/app/globals.css",
+      "frontend/app/layout.tsx",
+      "frontend/app/not-found.module.css",
+      "frontend/app/not-found.tsx",
+      "frontend/app/page.tsx",
+      "frontend/components/KeyboardShortcuts/index.tsx",
+      "frontend/components/MinWidthGate/MinWidthGate.module.css",
+      "frontend/components/MinWidthGate/index.tsx",
+      "frontend/components/StoreHydration/index.tsx",
+      "frontend/components/ThemeProvider/index.tsx",
+      "frontend/components/atoms/ConfidenceBadge/ConfidenceBadge.module.css",
+      "frontend/components/atoms/ConfidenceBadge/index.tsx",
+      "frontend/components/atoms/ContractExplanationToggle/ContractExplanationToggle.module.css",
+      "frontend/components/atoms/ContractExplanationToggle/index.tsx",
+      "frontend/components/atoms/ContractStar/index.tsx",
+      "frontend/components/atoms/EventFlag/EventFlag.module.css",
+      "frontend/components/atoms/EventFlag/index.tsx",
+      "frontend/components/atoms/IconButton/IconButton.module.css",
+      "frontend/components/atoms/IconButton/index.tsx",
+      "frontend/components/atoms/ModeToggle/ModeToggle.module.css",
+      "frontend/components/atoms/ModeToggle/index.tsx",
+      "frontend/components/atoms/NoLiveQuoteTag/index.tsx",
+      "frontend/components/atoms/OpenChartButton/OpenChartButton.module.css",
+      "frontend/components/atoms/OpenChartButton/index.tsx",
+      "frontend/components/atoms/RMultipleBadge/RMultipleBadge.module.css",
+      "frontend/components/atoms/RMultipleBadge/index.tsx",
+      "frontend/components/atoms/RankDelta/RankDelta.module.css",
+      "frontend/components/atoms/RankDelta/index.tsx",
+      "frontend/components/atoms/RiskBadge/RiskBadge.module.css",
+      "frontend/components/atoms/RiskBadge/index.tsx",
+      "frontend/components/atoms/ScoreBar/ScoreBar.module.css",
+      "frontend/components/atoms/ScoreBar/index.tsx",
+      "frontend/components/atoms/StatusBadge/StatusBadge.module.css",
+      "frontend/components/atoms/StatusBadge/index.tsx",
+      "frontend/components/atoms/StatusDot/StatusDot.module.css",
+      "frontend/components/atoms/StatusDot/index.tsx",
+      "frontend/components/atoms/Tooltip/Tooltip.module.css",
+      "frontend/components/atoms/Tooltip/index.tsx",
+      "frontend/components/atoms/WatchStar/WatchStar.module.css",
+      "frontend/components/atoms/WatchStar/index.tsx",
+      "frontend/components/molecules/AlertRow/AlertRow.module.css",
+      "frontend/components/molecules/AlertRow/index.tsx",
+      "frontend/components/molecules/AlternativeContractRow/AlternativeContractRow.module.css",
+      "frontend/components/molecules/AlternativeContractRow/index.tsx",
+      "frontend/components/molecules/CandidateNav/CandidateNav.module.css",
+      "frontend/components/molecules/CandidateNav/index.tsx",
+      "frontend/components/molecules/ChartClickPopover/ChartClickPopover.module.css",
+      "frontend/components/molecules/ChartClickPopover/index.tsx",
+      "frontend/components/molecules/ChartPanelHeader/ChartPanelHeader.module.css",
+      "frontend/components/molecules/ChartPanelHeader/index.tsx",
+      "frontend/components/molecules/CollapsibleSection/CollapsibleSection.module.css",
+      "frontend/components/molecules/CollapsibleSection/index.tsx",
+      "frontend/components/molecules/ConfigHealthChip/ConfigHealthChip.module.css",
+      "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "frontend/components/molecules/ConfirmDialog/ConfirmDialog.module.css",
+      "frontend/components/molecules/ConfirmDialog/index.tsx",
+      "frontend/components/molecules/ContractScoreExplanation/ContractScoreExplanation.module.css",
+      "frontend/components/molecules/ContractScoreExplanation/index.tsx",
+      "frontend/components/molecules/DTEProgressBar/DTEProgressBar.module.css",
+      "frontend/components/molecules/DTEProgressBar/index.tsx",
+      "frontend/components/molecules/FundamentalHealthCard/FundamentalHealthCard.module.css",
+      "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+      "frontend/components/molecules/IndicatorPanel/IndicatorPanel.module.css",
+      "frontend/components/molecules/IndicatorPanel/index.tsx",
+      "frontend/components/molecules/InitStores/index.tsx",
+      "frontend/components/molecules/LabeledStatusBadge/LabeledStatusBadge.module.css",
+      "frontend/components/molecules/LabeledStatusBadge/index.tsx",
+      "frontend/components/molecules/MarketClock/MarketClock.module.css",
+      "frontend/components/molecules/MarketClock/index.tsx",
+      "frontend/components/molecules/MarketSentiment/MarketSentiment.module.css",
+      "frontend/components/molecules/MarketSentiment/index.tsx",
+      "frontend/components/molecules/MeanReversionConfirmPanel/MeanReversionConfirmPanel.module.css",
+      "frontend/components/molecules/MeanReversionConfirmPanel/index.tsx",
+      "frontend/components/molecules/MethodPickSelector/MethodPickSelector.module.css",
+      "frontend/components/molecules/MethodPickSelector/index.tsx",
+      "frontend/components/molecules/NewsCard/index.module.css",
+      "frontend/components/molecules/NewsCard/index.tsx",
+      "frontend/components/molecules/Pagination/Pagination.module.css",
+      "frontend/components/molecules/Pagination/index.tsx",
+      "frontend/components/molecules/QuickLookRow/QuickLookRow.module.css",
+      "frontend/components/molecules/QuickLookRow/index.tsx",
+      "frontend/components/molecules/RegimeIndicator/RegimeIndicator.module.css",
+      "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "frontend/components/molecules/RenameProfileDialog/RenameProfileDialog.module.css",
+      "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "frontend/components/molecules/RiskPanel/RiskPanel.module.css",
+      "frontend/components/molecules/RiskPanel/index.tsx",
+      "frontend/components/molecules/SaveProfileDialog/SaveProfileDialog.module.css",
+      "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "frontend/components/molecules/SavedScanResultsTable/SavedScanResultsTable.module.css",
+      "frontend/components/molecules/SavedScanResultsTable/index.tsx",
+      "frontend/components/molecules/ScanIndicator/ScanIndicator.module.css",
+      "frontend/components/molecules/ScanIndicator/index.tsx",
+      "frontend/components/molecules/ScoreCardPanel/ScoreCardPanel.module.css",
+      "frontend/components/molecules/ScoreCardPanel/index.tsx",
+      "frontend/components/molecules/SectionCard/SectionCard.module.css",
+      "frontend/components/molecules/SectionCard/index.tsx",
+      "frontend/components/molecules/StepIndicator/StepIndicator.module.css",
+      "frontend/components/molecules/StepIndicator/index.tsx",
+      "frontend/components/molecules/SymbolHeader/SymbolHeader.module.css",
+      "frontend/components/molecules/SymbolHeader/index.tsx",
+      "frontend/components/molecules/SymbolNotes/SymbolNotes.module.css",
+      "frontend/components/molecules/SymbolNotes/index.tsx",
+      "frontend/components/molecules/TableRow/TableRow.module.css",
+      "frontend/components/molecules/TableRow/index.tsx",
+      "frontend/components/molecules/TextInputPopover/TextInputPopover.module.css",
+      "frontend/components/molecules/TextInputPopover/index.tsx",
+      "frontend/components/molecules/Toast/Toast.module.css",
+      "frontend/components/molecules/Toast/index.tsx",
+      "frontend/components/molecules/TopBarActions/TopBarActions.module.css",
+      "frontend/components/molecules/TopBarActions/index.tsx",
+      "frontend/components/molecules/TradeCardQualification/TradeCardQualification.module.css",
+      "frontend/components/molecules/TradeCardQualification/index.tsx",
+      "frontend/components/organisms/AlertRuleBuilder/AlertRuleBuilder.module.css",
+      "frontend/components/organisms/AlertRuleBuilder/index.tsx",
+      "frontend/components/organisms/AlertRuleBuilder/regimeStates.ts",
+      "frontend/components/organisms/AlertToast/AlertToast.module.css",
+      "frontend/components/organisms/AlertToast/index.tsx",
+      "frontend/components/organisms/AutoTradeArm/AutoTradeArm.module.css",
+      "frontend/components/organisms/AutoTradeArm/index.tsx",
+      "frontend/components/organisms/BarrierRaceCard/BarrierRaceCard.module.css",
+      "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "frontend/components/organisms/BrokerAttemptPanel/BrokerAttemptPanel.module.css",
+      "frontend/components/organisms/BrokerAttemptPanel/index.tsx",
+      "frontend/components/organisms/BrokerPicker/BrokerPicker.module.css",
+      "frontend/components/organisms/BrokerPicker/index.tsx",
+      "frontend/components/organisms/CandidateBacktestWorkspace/CandidateBacktestWorkspace.module.css",
+      "frontend/components/organisms/CandidateBacktestWorkspace/chart.ts",
+      "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+      "frontend/components/organisms/CandidateChartWorkspace/index.tsx",
+      "frontend/components/organisms/CandlestickChart/CandlestickChart.module.css",
+      "frontend/components/organisms/CandlestickChart/index.tsx",
+      "frontend/components/organisms/ChartOverlays/index.tsx",
+      "frontend/components/organisms/ChartPane/ChartPane.module.css",
+      "frontend/components/organisms/ChartPane/index.tsx",
+      "frontend/components/organisms/ChartRightPanel/ChartRightPanel.module.css",
+      "frontend/components/organisms/ChartRightPanel/index.tsx",
+      "frontend/components/organisms/ChartTopBar/ChartTopBar.module.css",
+      "frontend/components/organisms/ChartTopBar/index.tsx",
+      "frontend/components/organisms/ChartWorkspace/ChartWorkspace.module.css",
+      "frontend/components/organisms/ChartWorkspace/index.tsx",
+      "frontend/components/organisms/ClosePositionDrawer/ClosePositionDrawer.module.css",
+      "frontend/components/organisms/ClosePositionDrawer/index.tsx",
+      "frontend/components/organisms/CompositeAlertDialog/CompositeAlertDialog.module.css",
+      "frontend/components/organisms/CompositeAlertDialog/index.tsx",
+      "frontend/components/organisms/ConfigHealthBanner/ConfigHealthBanner.module.css",
+      "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "frontend/components/organisms/ContextRail/ContextRail.module.css",
+      "frontend/components/organisms/ContextRail/QuickLook.module.css",
+      "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "frontend/components/organisms/ContextRail/index.tsx",
+      "frontend/components/organisms/DirectSendNotesPanel/DirectSendNotesPanel.module.css",
+      "frontend/components/organisms/DirectSendNotesPanel/index.tsx",
+      "frontend/components/organisms/DrawingOverlays/index.tsx",
+      "frontend/components/organisms/DrawingToolbar/DrawingToolbar.module.css",
+      "frontend/components/organisms/DrawingToolbar/index.tsx",
+      "frontend/components/organisms/EarningsChart/EarningsChart.module.css",
+      "frontend/components/organisms/EarningsChart/index.tsx",
+      "frontend/components/organisms/FibPullbackParamsPanel/FibPullbackParamsPanel.module.css",
+      "frontend/components/organisms/FibPullbackParamsPanel/index.tsx",
+      "frontend/components/organisms/Frame.module.css",
+      "frontend/components/organisms/FreshBacktestControls/FreshBacktestControls.module.css",
+      "frontend/components/organisms/FreshBacktestControls/index.tsx",
+      "frontend/components/organisms/IndicatorPanel/IndicatorPanel.module.css",
+      "frontend/components/organisms/IndicatorPanel/index.tsx",
+      "frontend/components/organisms/InlineChartPanel/InlineChartPanel.module.css",
+      "frontend/components/organisms/InlineChartPanel/index.tsx",
+      "frontend/components/organisms/JournalEntryForm/JournalEntryForm.module.css",
+      "frontend/components/organisms/JournalEntryForm/index.tsx",
+      "frontend/components/organisms/JournalEntryTable/JournalEntryTable.module.css",
+      "frontend/components/organisms/JournalEntryTable/index.tsx",
+      "frontend/components/organisms/MtfDashboard/MtfDashboard.module.css",
+      "frontend/components/organisms/MtfDashboard/index.tsx",
+      "frontend/components/organisms/NavItems/NavItems.module.css",
+      "frontend/components/organisms/NavItems/index.tsx",
+      "frontend/components/organisms/NavRail/NavRail.module.css",
+      "frontend/components/organisms/NavRail/index.tsx",
+      "frontend/components/organisms/PipelineInspector/PipelineInspector.module.css",
+      "frontend/components/organisms/PipelineInspector/index.tsx",
+      "frontend/components/organisms/PnlChart/PnlChart.module.css",
+      "frontend/components/organisms/PnlChart/index.tsx",
+      "frontend/components/organisms/PnlHeatmap/PnlHeatmap.module.css",
+      "frontend/components/organisms/PnlHeatmap/index.tsx",
+      "frontend/components/organisms/PreBreakoutParamsPanel/PreBreakoutParamsPanel.module.css",
+      "frontend/components/organisms/PreBreakoutParamsPanel/index.tsx",
+      "frontend/components/organisms/RunScanButton/index.module.css",
+      "frontend/components/organisms/RunScanButton/index.tsx",
+      "frontend/components/organisms/SavedScanReportInspector/LegacyReport.tsx",
+      "frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx",
+      "frontend/components/organisms/SavedScanReportInspector/SavedScanReportInspector.module.css",
+      "frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx",
+      "frontend/components/organisms/SavedScanReportInspector/UnsavedReport.tsx",
+      "frontend/components/organisms/SavedScanReportInspector/index.tsx",
+      "frontend/components/organisms/ScreenerStepGate/index.tsx",
+      "frontend/components/organisms/SearchProfileBar/SearchProfileBar.module.css",
+      "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "frontend/components/organisms/SendToBrokerDialog/SendToBrokerDialog.module.css",
+      "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "frontend/components/organisms/StepNavBar/StepNavBar.module.css",
+      "frontend/components/organisms/StepNavBar/index.tsx",
+      "frontend/components/organisms/Stepper/Stepper.module.css",
+      "frontend/components/organisms/Stepper/index.tsx",
+      "frontend/components/organisms/StockAutoTradeArm/StockAutoTradeArm.module.css",
+      "frontend/components/organisms/StockAutoTradeArm/index.tsx",
+      "frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx",
+      "frontend/components/organisms/StockPositionCard/PositionEvidence.tsx",
+      "frontend/components/organisms/StockPositionCard/StockPositionCard.module.css",
+      "frontend/components/organisms/StockPositionCard/index.tsx",
+      "frontend/components/organisms/StockSendDialog/StockSendDialog.module.css",
+      "frontend/components/organisms/StockSendDialog/index.tsx",
+      "frontend/components/organisms/StrategyParamsPanel/StrategyParamsPanel.module.css",
+      "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "frontend/components/organisms/StructurePanel/StructurePanel.module.css",
+      "frontend/components/organisms/StructurePanel/index.tsx",
+      "frontend/components/organisms/ToastContainer/ToastContainer.module.css",
+      "frontend/components/organisms/ToastContainer/index.tsx",
+      "frontend/components/organisms/TopBar/TopBar.module.css",
+      "frontend/components/organisms/TopBar/index.tsx",
+      "frontend/components/organisms/TradeCard/TradeCard.module.css",
+      "frontend/components/organisms/TradeCard/index.tsx",
+      "frontend/components/organisms/ValidationTable/ValidationTable.module.css",
+      "frontend/components/organisms/ValidationTable/index.tsx",
+      "frontend/components/primitives/Data.module.css",
+      "frontend/components/primitives/Data.tsx",
+      "frontend/components/primitives/Text.module.css",
+      "frontend/components/primitives/Text.tsx",
+      "frontend/components/primitives/Title.module.css",
+      "frontend/components/primitives/Title.tsx",
+      "frontend/components/primitives/index.ts",
+      "frontend/lib/alertEngine.ts",
+      "frontend/lib/alertIndicators.ts",
+      "frontend/lib/alertStore.ts",
+      "frontend/lib/analysisStore.ts",
+      "frontend/lib/api.ts",
+      "frontend/lib/apiError.ts",
+      "frontend/lib/armBookingFields.ts",
+      "frontend/lib/audit.ts",
+      "frontend/lib/autoTradeStore.ts",
+      "frontend/lib/barrierRace.ts",
+      "frontend/lib/brokerAttempts.ts",
+      "frontend/lib/candidateChart.ts",
+      "frontend/lib/cardEdits.ts",
+      "frontend/lib/chart/drawingOverlaysDiff.ts",
+      "frontend/lib/chart/hitTest.ts",
+      "frontend/lib/chart/indicators.ts",
+      "frontend/lib/chart/mainSeriesId.ts",
+      "frontend/lib/chart/mtf.ts",
+      "frontend/lib/chart/overlays.ts",
+      "frontend/lib/chartAlertEngine.ts",
+      "frontend/lib/chartAlertStore.ts",
+      "frontend/lib/chartPrimitives/ArrowDownPrimitive.ts",
+      "frontend/lib/chartPrimitives/ArrowPrimitive.ts",
+      "frontend/lib/chartPrimitives/ArrowUpPrimitive.ts",
+      "frontend/lib/chartPrimitives/BOSPrimitive.ts",
+      "frontend/lib/chartPrimitives/CirclePrimitive.ts",
+      "frontend/lib/chartPrimitives/ConfluencePrimitive.ts",
+      "frontend/lib/chartPrimitives/DivergencePrimitive.ts",
+      "frontend/lib/chartPrimitives/FVGPrimitive.ts",
+      "frontend/lib/chartPrimitives/FibPrimitive.ts",
+      "frontend/lib/chartPrimitives/HorizontalLinePrimitive.ts",
+      "frontend/lib/chartPrimitives/OrderBlockPrimitive.ts",
+      "frontend/lib/chartPrimitives/PathPrimitive.ts",
+      "frontend/lib/chartPrimitives/PreviewPrimitive.ts",
+      "frontend/lib/chartPrimitives/RectanglePrimitive.ts",
+      "frontend/lib/chartPrimitives/TextPrimitive.ts",
+      "frontend/lib/chartPrimitives/TrendLinePrimitive.ts",
+      "frontend/lib/chartPrimitives/VolumeProfilePrimitive.ts",
+      "frontend/lib/chartStore.ts",
+      "frontend/lib/chartWS.ts",
+      "frontend/lib/compositeWatchSummary.ts",
+      "frontend/lib/confidenceText.ts",
+      "frontend/lib/configHealth.ts",
+      "frontend/lib/configHealthStore.ts",
+      "frontend/lib/contractExplanation.ts",
+      "frontend/lib/contractGrading.ts",
+      "frontend/lib/currentScanReportInputs.ts",
+      "frontend/lib/date.ts",
+      "frontend/lib/directOrder.ts",
+      "frontend/lib/directSendNotesStore.ts",
+      "frontend/lib/drawingStore.ts",
+      "frontend/lib/earningsGate.ts",
+      "frontend/lib/eventThresholdsStore.ts",
+      "frontend/lib/executionParamDefaults.ts",
+      "frontend/lib/exitPlanLabels.ts",
+      "frontend/lib/export.ts",
+      "frontend/lib/horizonPresets.ts",
+      "frontend/lib/indicators.ts",
+      "frontend/lib/ivBasis.ts",
+      "frontend/lib/ivThresholdsStore.ts",
+      "frontend/lib/journalDate.ts",
+      "frontend/lib/journalStore.ts",
+      "frontend/lib/marketHours.ts",
+      "frontend/lib/notesStore.ts",
+      "frontend/lib/paperTrade.ts",
+      "frontend/lib/parsePipelineDiagnostics.ts",
+      "frontend/lib/parseStockPipelineDiagnostics.ts",
+      "frontend/lib/performanceStore.ts",
+      "frontend/lib/portfolioHistory.ts",
+      "frontend/lib/portfolioRejection.ts",
+      "frontend/lib/portfolioStore.ts",
+      "frontend/lib/portfolioTotals.ts",
+      "frontend/lib/portfolioUiStore.ts",
+      "frontend/lib/premiumStop.ts",
+      "frontend/lib/pydanticError.ts",
+      "frontend/lib/quoteWarning.ts",
+      "frontend/lib/regimeAlignment.ts",
+      "frontend/lib/regimeDuration.ts",
+      "frontend/lib/regimeGateOverrides.ts",
+      "frontend/lib/resolveOptionsScanRequest.ts",
+      "frontend/lib/resolveStockScanRequest.ts",
+      "frontend/lib/risk.ts",
+      "frontend/lib/riskStore.ts",
+      "frontend/lib/scanContextFromResult.ts",
+      "frontend/lib/scanParamsStore.ts",
+      "frontend/lib/scanReports.ts",
+      "frontend/lib/scanScheduleResolve.ts",
+      "frontend/lib/scanStore.ts",
+      "frontend/lib/scoreDetailText.ts",
+      "frontend/lib/searchProfileSnapshot.ts",
+      "frontend/lib/searchProfilesStore.ts",
+      "frontend/lib/settingsStore.ts",
+      "frontend/lib/shortlistCap.ts",
+      "frontend/lib/status.ts",
+      "frontend/lib/statusTooltips.ts",
+      "frontend/lib/step6CardContract.ts",
+      "frontend/lib/stockDelta.ts",
+      "frontend/lib/stockDirectSend.ts",
+      "frontend/lib/stockExecutionSession.ts",
+      "frontend/lib/stockScan.ts",
+      "frontend/lib/stockShortlist.ts",
+      "frontend/lib/strategyProfilesStore.ts",
+      "frontend/lib/strategyWatchStore.ts",
+      "frontend/lib/structureStore.ts",
+      "frontend/lib/theme.ts",
+      "frontend/lib/tradeCardEdits.ts",
+      "frontend/lib/tradeCardOverride.ts",
+      "frontend/lib/tradeCardSnapshot.ts",
+      "frontend/lib/tradeCardUiStore.ts",
+      "frontend/lib/universeStore.ts",
+      "frontend/lib/unvalidated.ts",
+      "frontend/lib/useOriginalBacktest.ts",
+      "frontend/lib/useStockExecutionField.ts",
+      "frontend/lib/watchedContractsStore.ts",
+      "frontend/lib/watchlistStore.ts",
+      "frontend/lib/watchlistUiStore.ts",
+      "frontend/package-lock.json",
+      "frontend/package.json",
+      "frontend/tsconfig.json",
+      "frontend/types/domain.ts",
+      "frontend/types/journal.ts"
+    ]
+  }
+}

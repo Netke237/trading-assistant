@@ -212,8 +212,8 @@ def test_both_scripts_pass_commission_to_run_strategy_backtest(monkeypatch):
 
 import asyncio  # noqa: E402
 
-# CTVA is scope: scan, BIIB scope: evidence in backend/config/universe_exclusions.yaml.
-_STORED = ["AAPL", "BIIB", "CTVA", "MSFT"]
+# PXD is scope: scan, BIIB scope: evidence in backend/config/universe_exclusions.yaml.
+_STORED = ["AAPL", "BIIB", "MSFT", "PXD"]
 
 
 async def _fake_stored_symbols(*, session_factory=None):
@@ -232,11 +232,11 @@ def test_evidence_symbols_drops_both_scopes_from_stored_and_requested(monkeypatc
     _stub_stored(monkeypatch)
     kept, excluded = asyncio.run(evidence_symbols(None))
     assert kept == ["AAPL", "MSFT"]
-    assert [(e.symbol, e.scope) for e in excluded] == [("BIIB", "evidence"), ("CTVA", "scan")]
+    assert [(e.symbol, e.scope) for e in excluded] == [("BIIB", "evidence"), ("PXD", "scan")]
 
-    kept, excluded = asyncio.run(evidence_symbols(["ctva", "NVDA"]))
+    kept, excluded = asyncio.run(evidence_symbols(["pxd", "NVDA"]))
     assert kept == ["NVDA"]
-    assert [e.symbol for e in excluded] == ["CTVA"]
+    assert [e.symbol for e in excluded] == ["PXD"]
 
 
 def test_include_excluded_flag_keeps_every_symbol(monkeypatch):
@@ -255,9 +255,9 @@ def test_report_header_lists_exclusions_or_none():
     from evidence._bars import report_header
 
     kw = dict(symbols=["AAPL"], start="2020-01-01", end="2020-12-31", cost_model="n/a")
-    excluded = [Exclusion("BIIB", "evidence", "r1"), Exclusion("CTVA", "scan", "r2")]
+    excluded = [Exclusion("BIIB", "evidence", "r1"), Exclusion("PXD", "scan", "r2")]
     lines = report_header("T", excluded=excluded, **kw).splitlines()
-    assert "- Excluded (universe_exclusions.yaml): 2 — BIIB (evidence), CTVA (scan)" in lines
+    assert "- Excluded (universe_exclusions.yaml): 2 — BIIB (evidence), PXD (scan)" in lines
     assert "- Excluded (universe_exclusions.yaml): none" in report_header("T", **kw).splitlines()
 
 

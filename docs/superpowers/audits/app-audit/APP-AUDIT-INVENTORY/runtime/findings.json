@@ -1,0 +1,123 @@
+[
+  {
+    "id": "A-UI-RAIL-CALENDAR",
+    "category": "UI/navigation",
+    "numeric_gate": "No incorrect arithmetic demonstrated; no numerical correctness claim",
+    "owners": {
+      "navigation": "A",
+      "presentation": "J",
+      "persistence_interactions": "I"
+    },
+    "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+    "affected_destination": "route:frontend/app/(frame)/calendar/page.tsx",
+    "source_evidence": {
+      "root_fallback": "frontend/app/(frame)/@contextRail/default.tsx:1",
+      "frame": "frontend/app/(frame)/layout.tsx:27",
+      "next_parallel_slot_behavior": "source-index.md Frame/slots readback; hard default and retained soft content differ"
+    },
+    "reproduction": [
+      "Hard-open Dashboard",
+      "Click actual Primary link Portfolio",
+      "Click actual Primary link Calendar",
+      "Observe Portfolio totals/Greek rail",
+      "Reload Calendar; observe default QuickLook rail"
+    ],
+    "expected": "Route destination presents the intended root fallback consistently with hard reload (source default comment includes calendar/settings)",
+    "actual": "Actual link soft navigation retains prior page-specific rail; hard reload replaces it with destination fallback",
+    "proof": [
+      {
+        "url": "/calendar",
+        "artifact": "interactive-attempt-1/observations.json",
+        "soft_observation_id": "slots:soft:/calendar",
+        "hard_observation_id": "slots:hard:/calendar",
+        "actual_soft_rail": "TOTALS\nDeployed\n$0\nOpen P&L\n$0\nPositions\n0\nAGGREGATE GREEKS\nΔ Delta\n—\nΘ Theta / day\n—\nWATCHLIST · TOP 5",
+        "actual_hard_rail": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "equal_text": false,
+        "retained_origin_source_id": "route:frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+        "hard_expected_entry_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+        "source_binding_status": "runtime distinctive text matches retained source rail; hard target source association",
+        "storage_readback": "both observations contain full isolated local/session readback",
+        "request_response_readback": "network_indices link each operation to sanitized request metadata and SHA256-addressed synthetic payloads"
+      },
+      {
+        "url": "/calendar",
+        "artifact": "interactive-evidence/observations.json",
+        "soft_observation_id": "slots:soft:/calendar",
+        "hard_observation_id": "slots:hard:/calendar",
+        "actual_soft_rail": "TOTALS\nDeployed\n$0\nOpen P&L\n$0\nPositions\n0\nAGGREGATE GREEKS\nΔ Delta\n—\nΘ Theta / day\n—\nWATCHLIST · TOP 5",
+        "actual_hard_rail": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "equal_text": false,
+        "retained_origin_source_id": "route:frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+        "hard_expected_entry_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+        "source_binding_status": "runtime distinctive text matches retained source rail; hard target source association",
+        "storage_readback": "both observations contain full isolated local/session readback",
+        "request_response_readback": "network_indices link each operation to sanitized request metadata and SHA256-addressed synthetic payloads"
+      }
+    ],
+    "fixture_row_identity": "empty synthetic portfolio/watchlist; no real user rows",
+    "fixture_payload_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "related_issue": "APP-AUDIT #348 / inventory #349; no separate fix issue filed by implementer",
+    "retest_status": "Repeated with fresh isolated browser context in two recorded runs when two proof records exist; application not changed",
+    "fix_scope": "separate claimed board phase; no opportunistic app edit"
+  },
+  {
+    "id": "A-UI-RAIL-SETTINGS",
+    "category": "UI/navigation",
+    "numeric_gate": "No incorrect arithmetic demonstrated; no numerical correctness claim",
+    "owners": {
+      "navigation": "A",
+      "presentation": "J",
+      "persistence_interactions": "I"
+    },
+    "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+    "affected_destination": "route:frontend/app/(frame)/settings/page.tsx",
+    "source_evidence": {
+      "root_fallback": "frontend/app/(frame)/@contextRail/default.tsx:1",
+      "frame": "frontend/app/(frame)/layout.tsx:27",
+      "next_parallel_slot_behavior": "source-index.md Frame/slots readback; hard default and retained soft content differ"
+    },
+    "reproduction": [
+      "Hard-open Watchlist",
+      "Click actual Primary link Settings",
+      "Observe Watchlist status/flags rail",
+      "Reload Settings; observe default QuickLook rail"
+    ],
+    "expected": "Route destination presents the intended root fallback consistently with hard reload (source default comment includes calendar/settings)",
+    "actual": "Actual link soft navigation retains prior page-specific rail; hard reload replaces it with destination fallback",
+    "proof": [
+      {
+        "url": "/settings",
+        "artifact": "interactive-attempt-1/observations.json",
+        "soft_observation_id": "slots:soft:/settings",
+        "hard_observation_id": "slots:hard:/settings",
+        "actual_soft_rail": "STATUS BREAKDOWN\nPASS\n0\nCAUTION\n0\nREJECT\n0\nFLAGS\nEvents ≤ 7d\n0\nTotal\n0\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "actual_hard_rail": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "equal_text": false,
+        "retained_origin_source_id": "route:frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+        "hard_expected_entry_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+        "source_binding_status": "runtime distinctive text matches retained source rail; hard target source association",
+        "storage_readback": "both observations contain full isolated local/session readback",
+        "request_response_readback": "network_indices link each operation to sanitized request metadata and SHA256-addressed synthetic payloads"
+      },
+      {
+        "url": "/settings",
+        "artifact": "interactive-evidence/observations.json",
+        "soft_observation_id": "slots:soft:/settings",
+        "hard_observation_id": "slots:hard:/settings",
+        "actual_soft_rail": "STATUS BREAKDOWN\nPASS\n0\nCAUTION\n0\nREJECT\n0\nFLAGS\nEvents ≤ 7d\n0\nTotal\n0\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "actual_hard_rail": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+        "equal_text": false,
+        "retained_origin_source_id": "route:frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+        "hard_expected_entry_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+        "source_binding_status": "runtime distinctive text matches retained source rail; hard target source association",
+        "storage_readback": "both observations contain full isolated local/session readback",
+        "request_response_readback": "network_indices link each operation to sanitized request metadata and SHA256-addressed synthetic payloads"
+      }
+    ],
+    "fixture_row_identity": "empty synthetic portfolio/watchlist; no real user rows",
+    "fixture_payload_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "related_issue": "APP-AUDIT #348 / inventory #349; no separate fix issue filed by implementer",
+    "retest_status": "Repeated with fresh isolated browser context in two recorded runs when two proof records exist; application not changed",
+    "fix_scope": "separate claimed board phase; no opportunistic app edit"
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "frontend_server": "isolated Next dev, loopback3017",
+  "backend_mode": "no backend; context deny guard; deterministic repository mocks and null recovery inputs",
+  "browser": "155.0.8059.41",
+  "playwright": "1.62.1",
+  "next": "15.5.23",
+  "node": "v22.23.2",
+  "date": "2026-10-16T11:58:58.969Z",
+  "harness_start_sha256": {
+    "probe.cjs": "283f01c7ceb7e17ff4ed8c087d2c51714e8c8d9a5e0c2757a1d7f3272cff1751",
+    "details.cjs": "d96f8a90862820f76ae43f6a4cd9b9a368b31491d78f9af1fe1ed3a1aea047c1",
+    "extras.cjs": "eff2f3280f1e369178c16e5dd912c55713852061aa3179f3dafc0f213ef2f81d",
+    "followup.cjs": "c0da4fbc415f55cac8280b3056707997b58d8e2708f07956e62efe55d273d25f"
+  },
+  "input_hashes": {
+    "frontend/e2e/fixtures/api-mocks.ts": "403c44de4499c97875edbd07c934fb568ec6feae4156282c7eb3b9b23a73bad8",
+    "backend/tests/fixtures/AAPL_candles.json": "59d88b1635b5a6d118c6b33d2defcd4f8163e3c38b7dde6d140a8a890288ef28",
+    "backend/tests/fixtures/MSFT_candles.json": "940513c885b36e2fe7790b7e882e671532a03ca63daf7e138dc70c9eb9635bf7",
+    "backend/tests/fixtures/NVDA_candles.json": "dcd3309a1b1cc58f92282aff0f8531a503aec5cef74ba92548d27e6d445fb330",
+    "backend/tests/fixtures/SPY_candles.json": "7e7c2679ca71c33d2adb8eb1f54ebf6037cfafd381e61c1b6c7556810b2d38d4"
+  },
+  "observation_count": 5,
+  "failure_count": 1,
+  "mock_payload_count": 8,
+  "real_backend_requests_allowed": 0
+}

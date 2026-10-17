@@ -1,0 +1,4116 @@
+[
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/alerts",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "route:/",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/settings/alert-delivery",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/alerts/rules",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/alerts",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/analysis",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/calendar",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/api/symbol/AAPL/info",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/alerts/rules",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "GET",
+    "path": "/chart/drawings",
+    "query_keys": [
+      "symbol",
+      "interval"
+    ],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart",
+    "method": "WEBSOCKET",
+    "path": "/chart/stream/AAPL",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "WEBSOCKET",
+    "path": "/chart/stream/AAPL",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/alerts",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dashboard",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/journal/entries",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/journal",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/broker/attempts",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/portfolio/history",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/portfolio",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [
+      "horizon",
+      "lookback",
+      "threshold",
+      "smoothing"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/sectors",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "58228a2497d64cedb7844ac89b9ed4d9bf41bdfda127f8587a397a6a976a854d",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/candles/SPY",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "915d6316aadcb7f96d5634ead6af3dd688f9bf3757db62895a3f5b9c20f5557b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/candles/QQQ",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "beee531f3b3cc133a6ae6af10b3937918877c35e6434e5a87668658e7b24f03e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [
+      "horizon",
+      "lookback",
+      "threshold",
+      "smoothing"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/sectors",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "58228a2497d64cedb7844ac89b9ed4d9bf41bdfda127f8587a397a6a976a854d",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/candles/SPY",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "915d6316aadcb7f96d5634ead6af3dd688f9bf3757db62895a3f5b9c20f5557b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/candles/QQQ",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "beee531f3b3cc133a6ae6af10b3937918877c35e6434e5a87668658e7b24f03e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-1-regime",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/sectors",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "58228a2497d64cedb7844ac89b9ed4d9bf41bdfda127f8587a397a6a976a854d",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/index-changes",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/historical-data/prefetch/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/sectors",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "58228a2497d64cedb7844ac89b9ed4d9bf41bdfda127f8587a397a6a976a854d",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/index-changes",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/historical-data/prefetch/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-2-universe",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-3-direction",
+    "method": "GET",
+    "path": "/api/scan-reports/latest/options",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-prebreakout",
+    "method": "GET",
+    "path": "/api/scan-reports/latest/prebreakout",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-ranking",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/config/strategy-profiles",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/config/strategy-profiles",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-4-stocks",
+    "method": "GET",
+    "path": "/api/scan-reports/latest/stocks",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/config/strategy-profiles",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/data/ingest/last-refresh",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/config/strategy-profiles",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-strategy",
+    "method": "GET",
+    "path": "/api/scan-reports/latest/stocks",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/config/event-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "b973efb84628e0bb5b170604c9857e1bb6382bd1892a4ae243b4c0ad5c83ad79",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-5-vol-events",
+    "method": "GET",
+    "path": "/api/config/event-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "b973efb84628e0bb5b170604c9857e1bb6382bd1892a4ae243b4c0ad5c83ad79",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-backtest",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-6-contracts",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-position-card",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/screener/step-7-trade-card",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/settings",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/strategy-watch/",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/strategy-watch/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/strategy-watch",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/validation",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watched-contracts/detail",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/composite-watches/",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/watched-contracts",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/watchlist",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/__test-crash",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/__test-crash",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/__test-crash",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/__test-crash",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/__test-crash",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/api/symbol/AAPL/info",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "WEBSOCKET",
+    "path": "/chart/stream/AAPL",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/alerts/rules",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/chart/drawings",
+    "query_keys": [
+      "symbol",
+      "interval"
+    ],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/chart/standalone",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "WEBSOCKET",
+    "path": "/chart/stream/AAPL",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "hard:/dev/components",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/scheduling",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/scheduled-scan-retention",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/scan-schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/scheduling",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/scheduled-scan-retention",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/scan-schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/risk",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/risk",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/history-retention",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/notifications",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/history-retention",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/settings/notifications",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/edgar/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/sp500/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/ingest/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/edgar/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/sp500/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/data/ingest/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/strategy-tuning/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/strategy-tuning/jobs",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/strategy-tuning/schedule",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "settings:nine-sections",
+    "method": "GET",
+    "path": "/api/strategy-tuning/jobs",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/alerts",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "navigation:primary",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:notfound",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "boundary:notfound",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:notfound",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:notfound",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:notfound",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/alerts",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/config/iv-thresholds",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "887d4942e197c0538ecde977df04ee1a706558fbe53b1a22225435a929f8539f",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "boundary:min-width",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  }
+]

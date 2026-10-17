@@ -1,0 +1,38 @@
+{
+  "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945": {
+    "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "body": "[]"
+  },
+  "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b": {
+    "sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "body": "{\"ok\":true,\"checked\":[\"scoring_rules.yaml parses\",\"money blocks: presence, spelling, enabled\",\"regime_sizing values\",\"regime blocks (intraday, swing, position)\",\"direction_conviction: position and values\",\"top-level families\",\"horizons tree: unknown keys\",\"risk_rules.yaml parses\",\"contract_rules.yaml parses\",\"running config vs disk\"],\"not_checked\":[\"money blocks other than regime_sizing: values\",\"required non-money sections and keys (horizons.<h>.*, stock_score_thresholds, confidence_backtest, risk_rules sections)\",\"risk_rules.yaml and contract_rules.yaml contents\",\"single worker assumed; only WEB_CONCURRENCY is detected\",\"copies the frontend fetched at page load (event and IV thresholds)\"],\"pid\":4242,\"errors\":[],\"warnings\":[],\"stale\":[]}"
+  },
+  "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b": {
+    "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "body": "null"
+  },
+  "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7": {
+    "sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "body": "{\"status\":\"IDLE\",\"updated_at\":null}"
+  },
+  "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947": {
+    "sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "body": "{\"overall\":\"PASS\",\"headline\":\"Market conditions favourable for directional trades\",\"metrics\":[{\"label\":\"SPX Trend\",\"value\":\"4,185.22\",\"status\":\"PASS\",\"trend\":\"up\"},{\"label\":\"NDX Trend\",\"value\":\"14,221.55\",\"status\":\"PASS\",\"trend\":\"up\"},{\"label\":\"VIX\",\"value\":\"14.2\",\"status\":\"PASS\",\"trend\":\"down\"}],\"omm\":{\"state\":\"Bull\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":10,\"avg_regime_duration\":15,\"transition_row\":[0.8,0.1,0.1],\"state_order\":[\"Bull\",\"Bear\",\"Choppy\"]}}"
+  },
+  "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e": {
+    "sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "body": "[{\"id\":\"1\",\"symbol\":\"AAPL\",\"headline\":\"Apple announces new product line\",\"source\":\"Reuters\",\"timestamp\":\"2024-05-01T10:00:00Z\",\"sentiment\":\"bull\"},{\"id\":\"2\",\"symbol\":\"MSFT\",\"headline\":\"Microsoft earnings beat expectations\",\"source\":\"Bloomberg\",\"timestamp\":\"2024-05-01T14:30:00Z\",\"sentiment\":\"bull\"}]"
+  },
+  "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb": {
+    "sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "body": "{\"status\":\"IDLE\",\"updated_at\":null,\"strategy\":null}"
+  },
+  "41f7da9f7e22a586ff19696e59713b5632d425e53744086aef5d50e8ec4f0dfa": {
+    "sha256": "41f7da9f7e22a586ff19696e59713b5632d425e53744086aef5d50e8ec4f0dfa",
+    "body": "{\"scan_id\":\"integrated-pullback\",\"timestamp\":\"2026-10-16T08:00:00Z\",\"candidates\":[{\"symbol\":\"AAPL\",\"direction\":\"Bullish\",\"confidence\":75,\"stock_score\":70,\"stock_status\":\"CAUTION\",\"metrics\":{\"atr_ratio\":0.7,\"vol_ratio\":0.8,\"proximity_pct\":2,\"custom\":{\"zero\":0,\"enabled\":false,\"missing\":null}},\"fib_swing\":{\"low\":100,\"high\":120},\"fib_level_hit\":\"61.8\",\"fib_dist_pct\":1,\"at_level\":true,\"strategy\":{\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"custom_evidence\":{\"fixture\":\"integrated-AAPL\",\"entries\":[0,false,null]}},{\"symbol\":\"MSFT\",\"direction\":\"Bullish\",\"confidence\":74,\"stock_score\":69,\"stock_status\":\"CAUTION\",\"metrics\":{\"atr_ratio\":0.7999999999999999,\"vol_ratio\":0.8,\"proximity_pct\":2,\"custom\":{\"zero\":0,\"enabled\":false,\"missing\":null}},\"fib_swing\":{\"low\":101,\"high\":121},\"fib_level_hit\":\"61.8\",\"fib_dist_pct\":1,\"at_level\":true,\"strategy\":{\"entry_price\":151,\"stop_price\":146,\"target_price\":161,\"targets\":[161],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"custom_evidence\":{\"fixture\":\"integrated-MSFT\",\"entries\":[0,false,null]}}],\"rejected\":[]}"
+  },
+  "fa0b507ba71681ac48efd5ede8fb687595855c864370f29264ce110ba238a16e": {
+    "sha256": "fa0b507ba71681ac48efd5ede8fb687595855c864370f29264ce110ba238a16e",
+    "body": "{\"category\":\"pullback\",\"universe\":[\"SP500\"],\"direction\":\"Bullish\",\"horizon\":\"Swing\",\"strategy\":\"pullback_ema\",\"pullback_ema_period\":50,\"pullback_trend_ema\":100,\"account_size\":100000,\"risk_pct\":0.0375}"
+  }
+}

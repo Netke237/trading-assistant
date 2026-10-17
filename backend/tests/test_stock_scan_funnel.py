@@ -495,7 +495,7 @@ def test_an_absent_or_null_sizing_block_now_fails_the_scan(stock_client, cfg):
 # A `scope: scan` symbol in config/universe_exclusions.yaml is skipped before
 # any per-symbol work, reported in `rejected` as "Excluded (data): <reason>",
 # counted in `scanned` and in `failed_history`, so the sum invariant holds. The
-# shipped file lists CTVA with scope scan (pinned by test_universe_exclusions.py).
+# shipped file lists PXD with scope scan (pinned by test_universe_exclusions.py).
 
 _BROKEN_LIST = "universe_exclusions.yaml: 'version' must be 1, got 2"
 
@@ -528,20 +528,20 @@ def test_an_excluded_symbol_is_rejected_as_history_and_never_processed(stock_cli
         return {"symbol": sym, "reason": "REJECT score=20"}
 
     if typed:
-        r, quotes = _post_stock_scan(stock_client, ["AAPL", "CTVA"], _fake_process)
+        r, quotes = _post_stock_scan(stock_client, ["AAPL", "PXD"], _fake_process)
     else:
         r, quotes = _post_stock_scan(
             stock_client, None, _fake_process,
-            patch("app.data.universe_presets.expand_universe", return_value=["AAPL", "CTVA"]),
+            patch("app.data.universe_presets.expand_universe", return_value=["AAPL", "PXD"]),
             universe=["SP500"],
         )
     assert r.status_code == 200, r.text
     body = r.json()
 
-    assert processed == ["AAPL"], "CTVA reached per-symbol work"
-    assert "CTVA" not in quotes.call_args.args[0], "CTVA reached the batch quote fetch"
+    assert processed == ["AAPL"], "PXD reached per-symbol work"
+    assert "PXD" not in quotes.call_args.args[0], "PXD reached the batch quote fetch"
     reasons = {x["symbol"]: x["reason"] for x in body["rejected"]}
-    assert reasons["CTVA"] == f"Excluded (data): {load_exclusions()['CTVA'].reason}"
+    assert reasons["PXD"] == f"Excluded (data): {load_exclusions()['PXD'].reason}"
 
     pipeline = body["pipeline"]
     assert pipeline["failed_history"] == 1
