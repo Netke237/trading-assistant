@@ -39,6 +39,14 @@
       "expires_at": "2026-10-17T07:33:32Z",
       "note": "User-authorized #350 remediation: issue#374",
       "task": "APP-AUDIT-B-SCHEDULE-ROLLBACK"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-profile-validation-3b841177",
+      "claimed_at": "2026-10-17T04:33:47Z",
+      "expires_at": "2026-10-17T07:33:47Z",
+      "note": "User-authorized #350 remediation: issue#381",
+      "task": "APP-AUDIT-B-PROFILE-VALIDATION"
     }
   ]
 }
