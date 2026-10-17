@@ -15,6 +15,14 @@
       "expires_at": "2026-10-17T07:31:01Z",
       "note": "User-authorized #350 remediation: issue#368",
       "task": "APP-AUDIT-B-CAP-UNITS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-vix-window-14595bb2",
+      "claimed_at": "2026-10-17T04:31:30Z",
+      "expires_at": "2026-10-17T07:31:30Z",
+      "note": "User-authorized #350 remediation: issue#369",
+      "task": "APP-AUDIT-B-VIX-WINDOW"
     }
   ]
 }
