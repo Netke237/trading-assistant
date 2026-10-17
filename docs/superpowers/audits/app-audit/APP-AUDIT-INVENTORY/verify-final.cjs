@@ -4,7 +4,7 @@ const r=read('reconciliation.json'),i=read('inventory.json');assert.equal(r.inte
 assert(r.discovery.every(d=>d.owner&&d.status&&d.evidence.length));assert.equal(r.inventory_complete,r.discovery.every(d=>d.status==='resolved'||d.owner!=='A'));
 for(const f of r.historical_files)assert.equal(sha(fs.readFileSync(path.join(dir,f.path))),f.sha256,'historical evidence mutated '+f.path);
 for(const f of r.unchanged_reuse_files)assert.equal(f.old_blob,f.integrated_blob,'invalid unchanged-file reuse');
-const semantic=read('semantic-classification.json');assert.equal(semantic.source_baseline,i.source_baseline);
+const semantic=read('semantic-classification.json');require('./verify-capability-contracts.cjs')(i,semantic,read('supplemental-capability-contracts.json'));assert.equal(semantic.source_baseline,i.source_baseline);
 const ids=new Set(i.definitions.map(d=>d.id)),caps=new Set(semantic.supplemental_local_capabilities.map(c=>c.id));assert.equal(semantic.definition_state_contracts.length,ids.size);assert.equal(semantic.native_candidate_classification.length,i.counts.native_surface_candidates);assert.equal(new Set(semantic.jsx_occurrences.map(j=>j.id)).size,semantic.jsx_occurrences.length);
 for(const d of semantic.definition_state_contracts){assert(ids.has(d.definition_id));assert.equal(d.states.length,9);assert(d.states.every(s=>s.source_evidence_ref===d.definition_id&&!s.not_applicable&&s.fixture_owner));}
 for(const n of semantic.native_candidate_classification){assert(ids.has(n.parent_definition_id));assert.equal(n.state_contract_ref,n.parent_definition_id);assert(n.owners.numeric&&n.owners.persistence==='I');}

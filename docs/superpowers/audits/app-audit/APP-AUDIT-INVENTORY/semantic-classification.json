@@ -71922,7 +71922,7 @@
       "source": "frontend/app/(frame)/strategy-watch/page.tsx",
       "line": 34,
       "tag": "span",
-      "parent_definition_id": null,
+      "parent_definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage",
       "kind": "native",
       "categories": [
         "rendered-content"
@@ -71935,17 +71935,30 @@
       ],
       "binding": null,
       "entry_context": {
-        "source_module": "frontend/app/(frame)/strategy-watch/page.tsx",
-        "disposition": "module-level JSX capability; invoke containing expression; route binding follows module/parent usage"
+        "definition_ref": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage",
+        "helper": "phasePill",
+        "source_range": {
+          "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+          "line": 33,
+          "end_line": 36
+        },
+        "caller_references": [
+          {
+            "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+            "line": 194,
+            "definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage"
+          }
+        ]
       },
-      "runtime_status": "source capability; actual observation only through linked runtime evidence"
+      "runtime_status": "source capability; actual observation only through linked runtime evidence",
+      "state_contract_ref": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage"
     },
     {
       "id": "jsx:frontend/app/(frame)/strategy-watch/page.tsx:35:span:1325",
       "source": "frontend/app/(frame)/strategy-watch/page.tsx",
       "line": 35,
       "tag": "span",
-      "parent_definition_id": null,
+      "parent_definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage",
       "kind": "native",
       "categories": [
         "rendered-content"
@@ -71958,10 +71971,23 @@
       ],
       "binding": null,
       "entry_context": {
-        "source_module": "frontend/app/(frame)/strategy-watch/page.tsx",
-        "disposition": "module-level JSX capability; invoke containing expression; route binding follows module/parent usage"
+        "definition_ref": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage",
+        "helper": "phasePill",
+        "source_range": {
+          "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+          "line": 33,
+          "end_line": 36
+        },
+        "caller_references": [
+          {
+            "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+            "line": 194,
+            "definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage"
+          }
+        ]
       },
-      "runtime_status": "source capability; actual observation only through linked runtime evidence"
+      "runtime_status": "source capability; actual observation only through linked runtime evidence",
+      "state_contract_ref": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage"
     },
     {
       "id": "jsx:frontend/app/(frame)/strategy-watch/page.tsx:98:div:3612",
@@ -191379,7 +191405,7 @@
         "jsx:frontend/app/(frame)/screener/step-6-contracts/page.tsx:517:ContractScoreExplanation:26476",
         "jsx:frontend/app/(frame)/screener/step-6-contracts/page.tsx:534:ContractScoreExplanation:27253"
       ],
-      "state_contract": "caller-controlled visibility/async; declared props retain special-value cases; imperative effect teardown/replacement belongs H/I; no state N/A",
+      "state_contract_ref": "supplemental-capability-contracts.json#capability:frontend/components/molecules/ContractScoreExplanation/index.tsx#ContractScoreExplanation",
       "owners": {
         "numeric_lanes": [
           "C"
@@ -191399,7 +191425,7 @@
       "entry_call_ids": [
         "jsx:frontend/components/organisms/CandlestickChart/index.tsx:239:IndicatorPanel:8639"
       ],
-      "state_contract": "caller-controlled visibility/async; declared props retain special-value cases; imperative effect teardown/replacement belongs H/I; no state N/A",
+      "state_contract_ref": "supplemental-capability-contracts.json#capability:frontend/components/molecules/IndicatorPanel/index.tsx#IndicatorPanel",
       "owners": {
         "numeric_lanes": [
           "H"
@@ -191419,7 +191445,7 @@
       "entry_call_ids": [
         "jsx:frontend/components/organisms/ChartWorkspace/index.tsx:774:ChartOverlays:37012"
       ],
-      "state_contract": "caller-controlled visibility/async; declared props retain special-value cases; imperative effect teardown/replacement belongs H/I; no state N/A",
+      "state_contract_ref": "supplemental-capability-contracts.json#capability:frontend/components/organisms/ChartOverlays/index.tsx#ChartOverlays",
       "owners": {
         "numeric_lanes": [
           "H"
@@ -191439,7 +191465,7 @@
       "entry_call_ids": [
         "jsx:frontend/components/organisms/ChartWorkspace/index.tsx:781:DrawingOverlays:37259"
       ],
-      "state_contract": "caller-controlled visibility/async; declared props retain special-value cases; imperative effect teardown/replacement belongs H/I; no state N/A",
+      "state_contract_ref": "supplemental-capability-contracts.json#capability:frontend/components/organisms/DrawingOverlays/index.tsx#DrawingOverlays",
       "owners": {
         "numeric_lanes": [
           "H"

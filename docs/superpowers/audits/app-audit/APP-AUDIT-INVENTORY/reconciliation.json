@@ -26673,5 +26673,10 @@
       "source": "frontend/components/organisms/ScanLog/index.tsx",
       "disposition": "no static route import path; retained, not user-excluded; dynamic reachability not exhaustively certified"
     }
-  ]
+  ],
+  "supplemental_contract_correction": {
+    "ticket": 397,
+    "artifact": "supplemental-capability-contracts.json",
+    "disposition": "identified source-backed route/state requirements for all four supplemental bindings; exact caller/HOC/native inheritance validated; domain/persistence/presentation execution pending B-I/J; no new runtime observation or independent audit claim"
+  }
 }
