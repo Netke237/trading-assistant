@@ -132,7 +132,14 @@ establish a clean application gate.
 and30 real15-minute numerical checks (all pass). These are overlapping
 observations. The new source is labelled separately; no application code changed.
 The original18 Settings not-run entries have [explicit current dispositions](followup/coverage-dispositions.json).
-New defects and extensions remain unfixed. Fresh delta review is pending.
+New defects and extensions remain unfixed. Fresh independent code/artifact round2 is clean: zero gate findings and zero
+concealed evidence/coverage findings after16 mechanism rechecks. The reviewer
+independently reproduced all88 storage assertion records exactly, all42 Settings
+browser outcomes,15schema checks,12YAML outcomes and the entire30-check
+intraday output. [Review](review-code-r2.md) and [exact scope](review-code-r2.json)
+record the42-file delta4b1f6b86..c0e41c2c and all limitations.
+Plan stage remains1round; code stage is2of3rounds. No fixes were needed.
+Capture children393/394/396 are closed; application acceptance remains open.
 
 The follow-up adds the separately claimable defects below; #371, #381 and #373
 receive supplemental evidence rather than duplicate issues.
