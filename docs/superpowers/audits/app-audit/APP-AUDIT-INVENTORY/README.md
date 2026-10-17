@@ -1,6 +1,6 @@
 # Lane A inventory evidence
 
-Execution and source/runtime classification are ready for independent final review. The implementer has not cleared the shipping gate or certified application arithmetic/persistence.
+Independent plan2/code2 review is clean for Lane A report/tooling delivery, and PR [#405](https://github.com/Netke237/trading-assistant/pull/405) is verified merged. Exact scopes and the corrected coverage finding are in [independent-review.md](independent-review.md). Application arithmetic/persistence/presentation acceptance remains with B–J; rail defects395 remain open.
 
 Start with [report.md](report.md). `reconciliation.json` records the eight discovery dispositions and historical/current source boundary. `semantic-classification.json` provides normalized JSX bindings, conditional capabilities, native classifications and state-entry contracts. `supplemental-capability-contracts.json` adds identified source-backed capability/route/state requirements for the four HOC/renderless bindings; join its capability IDs to the semantic overlay and its route IDs to `inventory.json`, the generated structural index. `findings.json` links both UI rail defects to separate remediation phase [#395](https://github.com/Netke237/trading-assistant/issues/395).
 
