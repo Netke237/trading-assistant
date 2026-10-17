@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/app-audit-settings-profiles-9e622f43",
       "claimed_at": "2026-10-17T03:06:38Z",
-      "expires_at": "2026-10-17T06:09:08Z",
+      "expires_at": "2026-10-17T06:09:16Z",
       "note": "Continue #350 follow-up evidence publication and independent code round2",
       "task": "APP-AUDIT-SETTINGS-PROFILES"
     }
