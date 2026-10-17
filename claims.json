@@ -36,7 +36,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-schedule-rollback-07ec76a0",
       "claimed_at": "2026-10-17T04:33:20Z",
-      "expires_at": "2026-10-17T07:33:20Z",
+      "expires_at": "2026-10-17T07:33:24Z",
       "note": "User-authorized #350 remediation: issue#374",
       "task": "APP-AUDIT-B-SCHEDULE-ROLLBACK"
     }
