@@ -37,6 +37,14 @@
       "expires_at": "2026-10-19T14:05:01Z",
       "note": "Fix Regime VIX percentile ordinal suffixes (#388)",
       "task": "APP-AUDIT-B-PERCENTILE-TEXT"
+    },
+    {
+      "agent": "gemini",
+      "branch": "board/app-audit-b-tuning-hint-b1ebd61a",
+      "claimed_at": "2026-10-19T11:06:39Z",
+      "expires_at": "2026-10-19T14:06:39Z",
+      "note": "Fix tuning schedule cadence hint to reflect selected weekdays (#377)",
+      "task": "APP-AUDIT-B-TUNING-HINT"
     }
   ]
 }
