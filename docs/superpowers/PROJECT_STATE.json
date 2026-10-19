@@ -4747,7 +4747,8 @@
           "closed_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19"
         },
         {
-          "rounds": 1
+          "rounds": 1,
+          "opened_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19"
         }
       ]
     },
