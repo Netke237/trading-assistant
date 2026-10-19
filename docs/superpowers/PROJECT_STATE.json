@@ -4782,9 +4782,9 @@
     {
       "id": "APP-AUDIT-B-VIX-WINDOW",
       "name": "252-day VIX percentile uses 259 prior bars",
-      "status": "in_progress",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-17-app-audit-b-vix-window-plan.md",
       "branch": "board/app-audit-b-vix-window-14595bb2",
       "covers": [
@@ -4798,8 +4798,10 @@
         "closure_evidence": "Fresh /root/fix369_plan_r1 reviewed plan SHA25642b4a2aa3072118bdeecf864f61a5e13242f8a7f3ddba4a346b2669fd3e98e83; exactscope verified,0gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-VIX-WINDOW/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent b7fe7869-32aa-4c65-8136-1ddd9beb69dc reviewed diff 9adb7ee3..71c48f75 (regime.py [-253:-1], test_vix_percentile_window.py 8 tests, vixPercentileDisplay.test.tsx 2 tests); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-VIX-WINDOW/code-r1.md"
       },
       "audit_history": [
         {
@@ -4813,6 +4815,18 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "b7fe7869-32aa-4c65-8136-1ddd9beb69dc",
+          "reviewed": "diff 9adb7ee3a47c1e049f2f17492a6e2af144133314..71c48f75365496057d3b4343b14b5160228ae1da",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "tickets": [
@@ -4820,9 +4834,9 @@
       ],
       "verify": {
         "kind": "present",
-        "path": "frontend/lib/resolveOptionsScanRequest.ts",
-        "pattern": "__UNBUILT_APP_AUDIT_B_VIX_WINDOW__",
-        "note": "Unbuilt placeholder; coordinator will replace with an actual production presence probe when implementation is built."
+        "path": "backend/app/routers/regime.py",
+        "pattern": "vix_closes\\[-253:-1\\]",
+        "note": "Pins the 252-day VIX percentile slice [-253:-1] in get_regime."
       }
     }
   ],
