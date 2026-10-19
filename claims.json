@@ -4,7 +4,7 @@
       "agent": "codex",
       "branch": "board/app-audit-settings-profiles-9e622f43",
       "claimed_at": "2026-10-19T05:48:17Z",
-      "expires_at": "2026-10-19T08:59:57Z",
+      "expires_at": "2026-10-19T09:00:06Z",
       "note": "User-requested size/complexity labels and milestone report for 25 confirmed defects",
       "task": "APP-AUDIT-SETTINGS-PROFILES"
     }
