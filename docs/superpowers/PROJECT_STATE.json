@@ -4876,7 +4876,7 @@
     {
       "id": "APP-AUDIT-B-DENSITY",
       "name": "Appearance row density resets when the Settings section remounts",
-      "status": "shipped",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-density-plan.md",
@@ -4932,7 +4932,8 @@
         "pattern": "density: Density",
         "note": "Pins the persisted density field on ThemeState in theme.ts."
       },
-      "note": "Appearance row density persistence across section remount/reload (#370). Plan round 1 clean (0 gate findings); code round 1 clean (0 gate findings) by independent subagent; full typecheck and test suites passed."
+      "pull_request": 414,
+      "note": "SELF-MERGE PENDING, PR #414, audited head eafbd7d612ec78611aff4133c88178e8000faebf. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required."
     },
     {
       "id": "HISTORY-INGEST-GAPS",
