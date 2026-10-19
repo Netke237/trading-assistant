@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-tuning-hint-merge-record-482d8277",
-      "claimed_at": "2026-10-19T12:32:30Z",
-      "expires_at": "2026-10-19T15:32:30Z",
-      "note": "Fix cross-tab theme sync in ThemeProvider (#399)",
-      "task": "APP-AUDIT-B-THEME-SYNC"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-run-gate-ee5e0b18",
       "claimed_at": "2026-10-19T12:32:33Z",
       "expires_at": "2026-10-19T15:32:33Z",
