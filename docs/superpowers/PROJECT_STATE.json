@@ -5122,7 +5122,9 @@
         "pattern": "syncThemeFromStorage",
         "path": "frontend/lib/theme.ts",
         "note": "Pins cross-tab theme synchronization helper in theme.ts."
-      }
+      },
+      "pull_request": 419,
+      "note": "SELF-MERGE PENDING, PR #419, audited head 8b2df6cca4838770db5891fb000db3b42c05b381. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required."
     },
     {
       "id": "HISTORY-INGEST-GAPS",
