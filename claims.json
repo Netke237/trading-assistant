@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-vix-window-14595bb2",
       "claimed_at": "2026-10-19T07:15:30Z",
-      "expires_at": "2026-10-19T10:15:30Z",
+      "expires_at": "2026-10-19T11:18:43Z",
       "note": "#369 VIX percentile window 252-day remediation",
       "task": "APP-AUDIT-B-VIX-WINDOW"
     }
