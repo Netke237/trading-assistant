@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-density-7b892ac1",
       "claimed_at": "2026-10-19T09:49:35Z",
-      "expires_at": "2026-10-19T15:18:10Z",
+      "expires_at": "2026-10-19T15:21:42Z",
       "note": "Fix Appearance row density persistence across remount/reload (#370)",
       "task": "APP-AUDIT-B-DENSITY"
     },
