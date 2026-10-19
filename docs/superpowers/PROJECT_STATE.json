@@ -5180,7 +5180,7 @@
         "pattern": "isRegimeOpposed",
         "note": "Pins that RunScanButton checks the direction-aligned REJECT gate before running or navigating."
       },
-      "note": "Enforces shared direction-aligned combinedRegime === 'REJECT' confirmation across all three screener modes (#387). Plan round 1 clean, code round 1 clean."
+      "note": "Enforces shared direction-aligned combinedRegime === 'REJECT' confirmation across all three screener modes (#387). Plan round 1 clean, code round 1 clean. Self-merge pending CI on PR #420."
     }
   ],
   "already_shipped": [
