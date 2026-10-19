@@ -1517,7 +1517,8 @@
             "verification": "Independently recomputed from scans/2026-10-09 (and 2026-10-01 where pooled): plan s5 validity (core_complete, no flags/day_invalid/truncation, tag 61a03e49, pooling hashes, config-start CRLF sha256 match, request bodies identical to day 1); regime -14 vs +20; S-scan rates/candidates/gaps and s6 keep outcomes; C1/C1b/C5/C5b/C6 attribution and quality bar (C5 median 47 -> 45); min_mult table; IV rows replayed via iv_basis_analysis collect (Swing 6 / Position 10 pooled); all 13 funnel rows; Kenneth column vs decision; main contract_rules min_stock_score 45, scoring_rules PASS 55; no file outside docs changed. Limitation noted by auditor: collect replay ran on Python 3.13 (pure JSON transform, byte-identical output)."
           }
         ]
-      }
+      },
+      "self_merge": "SELF-MERGE PENDING (Kenneth #121 'Merge' 2026-10-14 and option 1-a 2026-10-15): new PR superseding #319, audited head ef87badd (day-2 reading round 1 clean) + docs-only state records + origin/main merge e2c7c789 whose only conflict was PROJECT_STATE.json. Pending attempt only, not merged."
     },
     {
       "id": "DOCC-5-TOPBAR-BANNER",
