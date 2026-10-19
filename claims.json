@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/meas-market-data-measurement-1090d5f3",
-      "claimed_at": "2026-10-19T04:30:58Z",
-      "expires_at": "2026-10-19T07:32:39Z",
-      "note": "#121 option 1-a: merge main into PR #319, PROJECT_STATE-only conflict, CI, self-merge (Kenneth 2026-10-15)",
-      "task": "MEAS-MARKET-DATA-MEASUREMENT"
-    }
-  ]
+  "claims": []
 }
