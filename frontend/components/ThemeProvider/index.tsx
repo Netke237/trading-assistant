@@ -10,7 +10,7 @@
  */
 
 import { useEffect } from 'react';
-import { useThemeStore } from '@/lib/theme';
+import { useThemeStore, THEME_STORAGE_KEY, syncThemeFromStorage } from '@/lib/theme';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useThemeStore((s) => s.theme);
@@ -18,6 +18,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === THEME_STORAGE_KEY || event.key === null) {
+        syncThemeFromStorage(event.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   return <>{children}</>;
 }
