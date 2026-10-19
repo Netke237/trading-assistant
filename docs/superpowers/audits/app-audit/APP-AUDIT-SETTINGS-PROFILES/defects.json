@@ -1,0 +1,197 @@
+[
+  {
+    "phase": "APP-AUDIT-B-CAP-UNITS",
+    "number": 368,
+    "url": "https://github.com/Netke237/trading-assistant/issues/368",
+    "title": "Options millions market-cap filters are sent as dollars",
+    "owner": "B numeric/persistence; J labels only",
+    "evidence": "controls/browser-output.json; controls/source-output.json",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-VIX-WINDOW",
+    "number": 369,
+    "url": "https://github.com/Netke237/trading-assistant/issues/369",
+    "title": "252-day VIX percentile uses 259 prior bars",
+    "owner": "B numeric; J presentation",
+    "evidence": "regime/output.json; regime/calculate.py",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-DENSITY",
+    "number": 370,
+    "url": "https://github.com/Netke237/trading-assistant/issues/370",
+    "title": "Appearance row density resets when the Settings section remounts",
+    "owner": "B save boundary; J presentation/usability",
+    "evidence": "settings/ui-output.json; settings/density-before.png; settings/density-after.png",
+    "status": "open; no product fix",
+    "blocked_by": [
+      373
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-SAVE-FEEDBACK",
+    "number": 371,
+    "url": "https://github.com/Netke237/trading-assistant/issues/371",
+    "title": "Settings footer confirms Saved after a failed or unsubmitted backend save",
+    "owner": "B configuration saves; J presentation; F risk follow-up",
+    "evidence": "settings/ui-output.json; settings/risk-false-saved.png",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-TIMEZONE-RACE",
+    "number": 372,
+    "url": "https://github.com/Netke237/trading-assistant/issues/372",
+    "title": "Late Settings timezone response overwrites an operator edit",
+    "owner": "B numeric/persistence; scheduling consumers G/H/D",
+    "evidence": "settings/ui-output.json",
+    "status": "open; no product fix",
+    "blocked_by": [
+      371
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-STRATEGY-VALIDATION",
+    "number": 373,
+    "url": "https://github.com/Netke237/trading-assistant/issues/373",
+    "title": "Strategy scan stores zero override that the backend rejects",
+    "owner": "B validation/persistence; D strategy scan",
+    "evidence": "settings/ui-output.json; settings/persistence-output.json; controls/source-output.json",
+    "status": "open; no product fix",
+    "blocked_by": [
+      372
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
+    "number": 374,
+    "url": "https://github.com/Netke237/trading-assistant/issues/374",
+    "title": "Failed schedule writes change API state while disk and scheduler retain old values",
+    "owner": "B persistence; H ingestion/EDGAR/SP500; D tuning",
+    "evidence": "settings/families-output.json; settings/families.py",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-NOTIFICATION-TEXT",
+    "number": 375,
+    "url": "https://github.com/Netke237/trading-assistant/issues/375",
+    "title": "Notifications help text renders a literal Unicode escape",
+    "owner": "J presentation; B Settings surface",
+    "evidence": "settings/notifications-family.png; settings/findings.md",
+    "status": "open; no product fix",
+    "blocked_by": [
+      370
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-TUNING-HINT",
+    "number": 377,
+    "url": "https://github.com/Netke237/trading-assistant/issues/377",
+    "title": "Tuning schedule says every day despite saved weekday selection",
+    "owner": "J presentation; D tuning; B Settings surface",
+    "evidence": "settings/tuning-family.png; settings/families-ui-output.json; settings/families-output.json",
+    "status": "open; no product fix",
+    "blocked_by": [
+      375
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-STOCK-FILTERS",
+    "number": 380,
+    "url": "https://github.com/Netke237/trading-assistant/issues/380",
+    "title": "Stocks manual and scheduled requests drop universe price/cap filters",
+    "owner": "B request plumbing; D Stocks",
+    "evidence": "controls/findings.md (C2); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      343
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-PROFILE-VALIDATION",
+    "number": 381,
+    "url": "https://github.com/Netke237/trading-assistant/issues/381",
+    "title": "Malformed current-version profile crashes the Search Profile controls",
+    "owner": "B profiles; I recovery; J failure UI",
+    "evidence": "controls/findings.md (C3); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-WEIGHT-UNITS",
+    "number": 382,
+    "url": "https://github.com/Netke237/trading-assistant/issues/382",
+    "title": "Options score-weight percent overrides are applied as raw multipliers",
+    "owner": "B control units; C score arithmetic",
+    "evidence": "controls/findings.md (C4); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      368
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
+    "number": 383,
+    "url": "https://github.com/Netke237/trading-assistant/issues/383",
+    "title": "Stocks requests ignore Step3 confidence threshold overrides",
+    "owner": "B request plumbing; D confidence gates",
+    "evidence": "controls/findings.md (C5); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      380
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-ENTRY-OVERRIDES",
+    "number": 384,
+    "url": "https://github.com/Netke237/trading-assistant/issues/384",
+    "title": "Entry Quality controls reach requests but do not affect the trade plan",
+    "owner": "B control plumbing; C entry-plan arithmetic",
+    "evidence": "controls/findings.md (C6); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      385
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-STOP-PERCENT-UNITS",
+    "number": 385,
+    "url": "https://github.com/Netke237/trading-assistant/issues/385",
+    "title": "Stop percentages display fractions and clamp a typed 3 percent to 100 percent",
+    "owner": "B numeric control units; C stop consumers; J presentation",
+    "evidence": "controls/findings.md (C7); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      382
+    ]
+  },
+  {
+    "phase": "APP-AUDIT-B-REGIME-RACE",
+    "number": 386,
+    "url": "https://github.com/Netke237/trading-assistant/issues/386",
+    "title": "Old regime response overwrites the newer direction-aligned scan gate",
+    "owner": "B numeric/state; all modes",
+    "evidence": "regime/findings.md (B3-1); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-RUN-GATE",
+    "number": 387,
+    "url": "https://github.com/Netke237/trading-assistant/issues/387",
+    "title": "Shared Run Scan confirmation is bypassed in Stocks and Pre-Breakout",
+    "owner": "B workflow; D/E mode consumers; J presentation",
+    "evidence": "regime/findings.md (B3-2); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-PERCENTILE-TEXT",
+    "number": 388,
+    "url": "https://github.com/Netke237/trading-assistant/issues/388",
+    "title": "Regime VIX percentile labels render incorrect ordinal suffixes",
+    "owner": "J presentation; B regime surface",
+    "evidence": "regime/findings.md (B3-4); see linked JSON/scripts/screenshots in that finding",
+    "status": "open; no product fix",
+    "blocked_by": [
+      386
+    ]
+  }
+]

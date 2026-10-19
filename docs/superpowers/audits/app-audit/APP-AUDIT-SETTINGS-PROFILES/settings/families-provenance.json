@@ -1,0 +1,22 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "python": "3.11.16 (main, Sep 24 2026, 17:56:40) [Clang 22.1.3 ]",
+  "browser": "151.0.7922.173",
+  "packages": {
+    "next": "15.5.23",
+    "playwright": "1.62.1"
+  },
+  "sha256": {
+    "frontend/app/(frame)/settings/page.tsx": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+    "backend/app/routers/ingestion.py": "c01b3b9465b50826027eb02419e70e12f4171fd8edcc5489e9771cee3f0d2dcb",
+    "backend/app/routers/strategy_tuning.py": "a526f954f859407555b06eb2633f3609eff58330f92934469c22eb21539b9d38",
+    "backend/app/routers/notification_settings.py": "28708082c5de1e42f8d315d2e2b64648d41acc64072439d453d5ef8755082244",
+    "backend/app/services/atomic_yaml.py": "37c42cb28a8b3d31784310a968faf3708a1697ac36aa449e54e82240a7e1579a",
+    "backend/app/services/ingestion_schedule_store.py": "fbdce5bcffbbedaf95d50f91e4f0d280e959c9181551a5c8aa42989e8ed52e8b",
+    "backend/app/services/edgar_schedule_store.py": "d7b8280038dfba126242f99ac4f02501d69da281c548e00bb26d814867a528c5",
+    "backend/app/services/sp500_schedule_store.py": "78890518dc408f1f2ca3d16fa9a7b8e96bd9a71cd2601b870d1bfd539d3ed561",
+    "backend/app/services/tuning_schedule_store.py": "56242db9424e72af1876e20c9e02eeea3f91a8ba4e8b4f661e50074efeb34a0f"
+  },
+  "input_provenance": "Deterministic hand-authored payloads in families.py and families-ui.mjs; default values from clean temporary files/default stores, before snapshots in outputs. Fake secrets redacted in output; boolean preservation checks retained. No external market/config inputs.",
+  "boundaries": "All browser API mocked, unknown denied; minimal backend real stores/routers isolated in temporary files; scheduler configure/next-run stubbed; job import rejects execution."
+}

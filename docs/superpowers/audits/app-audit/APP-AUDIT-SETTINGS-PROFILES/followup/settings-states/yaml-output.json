@@ -1,0 +1,508 @@
+{
+  "source_sha": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "python": "3.11.16 (main, Sep 24 2026, 17:56:40) [Clang 22.1.3 ]",
+  "boundary": "Real ScanScheduleStore on TemporaryDirectory only. No API router, scheduler, DB functions or jobs invoked. Restart here means new store instance, not new process.",
+  "checks": [
+    {
+      "id": "yaml-missing-file",
+      "kind": "persistence",
+      "expected": "missing file means empty and no file written",
+      "observed": {
+        "entries": [],
+        "exists": false
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-syntax-invalid-load-preserves-bytes",
+      "kind": "persistence",
+      "expected": "invalid load is empty in memory and does not immediately rewrite file",
+      "observed": {
+        "id": "syntax-invalid",
+        "before_text": "version: 2\nentries: [unterminated\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "f0d44042c308bd702bddc13a2ab8be1ad231952520ffddf9e1263fb7dd9d5629",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-syntax-invalid-next-write-preservation",
+      "kind": "persistence",
+      "expected": "subsequent ordinary save preserves invalid source for recovery or refuses write",
+      "observed": {
+        "id": "syntax-invalid",
+        "before_text": "version: 2\nentries: [unterminated\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "f0d44042c308bd702bddc13a2ab8be1ad231952520ffddf9e1263fb7dd9d5629",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "fail"
+    },
+    {
+      "id": "yaml-root-list-load-preserves-bytes",
+      "kind": "persistence",
+      "expected": "invalid load is empty in memory and does not immediately rewrite file",
+      "observed": {
+        "id": "root-list",
+        "before_text": "- a\n- b\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "25f2bb669e33041967c7ff7343c260b3e288bef9147ef86237d32a7bd7fd8ade",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-root-list-next-write-preservation",
+      "kind": "persistence",
+      "expected": "subsequent ordinary save preserves invalid source for recovery or refuses write",
+      "observed": {
+        "id": "root-list",
+        "before_text": "- a\n- b\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "25f2bb669e33041967c7ff7343c260b3e288bef9147ef86237d32a7bd7fd8ade",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "fail"
+    },
+    {
+      "id": "yaml-invalid-version-load-preserves-bytes",
+      "kind": "persistence",
+      "expected": "invalid load is empty in memory and does not immediately rewrite file",
+      "observed": {
+        "id": "invalid-version",
+        "before_text": "version: not-an-int\nentries: []\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "125c3bf09ce264527c28fc5e3e2e67642bed14b9e98c835dbdee724b26ab8592",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-invalid-version-next-write-preservation",
+      "kind": "persistence",
+      "expected": "subsequent ordinary save preserves invalid source for recovery or refuses write",
+      "observed": {
+        "id": "invalid-version",
+        "before_text": "version: not-an-int\nentries: []\n",
+        "entries_after_load": [],
+        "load_preserved_bytes": true,
+        "before_sha256": "125c3bf09ce264527c28fc5e3e2e67642bed14b9e98c835dbdee724b26ab8592",
+        "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+        "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+        "backups": []
+      },
+      "status": "fail"
+    },
+    {
+      "id": "yaml-legacy-v1-migration",
+      "kind": "persistence",
+      "expected": "legacy stock strategy overrides drop, hold maps to Swing, backup exact original",
+      "observed": {
+        "id": "legacy-v1",
+        "before_text": "entries:\n- days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  enabled: true\n  fire_time: 09:00\n  future_entry_key:\n    preserve: entry extension\n  id: fixture-2\n  label: Audit stocks\n  mode: stocks\n  pattern: fixed_time\n  profile_id: audit-stocks\n  profile_name: Audit stocks\n  profile_synced_at: '2026-10-16T20:39:54.758Z'\n  resolved_request:\n    account_size: 100000\n    breakout_volume_mult: 1.8\n    bt_min_trades: 5\n    bt_min_win_rate: 0.45\n    confidence_atr_mult_stop: 1.5\n    confidence_atr_mult_target: 2\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    direction: Bullish\n    hold_max_days: 15\n    horizon: Swing\n    ma_crossover_lookback: 7\n    overrides: {}\n    pullback_require_reversal: false\n    risk_pct: 0.0375\n    shortlist_max_candidates: 10\n    strategy: pullback_ema\n    universe:\n    - SP500\nfuture_top_level: extension\n",
+        "after_text": "version: 2\nentries:\n- days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  enabled: true\n  fire_time: 09:00\n  future_entry_key:\n    preserve: entry extension\n  id: fixture-2\n  label: Audit stocks\n  mode: stocks\n  pattern: fixed_time\n  profile_id: audit-stocks\n  profile_name: Audit stocks\n  profile_synced_at: '2026-10-16T20:39:54.758Z'\n  resolved_request:\n    account_size: 100000\n    bt_min_trades: 5\n    bt_min_win_rate: 0.45\n    confidence_atr_mult_stop: 1.5\n    confidence_atr_mult_target: 2\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    direction: Bullish\n    hold_max_days: 15\n    horizon: Swing\n    overrides: {}\n    pullback_require_reversal: false\n    risk_pct: 0.0375\n    shortlist_max_candidates: 10\n    strategy: pullback_ema\n    universe:\n    - SP500\n    params_horizon: Swing\n",
+        "in_memory": [
+          {
+            "days_of_week": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "enabled": true,
+            "fire_time": "09:00",
+            "future_entry_key": {
+              "preserve": "entry extension"
+            },
+            "id": "fixture-2",
+            "label": "Audit stocks",
+            "mode": "stocks",
+            "pattern": "fixed_time",
+            "profile_id": "audit-stocks",
+            "profile_name": "Audit stocks",
+            "profile_synced_at": "2026-10-16T20:39:54.758Z",
+            "resolved_request": {
+              "account_size": 100000,
+              "bt_min_trades": 5,
+              "bt_min_win_rate": 0.45,
+              "confidence_atr_mult_stop": 1.5,
+              "confidence_atr_mult_target": 2,
+              "confidence_caution_below": 50,
+              "confidence_reject_below": 35,
+              "direction": "Bullish",
+              "hold_max_days": 15,
+              "horizon": "Swing",
+              "overrides": {},
+              "pullback_require_reversal": false,
+              "risk_pct": 0.0375,
+              "shortlist_max_candidates": 10,
+              "strategy": "pullback_ema",
+              "universe": [
+                "SP500"
+              ],
+              "params_horizon": "Swing"
+            }
+          }
+        ],
+        "backup_matches_original": true,
+        "unknown_entry_preserved": true,
+        "unknown_top_level_preserved": false
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-legacy-restart",
+      "kind": "persistence",
+      "expected": "separate store instance reads same migrated payload without another migration",
+      "observed": [
+        {
+          "days_of_week": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "enabled": true,
+          "fire_time": "09:00",
+          "future_entry_key": {
+            "preserve": "entry extension"
+          },
+          "id": "fixture-2",
+          "label": "Audit stocks",
+          "mode": "stocks",
+          "pattern": "fixed_time",
+          "profile_id": "audit-stocks",
+          "profile_name": "Audit stocks",
+          "profile_synced_at": "2026-10-16T20:39:54.758Z",
+          "resolved_request": {
+            "account_size": 100000,
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "confidence_atr_mult_stop": 1.5,
+            "confidence_atr_mult_target": 2,
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "direction": "Bullish",
+            "hold_max_days": 15,
+            "horizon": "Swing",
+            "overrides": {},
+            "pullback_require_reversal": false,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "strategy": "pullback_ema",
+            "universe": [
+              "SP500"
+            ],
+            "params_horizon": "Swing"
+          }
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "id": "yaml-malformed-rows",
+      "kind": "persistence",
+      "expected": "malformed rows lacking id are dropped in memory; original bytes remain",
+      "observed": {
+        "before_text": "entries:\n- null\n- {}\n- invalid\n- days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  enabled: true\n  fire_time: 09:00\n  id: fixture-1\n  label: Audit options A\n  mode: options\n  pattern: fixed_time\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    confidence_atr_mult_stop: 1.5\n    confidence_atr_mult_target: 2\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    direction: Bullish\n    fundamentals_caution_below: 45\n    fundamentals_de_reject: 3\n    fundamentals_enabled: true\n    fundamentals_reject_below: 30\n    hold_max_days: 2\n    hold_min_days: 0\n    horizon: Intraday\n    horizon_preset: Intraday\n    iv_abs_threshold: 50\n    iv_rank_threshold: 50\n    max_debit_pct: 40\n    min_credit: 0.5\n    overrides:\n      shortlist_max_candidates: 10\n    short_leg_delta: 0.3\n    spread_width: 5\n    universe:\n    - SP500\nfuture_top_level: extension\nversion: 2\n",
+        "entries": [
+          {
+            "days_of_week": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "enabled": true,
+            "fire_time": "09:00",
+            "id": "fixture-1",
+            "label": "Audit options A",
+            "mode": "options",
+            "pattern": "fixed_time",
+            "profile_id": "audit-options-a",
+            "profile_name": "Audit options A",
+            "profile_synced_at": "2026-10-16T20:39:54.577Z",
+            "resolved_request": {
+              "confidence_atr_mult_stop": 1.5,
+              "confidence_atr_mult_target": 2,
+              "confidence_caution_below": 50,
+              "confidence_reject_below": 35,
+              "direction": "Bullish",
+              "fundamentals_caution_below": 45,
+              "fundamentals_de_reject": 3,
+              "fundamentals_enabled": true,
+              "fundamentals_reject_below": 30,
+              "hold_max_days": 2,
+              "hold_min_days": 0,
+              "horizon": "Intraday",
+              "horizon_preset": "Intraday",
+              "iv_abs_threshold": 50,
+              "iv_rank_threshold": 50,
+              "max_debit_pct": 40,
+              "min_credit": 0.5,
+              "overrides": {
+                "shortlist_max_candidates": 10
+              },
+              "short_leg_delta": 0.3,
+              "spread_width": 5,
+              "universe": [
+                "SP500"
+              ]
+            }
+          }
+        ],
+        "bytes_preserved": true
+      },
+      "status": "pass"
+    },
+    {
+      "id": "yaml-upsert-reload",
+      "kind": "persistence",
+      "expected": "two valid entries persist and reload",
+      "observed": [
+        {
+          "days_of_week": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "enabled": true,
+          "fire_time": "09:00",
+          "id": "fixture-1",
+          "label": "Audit options A",
+          "mode": "options",
+          "pattern": "fixed_time",
+          "profile_id": "audit-options-a",
+          "profile_name": "Audit options A",
+          "profile_synced_at": "2026-10-16T20:39:54.577Z",
+          "resolved_request": {
+            "confidence_atr_mult_stop": 1.5,
+            "confidence_atr_mult_target": 2,
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "direction": "Bullish",
+            "fundamentals_caution_below": 45,
+            "fundamentals_de_reject": 3,
+            "fundamentals_enabled": true,
+            "fundamentals_reject_below": 30,
+            "hold_max_days": 2,
+            "hold_min_days": 0,
+            "horizon": "Intraday",
+            "horizon_preset": "Intraday",
+            "iv_abs_threshold": 50,
+            "iv_rank_threshold": 50,
+            "max_debit_pct": 40,
+            "min_credit": 0.5,
+            "overrides": {
+              "shortlist_max_candidates": 10
+            },
+            "short_leg_delta": 0.3,
+            "spread_width": 5,
+            "universe": [
+              "SP500"
+            ]
+          }
+        },
+        {
+          "label": "Audit stocks",
+          "mode": "stocks",
+          "profile_id": "audit-stocks",
+          "profile_name": "Audit stocks",
+          "profile_synced_at": "2026-10-16T20:39:54.758Z",
+          "resolved_request": {
+            "universe": [
+              "SP500"
+            ],
+            "direction": "Bullish",
+            "horizon": "Intraday",
+            "strategy": "pullback_ema",
+            "pullback_require_reversal": false,
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "account_size": 100000,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "overrides": {},
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "confidence_atr_mult_target": 2,
+            "confidence_atr_mult_stop": 1.5,
+            "hold_max_days": 2
+          },
+          "pattern": "fixed_time",
+          "enabled": true,
+          "days_of_week": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "fire_time": "09:00",
+          "id": "fixture-2"
+        }
+      ],
+      "status": "pass"
+    },
+    {
+      "id": "yaml-delete-reload",
+      "kind": "persistence",
+      "expected": "only selected id deleted and last record reloads",
+      "observed": [
+        {
+          "label": "Audit stocks",
+          "mode": "stocks",
+          "profile_id": "audit-stocks",
+          "profile_name": "Audit stocks",
+          "profile_synced_at": "2026-10-16T20:39:54.758Z",
+          "resolved_request": {
+            "universe": [
+              "SP500"
+            ],
+            "direction": "Bullish",
+            "horizon": "Intraday",
+            "strategy": "pullback_ema",
+            "pullback_require_reversal": false,
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "account_size": 100000,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "overrides": {},
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "confidence_atr_mult_target": 2,
+            "confidence_atr_mult_stop": 1.5,
+            "hold_max_days": 2
+          },
+          "pattern": "fixed_time",
+          "enabled": true,
+          "days_of_week": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "fire_time": "09:00",
+          "id": "fixture-2"
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "cases": [
+    {
+      "id": "syntax-invalid",
+      "before_text": "version: 2\nentries: [unterminated\n",
+      "entries_after_load": [],
+      "load_preserved_bytes": true,
+      "before_sha256": "f0d44042c308bd702bddc13a2ab8be1ad231952520ffddf9e1263fb7dd9d5629",
+      "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+      "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+      "backups": []
+    },
+    {
+      "id": "root-list",
+      "before_text": "- a\n- b\n",
+      "entries_after_load": [],
+      "load_preserved_bytes": true,
+      "before_sha256": "25f2bb669e33041967c7ff7343c260b3e288bef9147ef86237d32a7bd7fd8ade",
+      "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+      "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+      "backups": []
+    },
+    {
+      "id": "invalid-version",
+      "before_text": "version: not-an-int\nentries: []\n",
+      "entries_after_load": [],
+      "load_preserved_bytes": true,
+      "before_sha256": "125c3bf09ce264527c28fc5e3e2e67642bed14b9e98c835dbdee724b26ab8592",
+      "after_upsert_text": "version: 2\nentries:\n- label: Audit options A\n  mode: options\n  profile_id: audit-options-a\n  profile_name: Audit options A\n  profile_synced_at: '2026-10-16T20:39:54.577Z'\n  resolved_request:\n    universe:\n    - SP500\n    direction: Bullish\n    horizon: Intraday\n    horizon_preset: Intraday\n    hold_min_days: 0\n    hold_max_days: 2\n    overrides:\n      shortlist_max_candidates: 10\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    confidence_atr_mult_target: 2\n    confidence_atr_mult_stop: 1.5\n    fundamentals_enabled: true\n    fundamentals_caution_below: 45\n    fundamentals_reject_below: 30\n    fundamentals_de_reject: 3\n    spread_width: 5\n    short_leg_delta: 0.3\n    iv_rank_threshold: 50\n    iv_abs_threshold: 50\n    min_credit: 0.5\n    max_debit_pct: 40\n  pattern: fixed_time\n  enabled: true\n  days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  fire_time: 09:00\n  id: fixture-1\n",
+      "after_upsert_sha256": "b0fc5931eda797ebd1a04582c593c96e50d0c9030df47bf748b2f6413e7ce3cf",
+      "backups": []
+    },
+    {
+      "id": "legacy-v1",
+      "before_text": "entries:\n- days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  enabled: true\n  fire_time: 09:00\n  future_entry_key:\n    preserve: entry extension\n  id: fixture-2\n  label: Audit stocks\n  mode: stocks\n  pattern: fixed_time\n  profile_id: audit-stocks\n  profile_name: Audit stocks\n  profile_synced_at: '2026-10-16T20:39:54.758Z'\n  resolved_request:\n    account_size: 100000\n    breakout_volume_mult: 1.8\n    bt_min_trades: 5\n    bt_min_win_rate: 0.45\n    confidence_atr_mult_stop: 1.5\n    confidence_atr_mult_target: 2\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    direction: Bullish\n    hold_max_days: 15\n    horizon: Swing\n    ma_crossover_lookback: 7\n    overrides: {}\n    pullback_require_reversal: false\n    risk_pct: 0.0375\n    shortlist_max_candidates: 10\n    strategy: pullback_ema\n    universe:\n    - SP500\nfuture_top_level: extension\n",
+      "after_text": "version: 2\nentries:\n- days_of_week:\n  - 0\n  - 1\n  - 2\n  - 3\n  - 4\n  enabled: true\n  fire_time: 09:00\n  future_entry_key:\n    preserve: entry extension\n  id: fixture-2\n  label: Audit stocks\n  mode: stocks\n  pattern: fixed_time\n  profile_id: audit-stocks\n  profile_name: Audit stocks\n  profile_synced_at: '2026-10-16T20:39:54.758Z'\n  resolved_request:\n    account_size: 100000\n    bt_min_trades: 5\n    bt_min_win_rate: 0.45\n    confidence_atr_mult_stop: 1.5\n    confidence_atr_mult_target: 2\n    confidence_caution_below: 50\n    confidence_reject_below: 35\n    direction: Bullish\n    hold_max_days: 15\n    horizon: Swing\n    overrides: {}\n    pullback_require_reversal: false\n    risk_pct: 0.0375\n    shortlist_max_candidates: 10\n    strategy: pullback_ema\n    universe:\n    - SP500\n    params_horizon: Swing\n",
+      "in_memory": [
+        {
+          "days_of_week": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "enabled": true,
+          "fire_time": "09:00",
+          "future_entry_key": {
+            "preserve": "entry extension"
+          },
+          "id": "fixture-2",
+          "label": "Audit stocks",
+          "mode": "stocks",
+          "pattern": "fixed_time",
+          "profile_id": "audit-stocks",
+          "profile_name": "Audit stocks",
+          "profile_synced_at": "2026-10-16T20:39:54.758Z",
+          "resolved_request": {
+            "account_size": 100000,
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "confidence_atr_mult_stop": 1.5,
+            "confidence_atr_mult_target": 2,
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "direction": "Bullish",
+            "hold_max_days": 15,
+            "horizon": "Swing",
+            "overrides": {},
+            "pullback_require_reversal": false,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "strategy": "pullback_ema",
+            "universe": [
+              "SP500"
+            ],
+            "params_horizon": "Swing"
+          }
+        }
+      ],
+      "backup_matches_original": true,
+      "unknown_entry_preserved": true,
+      "unknown_top_level_preserved": false
+    }
+  ],
+  "counts": {
+    "pass": 9,
+    "fail": 3
+  },
+  "module_sha256": {
+    "backend/app/services/scan_schedule_store.py": "57ecbdfc1c0a8f3be71aa85535edccb62df74c85c2052a6f9f5bcc2619d57b1a",
+    "backend/app/services/horizon_profiles.py": "1f959bda602ccac4190f8fb2ed343cbe214e5844c519571b18b57a1dac5a1cd4",
+    "backend/app/scoring/stock_scorer.py": "a7c2f331cb8cd7773177ff3d1552696554663afa779e3aa16830496b393b6c3e"
+  }
+}

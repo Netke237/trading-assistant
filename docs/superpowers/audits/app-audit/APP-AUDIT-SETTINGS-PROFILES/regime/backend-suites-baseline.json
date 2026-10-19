@@ -1,0 +1,29 @@
+{
+  "command": [
+    "/workspace/trading-assistant/backend/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "--confcutdir=/tmp/b3-regime-suites-2syjmdyv",
+    "--rootdir=/tmp/b3-regime-suites-2syjmdyv",
+    "-o",
+    "asyncio_mode=auto",
+    "-k",
+    "not test_r6",
+    "/tmp/b3-regime-suites-2syjmdyv"
+  ],
+  "cwd": "temporary isolated test-copy root",
+  "exit_code": 1,
+  "excluded": "test_r6* in test_a4b_completed_intraday_bars.py imports app.main; route semantics covered separately by calculate.py",
+  "files": {
+    "backend/tests/test_regime_omm.py": "7c429137c64238bf4011aac16960fe8da51bce912f707758d48b28115b02666c",
+    "backend/tests/test_regime_hmm.py": "30cc5ced6ea78ffa7d8393f1bc9e74f544bcdec30d1c2b81abf6b10cabc9159f",
+    "backend/tests/test_regime_hmm_daily.py": "1ab3315775d4498c1a93164c2f0a3df2b11aba5a41558d8dd0964435b29f8e3a",
+    "backend/tests/test_regime_no_lookahead.py": "f073363ec88f2e1382c05bd9681b0cfbb837e453d05148f2292ed00f1eb29d1a",
+    "backend/tests/test_regime_series.py": "5baf2d7b7a931eb2b62c8d07b21eacf92c03cc2cc1647d7b74338b341d1cb752",
+    "backend/tests/test_regime_gate.py": "a2520614e9e786743f794be3e6a4aba2f12a3ae40be95345d79c821ab0be3c67",
+    "backend/tests/test_regime_gate_resolver.py": "870e3f9af0d7d5489d5602281518ff5ffa2334ec22473a5ebc2d0cbf6ec4abc7",
+    "backend/tests/test_a4_intraday_regime_bars.py": "19abe52236942d4c942892f551bb89f1d7f2202b866d8f3426676daa8525e908",
+    "backend/tests/test_a4b_completed_intraday_bars.py": "7ec49c344c8648a9dfed93adb5ae11ced9eb242b3169798bd992a879f5e91d86"
+  }
+}

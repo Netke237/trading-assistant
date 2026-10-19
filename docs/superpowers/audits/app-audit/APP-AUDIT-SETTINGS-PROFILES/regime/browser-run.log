@@ -1,0 +1,65 @@
+[
+  {
+    "mode": "options",
+    "step1_combined": "REJECT",
+    "units_visible": true,
+    "stay_percent_visible": true,
+    "hmm_percent_visible": true,
+    "step1_next_dialog": true,
+    "run_dialog": true,
+    "after_run_url": "http://127.0.0.1:3027/screener/step-3-direction",
+    "scan_requests": [],
+    "page_errors": []
+  },
+  {
+    "mode": "stocks",
+    "step1_combined": "REJECT",
+    "units_visible": true,
+    "stay_percent_visible": true,
+    "hmm_percent_visible": true,
+    "step1_next_dialog": true,
+    "run_dialog": false,
+    "after_run_url": "http://127.0.0.1:3027/screener/step-6-backtest",
+    "scan_requests": [
+      {
+        "method": "POST",
+        "path": "/api/stock-scan",
+        "query": "",
+        "body": {
+          "universe": [
+            "SP500"
+          ],
+          "direction": "Bullish",
+          "horizon": "Swing",
+          "strategy": "pullback_ema",
+          "pullback_require_reversal": false,
+          "params_horizon": "Swing",
+          "bt_min_trades": 5,
+          "bt_min_win_rate": 0.45,
+          "account_size": 100000,
+          "risk_pct": 0.0375,
+          "shortlist_max_candidates": 10,
+          "overrides": {},
+          "confidence_caution_below": 50,
+          "confidence_reject_below": 35,
+          "confidence_atr_mult_target": 3,
+          "confidence_atr_mult_stop": 1.5,
+          "hold_max_days": 15
+        }
+      }
+    ],
+    "page_errors": []
+  },
+  {
+    "mode": "prebreakout",
+    "step1_combined": "REJECT",
+    "units_visible": true,
+    "stay_percent_visible": true,
+    "hmm_percent_visible": true,
+    "step1_next_dialog": true,
+    "run_dialog": false,
+    "after_run_url": "http://127.0.0.1:3027/screener/step-4-prebreakout",
+    "scan_requests": [],
+    "page_errors": []
+  }
+]

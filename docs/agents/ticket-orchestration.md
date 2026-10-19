@@ -14,6 +14,10 @@ The user-level `k-ticket-coordinator` skill (Kenneth's `~/.claude/skills/` and c
 - **Ticket** (a GitHub child issue) = one plan task = one build unit. Tickets are never audit targets.
 - One tracking issue per phase. When the phase is a **board item** (`docs/agents/board.md`), the board item issue *is* that tracking issue: do not create another; START mode cuts the tickets as its sub-issues and records Tickets / Audit / Needs Kenneth / Log as **comments** on the item, never body edits (only the `**Branch:**` value changes). For board items, `board.md` wins on branches, claims, ownership, labels and tracking.
 
+## Required task ratings and progress
+
+Follow [task-ratings.md](task-ratings.md) for every board phase, confirmed defect and build ticket. Before publishing or starting a task, apply exactly one `size:*` and one `complexity:*` label, explain the estimate, and record an evidence-based completion milestone. Recheck ratings after plan approval and scope changes. Include completion, size and complexity in tracking updates and stop reports. These requirements supplement the user-level `k-ticket-coordinator` skill; existing claims, audit caps and merge gates remain authoritative.
+
 ## Commands
 
 | What | Command |
