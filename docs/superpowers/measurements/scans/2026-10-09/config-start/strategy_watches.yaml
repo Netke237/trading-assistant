@@ -1,0 +1,43 @@
+schedule:
+  enabled: true
+  mode: eod
+  eod_time: '16:15'
+  poll_hours: 4
+  sustain_minutes: 0
+watches:
+- id: wch_88e166325061
+  symbol: AAPL
+  strategy_key: pullback_ema
+  params_override: {}
+  enabled: true
+  created_at: '2026-06-13T20:48:29.893224+00:00'
+  last_state:
+    phase: armed
+    direction: Bullish
+    entry_price: 317.52
+    stop_price: 296.73
+    target_price: 359.1
+    last_event: entry
+    last_event_at: '2026-08-19T14:19:18.851879+00:00'
+  watch_type: strategy
+  trigger_def: null
+  interval: 1D
+  direction: Bullish
+- id: wch_b579a9763023
+  symbol: MO
+  strategy_key: pullback_ema
+  params_override: {}
+  enabled: true
+  created_at: '2026-06-16T20:35:58.750740+00:00'
+  last_state:
+    phase: idle
+    direction: null
+    entry_price: null
+    stop_price: null
+    target_price: null
+    last_event: exit_target
+    last_event_at: '2026-07-28T14:18:16.361274+00:00'
+  watch_type: strategy
+  trigger_def: null
+  interval: 1D
+  direction: Bullish

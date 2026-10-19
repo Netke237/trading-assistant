@@ -1,0 +1,55 @@
+{
+  "head": "c3945a4024f8bc767c8608a99ee0b59988fac03e",
+  "base": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "json_files_parsed": 30,
+  "python_files_parsed": 5,
+  "javascript_files_syntax_checked": 10,
+  "syntax_errors": [],
+  "frozen_baseline_hash_mismatches": [],
+  "current_main_inputs_changed_from_frozen_baseline": [
+    "backend/config/universe_exclusions.yaml"
+  ],
+  "diff_files": 74,
+  "application_files_in_pr_diff": [],
+  "frontend": {
+    "typecheck": {
+      "command": "cd frontend && npm run typecheck",
+      "exit_code": 0
+    },
+    "jest": {
+      "command": "cd frontend && npm run test -- --runInBand",
+      "exit_code": 0,
+      "suites_passed": 268,
+      "tests_passed": 5477,
+      "tests_total": 5477,
+      "duration_s": 164.059
+    }
+  },
+  "backend_supplemental": {
+    "python": "3.11.16",
+    "selected": 89,
+    "passed": 89,
+    "deselected": 4,
+    "exit_code": 0,
+    "duration_s": 2.23,
+    "runner": "regime/run_suites.py with output redirected to temporary directory",
+    "isolation": "unchanged tests copied outside conftest, temporary database/config layout, no app.main; network-enabled local sockets with sitecustomize guard rejecting non-loopback TCP connections",
+    "excluded": "Two test_r6* app.main cases and two previously failing session_closed quote-precondition auto-trader cases; same exclusions as frozen supplemental run",
+    "prior_attempt": "Restricted-sandbox attempt timed out after90s at async executor wakeup following8 passed tests; not counted as pass",
+    "qualification": "Original frozen backend3 failed/88 passed remains authoritative for that earlier run; selected supplemental passes do not establish full backend correctness."
+  },
+  "lane_a_inventory": {
+    "remote_sha": "6309c0636f8021e212d8014e3df2fe15394c0659",
+    "status": "unchanged incomplete source discovery increment; final runtime/state reconciliation not available"
+  },
+  "live_defect_registry": {
+    "issues": 18,
+    "all_open": true,
+    "all_titles_match": true,
+    "open_native_shared_file_blocker_edges": 11
+  },
+  "diff_whitespace": {
+    "non_log_files": "pass",
+    "captured_logs": "raw captured log whitespace retained; not changed or treated as correctness finding"
+  }
+}

@@ -11,23 +11,30 @@ a finding.
 
 ## Proposal table (fill in after the last day)
 
+Draft filled 2026-10-09 from the two valid days (see "Two-day reading" below). Kenneth answered every
+row in chat on 2026-10-11 (recorded on #121 and as decision `MEAS-DAY2-ANSWERS-2026-10-11`). The only
+change, `min_stock_score` 55 → 45, was made on main by OPTIONS-UNDERLYING-FLOOR-45; this sheet changes
+no setting. The stock scanner's own PASS threshold (`scoring_rules.yaml`, 55) is unchanged.
+
 | Threshold | Seed | Proposed | Rule that fired | Rows / days cited | Kenneth |
 |---|---|---|---|---|---|
-| `bearish_min_trend` Swing | 30 | | | | |
-| `bearish_min_trend` Position | 40 | | | | |
-| `confidence_reject_below` (both directions) | 35 | | | | |
-| `min_stock_score` (both directions) | 55 | | | | |
-| `iv_rank_pass_max` Swing / Position | | | | | |
-| `iv_rank_caution_max` Swing / Position | | | | | |
-| `preferred_iv_rank_max` (one key, horizons pooled) | 55 | | | | |
-| `regime_sizing.min_mult` | 0.3 | keep 0.3 (table only) | | | |
-| `min_volume` / `min_open_interest` | 50 / 200 | report only | | | — |
-| `max_iv_rank` | 70 | report only | | | — |
-| `iv_rank_threshold` / `ivAbsThreshold` | 50 / 50 | report only | | | — |
+| `bearish_min_trend` Swing | 30 | keep 30 | keep (no step down: rate < 50%; no step up: day 1 2.03% is not < 2%, S1 0 candidates both days) | S1 2026-10-01 / 2026-10-09 | keep 30 (2026-10-11) |
+| `bearish_min_trend` Position | 40 | keep 40 | keep (rates 3.50% / 5.36%) | S3 2026-10-01 / 2026-10-09 | keep 40 (2026-10-11) |
+| `confidence_reject_below` (both directions) | 35 | keep 35 | keep (C1 quality addition on 1 of 2 days: NKE 10-09) | C1/C1b 2026-10-01 / 2026-10-09 | keep 35 (2026-10-11) |
+| `min_stock_score` (both directions) | 55 | **45** | C5 ≥ 1 quality addition on 2 valid days; median stockScore 47 → 45. New question: C5b's names give 40 | C5 2026-10-01 (CSCO 53, NFLX 38), 2026-10-09 (NFLX 50, TSLA 47, WDC 46); C5b shown | **yes, 45 for both directions** (2026-10-11): the single key `contract_rules.yaml` `min_stock_score`, no per-direction key; applied on main by OPTIONS-UNDERLYING-FLOOR-45, not by this sheet |
+| `iv_rank_pass_max` Swing / Position | | not enough data | rank rows Swing 6 / Position 10 < 30 | O1–O4 both days | not enough data: stays at its seed until #189 has ≥ 30 rows per horizon (2026-10-11) |
+| `iv_rank_caution_max` Swing / Position | | not enough data | as above | O1–O4 both days | not enough data: stays at its seed until #189 (2026-10-11) |
+| `preferred_iv_rank_max` (one key, horizons pooled) | 55 | not enough data | per-horizon floor not met | O1–O4 both days | not enough data: stays at 55 until #189 (2026-10-11) |
+| `regime_sizing.min_mult` | 0.3 | keep 0.3 (table only) | regimes differ (conviction +20 / −14), table shown | base scans both days | keep 0.3 (2026-10-11) |
+| `min_volume` / `min_open_interest` | 50 / 200 | report only | C6: 4 + 2 attributed, 1 + 1 quality, all volume < 50 | C6 both days | — |
+| `max_iv_rank` | 70 | report only | `iv_rank_too_high` O1–O4: 3/11/0/3 and 6/11/2/4 | O1–O4 both days | — |
+| `iv_rank_threshold` / `ivAbsThreshold` | 50 / 50 | report only | no bearish name ≥ 40; no spread built | O1–O4 both days, A1/A2 day 1 | — |
 
 When **every** row has Kenneth's answer, and each is recorded as a decision, add a line reading
 exactly `MEAS-ALL-PROPOSALS-ANSWERED` directly below this paragraph. The MEAS verify probe reads that
 line: until it exists, the phase is in progress.
+
+MEAS-ALL-PROPOSALS-ANSWERED
 
 "not enough data" is a valid answer for any row, and so is "new question for Kenneth" (plan §6,
 direction scope).
@@ -237,6 +244,183 @@ liquidity readings compute per day, but the Swing IV rank rows pool across days.
 
 Whether a 5–15-day hold should accept the 15-DTE monthly is a separate product question, outside the
 freeze.
+
+### Day 2026-10-09
+
+- Freeze tag / commit: `meas-freeze-1` / `61a03e49` (same tag commit as day 1, so the days pool)
+- Valid day? (plan §5) **yes**. All eight base scans ran on the tag, none INVALID or
+  `late_for_comparison` (O1 13:00:47 ET, last base S4 ended 14:09:53 ET).
+- Manifest `core_status`: `core_complete` (status `core_complete`; core block only, no A-block)
+- Manifest flags / `day_invalid` / `snapshot_failed`: none / none / none. No scan carries a flag.
+  `config_changed.core_end`: [].
+- Day regime (position `/api/regime` at start): conviction **−14** · **Choppy** · **Fragile** · VIX **14.8** · **MIXED**
+  (hmm Bull, alignment Diverging, overall PASS)
+- **Different regime from day 1?** **yes**: |Δ conviction_pct| = |−14 − 20| = 34 ≥ 15. (VIX Δ 2.2,
+  direction both MIXED, omm state and stability both unchanged: the conviction test alone decides.)
+  So the min_mult table is shown below (§5).
+- `strategy_params.yaml` sha256 (start): `6e60d95a…a764`, the same as day 1 (manifest values
+  compared, not re-hashes). The S-scan rules therefore pool both days [v6 R1].
+- `sp500.csv` sha256 (core start / end): `6d7eae00…60e3` / same. Same as day 1 [U1].
+- Config health pid start / end: core 7248 / 7248; `ok` true, `stale` [] at both ends
+- C-scans skipped (`skipped:time`): none
+- Pairs excluded (`pair_excluded`): none
+- Truncated scans: none
+- A-block run today? **no** (plan §5: it runs on one valid day; day 1's is usable and is the one
+  the report uses)
+
+**Direction floors (S-scans; measured only, plan §6 [v6 R3])**
+
+| Horizon | Dir | scanned | failed_history | failed_score | entered | failed_direction_unmeasured | measured entrants | failed_direction | rate | candidates |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Swing | Bearish (S1) | 518 | 2 | 198 | 318 | 0 | 318 | 3 | 0.94% | 0 |
+| Swing | Bullish (S2) | 518 | 2 | 270 | 246 | 0 | 246 | 9 | 3.66% | 13 |
+| Position | Bearish (S3) | 518 | 2 | 199 | 317 | 0 | 317 | 17 | 5.36% | 2 |
+| Position | Bullish (S4) | 518 | 2 | 251 | 265 | 0 | 265 | 68 | 25.66% | 21 |
+
+Rejected trend scores: S1 {0: 1, 15: 2}; S2 {0: 2, 15: 7}; S3 {15: 8, 30: 9}; S4 {0: 1, 15: 11, 30: 56}.
+Bearish − bullish gap (information only): Swing −2.7 pt, Position −20.3 pt.
+O-scan direction removals: `direction_conviction:` 0 and `direction_conviction_unmeasured:` 0 on
+O1–O4 (min trend 40 Position, 30 Swing).
+
+**Confidence (C1 / C1b):**
+- C1 (bearish, vs O1; quality bar contractScore ≥ 55, the single base candidate LULU): 2 attributed,
+  **1 quality**: **NKE** (CAUTION, stop cost PASS, contractScore 78; base breakdown confidence 30,
+  fundamentals 56). Below the bar: LEN (CAUTION, stop cost CAUTION, contractScore 54; base
+  confidence 31, fundamentals 41). 0 drift.
+- C1b (bullish, vs O2): 0 attributed, 0 drift. C1b returned the same four names as O2.
+- S-scan confidence-gate rejects ("would clear at 30 / 25"): S1 4 rejects (1 / 1), S2 5 (2 / 4),
+  S3 3 (1 / 1), S4 0.
+
+**min_stock_score (C5 / C5b):** every added name lay in [35, 55); drift (≥ 55): 0 on both.
+- C5 (bearish, vs O1; bar ≥ 55): 5 attributed, **3 quality**: NFLX (stockScore 50, cs 70),
+  TSLA (47, 84) and WDC (46, 62). Below the bar: GLW (48, cs 49) and FIS (45, 50).
+- C5b (bullish, vs O2; bar ≥ 58.5): 14 attributed, **11 quality**: WMT (52, cs 77), CSCO (52, 67),
+  MSFT (49, 78), PFE (47, 74), WBD (47, 69), NOW (45, 65), AAPL (43, 77), GOOG (43, 72),
+  GOOGL (43, 70), MU (42, 88) and XOM (38, 73). Below the bar: CVX (40, 58), AMAT (40, 54) and
+  DVN (38, 57). WBD's `stopCostStatus` is null; null is "not REJECT", so it passes that part of
+  the bar.
+- `contract_rules` echo: C5 / C5b `{"min_stock_score": 35}` ✓.
+
+**Liquidity (C6, report only):**
+- 2 attributed (bearish, vs O1), 1 passes the quality bar.
+- Both trade below the frozen `min_volume` 50, so neither is drift.
+
+| Symbol | Volume | OI | Spread % | contractScore | Quality |
+|---|---|---|---|---|---|
+| COO | 0 | 478 | 10.5 | 59 | yes |
+| JKHY | 0 | 5 | 18.3 | 46 | no |
+
+- `contract_rules`: C6 shows all four keys at 0 ✓. O1–O4, C1 and C1b show `{}` ✓.
+- No C6 reject reason contains `volume_too_low` or `open_interest_too_low`. Every C6 candidate echoes
+  `preferred_volume_min` / `preferred_oi_min` 0.
+- `override_not_applied:liquidity`: **no**.
+
+**min_mult (shown: the two valid days are different regimes, §5).** Read from the
+`*.result.json` files of the base scans (the funnel rows carry no sentiment). Multiplier =
+`m + (1 − m) · clamp((c + 40) / 80, 0, 1)` with `full_conviction_pct` 40. Options rows are **the
+fire's ramp on the scan's reading**: options cards are not conviction-sized. A candidate with no
+sentiment is sized at the floor m.
+
+| Day | Scan | Path / dir / horizon | Candidates | No sentiment | Conviction % values | Stability | Mean mult m=0.2 | m=0.3 | m=0.4 |
+|---|---|---|---|---|---|---|---|---|---|
+| 10-01 | O1 | options Bear Position | 1 | 1 | — | — | (floor) | (floor) | (floor) |
+| 10-01 | O2 | options Bull Position | 4 | 0 | 33, 50, 67, 100 | 3 Fragile, 1 Stable | 0.983 | 0.985 | 0.987 |
+| 10-01 | O4 | options Bull Swing | 3 | 0 | 0, 14, 64 | 2 Fragile, 1 Stable | 0.780 | 0.808 | 0.835 |
+| 10-01 | S2 | stocks Bull Swing | 3 | 1 | −9, 0 | 2 Fragile | 0.555 | 0.611 | 0.666 |
+| 10-01 | S3 | stocks Bear Position | 1 | 0 | 50 | 1 Fragile | 1.000 | 1.000 | 1.000 |
+| 10-01 | S4 | stocks Bull Position | 9 | 0 | −67, −20, −20, 0, 11, 17, 25, 33, 43 | 9 Fragile | 0.651 | 0.695 | 0.738 |
+| 10-09 | O1 | options Bear Position | 1 | 0 | 50 | 1 Stable | 1.000 | 1.000 | 1.000 |
+| 10-09 | O2 | options Bull Position | 4 | 0 | 0, 50, 50, 67 | 2 Fragile, 2 Stable | 0.900 | 0.913 | 0.925 |
+| 10-09 | O4 | options Bull Swing | 3 | 0 | −20, 14, 75 | 2 Fragile, 1 Stable | 0.713 | 0.749 | 0.785 |
+| 10-09 | S2 | stocks Bull Swing | 13 | 1 | 0, 0, 10, 14, 20, 20, 25, 31, 33, 36, 38, 40 | 12 Fragile | 0.823 | 0.845 | 0.867 |
+| 10-09 | S3 | stocks Bear Position | 2 | 0 | −25, 71 | 1 Fragile, 1 Stable | 0.675 | 0.716 | 0.756 |
+| 10-09 | S4 | stocks Bull Position | 21 | 0 | −44, −14, 0 ×6, 12, 25, 25, 29, 29, 29, 33, 38, 40, 88, 100, 100, 100 | 20 Fragile, 1 Stable | 0.774 | 0.803 | 0.831 |
+
+The means cover the candidates with sentiment only, rounded half-up to 3 decimals. O3 and S1 had no candidates on either day.
+Day 1's A1 (2 candidates, no sentiment) is not a base scan and is not listed. Among candidates
+with sentiment, one sits at the floor on each day (day 1 S4, conviction −67; day 2 S4, −44):
+below −40 the ramp gives m. The three candidates with no sentiment (day 1 O1 and S2, day 2 S2)
+are also sized at m. Every other candidate is above the floor, so moving m between
+0.2 and 0.4 shifts these means by at most 0.11 (day 1 S2, 0.555 → 0.666). The proposal stays
+**keep 0.3** (§6); the table is for Kenneth's own choice.
+
+**IV (rank basis, untruncated O1–O4):** "not used: truncated": none.
+- Deduplicated primary rank rows (16 rows collected from the O1/O2/O4 envelopes, 8 primary; O3 had
+  no candidates):
+
+| Horizon | Direction | Rows | Names (rank `stock_iv`) |
+|---|---|---|---|
+| Swing | Bullish | 3 | AMD 22.4, SMCI 42.7, CSCO 45.6 |
+| Swing | Bearish | 0 | O3 had no candidates |
+| Position | Bullish | 4 | ADI 29.7, INTC 30.9, KEYS 32.6, HPE 44.0 |
+| Position | Bearish | 1 | LULU 16.1 |
+
+  Day totals: Swing 3, Position 5. **Pooled over both valid days: Swing 6, Position 10**, against
+  a floor of ≥ 30 per horizon.
+- `iv_rank_too_high` (names whose reason contains it): O1 6, O2 11, O3 2, O4 4.
+- Spread build rate: O1 0/1, O2 0/4, O3 0/0, O4 0/3.
+- Line counts (below / at or above) at 40 / 50 / 60:
+  - O1: 1/0 at every line.
+  - O2: 3/1 at 40, 4/0 at 50, 4/0 at 60. Moving the line to 40 flips 1 name.
+  - O4: 1/2 at 40, 3/0 at 50, 3/0 at 60. Moving the line to 40 flips 2 names.
+- As on day 1, only the bearish scans can build a structure, so the bullish build rates are 0 by
+  design. The only bearish name, O1's LULU (16.1), is below every line and built nothing.
+
+**Swing expiry gap, as predicted.** 2026-10-09 is a gap day (day 1's list above). Of the names that
+reached the chain fetch (`scanned − failed_data − failed_pre_screen`), O3 rejected 196 of 302 (65%)
+as `no option chain` and O4 95 of 186 (51%). The Position bases lost O1 14 of 286 (5%) and O2 15 of
+175 (9%). This is consistent with the gap-day reading (the day-2 O4 picks use the 2026-10-30 weekly,
+not the Oct 16 monthly), though the shares differ from day 1 (61% / 40%) and the names reaching
+the fetch differ (O3 347 → 302, O4 112 → 186). The Swing populations are inferred, not shown,
+to be alike; the pooled Swing IV rows are labelled accordingly.
+
+---
+
+## Two-day reading (2026-10-01 + 2026-10-09)
+
+Both days are valid (§5), on different calendar days, the same tag commit `61a03e49`, the same
+start `strategy_params.yaml` hash and the same universe hash. They are different regimes
+(conviction +20 vs −14). Each rule below is plan §6 applied to both days; the proposal table at
+the top carries the result. **Nothing has been changed: every proposal needs Kenneth's yes.**
+
+- **`bearish_min_trend` Swing 30: keep.** Counted days 2 (measured entrants 345 / 318). Bearish
+  rate 2.03% / 0.94%: never ≥ 50% (no step down). Step up needs < 2% on **every** counted day and
+  S1 candidates on ≥ 2 days: day 1 is 2.03% and S1 had 0 candidates on both days, so it fails
+  both ways. Gap −1.3 / −2.7 pt.
+- **`bearish_min_trend` Position 40: keep.** Counted days 2 (343 / 317). Rate 3.50% / 5.36%: no
+  step down; not < 2%, so no step up. S3 candidates 1 / 2. Gap −11.4 / −20.3 pt.
+- **`confidence_reject_below` 35 (both directions): keep.** C1 has an attributed quality candidate
+  on 1 of 2 valid days (day 2 NKE; day 1 none); the rule needs ≥ 2. C1b: day 1 1 attributed (AMD,
+  quality), day 2 0. S-scan "would clear at 30 / 25" across the two days: S1 0/0 + 1/1, S2 0/1 +
+  2/4, S3 0/0 + 1/1, S4 0 + 0.
+- **`min_stock_score` 55 (both directions): proposal 45.** The rule fires: C5 has ≥ 1 attributed
+  quality candidate on both valid days (day 1: 2, day 2: 3). Their C5 `stockScore`s are CSCO 53,
+  NFLX 38 (day 1) and NFLX 50, TSLA 47, WDC 46 (day 2). Median of the five = **47**, rounded down
+  to a multiple of 5 = **45**, inside [35, 55].
+  - Effect on both directions (inferred from the 35 runs; 45 itself was not scanned): the
+    attributed quality names with `stockScore` ≥ 45 are the ones a 45 floor would admit.
+    Bearish: day 1 CSCO (NFLX 38 stays out); day 2 NFLX, TSLA, WDC. Bullish: day 1 NOW, MSFT
+    (INTC, AAPL, GOOGL 38–43 stay out); day 2 WMT, CSCO, MSFT, PFE, WBD, NOW (AAPL, GOOG, GOOGL,
+    MU, XOM 38–43 stay out).
+  - **Direction scope: a new question for Kenneth.** Applied to C5b's quality names (5 on day 1,
+    11 on day 2, 16 scores), the same median-and-round-down rule gives **40**: median 44 → 40.
+    The two directions therefore point at different values (45 bearish, 40 bullish). The rule is
+    defined on C5, so 45 is the proposal. A per-direction key would be a code change and is not
+    decided here.
+  - The key sits in `contract_rules.yaml` `hard_reject` and is also read by scheduled scans and the
+    auto-trader.
+- **`iv_rank_pass_max` / `iv_rank_caution_max` per horizon, `preferred_iv_rank_max` 55:
+  not enough data.** Deduplicated rank rows: Swing 6, Position 10, against ≥ 30 per horizon.
+  "not used: truncated": none. `iv_rank_too_high`: day 1 O1 3, O2 11, O3 0, O4 3; day 2 O1 6,
+  O2 11, O3 2, O4 4.
+- **`regime_sizing.min_mult` 0.3: keep 0.3 (table above, shown because the regimes differ).**
+- **`min_volume` / `min_open_interest`: report only.** Attributed C6 additions: day 1 4 (1 quality,
+  LULU), day 2 2 (1 quality, COO). All six trade below 50 volume (0–8). The overrides reached the
+  validator on both days.
+- **`max_iv_rank` 70: report only.** Counts as above.
+- **`iv_rank_threshold` / `ivAbsThreshold` 50: report only.** No bearish O-row on either day sits
+  at or above 40 (WMT 31.7, LULU 16.1); the A-block's ROST 31.5 and WMT 27.2 are also below 40.
+  No spread was built on either day.
 
 ---
 

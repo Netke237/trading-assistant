@@ -1,0 +1,33 @@
+{
+  "source_sha": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "versions": {
+    "browser": "151.0.7922.173",
+    "node": "v24.19.0",
+    "next": "15.5.23",
+    "playwright": "1.62.1"
+  },
+  "sha256": {
+    "frontend/app/(frame)/settings/page.tsx": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+    "frontend/app/(frame)/settings/IvThresholdsSection.tsx": "e5d97abeb61b457b3b2cb29326fdae2b0fcdbb504b4cbb7d38b942ed0eefaa75",
+    "frontend/lib/scanScheduleResolve.ts": "e24982bb861684fec7cac405a7ef7379d3a2f665cdf0656d586d721c761cdf2c",
+    "frontend/lib/searchProfilesStore.ts": "2a7d1d3daebc6c556b2f6e062e68c1d02c3123a59e52acc740ffb07c41b0f9dc",
+    "frontend/lib/scanParamsStore.ts": "ce5583862d624ba3bf4d68f939062913a4403dcb0e2ec57d10394b9c0ab18631",
+    "frontend/lib/ivThresholdsStore.ts": "f462d784c5ff799f56946e05b4a37be5e5016a40edf504b7b054c8340af79021",
+    "frontend/lib/configHealth.ts": "27fe01baba15a56d40bbb264395821e4d4d4e0672bd969764734312f927e2465",
+    "frontend/lib/configHealthStore.ts": "412e0e6507417ae35174a21599f339adfdb4fb78346cb037cff67845a3f10aa9",
+    "frontend/components/molecules/ConfigHealthChip/index.tsx": "c12fa60cf7f87b8e1da637f22a47f34799a16a3ac4ed38639c58f0c460da6ce5",
+    "frontend/components/organisms/ConfigHealthBanner/index.tsx": "8f7f893c5380d41f1b0e3c83f9ccfab382de9f3ecd8d293666cf3a433ee1bc18",
+    "frontend/lib/api.ts": "e2a5d70f453a1da8f54edc22e18a09e46f7802d52d5e6841b8c29994355a71bf",
+    "backend/app/schemas/scan_schedule.py": "4f481ff57e4589b4e1c740593a60c7d3d2efe5be9e047966008cc716391c930c",
+    "backend/app/routers/scan_schedule.py": "ae09979df51e7a519a58b1a9c1f5e5cd371224f95f52f55756399cc8da8bfe07",
+    "backend/app/schemas/stock_scan.py": "6244baa32d5d13c768cf256a43004d696097b4fe624075b846090c719fb428a5",
+    "frontend/lib/resolveStockScanRequest.ts": "5e6aeb6ea90ddf282758f2f92a3fdbf9c902633f11205161d24c2f6d7f5a4883",
+    "frontend/lib/resolveOptionsScanRequest.ts": "06e48da762adb0df4eb1984dc3981938e6527d297b0cf76bc49be3034d8f921c",
+    "docs/search-profiles/search-profiles-export.json": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+    "frontend/package.json": "95f9af6a1397135fb29850345c9f0c79d4a6ebd9ada40d1c71767ef526c8f35b",
+    "frontend/package-lock.json": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+    "backend/config/settings.example.yaml": "3d6a4080a8f57fa1abe2b928e794661ce30a04829881a53eb6e2c849f9ee66dc",
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/config/strategy_params.yaml": "6c0eb765bd79ea155fbea8288e46e2b7ac9ff1432c4843b5856827b033a35f3c"
+  }
+}

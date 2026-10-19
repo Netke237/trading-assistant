@@ -1,0 +1,509 @@
+# backend/config/scoring_rules.yaml
+
+# stock_score_thresholds: classifies a STOCK's composite score (trend/pullback/trigger/
+# event/vol weighted per horizon — see `horizons.*.weights` below). Read by stock_scorer.py.
+# The frontend statusForScore() mirrors these values — see frontend/lib/status.ts.
+# NOTE: contract_rules.yaml has a similarly-named `score_thresholds` block with different
+# numbers (65/45) — that one classifies CONTRACT scores (liquidity/spread/delta/DTE/IV),
+# a different scale entirely. Do not "fix" the numeric mismatch; they measure different things.
+stock_score_thresholds:
+  pass: 55
+  caution: 35
+
+# confidence_gate: the frontend confidenceTier() mirrors these values —
+# see frontend/lib/confidenceText.ts.
+confidence_gate:
+  enabled: true
+  cautionBelow: 50   # confidence < 50 -> cap final status at CAUTION
+  rejectBelow: 35    # confidence < 35 -> cap final status at REJECT
+
+confidence_backtest:
+  swing:
+    n_days: 10
+    atr_mult_target: 3.0    # strategy targets ~3 ATR (pullback_ema default)
+    atr_mult_stop:   1.5    # strategy risks ~1.5 ATR stop
+    atr_period: 14
+    history_years: 4
+    min_samples: 20
+  position:
+    n_days: 40
+    atr_mult_target: 2.5
+    atr_mult_stop:   1.5
+    atr_period: 14
+    history_years: 5
+    min_samples: 20
+  intraday:
+    n_days: 5
+    atr_mult_target: 2.0
+    atr_mult_stop:   1.5
+    atr_period: 14
+    history_years: 2
+    min_samples: 20
+
+horizons:
+  swing:
+    weights:
+      trend: 0.30
+      pullback: 0.20
+      trigger: 0.25
+      event: 0.15
+      vol: 0.10
+    trend:
+      method: additive          # crossover | additive | relative_strength
+      crossover:
+        fast_ema: 50
+        slow_ema: 200
+        slow_slope_required: true
+        fast_slope_required: false
+      additive:
+        ma_period: 20
+        ma_type: SMA
+        slope_lookback: 10
+        adx_period: 14
+        adx_pass: 25
+        adx_caution: 20
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
+      relative_strength:
+        rs_period: 20
+        rs_pass_threshold: 2.0
+        rs_caution_threshold: -1.0
+        benchmark: NDX
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 40
+      swing_high_min_bars_ago: 5
+      max_days_in_pullback: 20
+      theta_caution_days: 15
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 8
+      macd_slow: 21
+      macd_signal: 5
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 38
+      rsi_div_window_bars: 15
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
+      setup_window_bars: 8
+      momentum_signals_for_pass: 2
+      volume_lookback_bars: 20
+      volume_multiplier: 1.50
+      volume_bonus_pts: 10
+    event:
+      reject_days: 21
+      caution_days: 45
+    vol:
+      # TWO THRESHOLD SETS, because `iv_rank` can hold either of two different
+      # quantities (PHASE-A-NULL-IVRANK-2026-09-06):
+      #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
+      #             or the Black-Scholes inversion). This is the path most
+      #             symbols take, since only Tradier returns a per-contract IV.
+      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #             tastytrade answered.
+      # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
+      # since before the split -- raw IV was written into a field named for a
+      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rather than silently changing which candidates pass.
+      # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
+      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # as an open question alongside Q7.
+      iv_abs_compressed_caution: 5
+      iv_abs_pass_max: 34      # IV <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_abs_caution_max: 55
+      iv_rank_compressed_caution: 5
+      iv_rank_pass_max: 34     # UNMEASURED — seeded from the absolute set
+      iv_rank_caution_max: 55
+
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.7   # Swing -- PASS means >=30% of premium still there
+
+    direction_conviction:
+      # Minimum trend score a candidate must reach to count as having real
+      # directional structure. Read by BOTH scan paths (routers/scan.py for
+      # options, routers/stock_scan.py for stocks) through
+      # services/config_loader.load_direction_conviction_min_trend, which also
+      # holds the fallback defaults if these keys are removed.
+      #
+      # A FLOOR IN BOTH DIRECTIONS, NEVER A CEILING -- and the two sides mirror
+      # each other deliberately. The trend rule is direction-aware: on a Bearish
+      # scan it awards its points for price BELOW the MA with a falling slope,
+      # so a HIGH score means a strong DOWNtrend, which is the setup a put
+      # wants. "No directional structure" is a LOW score on either side.
+      #
+      # Until 2026-09-16 the bearish side was a `max_trend` CEILING of 50 here,
+      # which inverted the gate: it deleted the strongest short setups and kept
+      # the names that were not falling. Do not reintroduce a ceiling.
+      #
+      # To turn a gate off, write `null`. DO NOT DELETE THE LINE: a deleted key
+      # falls back to the code default in config_loader.py (30/40 — a gate, not
+      # an exemption), whereas an explicit `null` is honoured as "no gate for
+      # this direction". The two are opposite outcomes.
+      #
+      # Deleting is not merely different, it is UNSUPPORTED on this file: the
+      # shipped config is expected to declare all four thresholds explicitly,
+      # and test_shipped_yaml_and_code_defaults_agree fails if it does not. The
+      # code defaults are a safety net for a config that cannot be read, not a
+      # second place to configure the gate from.
+      #
+      # Every shape mistake here is REJECTED rather than ignored: a misspelled
+      # leaf key, a misspelled or mis-cased horizon key above, a block indented
+      # one level too deep, or a non-mapping anywhere on the path all raise and
+      # fail the scan with a message naming the offending key. That is
+      # deliberate — a silently inert edit is the failure this gate has already
+      # had once, and it cost three months.
+      #
+      # THE BEARISH NUMBER IS UNMEASURED -- it MIRRORS the bullish one rather
+      # than having been derived. The bullish floor has live history behind it;
+      # the bearish side ran as an inverted ceiling for three months, so there
+      # is no observed bearish pass-rate to tune against and a mirror is the
+      # only defensible starting point, not a validated one. Same standing as
+      # this file's iv_rank_* and pass_max_fraction thresholds. Revisit once a
+      # few real bearish scans have run and the survivor count can be looked
+      # at; one edit either way.
+      bullish_min_trend: 30
+      bearish_min_trend: 30
+  intraday:
+    weights:
+      trend: 0.35
+      pullback: 0.20
+      trigger: 0.30
+      event: 0.05
+      vol: 0.10
+    trend:
+      method: additive
+      crossover:
+        fast_ema: 20
+        slow_ema: 50
+        slow_slope_required: true
+        fast_slope_required: false
+      additive:
+        ma_period: 9
+        ma_type: EMA
+        slope_lookback: 3
+        adx_period: 7
+        adx_pass: 20
+        adx_caution: 15
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
+      relative_strength:
+        rs_period: 2
+        rs_pass_threshold: 1.0
+        rs_caution_threshold: -0.5
+        benchmark: NDX
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 20
+      swing_high_min_bars_ago: 5
+      max_days_in_pullback: 3
+      theta_caution_days: 2
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 5
+      macd_slow: 13
+      macd_signal: 3
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 40
+      rsi_div_window_bars: 10
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
+      setup_window_bars: 10
+      momentum_signals_for_pass: 1
+      volume_lookback_bars: 20
+      volume_multiplier: 1.20
+      volume_bonus_pts: 10
+    event:
+      reject_days: 1
+      caution_days: 3
+    vol:
+      # Intraday skips vol scoring entirely on BOTH paths — a null pass_max is
+      # what _rule_vol reads as "skip", and it must be null in each set or the
+      # basis would decide whether the rule runs at all.
+      iv_abs_compressed_caution: null
+      iv_abs_pass_max: null
+      iv_abs_caution_max: null
+      iv_rank_compressed_caution: null
+      iv_rank_pass_max: null
+      iv_rank_caution_max: null
+
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.8   # Intraday -- PASS means >=20% of premium still there
+
+    direction_conviction:
+      # Intraday is EXEMPT in both directions, and the `null`s say so
+      # explicitly rather than leaving the reader to infer it from an absent
+      # block: intraday reversals are common regardless of the daily trend, so
+      # requiring daily-trend conviction here would screen out the setups this
+      # horizon exists to find. Put a number in either key to gate that side.
+      bullish_min_trend: null
+      bearish_min_trend: null
+  position:
+    weights:
+      trend: 0.30
+      pullback: 0.20
+      trigger: 0.20
+      event: 0.20
+      vol: 0.10
+    trend:
+      method: additive
+      crossover:
+        fast_ema: 50
+        slow_ema: 200
+        slow_slope_required: true
+        fast_slope_required: true
+      additive:
+        ma_period: 50
+        ma_type: SMA
+        slope_lookback: 20
+        adx_period: 14
+        adx_pass: 25
+        adx_caution: 15
+        price_max: 40
+        slope_max: 30
+        adx_max: 30
+        status_pass: 70      # component-level PASS threshold for the additive trend score
+        status_caution: 40   # component-level CAUTION threshold
+      relative_strength:
+        rs_period: 50
+        rs_pass_threshold: 3.0
+        rs_caution_threshold: -1.5
+        benchmark: SPX
+    pullback:
+      fib_shallow_min: 0.236
+      fib_shallow_max: 0.382
+      fib_standard_min: 0.382
+      fib_standard_max: 0.500
+      fib_golden_min: 0.500
+      fib_golden_max: 0.618
+      swing_high_lookback_bars: 75
+      swing_high_min_bars_ago: 3
+      max_days_in_pullback: 60
+      theta_caution_days: 45
+      atr_period: 14
+      atr_pass_min: 1.0
+      atr_pass_max: 2.0
+      atr_caution_max: 2.5
+    trigger:
+      macd_fast: 12
+      macd_slow: 26
+      macd_signal: 9
+      macd_histogram_rising: true
+      rsi_period: 14
+      rsi_floor: 37
+      rsi_div_window_bars: 20
+      stoch_k: 14
+      stoch_d: 3
+      stoch_smooth: 3
+      stoch_oversold: 30
+      stoch_tolerance_pct: 5
+      rsi_ceiling: 60        # bearish: RSI falls through this level from above
+      stoch_overbought: 70   # bearish: stoch exits above this level
+      setup_window_bars: 5
+      momentum_signals_for_pass: 2
+      volume_lookback_bars: 20
+      volume_multiplier: 1.50
+      volume_bonus_pts: 10
+    event:
+      reject_days: 30
+      caution_days: 60
+    vol:
+      # TWO THRESHOLD SETS, because `iv_rank` can hold either of two different
+      # quantities (PHASE-A-NULL-IVRANK-2026-09-06):
+      #   iv_abs_*  judge ABSOLUTE implied volatility 0-100 (Tradier per-strike,
+      #             or the Black-Scholes inversion). This is the path most
+      #             symbols take, since only Tradier returns a per-contract IV.
+      #   iv_rank_* judge a TRUE PERCENTILE, available only when IBKR or
+      #             tastytrade answered.
+      # The iv_abs_* numbers are the ones this rule has ACTUALLY been applying
+      # since before the split -- raw IV was written into a field named for a
+      # percentile -- so keeping them here preserves today's behaviour exactly
+      # rather than silently changing which candidates pass.
+      # The iv_rank_* numbers are seeded to match and are UNMEASURED: nobody has
+      # checked that a percentile deserves the same cut-offs as a level. Logged
+      # as an open question alongside Q7.
+      iv_abs_compressed_caution: 5
+      iv_abs_pass_max: 44      # IV <= this -> PASS; mirrors frontend ivThresholds.ts
+      iv_abs_caution_max: 65
+      iv_rank_compressed_caution: 5
+      iv_rank_pass_max: 44     # UNMEASURED — seeded from the absolute set
+      iv_rank_caution_max: 65
+
+# Entry quality thresholds (FR-45)
+    stop_premium:
+      # Stop-vs-premium gate (frontend TradeCard + step-4 ranking). What share of
+      # the option's premium is lost if the underlying reaches its stop. At or
+      # above the threshold the stop costs most or all of the premium — it is not
+      # a meaningful risk control on that contract, just a marker for a position
+      # that would be near-worthless before price got there.
+      #
+      # Per-horizon because tolerance genuinely differs: an Intraday contract is
+      # expected to run closer to the edge; a Position contract has time for the
+      # thesis to work and should not be bought where the stop is a wipeout.
+      # ONE threshold, and the verdict is PASS or CAUTION — never REJECT. The
+      # gate sorts candidates into "the stop is survivable on this contract" and
+      # "it isn't", so the cheaper-to-be-wrong trades surface early. It is not a
+      # verdict on the trade and it blocks nothing, so it never paints red.
+      # Q7 (2026-09-02): re-derived WITH the Black-Scholes-at-today basis, not
+      # against it. The old numbers (0.85 / 0.80 / 0.70) were set against a
+      # delta-linear ruler running 17-29 points pessimistic; on the reference
+      # chain the WORST contract reads 77% under the new basis, so keeping
+      # them would silence the gate permanently. Taken as proposed rather than
+      # measured against a real universe -- Kenneth's explicit call. Revisit
+      # only if the observed flag rate looks wrong; one edit either way.
+      pass_max_fraction: 0.6   # Position -- PASS means >=40% of premium still there
+
+    direction_conviction:
+      # See horizons.swing.direction_conviction for the full rationale. Floors,
+      # never ceilings, and the two sides mirror each other.
+      #
+      # Position is the strictest horizon in both directions, and it carries the
+      # widest blast radius: frontend/lib/horizonPresets.ts collapses FOUR of the
+      # seven user presets -- Position, Quarterly, Semi-annual and Annual -- onto
+      # this one scoring horizon, and Custom lands here too whenever its upper
+      # hold bound exceeds 20 days (scoringHorizonForHold). So every number here
+      # screens most of the preset strip, not one entry. The bearish side was a
+      # `max_trend` CEILING of 40 until 2026-09-16; that is what made the
+      # inversion bite hardest here.
+      #
+      # The bearish number is UNMEASURED and mirrors the bullish one -- see the
+      # swing block above for why, and for when to revisit it.
+      bullish_min_trend: 40
+      bearish_min_trend: 40
+entry_quality:
+  spread_tolerance_pct: 0.10
+  max_slippage_pct: 0.03
+  min_premium: 0.10
+
+regime:
+  intraday: { timeframe: 15min, lookback: 26, window: 1000, min_obs: 60 }
+  swing:    { timeframe: daily, lookback: 20, window: 500,  min_obs: 100 }
+  position: { timeframe: daily, lookback: 50, window: 750,  min_obs: 100 }
+  enhanced_states: false
+
+# regime_gate, regime_sizing, confidence_gate and fundamentals_gate are the four
+# MONEY BLOCKS: each is REQUIRED, must say `enabled: true` or `enabled: false`,
+# and is CLOSED (an unknown key anywhere inside it refuses the scans and the
+# auto-trade fire). Keys are declared in app/services/money_config.py (DOCC-1).
+regime_gate:
+  enabled: true
+  headwind_caution_pct: -15
+  headwind_reject_pct:  -40
+  require_stable_for_reject: true
+
+regime_sizing:
+  enabled: true
+  # Floor of the conviction ramp. THE RAMP IS TWO-SIDED since 2026-09-19:
+  #   size = min_mult + (1 - min_mult) * (conv + full) / (2 * full)
+  # so -full gives min_mult, 0 gives the midpoint, +full gives 1.0. It was
+  # one-sided ((conv / full), clamped at 0), which meant every conviction at or
+  # below neutral produced min_mult -- a regime opposing a trade slightly and
+  # one opposing it overwhelmingly sized identically.
+  #
+  # THAT CHANGE ROUGHLY DOUBLED NEUTRAL-REGIME SIZING: 0.30 -> 0.65 on these
+  # values, on BOTH the scan card and the auto-trader, which share this ramp.
+  # Raise min_mult to size up across the board; lower it to size down.
+  #
+  # The gate does NOT bound the floor: `regime_gate` REJECTs at or below -40
+  # only in a Stable regime (require_stable_for_reject). On the AUTO-TRADER a
+  # Fragile-regime trade below -40 survives and is sized at min_mult. On the
+  # SCAN CARD it may never get that far: with Step 3's regime filter on
+  # (req.regime_filter) anything at or below the caution threshold is dropped
+  # first. -40 is the shipped value; Step 3 can override both thresholds per
+  # run.
+  min_mult: 0.3
+  full_conviction_pct: 40
+
+fundamentals_gate:
+  enabled: true
+  cautionBelow: 45   # bullish: demote weak fundamentals
+  rejectBelow: 30    # bullish
+  cautionAbove: 70   # bearish: caution shorting strong companies
+  rejectAbove: 80    # bearish: reject shorting very strong companies
+  safety:
+    reject_on_negative_equity: true
+    debt_to_equity_reject: 3.0
+  staleness_days: 90
+  weights: { growth: 0.35, quality: 0.35, risk: 0.30 }
+  quality_label_thresholds: { strong: 65, neutral: 40 }
+  thresholds:
+    revenue_growth_yoy:  { strong: 0.15, weak: 0.0 }
+    eps_growth_yoy:      { strong: 0.15, weak: 0.0 }
+    gross_margin:        { strong: 0.40, weak: 0.20 }
+    operating_margin:    { strong: 0.15, weak: 0.0 }
+    debt_to_equity:      { strong: 0.5,  weak: 2.0 }
+    current_ratio:       { strong: 2.0,  weak: 1.0 }
+    share_growth_yoy:    { strong: 0.0,  weak: 0.03 }

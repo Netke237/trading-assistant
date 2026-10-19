@@ -1,0 +1,1459 @@
+{
+  "mocked": "in-memory browser storage; API getScanSchedule returns []; fetch forbidden",
+  "checks": [
+    {
+      "id": "store CRUD Intraday_Baseline_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Intraday_Baseline_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Intraday_Baseline_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Baseline_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Intraday_Restrictive_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Intraday_Restrictive_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Intraday_Restrictive_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Restrictive_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Intraday_Loose_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Intraday_Loose_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Intraday_Loose_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Loose_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Intraday_Baseline_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Intraday_Baseline_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Intraday_Baseline_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Baseline_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Intraday_Restrictive_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Intraday_Restrictive_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Intraday_Restrictive_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Restrictive_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Intraday_Loose_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Intraday_Loose_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Intraday_Loose_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Intraday_Loose_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Baseline_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Swing_Baseline_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Swing_Baseline_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Baseline_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Restrictive_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Swing_Restrictive_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Swing_Restrictive_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Restrictive_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Loose_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "Swing_Loose_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "Swing_Loose_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Loose_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Baseline_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Swing_Baseline_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Swing_Baseline_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Baseline_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Restrictive_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Swing_Restrictive_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Swing_Restrictive_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Restrictive_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD Swing_Loose_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "Swing_Loose_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "Swing_Loose_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete Swing_Loose_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Baseline_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "SemiAnnual_Baseline_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "SemiAnnual_Baseline_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Baseline_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Restrictive_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "SemiAnnual_Restrictive_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "SemiAnnual_Restrictive_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Restrictive_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Loose_Bullish",
+      "status": "pass",
+      "expected": [
+        "Bearish",
+        "SemiAnnual_Loose_Bullish renamed"
+      ],
+      "actual": [
+        "Bearish",
+        "SemiAnnual_Loose_Bullish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Loose_Bullish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Baseline_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "SemiAnnual_Baseline_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "SemiAnnual_Baseline_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Baseline_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Restrictive_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "SemiAnnual_Restrictive_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "SemiAnnual_Restrictive_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Restrictive_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "store CRUD SemiAnnual_Loose_Bearish",
+      "status": "pass",
+      "expected": [
+        "Bullish",
+        "SemiAnnual_Loose_Bearish renamed"
+      ],
+      "actual": [
+        "Bullish",
+        "SemiAnnual_Loose_Bearish renamed"
+      ]
+    },
+    {
+      "id": "store delete SemiAnnual_Loose_Bearish",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "saved snapshot independent after live edits",
+      "status": "pass",
+      "expected": 10,
+      "actual": 10
+    },
+    {
+      "id": "live snapshot differs",
+      "status": "pass",
+      "expected": 37,
+      "actual": 37
+    },
+    {
+      "id": "saved schedule resolves frozen shortlist",
+      "status": "pass",
+      "expected": 10,
+      "actual": 10
+    },
+    {
+      "id": "custom parser deduplicates and filters",
+      "status": "pass",
+      "expected": [
+        "AAPL",
+        "MSFT",
+        "BRK.B"
+      ],
+      "actual": [
+        "AAPL",
+        "MSFT",
+        "BRK.B"
+      ]
+    },
+    {
+      "id": "scheduled million cap",
+      "status": "fail",
+      "expected": 25000000,
+      "actual": 25
+    },
+    {
+      "id": "zero values preserved",
+      "status": "pass",
+      "expected": [
+        0,
+        0,
+        0,
+        0,
+        false
+      ],
+      "actual": [
+        0,
+        0,
+        0,
+        0,
+        false
+      ]
+    },
+    {
+      "id": "absent filters omitted",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "null override follows frozen setting",
+      "status": "pass",
+      "expected": 50,
+      "actual": 50
+    },
+    {
+      "id": "stocks zero false explicit",
+      "status": "pass",
+      "expected": [
+        0,
+        0,
+        false,
+        0
+      ],
+      "actual": [
+        0,
+        0,
+        false,
+        0
+      ]
+    },
+    {
+      "id": "stocks absent strategy override omitted",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "strategyless profile clears strategy",
+      "status": "pass",
+      "expected": null,
+      "actual": null
+    },
+    {
+      "id": "strategyless schedule rejects clearly",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "legacy v0 strategy reset",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v0 target retirement",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v0 frozen IV ceiling",
+      "status": "pass",
+      "expected": 20,
+      "actual": 20
+    },
+    {
+      "id": "legacy v0 own spread threshold",
+      "status": "pass",
+      "expected": 50,
+      "actual": 50
+    },
+    {
+      "id": "legacy v2 strategy reset",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v2 target retirement",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v2 frozen IV ceiling",
+      "status": "pass",
+      "expected": 20,
+      "actual": 20
+    },
+    {
+      "id": "legacy v2 own spread threshold",
+      "status": "pass",
+      "expected": 50,
+      "actual": 50
+    },
+    {
+      "id": "legacy v3 strategy reset",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v3 target retirement",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v4 strategy reset",
+      "status": "pass",
+      "expected": false,
+      "actual": false
+    },
+    {
+      "id": "legacy v4 target retirement",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "malformed current profile rejected",
+      "status": "fail",
+      "expected": 0,
+      "actual": 1
+    },
+    {
+      "id": "unparseable JSON retains in-memory previous state",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "manual Stocks custom universe",
+      "status": "fail",
+      "expected": [
+        "AAPL",
+        "MSFT",
+        "BRK.B"
+      ],
+      "actual": [
+        "Custom"
+      ]
+    },
+    {
+      "id": "manual Stocks price filter",
+      "status": "fail",
+      "expected": 0
+    },
+    {
+      "id": "manual Stocks million cap filter",
+      "status": "fail",
+      "expected": 25000000
+    },
+    {
+      "id": "scheduled Stocks price filter",
+      "status": "fail",
+      "expected": 0
+    },
+    {
+      "id": "scheduled Stocks cap filter",
+      "status": "fail",
+      "expected": 25000000
+    },
+    {
+      "id": "pack 18 unique ids",
+      "status": "pass",
+      "expected": 18,
+      "actual": 18
+    },
+    {
+      "id": "pack all options",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    }
+  ],
+  "payloads": [
+    {
+      "id": "custom-scheduled-options",
+      "request": {
+        "universe": [
+          "AAPL",
+          "MSFT",
+          "BRK.B"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "horizon_preset": "Intraday",
+        "hold_min_days": 0,
+        "hold_max_days": 2,
+        "overrides": {
+          "min_volume": 0,
+          "shortlist_max_candidates": 10
+        },
+        "min_price": 0,
+        "max_price": 100,
+        "min_cap_usd": 25,
+        "max_cap_usd": 50,
+        "confidence_caution_below": 0,
+        "confidence_reject_below": 0,
+        "confidence_atr_mult_target": 2,
+        "confidence_atr_mult_stop": 1.5,
+        "fundamentals_enabled": false,
+        "fundamentals_caution_below": 45,
+        "fundamentals_reject_below": 30,
+        "fundamentals_de_reject": 3,
+        "regime_headwind_caution_pct": 0,
+        "spread_width": 5,
+        "short_leg_delta": 0.3,
+        "iv_rank_threshold": 50,
+        "iv_abs_threshold": 50,
+        "min_credit": 0.5,
+        "max_debit_pct": 40
+      }
+    },
+    {
+      "id": "stocks-zero-false",
+      "request": {
+        "universe": [
+          "SP500"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "strategy": "pullback_ema",
+        "pullback_tolerance_pct": 0,
+        "pullback_require_reversal": false,
+        "require_choppy_regime": false,
+        "bt_min_trades": 0,
+        "bt_min_win_rate": 0,
+        "account_size": 100000,
+        "risk_pct": 0.0375,
+        "shortlist_max_candidates": 10,
+        "overrides": {},
+        "confidence_caution_below": 50,
+        "confidence_reject_below": 35,
+        "confidence_atr_mult_target": 2,
+        "confidence_atr_mult_stop": 1.5,
+        "hold_max_days": 2
+      }
+    },
+    {
+      "id": "manual-stocks-custom-filters",
+      "request": {
+        "universe": [
+          "Custom"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "strategy": "pullback_ema",
+        "pullback_require_reversal": false,
+        "bt_min_trades": 5,
+        "bt_min_win_rate": 0.45,
+        "account_size": 100000,
+        "risk_pct": 0.0375,
+        "shortlist_max_candidates": 10,
+        "overrides": {},
+        "confidence_atr_mult_target": 2,
+        "confidence_atr_mult_stop": 1.5,
+        "regime_headwind_caution_pct": 0,
+        "hold_max_days": 2
+      }
+    },
+    {
+      "id": "scheduled-stocks-custom-filters",
+      "request": {
+        "universe": [
+          "AAPL",
+          "MSFT",
+          "BRK.B"
+        ],
+        "direction": "Bullish",
+        "horizon": "Intraday",
+        "strategy": "pullback_ema",
+        "pullback_require_reversal": false,
+        "bt_min_trades": 5,
+        "bt_min_win_rate": 0.45,
+        "account_size": 100000,
+        "risk_pct": 0.0375,
+        "shortlist_max_candidates": 10,
+        "overrides": {},
+        "confidence_atr_mult_target": 2,
+        "confidence_atr_mult_stop": 1.5,
+        "regime_headwind_caution_pct": 0,
+        "hold_max_days": 2
+      }
+    }
+  ],
+  "hashes": {
+    "frontend/lib/searchProfilesStore.ts": "2a7d1d3daebc6c556b2f6e062e68c1d02c3123a59e52acc740ffb07c41b0f9dc",
+    "frontend/lib/searchProfileSnapshot.ts": "5f65c3d6cb288c5c0ad624abe087969bd79e6b0174b180ebbe81dc7aaca8a471",
+    "frontend/lib/resolveOptionsScanRequest.ts": "06e48da762adb0df4eb1984dc3981938e6527d297b0cf76bc49be3034d8f921c",
+    "frontend/lib/resolveStockScanRequest.ts": "5e6aeb6ea90ddf282758f2f92a3fdbf9c902633f11205161d24c2f6d7f5a4883",
+    "frontend/lib/scanScheduleResolve.ts": "e24982bb861684fec7cac405a7ef7379d3a2f665cdf0656d586d721c761cdf2c",
+    "frontend/lib/universeStore.ts": "fd90dfd38b7e6cc8f160450b0d70dce3951401d1c82820688a245afe7922900b",
+    "frontend/lib/scanParamsStore.ts": "ce5583862d624ba3bf4d68f939062913a4403dcb0e2ec57d10394b9c0ab18631",
+    "frontend/app/(frame)/screener/step-3-direction/page.tsx": "6ec29199030a5c8a7327d4c0cf7f24578d0e597ac434bc18c5c800d102c7d655",
+    "docs/search-profiles/search-profiles-export.json": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+    "docs/search-profiles/import-search-profiles.js": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6",
+    "frontend/package-lock.json": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f"
+  },
+  "paramDefinitions": [
+    {
+      "key": "weight_trend",
+      "label": "Trend weight",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Weights",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Share of composite score from trend analysis. ↑ Higher → only clear trends pass (fewer results) · ↓ Lower → sideways stocks qualify (more results)"
+    },
+    {
+      "key": "weight_pullback",
+      "label": "Pullback weight",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Weights",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Share of score from pullback quality. ↑ Higher → only clean, shallow pullbacks pass (fewer) · ↓ Lower → any pullback depth qualifies (more)"
+    },
+    {
+      "key": "weight_trigger",
+      "label": "Trigger weight",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Weights",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Share of score from momentum timing signals. ↑ Higher → only active buying pressure qualifies (fewer) · ↓ Lower → weaker signals still pass (more)"
+    },
+    {
+      "key": "weight_event",
+      "label": "Event weight",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Weights",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Share of score from catalyst proximity. ↑ Higher → upcoming events penalise more stocks (fewer) · ↓ Lower → events count for less (more)"
+    },
+    {
+      "key": "weight_vol",
+      "label": "Vol weight",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Weights",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Share of score from IV conditions. ↑ Higher → only calm-IV stocks qualify (fewer) · ↓ Lower → high-IV stocks still pass (more)"
+    },
+    {
+      "key": "min_stock_score",
+      "label": "Min stock score",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Score Gate",
+      "min": 35,
+      "max": 100,
+      "step": 1,
+      "hint": "Stocks-mode scans only (the Options scan does not read it). Drops any name whose stock score is below this. At or below 35 it adds nothing: a score under 35 is already REJECT and dropped."
+    },
+    {
+      "key": "trend_method",
+      "label": "Trend method",
+      "type": "select",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "options": [
+        "additive",
+        "crossover",
+        "relative_strength"
+      ],
+      "hint": "Algorithm for scoring trend strength. Additive = price + slope + ADX combined; Crossover = MA crossover signal; Relative Strength = return vs. benchmark index"
+    },
+    {
+      "key": "ma_type",
+      "label": "MA type",
+      "type": "select",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "options": [
+        "EMA",
+        "SMA"
+      ],
+      "visibleFor": [
+        "crossover"
+      ],
+      "hint": "Moving average type. EMA reacts faster to recent price (more signals, more results); SMA is smoother (fewer, calmer signals)"
+    },
+    {
+      "key": "fast_ema",
+      "label": "Fast MA period",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 5,
+      "max": 200,
+      "step": 1,
+      "visibleFor": [
+        "crossover"
+      ],
+      "hint": "Short-period MA that detects momentum change. ↑ Higher → fewer, slower crossover signals · ↓ Lower → more frequent but noisier signals"
+    },
+    {
+      "key": "slow_ema",
+      "label": "Slow MA period",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 10,
+      "max": 500,
+      "step": 1,
+      "visibleFor": [
+        "crossover"
+      ],
+      "hint": "Long-period MA representing the primary trend. ↑ Higher → stronger trend required (fewer results) · ↓ Lower → shallower trends qualify (more)"
+    },
+    {
+      "key": "additive_ma_type",
+      "label": "MA type",
+      "type": "select",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "options": [
+        "EMA",
+        "SMA"
+      ],
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Moving average type for the additive model. EMA → faster reaction (more results); SMA → smoother baseline (fewer results)"
+    },
+    {
+      "key": "additive_ma_period",
+      "label": "MA period",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 5,
+      "max": 200,
+      "step": 1,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Period of the trend-defining MA. ↑ Higher → longer trend baseline required (fewer) · ↓ Lower → more stocks qualify (more)"
+    },
+    {
+      "key": "additive_slope_lookback",
+      "label": "Slope lookback",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 1,
+      "max": 50,
+      "step": 1,
+      "unit": "bars",
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Bars used to measure MA angle (steepness). ↑ Higher → smoother reading, misses early moves · ↓ Lower → reacts faster but noisier"
+    },
+    {
+      "key": "additive_adx_period",
+      "label": "ADX period",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 5,
+      "max": 30,
+      "step": 1,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Bars for the Average Directional Index. ↑ Higher → smoother but slower ADX · ↓ Lower → quicker but noisier"
+    },
+    {
+      "key": "additive_adx_pass",
+      "label": "ADX pass threshold",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Minimum ADX value for a PASS score. ↑ Higher → only strong trends qualify (fewer) · ↓ Lower → weak trends also pass (more)"
+    },
+    {
+      "key": "additive_adx_caution",
+      "label": "ADX caution threshold",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 0,
+      "max": 50,
+      "step": 1,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "ADX below this triggers CAUTION. ↑ Higher → broader caution zone, fewer clean passes · ↓ Lower → narrower caution zone, more passes"
+    },
+    {
+      "key": "additive_price_max",
+      "label": "Price factor max pts",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Max points the price-above-MA check can contribute. ↑ Higher → price position dominates the trend score · ↓ Lower → price position matters less"
+    },
+    {
+      "key": "additive_slope_max",
+      "label": "Slope factor max pts",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Max points MA steepness can contribute. ↑ Higher → trend angle matters more · ↓ Lower → slope carries less weight"
+    },
+    {
+      "key": "additive_adx_max",
+      "label": "ADX factor max pts",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "visibleFor": [
+        "additive"
+      ],
+      "hint": "Max points ADX strength can contribute. ↑ Higher → directional strength required · ↓ Lower → ADX matters less"
+    },
+    {
+      "key": "rs_period",
+      "label": "RS period",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": 1,
+      "max": 252,
+      "step": 1,
+      "unit": "days",
+      "visibleFor": [
+        "relative_strength"
+      ],
+      "hint": "Days of return used for benchmark comparison. ↑ Higher → structural outperformance required · ↓ Lower → recent momentum only"
+    },
+    {
+      "key": "rs_pass_threshold",
+      "label": "RS pass threshold",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": -10,
+      "max": 20,
+      "step": 0.5,
+      "unit": "%",
+      "visibleFor": [
+        "relative_strength"
+      ],
+      "hint": "Minimum return vs. benchmark for PASS. ↑ Higher → only clear outperformers qualify (fewer) · ↓ Lower → slight outperformers qualify (more)"
+    },
+    {
+      "key": "rs_caution_threshold",
+      "label": "RS caution threshold",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "min": -10,
+      "max": 10,
+      "step": 0.5,
+      "unit": "%",
+      "visibleFor": [
+        "relative_strength"
+      ],
+      "hint": "Return below this triggers CAUTION. ↑ Higher → stricter caution zone · ↓ Lower → slight underperformers still score cleanly"
+    },
+    {
+      "key": "rs_benchmark",
+      "label": "Benchmark index",
+      "type": "select",
+      "section": "stocks",
+      "subGroup": "Trend",
+      "options": [
+        "NDX",
+        "SPX"
+      ],
+      "visibleFor": [
+        "relative_strength"
+      ],
+      "hint": "Index used as the return baseline. NDX = tech-heavy comparison; SPX = broad market comparison"
+    },
+    {
+      "key": "rsi_period",
+      "label": "RSI period",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Pullback",
+      "hint": "Bars used to compute RSI. Set in the Trigger group (display only here)."
+    },
+    {
+      "key": "swing_high_lookback_bars",
+      "label": "Swing high lookback",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Pullback",
+      "min": 2,
+      "max": 200,
+      "step": 1,
+      "hint": "How many bars back to find the most recent swing high. ↑ Higher → broader context, fewer stocks qualify as pulling back · ↓ Lower → recent highs only (more)"
+    },
+    {
+      "key": "atr_caution_max",
+      "label": "ATR caution max",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Pullback",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "hint": "Max ATR multiples a move can extend before CAUTION. ↑ Higher → extended moves allowed (more results) · ↓ Lower → only tight pullbacks pass (fewer)"
+    },
+    {
+      "key": "pullback_require_reversal",
+      "label": "Require reversal candle",
+      "type": "boolean",
+      "section": "stocks",
+      "subGroup": "Pullback",
+      "hint": "Requires a bullish reversal bar at the pullback low (e.g. hammer). On → fewer, higher-conviction entries · Off → all pullbacks qualify"
+    },
+    {
+      "key": "macd_fast",
+      "label": "MACD fast",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "min": 2,
+      "max": 50,
+      "step": 1,
+      "hint": "Fast EMA period in MACD. ↑ Higher → fewer, stronger signals · ↓ Lower → more frequent but noisier signals"
+    },
+    {
+      "key": "macd_slow",
+      "label": "MACD slow",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "min": 2,
+      "max": 100,
+      "step": 1,
+      "hint": "Slow EMA period in MACD. ↑ Higher → more pronounced divergence required (fewer) · ↓ Lower → smaller divergences trigger (more)"
+    },
+    {
+      "key": "macd_signal",
+      "label": "MACD signal",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "min": 2,
+      "max": 50,
+      "step": 1,
+      "hint": "Smoothing on the MACD histogram. ↑ Higher → slower, steadier confirmation · ↓ Lower → noisier, faster trigger"
+    },
+    {
+      "key": "rsi_floor",
+      "label": "RSI floor",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "hint": "Minimum RSI to confirm momentum is recovering at entry. ↑ Higher → only stocks with active buying qualify (fewer) · ↓ Lower → oversold stocks also pass (more)"
+    },
+    {
+      "key": "volume_lookback_bars",
+      "label": "Volume lookback",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "hint": "Days used to compute the average volume baseline (display only)."
+    },
+    {
+      "key": "volume_multiplier",
+      "label": "Volume multiplier",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Trigger",
+      "hint": "Required volume as a multiple of average on the signal day (display only)."
+    },
+    {
+      "key": "event_reject_days",
+      "label": "Event reject days",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Event",
+      "min": 0,
+      "max": 90,
+      "step": 1,
+      "unit": "days",
+      "hint": "Stocks with a catalyst within this window are hard-rejected. ↑ Higher → wider safety zone (fewer) · ↓ Lower → closer-to-event entries allowed (more)"
+    },
+    {
+      "key": "event_caution_days",
+      "label": "Event caution days",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Event",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "unit": "days",
+      "hint": "Stocks within this wider window get a CAUTION flag instead of reject. ↑ Higher → larger amber zone · ↓ Lower → smaller amber zone"
+    },
+    {
+      "key": "earnings_buffer_days",
+      "label": "Earnings buffer",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Event",
+      "redundant": true
+    },
+    {
+      "key": "fomc_buffer_days",
+      "label": "FOMC buffer",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Event",
+      "redundant": true
+    },
+    {
+      "key": "div_buffer_days",
+      "label": "Div buffer",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Event",
+      "redundant": true
+    },
+    {
+      "key": "iv_abs_pass_max",
+      "label": "IV pass max (absolute)",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Volatility",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Max ABSOLUTE implied volatility (0–100%) for a PASS. This is the one that applies on most chains — a true IV rank needs IBKR or tastytrade to answer, and otherwise the contract carries a raw IV instead. N/A on Intraday. ↑ Higher → elevated-IV contracts still qualify (more) · ↓ Lower → only calm-IV contracts pass (fewer)."
+    },
+    {
+      "key": "iv_rank_pass_max",
+      "label": "IV rank pass max (percentile)",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Volatility",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "hint": "Max IV RANK — where today’s IV sits in the name’s own 52-week range (0–100) — for a PASS. Applies ONLY when IBKR or tastytrade supplied a real rank; otherwise the absolute ceiling above is what judges the contract. N/A on Intraday. ↑ Higher → elevated-IV stocks still qualify (more) · ↓ Lower → only calm-IV stocks pass (fewer)."
+    },
+    {
+      "key": "iv_rank_lookback",
+      "label": "IV rank lookback",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Volatility",
+      "hint": "Lookback window used to normalise current IV into a percentile rank (display only)."
+    },
+    {
+      "key": "hv_lookback",
+      "label": "HV period",
+      "type": "display",
+      "section": "stocks",
+      "subGroup": "Volatility",
+      "hint": "Days used to calculate historical (realised) volatility (display only)."
+    },
+    {
+      "key": "confidence_caution_below",
+      "label": "Confidence caution below",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Confidence",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Signal backtest win rate below this % triggers CAUTION. ↑ Higher → broader caution zone · ↓ Lower → narrower caution zone"
+    },
+    {
+      "key": "confidence_reject_below",
+      "label": "Confidence reject below",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Confidence",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "hint": "Signal backtest win rate below this % triggers REJECT. ↑ Higher → stricter gate, better-tested results (fewer) · ↓ Lower → looser gate (more)"
+    },
+    {
+      "key": "confidence_atr_mult_target",
+      "label": "Confidence ATR target",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Confidence",
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1,
+      "hint": "Win barrier for the mini backtest = this × ATR, for the active horizon. Overrides the Settings default for this scan only. ↑ Higher → demands a bigger winner (stricter, fewer)"
+    },
+    {
+      "key": "confidence_atr_mult_stop",
+      "label": "Confidence ATR stop",
+      "type": "number",
+      "section": "stocks",
+      "subGroup": "Confidence",
+      "min": 0.5,
+      "max": 5,
+      "step": 0.1,
+      "hint": "Loss barrier for the mini backtest = this × ATR, for the active horizon. Overrides the Settings default for this scan only. A lone target or stop override (without the other) is ignored."
+    },
+    {
+      "key": "max_delta",
+      "label": "Max delta",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Contract",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "hint": "Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)"
+    },
+    {
+      "key": "max_bid_ask_spread_pct",
+      "label": "Bid-ask spread ceiling",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Contract",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "hint": "Max spread as a fraction of mid price. ↑ Higher → illiquid contracts included (more, but costly) · ↓ Lower → tight spread required (fewer, cheaper to trade)"
+    },
+    {
+      "key": "min_volume",
+      "label": "Min option volume (0 = off)",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Contract",
+      "min": 0,
+      "max": 10000,
+      "step": 10,
+      "hint": "Optional hard floor on contracts traded, off (0) by default because volume is scored softly under Preferred Liquidity below. The figure is session-to-date volume, so with a floor set, results change with the time of day. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too."
+    },
+    {
+      "key": "min_open_interest",
+      "label": "Min open interest",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Contract",
+      "min": 0,
+      "max": 10000,
+      "step": 10,
+      "hint": "Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too."
+    },
+    {
+      "key": "min_delta",
+      "label": "Min delta (far OTM)",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Contract",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "hint": "Rejects contracts too far out of the money. ↑ Higher → keeps contracts closer to the money · ↓ Lower → very cheap deep-OTM contracts included"
+    },
+    {
+      "key": "min_dte",
+      "label": "Min DTE",
+      "type": "display",
+      "section": "options",
+      "subGroup": "Contract",
+      "unit": "days",
+      "hint": "Derived from the holding horizon (hold × 2). Change the horizon to change this."
+    },
+    {
+      "key": "max_dte",
+      "label": "Max DTE",
+      "type": "display",
+      "section": "options",
+      "subGroup": "Contract",
+      "unit": "days",
+      "hint": "Derived from the holding horizon (hold × 2). Change the horizon to change this."
+    },
+    {
+      "key": "preferred_volume_min",
+      "label": "Preferred min volume",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Preferred Liquidity",
+      "min": 0,
+      "max": 10000,
+      "step": 10,
+      "hint": "Daily contract volume below this docks the liquidity score and together with Preferred min open interest counts as at most one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard \"Min option volume\" floor above, an optional floor (off, 0, by default) which rejects outright rather than scoring."
+    },
+    {
+      "key": "preferred_oi_min",
+      "label": "Preferred min open interest",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Preferred Liquidity",
+      "min": 0,
+      "max": 10000,
+      "step": 10,
+      "hint": "Open interest below this docks the liquidity score and together with Preferred min volume counts as at most one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard \"Min open interest\" floor above."
+    },
+    {
+      "key": "preferred_spread_pct_max",
+      "label": "Preferred spread ceiling",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Preferred Liquidity",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "hint": "Spread (as a fraction of mid) above this docks the spread score and counts as one soft miss. ↑ Higher → wider spreads tolerated before scoring/rejecting on this axis · ↓ Lower → stricter. Default: 0.08. Independent of the hard \"Bid-ask spread ceiling\" above, which is far looser (0.20) by default — this preferred ceiling is usually the tighter, binding constraint in practice."
+    },
+    {
+      "key": "regime_headwind_caution_pct",
+      "label": "Headwind caution %",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Regime Gate",
+      "min": -100,
+      "max": 0,
+      "step": 5,
+      "unit": "%",
+      "hint": "Sector underperformance vs benchmark below this % → CAUTION on candidate. ↑ Higher (closer to 0) → stricter, more candidates caught (fewer pass) · ↓ Lower → only severe laggards affected (more pass). Default: -15%"
+    },
+    {
+      "key": "regime_headwind_reject_pct",
+      "label": "Headwind reject %",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Regime Gate",
+      "min": -100,
+      "max": 0,
+      "step": 5,
+      "unit": "%",
+      "hint": "Sector underperformance below this % → hard REJECT regardless of score. ↑ Higher (less negative) → stricter, more rejections · ↓ Lower → only catastrophic laggards rejected (more pass). Default: -40%"
+    },
+    {
+      "key": "fundamentals_caution_above",
+      "label": "Fundamentals caution above",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Fundamentals Bearish",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "hint": "BEARISH SCANS ONLY. Fundamental health score above this → CAUTION. Flags risk of shorting a financially strong company. ↑ Higher → only very strong companies flagged (fewer cautions) · ↓ Lower → wider caution zone (more cautions). Default: 70"
+    },
+    {
+      "key": "fundamentals_reject_above",
+      "label": "Fundamentals reject above",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Fundamentals Bearish",
+      "min": 0,
+      "max": 100,
+      "step": 5,
+      "hint": "BEARISH SCANS ONLY. Fundamental health score above this → hard REJECT. Company is too financially strong to short safely. ↑ Higher → only fortress-balance-sheet companies rejected (fewer) · ↓ Lower → stricter, more rejections. Default: 80"
+    },
+    {
+      "key": "entry_spread_tolerance_pct",
+      "label": "Spread tolerance",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Entry Quality",
+      "min": 0,
+      "max": 0.5,
+      "step": 0.01,
+      "hint": "Max bid-ask spread as a fraction of mid price at entry. ↑ Higher → wider spreads allowed (more contracts, worse fills) · ↓ Lower → tight spread required (fewer contracts, better fills). Default: 0.10"
+    },
+    {
+      "key": "entry_max_slippage_pct",
+      "label": "Max slippage",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Entry Quality",
+      "min": 0,
+      "max": 0.1,
+      "step": 0.005,
+      "hint": "Expected slippage as a fraction of price. ↑ Higher → accepts poor fills (more, but costlier) · ↓ Lower → only clean-fill entries pass (fewer). Default: 0.03"
+    },
+    {
+      "key": "entry_min_premium",
+      "label": "Min premium",
+      "type": "number",
+      "section": "options",
+      "subGroup": "Entry Quality",
+      "min": 0,
+      "max": 5,
+      "step": 0.05,
+      "unit": "$",
+      "hint": "Minimum option premium per contract in $. ↑ Higher → rejects cheap, illiquid options (fewer) · ↓ Lower → penny options included (more, but harder to exit). Default: $0.10"
+    },
+    {
+      "key": "rr_target_r_multiple",
+      "label": "Target (R-multiple)",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Reward/Risk",
+      "min": 0.5,
+      "max": 10,
+      "step": 0.25,
+      "unit": "R",
+      "hint": "First target distance in multiples of the stock-stop distance, with nearby structure preferred. Default: 2R"
+    },
+    {
+      "key": "rr_bullish_invalidation_pct",
+      "label": "Bullish stop %",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Reward/Risk",
+      "min": 0.005,
+      "max": 1,
+      "step": 0.005,
+      "unit": "%",
+      "hint": "Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 3%"
+    },
+    {
+      "key": "rr_bearish_invalidation_pct",
+      "label": "Bearish stop %",
+      "type": "number",
+      "section": "all",
+      "subGroup": "Reward/Risk",
+      "min": 0.005,
+      "max": 1,
+      "step": 0.005,
+      "unit": "%",
+      "hint": "Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 3%"
+    }
+  ],
+  "storageAfter": {
+    "bamendjou:search-profiles": "{broken",
+    "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":{\"universe\":\"Custom\",\"direction\":\"Bullish\",\"horizon\":\"Intraday (0–2d)\",\"horizonPreset\":\"Intraday\",\"holdMin\":0,\"holdMax\":2},\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"COMPLETED\",\"screenerMode\":\"options\",\"activeStrategy\":\"pullback_ema\",\"stockScanResult\":{\"candidates\":[],\"rejected\":[]},\"stockScanRequest\":{\"universe\":[\"Custom\"],\"direction\":\"Bullish\",\"horizon\":\"Intraday\",\"strategy\":\"pullback_ema\",\"pullback_require_reversal\":false,\"bt_min_trades\":5,\"bt_min_win_rate\":0.45,\"account_size\":100000,\"risk_pct\":0.0375,\"shortlist_max_candidates\":10,\"overrides\":{},\"confidence_atr_mult_target\":2,\"confidence_atr_mult_stop\":1.5,\"regime_headwind_caution_pct\":0,\"hold_max_days\":2},\"previousStockScanResult\":null,\"stockScanAt\":\"2026-10-16T06:10:01\",\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":\"completed\",\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+    "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"default\",\"lookback\":20,\"threshold\":0.02,\"smoothing\":0},\"shortlistMaxCandidates\":37,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":false,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}",
+    "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}"
+  }
+}

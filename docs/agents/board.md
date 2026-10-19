@@ -106,6 +106,8 @@ GitHub does not notify Kenneth of actions taken with his own token, so the Board
 
 Kenneth (or an agent he asks) creates an issue with this template, labels it `board-item`, adds native blocked-by links, and inserts it in the Board's Queue (bottom by default).
 
+Every item and build ticket also needs exactly one `size:*` and one `complexity:*` label, with an estimate rationale and evidence-based completion milestone as defined in [task-ratings.md](task-ratings.md). Apply these when creating work and when resuming existing work; preserve all unrelated labels. Ratings do not grant ownership or clear blockers.
+
 ```markdown
 **Phase id:** `<PHASE-ID>` · **Design / spec:** `<path or link>` · **Decision:** `<id or none>`
 **Branch:** _(set by the agent holding the claim)_
@@ -127,6 +129,7 @@ Kenneth (or an agent he asks) creates an issue with this template, labels it `bo
 ```
 Board: #<n> <link>
 Item:      #<item> <PHASE-ID> on <branch>: <status>
+Ratings:   <completion>% (<verified milestone>) · size <XS/S/M/L/XL> · complexity <1–5>
 Done:      <tickets / audits this session>
 Audit:     plan <n> rounds, <clean / not> · code <n> rounds, <clean / not / not started>
 Now:       <nothing | what is running>

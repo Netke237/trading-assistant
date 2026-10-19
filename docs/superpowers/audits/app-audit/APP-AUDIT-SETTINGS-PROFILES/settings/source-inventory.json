@@ -1,0 +1,275 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "functions": [
+    {
+      "component": "PremiumStopSettingNotes",
+      "line": 108,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "AtrPairRow",
+      "line": 137,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "SaveButton",
+      "line": 192,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "ThemeForm",
+      "line": 215,
+      "row_labels": [
+        "Theme",
+        "Row density"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "ScanForm",
+      "line": 242,
+      "row_labels": [
+        "Shortlist max candidates",
+        "Max contracts per chain",
+        "Max contract price (USD)",
+        "Enable gate",
+        "Caution below (%)",
+        "Reject below (%)",
+        "Last options scan",
+        "Last stock scan"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "OperatorTimezoneSection",
+      "line": 466,
+      "row_labels": [
+        "Timezone"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "ScheduledScanRetentionSection",
+      "line": 519,
+      "row_labels": [
+        "Retention (days)"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "formatRunTime",
+      "line": 577,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "ScheduledScansSection",
+      "line": 587,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "ScheduleEntryRow",
+      "line": 716,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "DaysOfWeekPicker",
+      "line": 833,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "FundamentalsGateSection",
+      "line": 855,
+      "row_labels": [
+        "Enable gate",
+        "Caution below (score)",
+        "Reject below (score)",
+        "D/E reject threshold"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "SpreadsSection",
+      "line": 957,
+      "row_labels": [
+        "Short-leg delta",
+        "Width (points)",
+        "IV rank threshold (percentile)",
+        "IV threshold (absolute)",
+        "Min credit",
+        "Max debit (% of width)"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "Toggle",
+      "line": 1107,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "daysSince",
+      "line": 1133,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "RiskForm",
+      "line": 1142,
+      "row_labels": [
+        "Portfolio value",
+        "Max single trade exposure",
+        "Max loss per trade",
+        "Max total exposure",
+        "Max single stock position",
+        "Max total stock exposure",
+        "Max concurrent positions",
+        "Max daily recommendations",
+        "Premium stop loss",
+        "Profit target \u2014 T1",
+        "Profit target \u2014 T2",
+        "Profit target \u2014 T3"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "RegimeForm",
+      "line": 1481,
+      "row_labels": [
+        "Preset",
+        "Lookback (bars)",
+        "Threshold",
+        "Smoothing (0\u20131)"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "NotificationForm",
+      "line": 1576,
+      "row_labels": [
+        "Trade history retention (years)",
+        "Enable Gmail alerts",
+        "To address",
+        "SMTP User",
+        "Password",
+        "Test",
+        "Enable Telegram alerts",
+        "Bot token",
+        "Chat ID",
+        "Test"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "BrokersForm",
+      "line": 1796,
+      "row_labels": [
+        "Gateway URL",
+        "Account ID",
+        "Live token",
+        "Account ID",
+        "Sandbox token",
+        "Account ID",
+        "Key ID",
+        "Secret key",
+        "Client secret",
+        "Refresh token",
+        "Account ID",
+        "Live trading",
+        "Live trading",
+        "Live trading"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "DataForm",
+      "line": 2077,
+      "row_labels": [
+        "Enable nightly schedule",
+        "Run time (HH:MM)",
+        "Next scheduled run"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "ScheduleSection",
+      "line": 2203,
+      "row_labels": [
+        "Enable schedule",
+        "Run time (HH:MM)",
+        "Active days",
+        "Next scheduled run"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "EdgarScheduleSection",
+      "line": 2317,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "Sp500ScheduleSection",
+      "line": 2332,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "OverrideInput",
+      "line": 2352,
+      "row_labels": [],
+      "source_only": true
+    },
+    {
+      "component": "StrategyScanForm",
+      "line": 2382,
+      "row_labels": [
+        "Pullback tolerance",
+        "MA crossover lookback",
+        "Breakout volume multiplier",
+        "Min backtest trades",
+        "Min win rate"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "StrategyTuningForm",
+      "line": 2475,
+      "row_labels": [
+        "Optimization history"
+      ],
+      "source_only": true
+    },
+    {
+      "component": "ProposalCard",
+      "line": 2686,
+      "row_labels": [],
+      "source_only": true
+    }
+  ],
+  "hashes": {
+    "frontend/app/(frame)/settings/page.tsx": "89d023f518bffeb2fe10f0fa4da766bd126e5221d417ae3a4e8d799bff6715c5",
+    "frontend/app/(frame)/settings/IvThresholdsSection.tsx": "e5d97abeb61b457b3b2cb29326fdae2b0fcdbb504b4cbb7d38b942ed0eefaa75",
+    "frontend/lib/settingsStore.ts": "2f116c44d02f4ea5a558a81edfc1054389280559269028a686ae3ff29c5230f6",
+    "frontend/lib/riskStore.ts": "e66200ae2032388aa5ccb5dfdf683f58d4d6eea36954828e0aa0bdaf06e11666",
+    "frontend/lib/scanParamsStore.ts": "ce5583862d624ba3bf4d68f939062913a4403dcb0e2ec57d10394b9c0ab18631",
+    "frontend/lib/ivThresholdsStore.ts": "f462d784c5ff799f56946e05b4a37be5e5016a40edf504b7b054c8340af79021",
+    "backend/app/routers/risk_settings.py": "a850900d7ca028982dac1735c726433e48629f3f9e5634b42159af9642139c96",
+    "backend/app/routers/notification_settings.py": "28708082c5de1e42f8d315d2e2b64648d41acc64072439d453d5ef8755082244",
+    "backend/app/services/atomic_yaml.py": "37c42cb28a8b3d31784310a968faf3708a1697ac36aa449e54e82240a7e1579a",
+    "backend/config/risk_rules.yaml": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968",
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/config/settings.example.yaml": "3d6a4080a8f57fa1abe2b928e794661ce30a04829881a53eb6e2c849f9ee66dc",
+    "backend/config/strategy_params.yaml": "6c0eb765bd79ea155fbea8288e46e2b7ac9ff1432c4843b5856827b033a35f3c"
+  },
+  "versions": {
+    "frontend": "15.5.23",
+    "node": "v24.19.0"
+  }
+}
