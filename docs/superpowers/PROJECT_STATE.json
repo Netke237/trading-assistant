@@ -4669,23 +4669,18 @@
       "summary": "Nightly daily-bar ingestion fetches only recent bars; the Tiingo prefix is re-downloaded only on an adjustment change (detected from Alpaca factors), an incomplete history or an unverifiable seam; all four Tiingo limits enforced from a persisted ledger. history_years stays 17.",
       "name": "Incremental nightly history ingestion",
       "status": "not_started",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": false,
       "branch": "claude/fervent-davinci-ded941",
       "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
       "tracking_issue": 413,
-      "plan_stage": {
-        "rounds": 3,
-        "audit_clean": false,
-        "capped": true
-      },
       "verify": {
         "kind": "absent",
         "path": "backend/app/services/history_incremental.py",
         "pattern": "def classify_nightly_symbol",
         "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
       },
-      "notes": "Plan only (2026-10-19). Plan stage 1 (rounds 1-3) capped: 5+1 findings fixed, R3-F1 open, R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19). Kenneth authorized plan stage 2 (rounds 4-6, HISTORY-INCREMENTAL-STAGE2-2026-10-19) and accepted the section-8 proposals (HISTORY-INCREMENTAL-DECISIONS-2026-10-19). R3-F1 fix applied to the plan; round 4 pending. Build waits for a clean plan round and for PR #390.",
+      "notes": "Plan only (2026-10-19). Plan stage 1 (rounds 1-3) capped: 5+1 findings fixed, R3-F1 open, R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19). Kenneth authorized plan stage 2 (rounds 4-6, HISTORY-INCREMENTAL-STAGE2-2026-10-19) and accepted the section-8 proposals (HISTORY-INCREMENTAL-DECISIONS-2026-10-19). R3-F1 fix applied; round 4 (stage 2 round 1): 1 finding (R4-F1, test gap) fixed; round 5 covers only that fix. Build waits for a clean plan round and for PR #390.",
       "audit_history": [
         {
           "round": 1,
@@ -4730,6 +4725,29 @@
             "R3-F2"
           ],
           "clean": false
+        },
+        {
+          "round": 4,
+          "stage": "plan",
+          "plan_stage": 2,
+          "stage_round": 1,
+          "reviewer": "gate-auditor subagent acc23eace0ad99555 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 85feb24e 9833e279 -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (R3-F1 fix, section-8 decisions) plus interactions",
+          "findings": [
+            "R4-F1 (Medium) no planned test isolates RESCALE condition (iii) F < P(E); listed fixture sits inside the T6 window"
+          ],
+          "fixes": "B1 gains two fixtures keeping T1-T6 true so only (iii) refuses (late Alpaca step with F = X+L+1; changed old step with F >> E+L)",
+          "outstanding": [],
+          "clean": false
+        }
+      ],
+      "plan_stages": [
+        {
+          "rounds": 3,
+          "closed_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19"
+        },
+        {
+          "rounds": 1
         }
       ]
     },
