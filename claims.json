@@ -29,6 +29,14 @@
       "expires_at": "2026-10-19T12:39:36Z",
       "note": "Plan stage 2 (rounds 4-6) authorized by Kenneth: R3-F1 fix + audit",
       "task": "HISTORY-INCREMENTAL-NIGHTLY"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-density-7b892ac1",
+      "claimed_at": "2026-10-19T09:49:35Z",
+      "expires_at": "2026-10-19T12:49:35Z",
+      "note": "Fix Appearance row density persistence across remount/reload (#370)",
+      "task": "APP-AUDIT-B-DENSITY"
     }
   ]
 }
