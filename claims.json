@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-strategy-validation-3c020642",
       "claimed_at": "2026-10-19T13:56:16Z",
-      "expires_at": "2026-10-19T17:02:27Z",
+      "expires_at": "2026-10-19T17:03:06Z",
       "note": "Validate strategy scan overrides before persistence and requests (#373)",
       "task": "APP-AUDIT-B-STRATEGY-VALIDATION"
     }
