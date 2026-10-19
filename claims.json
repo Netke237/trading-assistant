@@ -7,6 +7,14 @@
       "expires_at": "2026-10-19T15:24:08Z",
       "note": "Fix Appearance row density persistence across remount/reload (#370)",
       "task": "APP-AUDIT-B-DENSITY"
+    },
+    {
+      "agent": "claude",
+      "branch": "main",
+      "claimed_at": "2026-10-19T12:32:01Z",
+      "expires_at": "2026-10-19T15:32:01Z",
+      "note": "Fix shared reject confirmation bypass in Stocks and Pre-Breakout (#387)",
+      "task": "APP-AUDIT-B-RUN-GATE"
     }
   ]
 }
