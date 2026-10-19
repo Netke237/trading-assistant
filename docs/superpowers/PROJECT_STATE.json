@@ -4669,14 +4669,15 @@
       "summary": "Nightly daily-bar ingestion fetches only recent bars; the Tiingo prefix is re-downloaded only on an adjustment change (detected from Alpaca factors), an incomplete history or an unverifiable seam; all four Tiingo limits enforced from a persisted ledger. history_years stays 17.",
       "name": "Incremental nightly history ingestion",
       "status": "not_started",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "branch": "claude/fervent-davinci-ded941",
       "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
       "tracking_issue": 413,
       "plan_stage": {
-        "rounds": 2,
-        "audit_clean": false
+        "rounds": 3,
+        "audit_clean": false,
+        "capped": true
       },
       "verify": {
         "kind": "absent",
@@ -4684,7 +4685,7 @@
         "pattern": "def classify_nightly_symbol",
         "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
       },
-      "notes": "Plan only (2026-10-19). Plan round 1: 5 gate findings fixed; round 2: 1 gate finding fixed by replacing the adjustment mechanism. Round 3 (last under the cap) covers only the round-2 fix. Build waits for Kenneth's decisions Q0, D1-D5 in plan section 8 and for PR #390 to merge.",
+      "notes": "Plan only (2026-10-19). PLAN STAGE CAPPED, NOT CLEAN: round 1 five findings fixed, round 2 one finding fixed, round 3 two findings (R3-F1, R3-F2) left OPEN per audit_rule. Waiting for Kenneth: how to proceed past the cap (additional authorized plan stage, accept a stated bounded provider-lag residual, D1-b only, or split Stage A ledger out), plus decisions Q0, D1-D5 in plan section 8. Build also waits for PR #390.",
       "audit_history": [
         {
           "round": 1,
@@ -4710,8 +4711,24 @@
           "findings": [
             "R2-F1 lagging prefix written by a FULL-class path inside a provider-lag window is trusted by SUFFIX_ONLY and the acceptance check then blocks the repair"
           ],
-          "fixes": "adjustment mechanism replaced: T6 lag-window trust condition (nightly full re-fetch until a fetch lands PROVIDER_LAG_DAYS after the latest Alpaca-visible ex-date), RESCALE with Alpaca's ratio on the event night, CONFIRM re-fetch after the lag window under D1-a; pending columns, EVENT_TOL and PREFIX_RECHECK removed",
+          "fixes": "adjustment mechanism replaced: T6 lag-window trust condition (nightly full re-fetch until a fetch lands PROVIDER_LAG_DAYS after the latest Alpaca-visible ex-date), RESCALE with Alpaca's ratio on the event night, CONFIRM re-fetch after the lag window under D1-a; pending columns, EVENT_TOL and PREFIX_RECHECK removed (at 69950537)",
           "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent a543d946be6689d25 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 61530009 69950537 -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (round-2 fix) plus interactions",
+          "findings": [
+            "R3-F1 (High) T6 lag window opens at E; nightly runs ~20:00 ET of the previous ET day and Alpaca can apply ex-date X before a bar dated X exists, so a FULL prefix fetched at F = X-1 is trusted (proposed: window from P(E), the current date before E)",
+            "R3-F2 (Medium) provider lag > L: CONFIRM overwrites a correct rescaled prefix with a still-lagging one, and the last T6 FULL trusts one; worse than today (proposed: CONFIRM/trust only on agreement within ~1e-4)"
+          ],
+          "fixes": "none -- plan-stage cap of three rounds reached; audit stopped per audit_rule",
+          "outstanding": [
+            "R3-F1",
+            "R3-F2"
+          ],
           "clean": false
         }
       ]
@@ -6742,7 +6759,8 @@
     "DONE 2026-10-01 (decision AUDIT-GAP-CLOSEOUT-2026-10-01 item 3): ratified retroactively by Kenneth; all three pieces are now audit-clean. || WAS: RECORD 2026-10-01 (LEDGER-CLEANUP), for Kenneth to ratify or not: merge fc451c2d (2026-09-17, 'Merge the sizing, scan-failure and atomic-config pieces': REGIME SIZING DIVERGENCE, SCAN-FAILURE-REASON, ATOMIC-CONFIG-WRITES) has NO record of Kenneth approving it -- not in its commit message, not in this file -- and it landed with SCAN-FAILURE-REASON and ATOMIC-CONFIG-WRITES audit_clean false. Since closed: REGIME-SIZING by REGIME-SIZING-AUDIT (5c1d01b, round 4 clean); ATOMIC-CONFIG-WRITES round 2 and SCAN-FAILURE-REASON round 6 both CLEAN on 2026-10-01. Nothing to undo; this records the process gap.",
     "ANSWERED 2026-09-30 -> decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30 (all four recommendations). || OPEN 2026-09-30 (CONTRACT-LIQUIDITY-DTE): answer the plan's section 6 before any build -- Q1 what min_volume becomes once volume is soft (recommend: optional hard floor, default 0); Q2 accept one merged liquidity soft flag (recommend yes); Q3 a chain row with no live bid/ask: hard reject as quote_stale per FR-24 (recommend, for scan and auto-trade) or grade without the spread rule; Q4 Semi-annual is thin for real (median OI 16 at 198 DTE): leave it (recommend) / cap the DTE multiplier / steer to Stocks mode.",
     "ANSWERED 2026-10-04 -> decision PHASE-C-CAP-SPLIT-T9-2026-10-04 (option b: T9 split into TRADING-REVIEW-PHASE-C-RR). || WAS: TRADING-REVIEW-PHASE-C (2026-10-04): plan stage hit the 3-round cap with R3-F1 outstanding (fix written, unaudited). Decide: (a) accept the unaudited one-line fix and cut tickets, the code-stage audit then covering it; (b) drop T9 (R/R basis) from Phase C into its own later target; (c) something else.",
-    "DONE 2026-10-05: C4 re-scoped by decision STOCKS-PARAMS-PER-HORIZON-2026-10-05 (C4 round 2 default-value verdicts dropped; work continues as STOCKS-HORIZON-P0..T4). || PARTLY DONE 2026-10-05: C4 round 1 decided (decision C4-ROUND1-2026-10-05); C4 round 2 waits for strategy_matrix. || PARTLY DONE 2026-10-05 (decision PHASE-C-DEFERRED-GRILL-2026-10-05): refresh-adjustments run by Claude (538 checked / 42 stale / 42 refreshed / 0 failed); the four evidence reports are running from a main worktree. STILL OPEN: decide C4 from those reports. || WAS: TRADING-REVIEW-PHASE-C (2026-10-05): after merging its PR, run POST /api/historical-data/refresh-adjustments with {\"symbols\": []} once, then scripts/evidence/bar_basis_check.py, score_calibration.py, gate_persistence.py and strategy_matrix.py on the local DB, then decide C4 (live confidence de-overlap / min_samples / None policy, Step-7 R/R thresholds after TRADING-REVIEW-PHASE-C-RR, earnings veto window, bearish auto-arm, score re-weighting and gate redesign)."
+    "DONE 2026-10-05: C4 re-scoped by decision STOCKS-PARAMS-PER-HORIZON-2026-10-05 (C4 round 2 default-value verdicts dropped; work continues as STOCKS-HORIZON-P0..T4). || PARTLY DONE 2026-10-05: C4 round 1 decided (decision C4-ROUND1-2026-10-05); C4 round 2 waits for strategy_matrix. || PARTLY DONE 2026-10-05 (decision PHASE-C-DEFERRED-GRILL-2026-10-05): refresh-adjustments run by Claude (538 checked / 42 stale / 42 refreshed / 0 failed); the four evidence reports are running from a main worktree. STILL OPEN: decide C4 from those reports. || WAS: TRADING-REVIEW-PHASE-C (2026-10-05): after merging its PR, run POST /api/historical-data/refresh-adjustments with {\"symbols\": []} once, then scripts/evidence/bar_basis_check.py, score_calibration.py, gate_persistence.py and strategy_matrix.py on the local DB, then decide C4 (live confidence de-overlap / min_samples / None policy, Step-7 R/R thresholds after TRADING-REVIEW-PHASE-C-RR, earnings veto window, bearish auto-arm, score re-weighting and gate redesign).",
+    "HISTORY-INCREMENTAL-NIGHTLY (#413, 2026-10-19): plan stage hit the three-round cap with R3-F1/R3-F2 open (provider-lag trust window; see plan section 11). Decide how to proceed past the cap, then Q0 (Tiingo plan tier), D1 (rescale+confirm vs rescale only), D2 (72 Tiingo-only symbols), D3 (revalidation N/K), D4 (nightly reserve), D5 (UI now/later)."
   ],
   "open_questions": [
     "ANSWERED 2026-10-02 -> decision STOP-SEMANTICS-2026-10-02 (a): DIRECTION-AWARE -- a short fires on a rise of X% above entry. Still open as BUILD work (task_backlog STOP-SEMANTICS). || LOGGED BY P2-PREMIUM-STOP-POSITION-EDITING plan rounds (2026-09-25), NOT FIXED by Kenneth's choice (decision P2-SHORT-STOCK-PCT-STOP-LOG-ONLY-2026-09-25): a SHORT stock position's per-position percent stop fires when the price FALLS (frontend/lib/alertEngine.ts stock branch compares direction-blind), which is a gain for a short, not a loss. P2 only relabels it truthfully. Needs Kenneth's call on the behaviour.",
