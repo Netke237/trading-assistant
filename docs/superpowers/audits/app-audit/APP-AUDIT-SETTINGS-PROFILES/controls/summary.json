@@ -1,0 +1,87 @@
+{
+  "source": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "scope": "controls audit evidence only; all browser API requests mocked; backend helper checks isolated without provider/DB/config writes",
+  "authoritativeRuns": {
+    "source-output.json": {
+      "checks": 69,
+      "pass": 62,
+      "fail": 7,
+      "fatal": null,
+      "sha256": "2cc6121e009eba58d2254b8d8aa48d97665e0100e433ebf1c6a05ccd2b047135"
+    },
+    "parameter-output.json": {
+      "checks": 59,
+      "pass": 57,
+      "fail": 2,
+      "fatal": null,
+      "sha256": "795b4b3f73a544b2cc0c9c37dfd9eb9e44b11aecd4c05dd1e38da8f3560cdb9e"
+    },
+    "backend-parameters-output.json": {
+      "checks": 18,
+      "pass": 15,
+      "fail": 3,
+      "fatal": null,
+      "sha256": "619ef666ebcf96005b815ff8aee2609eb4b2ee520289fc1f4835e001c5a17e47"
+    },
+    "browser-parameters-output.json": {
+      "checks": 110,
+      "pass": 110,
+      "fail": 0,
+      "fatal": null,
+      "sha256": "43396b35469265c13c77818509953b0c5ff560cd36bf46e8aa61256e8a16d249"
+    },
+    "browser-output.json": {
+      "checks": 56,
+      "pass": 53,
+      "fail": 3,
+      "fatal": null,
+      "sha256": "50194fbf307b4e90858b37f6c1733c087149c5e7fed0fd41c62506e78d64e75a"
+    }
+  },
+  "supplementalRuns": {
+    "browser-continuation-output.json": {
+      "checks": 10,
+      "pass": 8,
+      "fail": 2,
+      "fatal": null,
+      "sha256": "3944502b4898877af9ab7ee747447abde9e92abccd31d67790b2b514983f8af7"
+    },
+    "browser-initial-output.json": {
+      "checks": 44,
+      "pass": 43,
+      "fail": 1,
+      "fatal": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n  - waiting for getByLabel('Search profile', { exact: true }) to be visible",
+      "sha256": "27fbe9ba3703aa2e7f568528c461e862ebcde9818d79aea84769c6a9aba1d042"
+    }
+  },
+  "independentReview": "not claimed; parent coordinator owns review",
+  "findings": "findings.md",
+  "coverage": "coverage.md",
+  "runtime": {
+    "node": "v24.19.0",
+    "python": "3.11.16",
+    "browser": "151.0.7922.173",
+    "frontend": {
+      "playwright": "1.62.1",
+      "next": "15.5.23"
+    }
+  },
+  "files": {
+    "backend-parameters-output.json": "619ef666ebcf96005b815ff8aee2609eb4b2ee520289fc1f4835e001c5a17e47",
+    "backend-parameters.py": "88e2ffe446397e7e5e84c8a30ba01d9f69d37ccf7436418c06792e7024a681c5",
+    "browser-continuation-output.json": "3944502b4898877af9ab7ee747447abde9e92abccd31d67790b2b514983f8af7",
+    "browser-continuation.cjs": "faad2557905d8e5d43d001655a1af25f967180485aab4beb40c4dbf92f1fef1b",
+    "browser-initial-output.json": "27fbe9ba3703aa2e7f568528c461e862ebcde9818d79aea84769c6a9aba1d042",
+    "browser-output.json": "50194fbf307b4e90858b37f6c1733c087149c5e7fed0fd41c62506e78d64e75a",
+    "browser-parameters-output.json": "43396b35469265c13c77818509953b0c5ff560cd36bf46e8aa61256e8a16d249",
+    "browser-parameters.cjs": "c7e558ed6310b580d1f4e1c2e6ceceb9b4c8ba046e03803e0a47a0b96c87b5db",
+    "browser-probe.cjs": "3756d50aa19ade7bd5796ef61cfda8aaacf5a06f7c9dc5471c7b2c3b2f2c940f",
+    "coverage.md": "13dbbcfe7d9d61ba0d6a28cae19e148b1318ec23403f34e73459cff730bb24c8",
+    "findings.md": "930e5adce0dd248568794a04a1cb759fbcaae7d26f76e9f872621224ddace1f9",
+    "malformed-profile.png": "bdf0d9c3c56a935287c4a5f579e51245862e441c4a7fe348e9052f9b196c2e6e",
+    "parameter-output.json": "795b4b3f73a544b2cc0c9c37dfd9eb9e44b11aecd4c05dd1e38da8f3560cdb9e",
+    "parameter-probe.cjs": "4f01b2506f828bc939ef7737bfa08b4df7d238303920951d11374f3b1d408765",
+    "source-output.json": "2cc6121e009eba58d2254b8d8aa48d97665e0100e433ebf1c6a05ccd2b047135",
+    "source-probe.cjs": "4fd9e26b8561d25cbf514ed17876b8fb695354d92f1ba430a2a1ea2ca393f7f5"
+  }
+}

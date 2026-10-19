@@ -1,0 +1,4 @@
+compute_intraday_hmm: only 221 bars available (ideal ≥ 500); HMM fit may be less reliable
+compute_intraday_hmm: only 251 bars available (ideal ≥ 500); HMM fit may be less reliable
+hmmlearn not importable — intraday HMM unavailable
+{"output": "regime/output.json", "omm_passed": true, "hmm_supplied_passed": true, "vix_252_passed": false}

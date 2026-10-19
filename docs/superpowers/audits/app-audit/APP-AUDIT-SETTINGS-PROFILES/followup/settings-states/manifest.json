@@ -1,0 +1,84 @@
+{
+  "source_sha": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "absent_local_configuration": [
+    "backend/config/settings.yaml"
+  ],
+  "files": {
+    "browser.mjs": {
+      "sha256": "b9008019e330eceb6fc931da91ecada1d422a002417e9402f8a6ad7d58c26971",
+      "bytes": 23541
+    },
+    "coverage.md": {
+      "sha256": "dbe51fd46271f161557c23dba4c41b19c0ca8a7455f1f880d0e321d026176923",
+      "bytes": 7008
+    },
+    "findings.md": {
+      "sha256": "254a90cc6fd45457138ba1bf3ccc73ccf4fcd542741bcf3cb29562108a02055f",
+      "bytes": 6858
+    },
+    "health-clean.png": {
+      "sha256": "8a799edf1930a017306b730f90bbbf2ef9063373e64f2a1ff71abb6ab59438cf",
+      "bytes": 133435
+    },
+    "health-error.png": {
+      "sha256": "d2f5187ac8898df41c22e250237dbc57cb8b96d2aff7100ff5a77008348cc055",
+      "bytes": 138799
+    },
+    "health-stale.png": {
+      "sha256": "e4c844a1f21694a73914c006f5559c549eca8892d26a1b1a646b8b96f11ec5f8",
+      "bytes": 136573
+    },
+    "health-unknown.png": {
+      "sha256": "de83f0d8a25da1bdb0d020382c10e9f9b1b15f041629a01631cf93b0cf20da58",
+      "bytes": 137210
+    },
+    "health-warning.png": {
+      "sha256": "74f9fb475ee1da8d9483f0214ba07bdc4006e030c741e8909d6c9695dfbf4008",
+      "bytes": 139918
+    },
+    "missing-profile.png": {
+      "sha256": "7b48109ad7fac90efba38312cd414cbb3ab98faa4f67fe2632a44263890b1dd2",
+      "bytes": 13026
+    },
+    "output.json": {
+      "sha256": "a900059430f14175ded64091193ee3be87477e477f1c0b53a29e32c54600f3f8",
+      "bytes": 351269
+    },
+    "schedule-stocks.png": {
+      "sha256": "dc99df223c46b6f490e3bc86ae16fc98f49ef45c7d87dbc3851445bae4a3d678",
+      "bytes": 12704
+    },
+    "schedule_yaml.py": {
+      "sha256": "258f1129e0503b95f3a72b2ac9e76a65bf3adc6c38bab559908459fcd225dad4",
+      "bytes": 6673
+    },
+    "schema-output.json": {
+      "sha256": "45827bf7140be2cb69738e9b18b690c4093b2beac57bbc8a8ab614b18c29f659",
+      "bytes": 4517
+    },
+    "source-hashes.json": {
+      "sha256": "e496dd8cfe3f0b9a8aaaad4235ce3d7c4ec1587762d42be681475a250968023a",
+      "bytes": 2684
+    },
+    "strategy-breakoutVolumeMult-1.png": {
+      "sha256": "d294de47adf8208bd7da028052728cc3b8447ad3df5af67690100798d455f2bf",
+      "bytes": 128147
+    },
+    "strategy-breakoutVolumeMult-4.png": {
+      "sha256": "79444c93ee6e8da50bb1432e2a89604251d4359bdb3ef71ba645e525315f5578",
+      "bytes": 128196
+    },
+    "strategy-maCrossoverLookback-0.png": {
+      "sha256": "e6fc45a6690d79845bd8e1d97d59a8e7c9352d678760908eacd41f4776cb5e94",
+      "bytes": 128260
+    },
+    "verify_contracts.py": {
+      "sha256": "91dde770af48ffa2388e1b05a748356e4f0f9d1ba1ee2a8c5b9301ebcb010c1a",
+      "bytes": 3016
+    },
+    "yaml-output.json": {
+      "sha256": "a39d369555a48310258cd2e2efdb7e2d725ae07b4d9a6e380343b3d8c5522477",
+      "bytes": 29789
+    }
+  }
+}

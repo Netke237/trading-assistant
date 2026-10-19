@@ -1,0 +1,2112 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "status": "Audit evidence; product unchanged; failures unresolved. Counters are evidence assertions, not unique defects.",
+  "checks": [
+    {
+      "id": "density-remount",
+      "expected": "Compact persists per-browser, as intro promises",
+      "observed": {
+        "before": "Compact",
+        "after": "Comfortable"
+      },
+      "status": "fail",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "global-save-risk",
+      "expected": "failed Risk save does not display Saved globally",
+      "observed": {
+        "visible": "234567",
+        "backend": 100000,
+        "requests": [
+          {
+            "path": "/settings/risk",
+            "method": "POST",
+            "body": {
+              "premiumStopPct": 0.6,
+              "portfolioValue": 234567,
+              "maxSinglePositionPct": 0.05,
+              "maxLossPerTradePct": 0.01,
+              "maxTotalExposurePct": 0.25,
+              "maxSingleStockPositionPct": 0.1,
+              "maxTotalStockExposurePct": 0.5,
+              "maxConcurrentPositions": 10,
+              "maxDailyRecommendations": 5,
+              "targetT1Pct": 0.2,
+              "targetT2Pct": 0.35,
+              "targetT3Pct": 0.5
+            }
+          }
+        ],
+        "confirmation": 1
+      },
+      "status": "fail",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "global-save-backend-draft",
+      "expected": "Save changes persists visible timezone draft",
+      "observed": {
+        "visible": "Asia/Tokyo",
+        "server": "Europe/Berlin",
+        "requests": [],
+        "confirmation": 1
+      },
+      "status": "fail",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "timezone-explicit-save",
+      "expected": "backend reflects explicit save",
+      "observed": "Asia/Tokyo",
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "timezone-invalid-save",
+      "expected": "failure shown, backend unchanged",
+      "observed": {
+        "server": "Asia/Tokyo",
+        "text": "Timezone\nIANA timezone name, e.g. Europe/Berlin\nDefault: Europe/Berlin\nSave\nSave failed \u2014 check the timezone name"
+      },
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "retention-failed-save",
+      "expected": "backend readback unchanged and error visible",
+      "observed": {
+        "server": 90,
+        "visible": "120",
+        "text": "Retention (days)\n1-3650\nDefault: 90\nSave\nSave failed"
+      },
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "regime-reload",
+      "expected": "local persisted conservative lookback 60 and smoothing 0.5",
+      "observed": [
+        "60",
+        "0.03",
+        "0.5"
+      ],
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "strategy-native-min",
+      "expected": "out-of-range override rejected or clamped",
+      "observed": {
+        "visible": "0",
+        "storage": {
+          "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+          "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+          "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":0,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+          "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+          "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":10,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+        }
+      },
+      "status": "fail",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "scan-zero-clamp",
+      "expected": "zero shortlist clamps to 1",
+      "observed": {
+        "visible": "1",
+        "storage": {
+          "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":234567,\"maxLossPerTradePct\":0.01,\"maxSingleStockPositionPct\":0.1,\"maxTotalStockExposurePct\":0.5},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":\"2026-10-16T06:08:45.907Z\"},\"version\":4}",
+          "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":null,\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"IDLE\",\"screenerMode\":\"options\",\"activeStrategy\":null,\"stockScanResult\":null,\"stockScanRequest\":null,\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":null,\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":null,\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+          "bamendjou:scan-params": "{\"state\":{\"pullbackTolerancePct\":null,\"pullbackEmaPeriod\":null,\"pullbackTrendEma\":null,\"pullbackMaType\":null,\"maCrossoverFast\":null,\"maCrossoverSlow\":null,\"maCrossoverLookback\":null,\"breakoutVolumeMult\":null,\"rsiPeriod\":null,\"rsiOversold\":null,\"rsiOverbought\":null,\"rsiTrendSma\":null,\"requireChoppyRegime\":null,\"meanReversionVariants\":null,\"meanReversionMinConfirm\":null,\"vwapLookback\":null,\"vwapDeviationPct\":null,\"btMinTrades\":5,\"btMinWinRate\":0.45,\"eventFilter\":\"include\",\"stockShortlistMax\":10},\"version\":12}",
+          "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+          "bamendjou-settings": "{\"state\":{\"broker\":{\"broker\":\"Interactive Brokers\",\"account\":\"\",\"apiToken\":\"\",\"paperTrading\":true},\"alertDeduplicationHours\":24,\"markov\":{\"preset\":\"conservative\",\"lookback\":60,\"threshold\":0.03,\"smoothing\":0.5},\"shortlistMaxCandidates\":1,\"maxContractsPerChain\":10,\"maxContractPrice\":50,\"premiumStopPct\":0.6,\"targetProfitPct\":{\"t1\":0.2,\"t2\":0.35,\"t3\":0.5},\"confidenceGate\":{\"enabled\":true,\"cautionBelow\":50,\"rejectBelow\":35,\"atrMult\":{\"intraday\":{\"target\":2,\"stop\":1.5},\"swing\":{\"target\":3,\"stop\":1.5},\"position\":{\"target\":2.5,\"stop\":1.5}}},\"fundamentalsGate\":{\"enabled\":true,\"cautionBelow\":45,\"rejectBelow\":30,\"deReject\":3},\"ibkrPaper\":{\"baseUrl\":\"https://localhost:7499/v1/api\",\"accountId\":\"\"},\"tradierPaper\":{\"token\":\"\",\"accountId\":\"\"},\"tradierLive\":{\"token\":\"\",\"accountId\":\"\"},\"alpacaPaper\":{\"keyId\":\"\",\"secretKey\":\"\"},\"tastytradePaper\":{\"clientSecret\":\"\",\"refreshToken\":\"\",\"accountId\":\"\"},\"spreads\":{\"shortLegDelta\":0.3,\"widthPoints\":5,\"ivRankThreshold\":50,\"ivAbsThreshold\":50,\"minCredit\":0.5,\"maxDebitPctOfWidth\":40},\"scheduleConfig\":{\"enabledOptions\":false,\"enabledStocks\":false,\"cadenceMinutes\":60,\"daysOfWeek\":[0,1,2,3,4],\"windowStartHour\":9,\"windowEndHour\":17,\"timezoneName\":\"America/New_York\"}},\"version\":24}"
+        }
+      },
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "confidence-false",
+      "expected": "false gate stored and threshold inputs disabled",
+      "observed": {
+        "checked": "false",
+        "disabled": true
+      },
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "iv-invalid",
+      "expected": "zero refused with inline error",
+      "observed": {
+        "error": "Not applied \u2014 enter a number from 1 to 100."
+      },
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "iv-session-remount",
+      "expected": "override survives section remount",
+      "observed": "40",
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "iv-reload",
+      "expected": "session override intentionally resets on reload",
+      "observed": "34",
+      "status": "pass",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "timezone-stale-load",
+      "expected": "late initial GET preserves operator edit",
+      "observed": {
+        "before": "America/New_York",
+        "after": "Europe/Berlin"
+      },
+      "status": "fail",
+      "evidence": "ui-output.json"
+    },
+    {
+      "id": "risk-zero-effective",
+      "expected": "zero persists and effective config agrees",
+      "observed": {
+        "save": {
+          "status": 200,
+          "body": {
+            "premiumStopPct": 0.55,
+            "portfolioValue": 125000.0,
+            "maxSinglePositionPct": null,
+            "maxLossPerTradePct": 0.0,
+            "maxTotalExposurePct": null,
+            "maxSingleStockPositionPct": 0.0,
+            "maxTotalStockExposurePct": null,
+            "maxConcurrentPositions": null,
+            "maxDailyRecommendations": null,
+            "targetT1Pct": 0.2,
+            "targetT2Pct": 0.4,
+            "targetT3Pct": 0.6
+          }
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "premiumStopPct": 0.55,
+            "portfolioValue": 125000.0,
+            "maxSinglePositionPct": 0.05,
+            "maxLossPerTradePct": 0.0,
+            "maxTotalExposurePct": 0.25,
+            "maxSingleStockPositionPct": 0.0,
+            "maxTotalStockExposurePct": 1.0,
+            "maxConcurrentPositions": 10,
+            "maxDailyRecommendations": 5,
+            "targetT1Pct": 0.2,
+            "targetT2Pct": 0.4,
+            "targetT3Pct": 0.6
+          }
+        },
+        "effective": {
+          "portfolio": {
+            "max_loss_per_trade_pct": 0.0,
+            "portfolio_value": 125000.0,
+            "max_single_stock_position_pct": 0.0
+          },
+          "reward_risk": {
+            "premium_stop_pct": 0.55,
+            "target_t1_pct": 0.2,
+            "target_t2_pct": 0.4,
+            "target_t3_pct": 0.6
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "risk-invalid-rollback",
+      "expected": "422 and byte-identical readback",
+      "observed": [
+        {
+          "request": {
+            "premiumStopPct": 0
+          },
+          "response": {
+            "status": 422,
+            "body": {
+              "detail": [
+                {
+                  "type": "greater_than_equal",
+                  "loc": [
+                    "body",
+                    "premiumStopPct"
+                  ],
+                  "msg": "Input should be greater than or equal to 0.1",
+                  "input": 0,
+                  "ctx": {
+                    "ge": 0.1
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "request": {
+            "premiumStopPct": null
+          },
+          "response": {
+            "status": 422,
+            "body": {
+              "detail": [
+                {
+                  "type": "float_type",
+                  "loc": [
+                    "body",
+                    "premiumStopPct"
+                  ],
+                  "msg": "Input should be a valid number",
+                  "input": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "request": {
+            "portfolioValue": 0
+          },
+          "response": {
+            "status": 422,
+            "body": {
+              "detail": [
+                {
+                  "type": "greater_than",
+                  "loc": [
+                    "body",
+                    "portfolioValue"
+                  ],
+                  "msg": "Input should be greater than 0",
+                  "input": 0,
+                  "ctx": {
+                    "gt": 0.0
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "request": {
+            "targetT1Pct": 0.8,
+            "targetT2Pct": 0.2
+          },
+          "response": {
+            "status": 422,
+            "body": {
+              "detail": [
+                {
+                  "type": "value_error",
+                  "loc": [
+                    "body"
+                  ],
+                  "msg": "Value error, Profit targets must be non-decreasing: T1 (0.8) <= T2 (0.2) <= T3 (0.5)",
+                  "input": {
+                    "targetT1Pct": 0.8,
+                    "targetT2Pct": 0.2
+                  },
+                  "ctx": {
+                    "error": {}
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "request": {
+            "maxConcurrentPositions": 0
+          },
+          "response": {
+            "status": 422,
+            "body": {
+              "detail": [
+                {
+                  "type": "greater_than_equal",
+                  "loc": [
+                    "body",
+                    "maxConcurrentPositions"
+                  ],
+                  "msg": "Input should be greater than or equal to 1",
+                  "input": 0,
+                  "ctx": {
+                    "ge": 1
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "risk-null-absent",
+      "expected": "optional null retains prior; absent target resets defaults",
+      "observed": {
+        "save": {
+          "status": 200,
+          "body": {
+            "premiumStopPct": 0.55,
+            "portfolioValue": null,
+            "maxSinglePositionPct": null,
+            "maxLossPerTradePct": null,
+            "maxTotalExposurePct": null,
+            "maxSingleStockPositionPct": null,
+            "maxTotalStockExposurePct": null,
+            "maxConcurrentPositions": null,
+            "maxDailyRecommendations": null,
+            "targetT1Pct": 0.2,
+            "targetT2Pct": 0.35,
+            "targetT3Pct": 0.5
+          }
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "premiumStopPct": 0.55,
+            "portfolioValue": 125000.0,
+            "maxSinglePositionPct": 0.05,
+            "maxLossPerTradePct": 0.0,
+            "maxTotalExposurePct": 0.25,
+            "maxSingleStockPositionPct": 0.0,
+            "maxTotalStockExposurePct": 1.0,
+            "maxConcurrentPositions": 10,
+            "maxDailyRecommendations": 5,
+            "targetT1Pct": 0.2,
+            "targetT2Pct": 0.35,
+            "targetT3Pct": 0.5
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "timezone-normal-clamp",
+      "expected": "save/readback agree",
+      "observed": {
+        "save": {
+          "status": 200,
+          "body": {
+            "timezone": "Asia/Tokyo",
+            "history_years": 17
+          }
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "timezone": "Asia/Tokyo",
+            "history_years": 17
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "historyRetentionYears-normal-clamp",
+      "expected": "save/readback agree",
+      "observed": {
+        "save": {
+          "status": 200,
+          "body": {
+            "historyRetentionYears": 1
+          }
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "historyRetentionYears": 1
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "scheduledScanRunRetentionDays-normal-clamp",
+      "expected": "save/readback agree",
+      "observed": {
+        "save": {
+          "status": 200,
+          "body": {
+            "scheduledScanRunRetentionDays": 1
+          }
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "scheduledScanRunRetentionDays": 1
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "timezone-invalid-rollback",
+      "expected": "422 byte-identical",
+      "observed": {
+        "status": 422,
+        "body": {
+          "detail": "unknown timezone 'Invalid/Zone'"
+        }
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "failed-write-/settings/risk",
+      "expected": "500, original file/readback intact, no sidecar",
+      "observed": {
+        "response": {
+          "status": 500,
+          "body": "Internal Server Error"
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "premiumStopPct": 0.55,
+            "portfolioValue": 125000.0,
+            "maxSinglePositionPct": 0.05,
+            "maxLossPerTradePct": 0.0,
+            "maxTotalExposurePct": 0.25,
+            "maxSingleStockPositionPct": 0.0,
+            "maxTotalStockExposurePct": 1.0,
+            "maxConcurrentPositions": 10,
+            "maxDailyRecommendations": 5,
+            "targetT1Pct": 0.2,
+            "targetT2Pct": 0.35,
+            "targetT3Pct": 0.5
+          }
+        },
+        "sidecars": []
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "failed-write-/settings/scheduled-scan-retention",
+      "expected": "500, original file/readback intact, no sidecar",
+      "observed": {
+        "response": {
+          "status": 500,
+          "body": "Internal Server Error"
+        },
+        "read": {
+          "status": 200,
+          "body": {
+            "scheduledScanRunRetentionDays": 1
+          }
+        },
+        "sidecars": []
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "strategy-zero-backend-validation",
+      "expected": "backend rejects persisted UI zero override",
+      "observed": {
+        "request": {
+          "universe": [
+            "SP500"
+          ],
+          "direction": "Bullish",
+          "horizon": "Swing",
+          "strategy": "pullback_ema",
+          "pullback_tolerance_pct": 0
+        },
+        "validation_errors": [
+          {
+            "type": "greater_than",
+            "loc": [
+              "pullback_tolerance_pct"
+            ],
+            "msg": "Input should be greater than 0",
+            "input": 0,
+            "ctx": {
+              "gt": 0.0
+            }
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "notifications-save-readback",
+      "expected": "public fields match request; write-only fake secrets persisted and omitted from API",
+      "observed": {
+        "before": {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": false,
+              "to": "",
+              "smtp_user": ""
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": ""
+            }
+          }
+        },
+        "save": {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": "[redacted fake secret]"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT",
+              "bot_token": "[redacted fake secret]"
+            }
+          },
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        "fake_secret_persisted": true
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "notifications-blank-secret-retain",
+      "expected": "blank/null fake secret retains existing value",
+      "observed": {
+        "method": "POST",
+        "url": "/settings/notifications",
+        "request": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid",
+            "smtp_password": ""
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": "FAKE-AUDIT-CHAT",
+            "bot_token": null
+          }
+        },
+        "status": 200,
+        "response": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "notifications-invalid-rollback",
+      "expected": "missing Telegram config gives 422, original YAML intact",
+      "observed": {
+        "method": "POST",
+        "url": "/settings/notifications",
+        "request": {
+          "gmail": {
+            "enabled": true
+          }
+        },
+        "status": 422,
+        "response": {
+          "detail": [
+            {
+              "type": "missing",
+              "loc": [
+                "body",
+                "telegram"
+              ],
+              "msg": "Field required",
+              "input": {
+                "gmail": {
+                  "enabled": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "notifications-failed-save-rollback",
+      "expected": "500 with unchanged disk/API and no temporary sidecar",
+      "observed": {
+        "failed": {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true,
+              "to": "changed@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": ""
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT",
+              "bot_token": null
+            }
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        "read": {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        "sidecars": []
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "ingestion-schedule-save-readback",
+      "expected": "enabled/time/weekdays match API, disk and configure args",
+      "observed": {
+        "before": {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "02:00",
+            "next_run": null
+          }
+        },
+        "save": {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": true,
+            "time": "01:17"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        "yaml": {
+          "enabled": true,
+          "time": "01:17"
+        },
+        "configure": {
+          "scheduler": "ingestion",
+          "args": [
+            true,
+            "01:17"
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "ingestion-schedule-invalid-rollback",
+      "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+      "observed": {
+        "invalid": {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "ingestion-schedule-failed-save-rollback",
+      "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+      "observed": {
+        "failed": {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        "disk": {
+          "enabled": true,
+          "time": "01:17"
+        },
+        "sidecar_exists": true,
+        "configure_calls_after_failure": 0
+      },
+      "status": "fail",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "edgar-schedule-save-readback",
+      "expected": "enabled/time/weekdays match API, disk and configure args",
+      "observed": {
+        "before": {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "03:00",
+            "next_run": null
+          }
+        },
+        "save": {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": true,
+            "time": "04:23"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        "yaml": {
+          "enabled": true,
+          "time": "04:23"
+        },
+        "configure": {
+          "scheduler": "edgar",
+          "args": [
+            true,
+            "04:23"
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "edgar-schedule-invalid-rollback",
+      "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+      "observed": {
+        "invalid": {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "edgar-schedule-failed-save-rollback",
+      "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+      "observed": {
+        "failed": {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        "disk": {
+          "enabled": true,
+          "time": "04:23"
+        },
+        "sidecar_exists": true,
+        "configure_calls_after_failure": 0
+      },
+      "status": "fail",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "sp500-schedule-save-readback",
+      "expected": "enabled/time/weekdays match API, disk and configure args",
+      "observed": {
+        "before": {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "04:00",
+            "next_run": null
+          }
+        },
+        "save": {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": true,
+            "time": "16:41"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        "yaml": {
+          "enabled": true,
+          "time": "16:41"
+        },
+        "configure": {
+          "scheduler": "sp500",
+          "args": [
+            true,
+            "16:41"
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "sp500-schedule-invalid-rollback",
+      "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+      "observed": {
+        "invalid": {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "sp500-schedule-failed-save-rollback",
+      "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+      "observed": {
+        "failed": {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        "disk": {
+          "enabled": true,
+          "time": "16:41"
+        },
+        "sidecar_exists": true,
+        "configure_calls_after_failure": 0
+      },
+      "status": "fail",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "tuning-schedule-save-readback",
+      "expected": "enabled/time/weekdays match API, disk and configure args",
+      "observed": {
+        "before": {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "05:00",
+            "days_of_week": [
+              5
+            ],
+            "next_run": null
+          }
+        },
+        "save": {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        "yaml": {
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "enabled": true,
+          "time": "05:37"
+        },
+        "configure": {
+          "scheduler": "tuning",
+          "args": [
+            true,
+            "05:37",
+            [
+              0,
+              2,
+              5
+            ]
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "tuning-schedule-invalid-rollback",
+      "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+      "observed": {
+        "invalid": {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        }
+      },
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "tuning-days-invalid-rollback",
+      "expected": "empty/out-of-range weekdays rejected without mutation",
+      "observed": [
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": []
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              -1
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              7
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        }
+      ],
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "tuning-schedule-failed-save-rollback",
+      "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+      "observed": {
+        "failed": {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        "read": {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        "disk": {
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "enabled": true,
+          "time": "05:37"
+        },
+        "sidecar_exists": true,
+        "configure_calls_after_failure": 0
+      },
+      "status": "fail",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "notifications-ui-save",
+      "expected": "UI fields become POST and readback; write-only inputs cleared; no sends",
+      "observed": {
+        "before": {
+          "gmail": {
+            "enabled": false,
+            "to": "",
+            "smtp_user": ""
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": ""
+          }
+        },
+        "after": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": true,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "requests": [
+          {
+            "path": "/settings/notifications",
+            "method": "POST",
+            "body": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid",
+                "smtp_password": "[redacted fake secret]"
+              },
+              "telegram": {
+                "enabled": true,
+                "bot_token": "[redacted fake secret]",
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "response": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid"
+              },
+              "telegram": {
+                "enabled": true,
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "status": 200
+          }
+        ],
+        "password": "",
+        "token": ""
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "notifications-ui-failed-save",
+      "expected": "500 shown and stored mock config unchanged",
+      "observed": {
+        "visible": "changed@audit.invalid",
+        "server": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": true,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "requests": [
+          {
+            "path": "/settings/notifications",
+            "method": "POST",
+            "body": {
+              "gmail": {
+                "enabled": true,
+                "to": "changed@audit.invalid",
+                "smtp_user": "fixture@audit.invalid",
+                "smtp_password": null
+              },
+              "telegram": {
+                "enabled": true,
+                "bot_token": null,
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "notifications-ui-remount-readback",
+      "expected": "remount rehydrates last successful config with blank secrets",
+      "observed": {
+        "to": "sink@audit.invalid",
+        "enabled": "true"
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "ingestion-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "02:00",
+            "next_run": null
+          },
+          "visibleTime": "02:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          },
+          "visibleTime": "01:17",
+          "requests": [
+            {
+              "path": "/api/data/ingest/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "01:17"
+              },
+              "response": {
+                "enabled": true,
+                "time": "01:17",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "ingestion-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "01:17",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/ingest/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "ingestion-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "01:17",
+        "enabled": "true"
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "edgar-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "03:00",
+            "next_run": null
+          },
+          "visibleTime": "03:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          },
+          "visibleTime": "04:23",
+          "requests": [
+            {
+              "path": "/api/data/edgar/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "04:23"
+              },
+              "response": {
+                "enabled": true,
+                "time": "04:23",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "edgar-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "04:23",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/edgar/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "edgar-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "04:23",
+        "enabled": "true"
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "sp500-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "04:00",
+            "next_run": null
+          },
+          "visibleTime": "04:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          },
+          "visibleTime": "16:41",
+          "requests": [
+            {
+              "path": "/api/data/sp500/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "16:41"
+              },
+              "response": {
+                "enabled": true,
+                "time": "16:41",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "sp500-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "16:41",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/sp500/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "sp500-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "16:41",
+        "enabled": "true"
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "tuning-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "05:00",
+            "days_of_week": [
+              5
+            ],
+            "next_run": null
+          },
+          "visibleTime": "05:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          },
+          "visibleTime": "05:37",
+          "requests": [
+            {
+              "path": "/api/strategy-tuning/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ]
+              },
+              "response": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "tuning-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "05:37",
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/strategy-tuning/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59",
+              "days_of_week": [
+                0,
+                2,
+                5
+              ]
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "tuning-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "05:37",
+        "enabled": "true"
+      },
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "families-ui-no-side-effects",
+      "expected": "no send/probe/trigger/job/adopt endpoint called",
+      "observed": [
+        {
+          "path": "/settings/notifications",
+          "method": "POST",
+          "body": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": "[redacted fake secret]"
+            },
+            "telegram": {
+              "enabled": true,
+              "bot_token": "[redacted fake secret]",
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": true,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "status": 200
+        },
+        {
+          "path": "/settings/notifications",
+          "method": "POST",
+          "body": {
+            "gmail": {
+              "enabled": true,
+              "to": "changed@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": null
+            },
+            "telegram": {
+              "enabled": true,
+              "bot_token": null,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/ingest/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "01:17"
+          },
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/ingest/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/edgar/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "04:23"
+          },
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/edgar/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/sp500/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "16:41"
+          },
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/sp500/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/strategy-tuning/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/strategy-tuning/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        }
+      ],
+      "status": "pass",
+      "evidence": "families-ui-output.json"
+    },
+    {
+      "id": "persistence-restart_readback_identical",
+      "expected": true,
+      "observed": true,
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "persistence-restart_hashes_identical",
+      "expected": true,
+      "observed": true,
+      "status": "pass",
+      "evidence": "persistence-output.json"
+    },
+    {
+      "id": "families-restart_hashes_identical",
+      "expected": true,
+      "observed": true,
+      "status": "pass",
+      "evidence": "families-output.json"
+    },
+    {
+      "id": "families-restart_api_identical",
+      "expected": true,
+      "observed": false,
+      "status": "fail",
+      "evidence": "families-output.json"
+    }
+  ],
+  "not_run_here": [
+    {
+      "id": "appearance-theme-sync",
+      "reason": "Theme interaction/cross-tab sync not run in settings harness",
+      "status": "not_run"
+    },
+    {
+      "id": "scan-consumer-trace",
+      "reason": "Complete request/consumer trace owned by controls helper",
+      "status": "not_run"
+    },
+    {
+      "id": "iv-error-reset",
+      "reason": "IV loading/error/Reset runtime not run",
+      "status": "not_run"
+    },
+    {
+      "id": "timezone-load-error",
+      "reason": "Initial timezone GET error not explicitly exercised",
+      "status": "not_run"
+    },
+    {
+      "id": "scheduled-row-runtime",
+      "reason": "Fixed/loop schedule conditional row runtime owned by controls helper",
+      "status": "not_run"
+    },
+    {
+      "id": "strategy-other-boundaries",
+      "reason": "Strategy ranges beyond proven zero and clear not run",
+      "status": "not_run"
+    },
+    {
+      "id": "broker-save-failure",
+      "reason": "Credential save/failure/probes handed to lane F; no credentials sent",
+      "status": "not_run"
+    },
+    {
+      "id": "risk-enforcement",
+      "reason": "Risk arithmetic/enforcement owned by F; no order submitted",
+      "status": "not_run"
+    },
+    {
+      "id": "regime-computation",
+      "reason": "Regime numbers/gates owned by regime helper",
+      "status": "not_run"
+    },
+    {
+      "id": "notifications-delivery",
+      "reason": "Send/test endpoints intentionally never invoked; G owns dispatch",
+      "status": "not_run"
+    },
+    {
+      "id": "data-job-provider",
+      "reason": "Ingestion/EDGAR/SP500 job/provider computation not run; H owns",
+      "status": "not_run"
+    },
+    {
+      "id": "tuning-job-proposals",
+      "reason": "Optimizer/job/proposal/adoption runtime not run; D owns",
+      "status": "not_run"
+    },
+    {
+      "id": "confighealth-nonclean",
+      "reason": "ConfigHealth error/stale/warning/unknown/multiworker runtime not run",
+      "status": "not_run"
+    },
+    {
+      "id": "request-unmount-cancel",
+      "reason": "Backend in-flight unmount/cancellation not run",
+      "status": "not_run"
+    },
+    {
+      "id": "real-scheduler",
+      "reason": "Scheduler configure recorded with stubs; timezone/next-run/actual execution not certified",
+      "status": "not_run"
+    },
+    {
+      "id": "browser-process-restart",
+      "reason": "Fresh browser-process storage recovery not run; same-origin reload/remount only",
+      "status": "not_run"
+    },
+    {
+      "id": "multiworker-concurrent-settings",
+      "reason": "Multiworker and concurrent-writer behavior not run",
+      "status": "not_run"
+    },
+    {
+      "id": "legacy-malformed-schedule",
+      "reason": "Legacy/malformed YAML loading not run",
+      "status": "not_run"
+    }
+  ],
+  "not_applicable": [
+    {
+      "id": "cancel-local-setter",
+      "reason": "No cancellation control exists for synchronous local setters/native edits",
+      "status": "N/A"
+    },
+    {
+      "id": "locked-live-broker",
+      "reason": "Locked IBKR/Alpaca/Tastytrade live forms offer no save path",
+      "status": "N/A"
+    },
+    {
+      "id": "intraday-hmm-settings",
+      "reason": "Intraday HMM fixed parameters have no Settings control",
+      "status": "N/A"
+    }
+  ],
+  "totals": {
+    "pass": 51,
+    "fail": 10,
+    "not_run_here": 18,
+    "not_applicable": 3
+  }
+}

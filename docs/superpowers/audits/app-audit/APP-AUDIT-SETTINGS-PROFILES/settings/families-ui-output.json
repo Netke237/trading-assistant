@@ -1,0 +1,1287 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "boundary": "ALL API MOCKED",
+  "requests": [
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/config/health",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/stock-scan/last-run",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "gmail": {
+          "enabled": false,
+          "to": "",
+          "smtp_user": ""
+        },
+        "telegram": {
+          "enabled": false,
+          "chat_id": ""
+        }
+      },
+      "status": 200
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "gmail": {
+          "enabled": false,
+          "to": "",
+          "smtp_user": ""
+        },
+        "telegram": {
+          "enabled": false,
+          "chat_id": ""
+        }
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/watchlist",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/portfolio",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/data-sources",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "POST",
+      "body": {
+        "gmail": {
+          "enabled": true,
+          "to": "sink@audit.invalid",
+          "smtp_user": "fixture@audit.invalid",
+          "smtp_password": "[redacted fake secret]"
+        },
+        "telegram": {
+          "enabled": true,
+          "bot_token": "[redacted fake secret]",
+          "chat_id": "FAKE-AUDIT-CHAT"
+        }
+      },
+      "response": {
+        "gmail": {
+          "enabled": true,
+          "to": "sink@audit.invalid",
+          "smtp_user": "fixture@audit.invalid"
+        },
+        "telegram": {
+          "enabled": true,
+          "chat_id": "FAKE-AUDIT-CHAT"
+        }
+      },
+      "status": 200
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "POST",
+      "body": {
+        "gmail": {
+          "enabled": true,
+          "to": "changed@audit.invalid",
+          "smtp_user": "fixture@audit.invalid",
+          "smtp_password": null
+        },
+        "telegram": {
+          "enabled": true,
+          "bot_token": null,
+          "chat_id": "FAKE-AUDIT-CHAT"
+        }
+      },
+      "response": {
+        "detail": "injected mock failure"
+      },
+      "status": 500
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "gmail": {
+          "enabled": true,
+          "to": "sink@audit.invalid",
+          "smtp_user": "fixture@audit.invalid"
+        },
+        "telegram": {
+          "enabled": true,
+          "chat_id": "FAKE-AUDIT-CHAT"
+        }
+      },
+      "status": 200
+    },
+    {
+      "path": "/settings/history-retention",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/settings/notifications",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "gmail": {
+          "enabled": true,
+          "to": "sink@audit.invalid",
+          "smtp_user": "fixture@audit.invalid"
+        },
+        "telegram": {
+          "enabled": true,
+          "chat_id": "FAKE-AUDIT-CHAT"
+        }
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "03:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "02:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "03:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "02:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "01:17"
+      },
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "22:59"
+      },
+      "response": {
+        "detail": "injected mock failure"
+      },
+      "status": 500
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "03:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "03:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "04:23"
+      },
+      "response": {
+        "enabled": true,
+        "time": "04:23",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "22:59"
+      },
+      "response": {
+        "detail": "injected mock failure"
+      },
+      "status": 500
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "04:23",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "04:23",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "04:00",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "16:41"
+      },
+      "response": {
+        "enabled": true,
+        "time": "16:41",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "22:59"
+      },
+      "response": {
+        "detail": "injected mock failure"
+      },
+      "status": 500
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "04:23",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "16:41",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/edgar/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "04:23",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/sp500/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "16:41",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/data/ingest/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "01:17",
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "05:00",
+        "days_of_week": [
+          5
+        ],
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": false,
+        "time": "05:00",
+        "days_of_week": [
+          5
+        ],
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "05:37",
+        "days_of_week": [
+          0,
+          2,
+          5
+        ]
+      },
+      "response": {
+        "enabled": true,
+        "time": "05:37",
+        "days_of_week": [
+          0,
+          2,
+          5
+        ],
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "POST",
+      "body": {
+        "enabled": true,
+        "time": "22:59",
+        "days_of_week": [
+          0,
+          2,
+          5
+        ]
+      },
+      "response": {
+        "detail": "injected mock failure"
+      },
+      "status": 500
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "05:37",
+        "days_of_week": [
+          0,
+          2,
+          5
+        ],
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "path": "/api/strategy-tuning/schedule",
+      "method": "GET",
+      "body": null,
+      "response": {
+        "enabled": true,
+        "time": "05:37",
+        "days_of_week": [
+          0,
+          2,
+          5
+        ],
+        "next_run": null
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/strategy-tuning/jobs",
+      "method": "GET",
+      "body": null
+    }
+  ],
+  "checks": [
+    {
+      "id": "notifications-ui-save",
+      "expected": "UI fields become POST and readback; write-only inputs cleared; no sends",
+      "observed": {
+        "before": {
+          "gmail": {
+            "enabled": false,
+            "to": "",
+            "smtp_user": ""
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": ""
+          }
+        },
+        "after": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": true,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "requests": [
+          {
+            "path": "/settings/notifications",
+            "method": "POST",
+            "body": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid",
+                "smtp_password": "[redacted fake secret]"
+              },
+              "telegram": {
+                "enabled": true,
+                "bot_token": "[redacted fake secret]",
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "response": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid"
+              },
+              "telegram": {
+                "enabled": true,
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "status": 200
+          }
+        ],
+        "password": "",
+        "token": ""
+      },
+      "status": "pass"
+    },
+    {
+      "id": "notifications-ui-failed-save",
+      "expected": "500 shown and stored mock config unchanged",
+      "observed": {
+        "visible": "changed@audit.invalid",
+        "server": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": true,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "requests": [
+          {
+            "path": "/settings/notifications",
+            "method": "POST",
+            "body": {
+              "gmail": {
+                "enabled": true,
+                "to": "changed@audit.invalid",
+                "smtp_user": "fixture@audit.invalid",
+                "smtp_password": null
+              },
+              "telegram": {
+                "enabled": true,
+                "bot_token": null,
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass"
+    },
+    {
+      "id": "notifications-ui-remount-readback",
+      "expected": "remount rehydrates last successful config with blank secrets",
+      "observed": {
+        "to": "sink@audit.invalid",
+        "enabled": "true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "ingestion-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "02:00",
+            "next_run": null
+          },
+          "visibleTime": "02:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          },
+          "visibleTime": "01:17",
+          "requests": [
+            {
+              "path": "/api/data/ingest/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "01:17"
+              },
+              "response": {
+                "enabled": true,
+                "time": "01:17",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "ingestion-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "01:17",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/ingest/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass"
+    },
+    {
+      "id": "ingestion-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "01:17",
+        "enabled": "true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "edgar-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "03:00",
+            "next_run": null
+          },
+          "visibleTime": "03:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          },
+          "visibleTime": "04:23",
+          "requests": [
+            {
+              "path": "/api/data/edgar/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "04:23"
+              },
+              "response": {
+                "enabled": true,
+                "time": "04:23",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "edgar-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "04:23",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/edgar/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass"
+    },
+    {
+      "id": "edgar-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "04:23",
+        "enabled": "true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "sp500-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "04:00",
+            "next_run": null
+          },
+          "visibleTime": "04:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          },
+          "visibleTime": "16:41",
+          "requests": [
+            {
+              "path": "/api/data/sp500/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "16:41"
+              },
+              "response": {
+                "enabled": true,
+                "time": "16:41",
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "sp500-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "16:41",
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/data/sp500/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59"
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass"
+    },
+    {
+      "id": "sp500-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "16:41",
+        "enabled": "true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "tuning-schedule-ui-save",
+      "expected": "enabled/time and tuning weekdays flow to save payload",
+      "observed": {
+        "before": {
+          "server": {
+            "enabled": false,
+            "time": "05:00",
+            "days_of_week": [
+              5
+            ],
+            "next_run": null
+          },
+          "visibleTime": "05:00",
+          "disabled": true,
+          "enabled": "false"
+        },
+        "after": {
+          "server": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          },
+          "visibleTime": "05:37",
+          "requests": [
+            {
+              "path": "/api/strategy-tuning/schedule",
+              "method": "POST",
+              "body": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ]
+              },
+              "response": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              },
+              "status": 200
+            }
+          ]
+        }
+      },
+      "status": "pass"
+    },
+    {
+      "id": "tuning-schedule-ui-failed-save",
+      "expected": "failed save visible and mock backend retains prior successful time",
+      "observed": {
+        "visibleTime": "22:59",
+        "server": {
+          "enabled": true,
+          "time": "05:37",
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "next_run": null
+        },
+        "requests": [
+          {
+            "path": "/api/strategy-tuning/schedule",
+            "method": "POST",
+            "body": {
+              "enabled": true,
+              "time": "22:59",
+              "days_of_week": [
+                0,
+                2,
+                5
+              ]
+            },
+            "response": {
+              "detail": "injected mock failure"
+            },
+            "status": 500
+          }
+        ]
+      },
+      "status": "pass"
+    },
+    {
+      "id": "tuning-schedule-ui-remount-readback",
+      "expected": "remount rehydrates saved schedule",
+      "observed": {
+        "visibleTime": "05:37",
+        "enabled": "true"
+      },
+      "status": "pass"
+    },
+    {
+      "id": "families-ui-no-side-effects",
+      "expected": "no send/probe/trigger/job/adopt endpoint called",
+      "observed": [
+        {
+          "path": "/settings/notifications",
+          "method": "POST",
+          "body": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": "[redacted fake secret]"
+            },
+            "telegram": {
+              "enabled": true,
+              "bot_token": "[redacted fake secret]",
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": true,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "status": 200
+        },
+        {
+          "path": "/settings/notifications",
+          "method": "POST",
+          "body": {
+            "gmail": {
+              "enabled": true,
+              "to": "changed@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": null
+            },
+            "telegram": {
+              "enabled": true,
+              "bot_token": null,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/ingest/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "01:17"
+          },
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/ingest/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/edgar/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "04:23"
+          },
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/edgar/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/data/sp500/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "16:41"
+          },
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/data/sp500/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59"
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        },
+        {
+          "path": "/api/strategy-tuning/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          },
+          "status": 200
+        },
+        {
+          "path": "/api/strategy-tuning/schedule",
+          "method": "POST",
+          "body": {
+            "enabled": true,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "response": {
+            "detail": "injected mock failure"
+          },
+          "status": 500
+        }
+      ],
+      "status": "pass"
+    }
+  ],
+  "pageErrors": [],
+  "unknownRequests": [],
+  "browser": "151.0.7922.173"
+}
