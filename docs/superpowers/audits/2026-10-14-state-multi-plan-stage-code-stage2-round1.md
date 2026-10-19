@@ -1,0 +1,7 @@
+# STATE-MULTI-PLAN-STAGE — authorized code stage2 round1 clean
+
+Fresh independent reviewer `/root/c3_followup_audit1` applied repository BMad adversarial skill and numeric/persistence gate. Scope63f731eb..86f316e9 C3-G1 source/test fixes and interactions, relevant validation/authorization/stage bookkeeping. Frozen reviewed head86f316e9d64ae22ee5702eb7633af1ae8702160a; sourcefixc6ae59d84d68f6709d82fd8f618e0f211ab2928a. User explicitly authorized this bounded stage, cap3, preserving all5 previous rounds. This is continuous round6, overall code4, new stage2 local1.
+
+Two-pass independent review:0gate findings. Entire normalized excluded tail is consumed; added punctuation, denial, condition, owner or range cannot disappear behind accepted prefix. Historical approval preserved. Independent Python3.11.16 focused460passed35.61s; synthetic real-git helper and actualCLI80cases:65unauthorizedexit1 with drift,15validexit0 including case/whitespace/historical controls. Fingerprints match recorded frozen checks; no reviewer edits. Fullbackend8858/9 andfrontend252/5254/typecheck were inspected as recorded verification, not independently rerun.
+
+All5 previous round records/counters/verdicts preserved. Original code stage3notclean remains recorded, superseded by explicit user-authorized bounded stage. No generic code-stage parser redesign or counter reset. Phase now built/audit_cleantrue; PR/exact-headCI pending, no merge claimed.

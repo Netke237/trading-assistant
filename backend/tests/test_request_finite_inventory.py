@@ -20,10 +20,11 @@ pydantic-core schema walked:
     a nested model without `allow_inf_nan=False` shows up here. The leaf is
     probed with nan, inf, -inf, the string "NaN" and the string "1e999". Not
     one leaf may accept any of them. Two self-tests pin this walker rule.
-  * untyped leaves (`Any`, or a `dict` whose values are `Any`) cannot be
-    validated by the schema at all; only T1's JSON guard reaches them. Their
-    set is pinned to the section 1 inventory (34), so a new one fails here and
-    gets a conscious decision instead of slipping in.
+  * untyped leaves (`Any`, or a `dict` whose values are `Any`) have no typed
+    value schema for this walker to probe. T1's JSON guard reaches their
+    numeric literals; some also have whole-model validation (section 1's
+    fresh-backtest extension). Their set is pinned to the section 1 inventory
+    (35), so a new one fails here and gets a conscious decision.
 
 There is no float-leaf allowlist. `StockExitPlanRequest.rr_ratios` was listed
 in section 1 as showing up in the schema walk (its float items sit under a
@@ -112,8 +113,11 @@ EXPECTED_UNTYPED: frozenset[tuple[str, str, str, str]] = frozenset({
      "body.<ScanScheduleEntryCreate>.resolved_request"),
     ("PUT /api/scan-schedule/{entry_id}", "body", "any-dict",
      "body.<ScanScheduleEntryCreate>.resolved_request"),
+    # Section 1 extension: exact per-strategy validation runs after the dict schema.
+    ("POST /api/backtest-artifacts/fresh", "body", "any-dict",
+     "request.<FreshBacktestRequest>.params"),
 })
-EXPECTED_UNTYPED_COUNT = 34
+EXPECTED_UNTYPED_COUNT = 35
 
 
 # ── the walk ──────────────────────────────────────────────────────────────────
@@ -357,8 +361,9 @@ def test_untyped_leaves_match_the_section_1_inventory(inventory):
     removed = sorted(EXPECTED_UNTYPED - found)
     assert not added and not removed and count == EXPECTED_UNTYPED_COUNT, (
         f"untyped request leaves changed (found {count}, inventory "
-        f"{EXPECTED_UNTYPED_COUNT}). Their values are never schema-validated; only "
-        f"the JSON guard (app/request_guards.py) reaches them. Decide deliberately "
+        f"{EXPECTED_UNTYPED_COUNT}). Their value schemas cannot be probed by this "
+        f"walker; numeric literals require the JSON guard (app/request_guards.py). "
+        f"Decide deliberately "
         f"-- type the field, or record it in {PLAN} section 1 and update "
         f"EXPECTED_UNTYPED here.\n  new: {added}\n  gone: {removed}"
     )

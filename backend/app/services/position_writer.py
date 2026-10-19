@@ -29,11 +29,16 @@ CREATE IS SERIALISED AGAINST CREATE (P1a). `_booking_lock()` is held from the
 in-lock duplicate re-check through the portfolio SELECT, the risk check, the
 commit, the IntegrityError handling and `refresh`, so two concurrent creates
 judge the exposure caps in turn and the second sees the first's committed row.
-The live fetches (up to 8s) stay OUTSIDE the lock. SCOPE: one process -- the
-backend runs a single uvicorn process, and the auto-trader singleton already
-assumes one -- and `create_position` against `create_position` only (card
-POST, basket POST, auto-trade booking). The drawer PATCH qty race and the
-/fire pre-broker snapshot race are NOT covered by it.
+The live fetches (up to 8s) stay OUTSIDE the lock. The read snapshot from the
+pre-fetch contract check is closed before those fetches, so a later wait on
+the exposure guard cannot keep a snapshot that hides the commit it waited
+for. Inside the lock that database guard is taken before the portfolio is
+read again. The guard, not this asyncio lock, also serialises PATCH, delete
+and close, and pending exposure holds count in the snapshot. SCOPE of the
+asyncio lock: one process -- the backend runs a single uvicorn process, and
+the auto-trader singleton already assumes one -- and `create_position`
+against `create_position` only. The /fire pre-broker snapshot race is not
+covered here.
 
 THIS FUNCTION COMMITS. It calls `db.commit()`, `db.rollback()` on a unique
 collision, and `db.refresh()`, so its caller must own the transaction or expect
@@ -59,7 +64,9 @@ exactly three things:
   - the exposure RESIZE: `qty` is `body.qty`, the quantity that was ordered.
     The books match the broker, not the gate;
   - the wrong-side-stop 422: warned instead of raised, and reported in
-    `WriteOutcome.wrong_side_stop` so the caller can page it (Q12). With gates
+    `WriteOutcome.wrong_side_stop` so the caller can page it (Q12). A
+    nonpositive user-set stop is stored as NULL and reports an unset warning
+    through that same outcome, even without a checking price. With gates
     off only, when the live underlying fetch returned nothing, the direction is
     checked against `scanStockPrice` instead (when > 0). GAPS, stated: no live
     price and no scanStockPrice means no check; and only USER-SET stops are
@@ -97,6 +104,9 @@ from app.models.portfolio import PortfolioPositionModel
 from app.schemas import PortfolioPositionCreate
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
+from app.services.portfolio_exposure import (
+    capacity_positions, load_holds, lock_exposure, restart_read, transfer_hold,
+)
 from app.services.portfolio_performance import _contract_multiplier
 from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.services.portfolio_risk import (
@@ -104,7 +114,6 @@ from app.services.portfolio_risk import (
     account_value, AccountValueError, RiskCheckResult,
     check_position_risk,
     premium_cap_basis,
-    PortfolioPosition as RiskPosition,
 )
 
 import logging as _logging
@@ -164,10 +173,11 @@ class WriteOutcome:
     it is that comment's own gloss, "the booking went past a cap", made true
     (O4 step 2, round 1).
 
-    `wrong_side_stop` (Q12) is the wrong-side detail when a user-set stop on
-    the wrong side of the underlying was booked with gates off (None
-    otherwise). With gates on that stop raises 422 instead. The caller must
-    put it in front of a human; a log line alone hides it.
+    `wrong_side_stop` (Q12) carries a stop warning when a user-set stop was
+    booked with gates off: a positive stop on the wrong side of the underlying,
+    or a nonpositive stop stored as NULL. With gates on the existing direction
+    check can raise 422 instead. The caller must put the warning in front of
+    a human; a log line alone hides it.
 
     `premium_stop_unapplied` (decision PREMIUM-STOP-FALLBACK-USER-FRACTION-
     2026-10-03) is set when a `premiumStopDollar` was sent and the stored
@@ -219,6 +229,27 @@ def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
     ]
 
 
+def _prepared_marker(body: PortfolioPositionCreate, stored_qty: int) -> dict:
+    """Gates-on save-before-order identity. Gates-off booking must not call this."""
+    from decimal import Decimal
+    if str(body.contract).endswith("|STOCK") and body.direction == "Bearish":
+        action = "SELL"
+    else:
+        action = "BUY"
+    limit = None
+    if body.orderType == "LMT" and body.orderLimitPrice is not None:
+        limit = format(Decimal(str(body.orderLimitPrice)).normalize(), "f")
+    return {
+        "instrument": body.contract,
+        "symbol": body.symbol,
+        "action": action,
+        "effect": "OPEN",
+        "quantity": int(stored_qty),
+        "order_type": body.orderType,
+        "limit": limit,
+    }
+
+
 async def create_position(
     body: PortfolioPositionCreate,
     db: AsyncSession,
@@ -230,6 +261,7 @@ async def create_position(
     stop_required: bool = False,
     cap_basis: Optional[float] = None,
     cap_basis_floor: Optional[float] = None,
+    exposure_attempt_id: Optional[str] = None,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring.
 
@@ -259,8 +291,11 @@ async def create_position(
     if exit_plan_cfg_loader is None:
         exit_plan_cfg_loader = load_exit_plan_cfg
 
-    # Duplicate contract check → 409
+    # Duplicate contract check → 409. Drop that read snapshot before the live
+    # fetches: holding it across the exposure-guard wait would miss the writer
+    # this transaction waited for.
     await _raise_if_contract_exists(db, body.contract)
+    await restart_read(db)
 
     # Two live fetches at save time, run CONCURRENTLY (one save = one round-trip
     # latency, not two sequential ones):
@@ -277,8 +312,10 @@ async def create_position(
     # gets persisted, not the frontend's (possibly stale) entryPrice — otherwise
     # a position could be approved against one price and stored at a materially
     # different one, silently bypassing the exposure gate.
-    adjusted_stop = body.stop
-    adjusted_structural_stop = body.structuralStop
+    # Generated nonpositive levels mean unset before AND after re-anchoring.
+    # Keep user main stops raw until the existing pre-trade direction check.
+    adjusted_stop = body.stop if body.stopIsUserSet else _floor_stop(body.stop)
+    adjusted_structural_stop = _floor_stop(body.structuralStop)
     adjusted_targets = list(body.targets or [])
     entry_stock_price = body.scanStockPrice
     entry_price = body.entryPrice
@@ -408,7 +445,17 @@ async def create_position(
     elif not enforce_pre_trade_gates and body.scanStockPrice and body.scanStockPrice > 0:
         check_price = body.scanStockPrice
         check_suffix = f" (against the scan price {body.scanStockPrice:.2f}; the live fetch failed)"
-    if body.stopIsUserSet and adjusted_stop is not None and check_price is not None:
+    if body.stopIsUserSet and adjusted_stop is not None and adjusted_stop <= 0 \
+            and not enforce_pre_trade_gates:
+        wrong_side_stop = (
+            f"A user-set stop of {adjusted_stop:.2f} is stored as unset: "
+            "no stop set; STOP_REACHED cannot fire."
+        )
+        _log.warning(
+            "create_position: %s -- booking %s anyway, pre-trade gates are off",
+            wrong_side_stop, body.contract,
+        )
+    elif body.stopIsUserSet and adjusted_stop is not None and check_price is not None:
         wrong_side = (
             adjusted_stop >= check_price if body.direction == "Bullish"
             else adjusted_stop <= check_price
@@ -454,25 +501,24 @@ async def create_position(
         )
 
     # CREATE vs CREATE (P1a): everything from here to `refresh` runs under the
-    # booking lock -- see the module docstring. The duplicate check is re-run
-    # FIRST under the lock, so a same-contract race answers 409, never 422.
+    # booking lock -- see the module docstring. The exposure guard is taken
+    # first, then the duplicate check is re-run, so a same-contract race
+    # answers 409, never 422.
     async with _booking_lock():
+        # Guard before the fresh snapshot. This contract check is the second
+        # and last one before commit (the collision test counts those two).
+        await lock_exposure(db)
+        db.expire_all()
         await _raise_if_contract_exists(db, body.contract)
 
-        # Fetch existing portfolio for risk check
         result = await db.execute(select(PortfolioPositionModel))
         db_positions = result.scalars().all()
-        portfolio = [
-            RiskPosition(
-                symbol=p.symbol,
-                contract_id=p.contract,
-                contracts=p.qty,
-                entry_premium=p.entry_price,
-                current_price=p.entry_price,
-                capital_at_risk=p.entry_price * p.qty * _contract_multiplier(p.contract),
-            )
-            for p in db_positions
-        ]
+        holds = await load_holds(db)
+        if exposure_attempt_id:
+            # This booking is the held order. Counting the hold beside it would
+            # treat one fill as two exposures; the transfer below keeps the hold.
+            holds = [hold for hold in holds if hold.attempt_id != exposure_attempt_id]
+        portfolio = capacity_positions(db_positions, holds)
 
         # Audit round 1, F1: the cap is judged at the price the order this
         # save precedes can FILL at, not at the mid stored as the entry. The
@@ -745,6 +791,11 @@ async def create_position(
                 datetime.now(timezone.utc) if resolved_tp_price is not None else None
             ),
         )
+        if enforce_pre_trade_gates and body.orderType:
+            position.prepared_order = _prepared_marker(body, stored_qty)
+        if exposure_attempt_id:
+            position.order_attempt_id = exposure_attempt_id
+            await transfer_hold(db, exposure_attempt_id, body.recId, stored_qty)
         db.add(position)
         try:
             await db.commit()

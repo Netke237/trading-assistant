@@ -1,8 +1,13 @@
-.container, .drawer { border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); padding: 16px; }
+.container, .drawer { min-width: 0; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); padding: 16px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .container h2, .drawer h2 { font-size: 16px; margin: 0; }
 .actions { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.container pre, .drawer pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
-.container details, .drawer details { margin-top: 12px; }
+.container pre, .drawer pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.container > details, .drawer > details { margin-top: 12px; }
+.container summary, .drawer summary { cursor: pointer; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.controls label { display: flex; align-items: center; gap: var(--space-2); }
+.controls select, .controls button, .actions button { padding: var(--space-1) var(--space-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-surface-2); }
+.controls button:hover, .actions button:hover { border-color: var(--accent); }
 .backdrop { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg-surface) 70%, transparent); z-index: 100; }
 .drawer { position: fixed; inset: 0 0 0 auto; width: min(680px, 95vw); overflow: auto; z-index: 101; }
 .terminal { border: 1px solid var(--border-subtle); padding: 12px; margin-top: 12px; }
@@ -11,3 +16,12 @@
 .terminal th, .terminal td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); }
 .counts { display: flex; flex-wrap: wrap; gap: 8px 16px; list-style: none; margin: 8px 0; padding: 0; font-size: 12px; }
 .values { list-style: none; margin: 0; padding: 0; }
+.legacy { border-top: 1px solid var(--border-subtle); padding-top: var(--space-3); }
+.metadata { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-4); margin: var(--space-3) 0; }
+.metadata dt { color: var(--text-secondary); }
+.metadata dd { margin: 0; }
+.raw { margin-top: var(--space-3); }
+.tableScroll { min-width: 0; overflow-x: auto; margin-top: var(--space-2); }
+.recordsTable { width: 100%; min-width: 480px; table-layout: fixed; border-collapse: collapse; }
+.recordsTable th, .recordsTable td { padding: var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+.recordsTable th { font-weight: 500; }

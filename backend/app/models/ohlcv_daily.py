@@ -42,7 +42,11 @@ class OhlcvDailyModel(OhlcvBase):
 
 
 class OhlcvHistoryStateModel(OhlcvBase):
-    """Observed provider floor and exact seam verification, committed with daily bars."""
+    """Observed provider floor and exact seam verification, committed with daily bars.
+
+    basis_provider set ('tiingo' / 'yfinance') = the symbol's whole retained series comes
+    from that one provider and is routed away from the Alpaca seam path; NULL = normal path.
+    """
     __tablename__ = "ohlcv_history_state"
 
     symbol = Column(String(10), primary_key=True)
@@ -53,6 +57,8 @@ class OhlcvHistoryStateModel(OhlcvBase):
     seam_date = Column(Date, nullable=True)
     old_source = Column(String(20), nullable=True)
     seam_signature = Column(String(64), nullable=True)
+    basis_provider = Column(String(20), nullable=True)
+    basis_rebuilt_at = Column(DateTime(timezone=True), nullable=True)
 
     def verified_seam(self) -> dict:
         return {"seam_date": self.seam_date, "old_source": self.old_source,

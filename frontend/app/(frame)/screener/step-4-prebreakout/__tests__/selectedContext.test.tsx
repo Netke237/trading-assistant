@@ -42,8 +42,8 @@ test('complete live explanation preserves zero, qualification, notes, weights, c
  const data={...analysis(),stock_explanation:evidence()};render(<SelectedStockScores context={{row:rows()[0],mode:'prebreakout',snapshot,reason:'',live:{request:{symbol:'AAA',direction:'Bearish',horizon:'Position',strategy:'pullback_ema',account_size:54321,risk_pct:.007},data,fetchedAt:'2026-10-14T01:00:00Z'}}}/>);
  expect(screen.getByText(/raw total 0.123456/)).toHaveTextContent('raw status REJECT');
  expect(screen.getAllByText('Weight 0 · Contribution 0')).toHaveLength(5);expect(screen.getByText('Unmeasured')).toBeInTheDocument();
- expect(screen.getByText('Scorer caps and safety explanations').parentElement).toHaveTextContent('Actual safety cap');
- expect(screen.getByText('Applied gate configuration').parentElement).toHaveTextContent('reject_below');
+ expect(screen.getByText('Raw data: Scorer caps and safety explanations').parentElement).toHaveTextContent('Actual safety cap');
+ expect(screen.getByText('Raw data: Applied gate configuration').parentElement).toHaveTextContent('reject_below');
  expect(screen.getByLabelText('trend component')).toHaveTextContent('nullable');
 });
 test.each([{symbol:'OTHER'},{direction:'Bullish'},{horizon:'Swing'},{score:10},{scoring_mode:'options'},{version:2}])('incompatible explanation is unavailable: %j',(change)=>{
@@ -56,7 +56,7 @@ test('original Pullback evidence wins over live data and fundamentals safety/zer
  const c={row:original,mode:'pullback' as const,snapshot:{...snapshot,scope:{...snapshot.scope,mode:'pullback' as const}},reason:'',live:{request:{symbol:'AAA',direction:'Bearish' as const,horizon:'Position' as const,strategy:'pullback_ema' as const},data:{...analysis(),stock_score:99},fetchedAt:'now'}};
  render(<><SelectedSentimentFundamentals context={c}/><SelectedStockScores context={c}/></>);
  expect(screen.getByText('Stock score: 0 / 100')).toBeInTheDocument();expect(screen.queryByText(/Stock score: 99/)).not.toBeInTheDocument();expect(screen.getByText('Historical signal confidence: 0')).toBeInTheDocument();
- expect(screen.getAllByText(/negative equity/).length).toBeGreaterThan(0);expect(screen.getAllByText(/Strong Bearish/).length).toBeGreaterThan(0);expect(screen.getByText('Complete original Pullback disclosure').parentElement).toHaveTextContent('Unvalidated original');
+ expect(screen.getAllByText(/negative equity/).length).toBeGreaterThan(0);expect(screen.getAllByText(/Strong Bearish/).length).toBeGreaterThan(0);expect(screen.getByText('Raw data: Complete original Pullback disclosure').parentElement).toHaveTextContent('Unvalidated original');
 });
 test('zero supplied risk is refused instead of defaulting to positive analysis sizing',async()=>{useRiskStore.setState({limits:{...useRiskStore.getState().limits,maxLossPerTradePct:0}});render(<Page/>);await act(async()=>select());expect(api.analyzeStock).not.toHaveBeenCalled();expect(screen.getAllByText(/positive account size and risk/).length).toBeGreaterThan(0);});
 test('missing original Pullback components stay unavailable alongside distinctly scoped live components and total',()=>{
@@ -73,10 +73,21 @@ test('late failure cannot erase a newer symbol success',async()=>{
 });
 test('live sentiment for another horizon is unavailable while same-symbol fundamentals remain supplied',async()=>{
  const data={...analysis(),sentiment:{horizon:'Swing',timeframe:'Daily',state:'Bear',p_stay:0,stability:'Low',regime_age_days:0,avg_regime_duration:0,conviction_pct:-30,conviction_label:'Strong Bearish',interpretation:'Wrong horizon',hmm_state:null,alignment:'Unavailable',insufficient_data:false},fundamentals:{score:0,quality_label:'Weak',risk_label:'High',growth_score:0,quality_score:0,risk_score:0,safety_flags:[],detail:{observed:0}}};(api.analyzeStock as jest.Mock).mockResolvedValue(data);
- render(<Page/>);await act(async()=>select());expect(screen.queryByText(/Wrong horizon/)).not.toBeInTheDocument();expect(screen.getByText(/Selected-stock sentiment unavailable/)).toBeInTheDocument();expect(screen.getByText('Complete fundamental evidence and safety flags').parentElement).toHaveTextContent('observed');
+ render(<Page/>);await act(async()=>select());expect(screen.queryByText(/Wrong horizon/)).not.toBeInTheDocument();expect(screen.getByText(/Selected-stock sentiment unavailable/)).toBeInTheDocument();expect(screen.getByText('Raw data: Complete fundamental evidence and safety flags').parentElement).toHaveTextContent('observed');
 });
 test.each([[25,'Supports selected direction'],[-25,'Opposes selected direction']] as const)('Bearish source conviction %s is already direction-aligned',(conviction_pct,label)=>{
  const data={...analysis(),sentiment:{horizon:'Position',timeframe:'Daily',state:'Bear',p_stay:0,stability:'Low',regime_age_days:0,avg_regime_duration:0,conviction_pct,conviction_label:'Source conviction',interpretation:'Direction-aligned source',hmm_state:null,alignment:'Unavailable',insufficient_data:false}};
  render(<SelectedSentimentFundamentals context={{row:rows()[0],mode:'prebreakout',snapshot,reason:'',live:{request:{symbol:'AAA',direction:'Bearish',horizon:'Position',strategy:'pullback_ema'},data,fetchedAt:'now'}}}/>);
  expect(screen.getByText(new RegExp(label))).toBeInTheDocument();expect(screen.getByText(new RegExp(`Source conviction.*${conviction_pct}%`))).toHaveTextContent(`${conviction_pct}% conviction`);
+});
+
+test('supplementary raw disclosure stays open for unchanged source and closes for new evidence',()=>{
+ const c={row:rows()[0],mode:'prebreakout' as const,snapshot,reason:'',live:{request:{symbol:'AAA',direction:'Bearish' as const,horizon:'Position' as const,strategy:'pullback_ema' as const},data:analysis(),fetchedAt:'now'}};
+ const view=render(<SelectedStockScores context={c}/>);
+ const summary=()=>screen.getByText('Raw data: Complete live score rules and qualification flags');
+ fireEvent.click(summary());expect(summary().closest('details')!.open).toBe(true);
+ view.rerender(<SelectedStockScores context={{...c}}/>);expect(summary().closest('details')!.open).toBe(true);
+ view.rerender(<SelectedStockScores context={{...c,live:{...c.live,data:{...c.live.data,earnings_days:7}}}}/>);
+ expect(summary().closest('details')!.open).toBe(false);
+ expect(JSON.parse(summary().closest('details')!.querySelector('pre')!.textContent!).earnings_days).toBe(7);
 });

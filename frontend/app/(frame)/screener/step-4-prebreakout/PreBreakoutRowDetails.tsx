@@ -4,6 +4,7 @@
 import type { PreBreakoutResultRow, FibPullbackResultRow, PositionCardData } from '@/types/stockDomain';
 import type { ScanSnapshot, ScanMode } from './scanThresholds';
 import { fmtThreshold } from './scanThresholds';
+import { RawEvidence } from './RawEvidence';
 import styles from './page.module.css';
 
 export function fibLabel(label: string | null | undefined): string {
@@ -14,9 +15,16 @@ export function confidenceWeights(row: PreBreakoutResultRow): string {
   if (!b) return 'Confidence weights unavailable (legacy evidence missing).';
   return Object.entries(b.weights).map(([key, value]) => `${key} ${fmtThreshold(value * 100, 0)}%`).join(', ');
 }
-const raw = (value: unknown): string => value === undefined ? 'Unavailable (absent)' : value === null ? 'Unavailable (null)' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+const raw = (value: unknown): string => value === undefined ? 'Unavailable (absent)' : value === null ? 'Unavailable (null)' : String(value);
 function Fields({values}: {values: object}) {
- return <dl className={styles.evidenceFields}>{Object.entries(values).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{raw(value)}</dd></div>)}</dl>;
+ const entries=Object.entries(values);
+ if (!entries.length) return <p>No fields recorded.</p>;
+ return <dl className={styles.evidenceFields}>{entries.map(([key,value])=><div key={key}>
+  <dt>{Array.isArray(values)?`Item ${Number(key)+1}`:key.replace(/_/g,' ')}</dt>
+  <dd>{value!==null && typeof value==='object'
+   ? <details className={styles.evidenceGroup}><summary>{Array.isArray(value)?`${value.length} items`:'View fields'}</summary><Fields values={value}/></details>
+   : raw(value)}</dd>
+ </div>)}</dl>;
 }
 function Swing({swing}: {swing: {low:number|null;high:number|null}|null|undefined}) {
  const price=(x:number|null|undefined)=>typeof x==='number' ? `$${x.toFixed(2)}` : 'Unavailable';
@@ -45,5 +53,6 @@ export function SelectedRowEvidence({row,mode,scanned}: {row: PreBreakoutResultR
  {fib && <><p>Fib confidence measures proximity only. It does not assert volatility, volume or trend qualification; the endpoint applies EMA filtering separately.</p><p>{scanned?.fib ? `Applied tolerance ${fmtThreshold(scanned.fib.fibTolerancePct*100,1)}%.` : 'Applied scan tolerance unavailable.'}</p><Swing swing={fib.fib_swing}/></>}
  {mode==='pullback' && <p>Stock score and historical signal confidence are separate returned values. Conditional status, qualification and evidence below belong to this Pullback scan.</p>}
  <h3>Complete returned evidence</h3><Fields values={row}/>
+ <RawEvidence value={row} label="complete returned evidence" />
  </details></section>;
 }

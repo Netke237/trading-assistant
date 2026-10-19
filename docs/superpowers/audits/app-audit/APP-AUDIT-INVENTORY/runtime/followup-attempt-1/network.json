@@ -1,0 +1,419 @@
+[
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/portfolio/performance",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/regime",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "79ec93fe1d973f39ab2fc4f5b93e65c6b704aa4e7ee6731c18c6ccc3039f1947",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/news",
+    "query_keys": [
+      "symbols"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "796e852f01ec68969dae18d37b192cbf3dab7e5561e2892e6c8fa7a2400c8a2e",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/alerts",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/events",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "setup",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/stock-scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/contracts",
+    "query_keys": [
+      "symbol",
+      "right",
+      "stock_score",
+      "direction",
+      "horizon",
+      "limit",
+      "max_price",
+      "hold_min_days",
+      "hold_max_days",
+      "contract_rules"
+    ],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4eade6224ca2eaa03b7c381b02015d65f10662aba986b1d90fb8869f918cdd74",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "options:confirmed-nested-chain",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/portfolio",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/config/health",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "59996aac9e367549ea0aa5be904c277762da37956a06822ad581647af481352b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "WEBSOCKET",
+    "path": "/_next/webpack-hmr",
+    "action": "closed-before-connect"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/scan/last",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/watchlist",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/data-sources",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/broker/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/broker/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/quote/stock",
+    "query_keys": [
+      "symbol"
+    ],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/quote/stock",
+    "query_keys": [
+      "symbol"
+    ],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "383d3e438936f1d47f347f83290b5575a1642372e5b2724c1619e636815a0ef7",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/stock-scan/last-run",
+    "query_keys": [],
+    "action": "mocked",
+    "status": 200,
+    "response_sha256": "1150d1d4ca004122c4365b49b1407edeb11f54346b7192c1ae33d4a4ff08bcfb",
+    "request_body_sha256": null
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/broker/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/broker/status",
+    "query_keys": [],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/quote/stock",
+    "query_keys": [
+      "symbol"
+    ],
+    "action": "blocked-unmatched"
+  },
+  {
+    "probe": "stocks:populated-position",
+    "method": "GET",
+    "path": "/api/quote/stock",
+    "query_keys": [
+      "symbol"
+    ],
+    "action": "blocked-unmatched"
+  }
+]

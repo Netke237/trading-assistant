@@ -188,10 +188,7 @@ def full_universe_recheck(result: CellResult, universe: UniverseData, config: di
     span = result.heldout_entry
     trade_set = set(trade_syms)
 
-    def fires(st: SymbolState, sig, start, stop, inclusive=False) -> int:
-        lo = bisect.bisect_left(st.dates, start)
-        hi = (bisect.bisect_right if inclusive else bisect.bisect_left)(st.dates, stop)
-        return sum(1 for t in range(lo, hi) if sig[t] is not None and st.allowed[t])
+    fires = wfc.count_fires
 
     for s in symbols:
         st = _state(s)
@@ -329,6 +326,9 @@ def cell_row(result: CellResult, recheck: Recheck, verdict: Verdict, config: dic
     c = result.cell
     return {
         "strategy": c.strategy, "direction": c.direction, "horizon": c.horizon,
+        "research_only": c.strategy in ("breakout_setup", "fibonacci_pullback"),
+        "fire_rate_basis": ("gated confirmed entry events" if c.strategy in
+                            ("breakout_setup", "fibonacci_pullback") else "gated strategy signals"),
         "final_params": result.final_params,
         "sample_oos_trades": result.oos[COST].n_trades,
         "sample_oos_symbols": result.oos[COST].n_symbols,
@@ -454,6 +454,10 @@ def header_lines(header: dict) -> list[str]:
         "and the history is mostly a bull market; results overstate what a point-in-time universe would show.",
         "- Annual window note: Annual tests 12 months < 2 x its 200-day hold (13.2 months), as decided; "
         "its held-out entry span is about 12 months - 214 days.",
+        "- breakout_setup / fibonacci_pullback are research only: fire rates count gated confirmed "
+        "entry events at setup AND trigger, never raw scanner setups. Their scanner UI has no "
+        "backtest, adoption, entry/exit integration or broker order bridge. Synthetic fixtures "
+        "validate machinery only; historical evidence requires historical data.",
         "- Nothing is written to `active:` (adoption is T2). Bearish cells are blocked (P0B).",
         "- adoption bar (full-universe numbers, cost per leg): OOS cluster-bootstrap CI lower bound > 0; "
         "held-out net expectancy > 0; pooled OOS trades >= min_oos_trades; symbols with an OOS trade >= "

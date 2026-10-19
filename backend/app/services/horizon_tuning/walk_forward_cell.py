@@ -266,6 +266,12 @@ def invalid_reason(strategy: str, direction: str, combo: dict) -> str | None:
             return f"min_confirmations {mc!r} outside 1..{len(variants)}"
     else:
         params = combo_params(strategy, direction, combo)
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_entries import setup_params
+        try:
+            setup_params(strategy, params)
+        except ValueError as exc:
+            return str(exc)
     eff = _signals.effective_params(strategy, params)
     if strategy == "ma_crossover":
         fn = se.ma_crossover_signal
@@ -298,6 +304,24 @@ class SymbolState:
         return cls(symbol, bars, bar_dates(bars),
                    [bool(m) and t >= first for t, m in enumerate(allowed_mask)],
                    normalize_direction(direction))
+
+
+def count_fires(state: SymbolState, sig, start: date, stop: date, inclusive: bool = False,
+                *, extra_allowed: list[bool] | None = None) -> int:
+    """Gated events: research entries require setup AND trigger in this span.
+
+    Shared by sample selection and full-universe evidence. Confirmation fires
+    are independent of holdings and need not become filled/closed trades.
+    """
+    from app.services.setup_entries import event_allowed
+    lo = bisect.bisect_left(state.dates, start)
+    hi = (bisect.bisect_right if inclusive else bisect.bisect_left)(state.dates, stop)
+    allowed = state.allowed if extra_allowed is None else [
+        a and b for a, b in zip(state.allowed, extra_allowed)]
+    end = stop + timedelta(days=1) if inclusive else stop
+    return sum(1 for t in range(lo, hi) if sig[t] is not None and
+               event_allowed(sig[t], t, state.dates, allowed=allowed,
+                             entry_start=start, entry_end=end))
 
 
 @dataclass
@@ -434,10 +458,7 @@ def _tune(cell, data, cfg, cal, folds, valid, states, _signal, costs, counts, ho
         hi = (bisect.bisect_right if inclusive else bisect.bisect_left)(cal_dates, stop)
         return max(0, hi - bisect.bisect_left(cal_dates, start))
 
-    def fires(st: SymbolState, sig, start: date, stop: date, inclusive: bool = False) -> int:
-        lo = bisect.bisect_left(st.dates, start)
-        hi = (bisect.bisect_right if inclusive else bisect.bisect_left)(st.dates, stop)
-        return sum(1 for t in range(lo, hi) if sig[t] is not None and st.allowed[t])
+    fires = count_fires
 
     def rate(fires_by_sector: dict[str, int], days: int) -> float:
         if days <= 0:

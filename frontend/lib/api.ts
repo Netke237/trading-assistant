@@ -1,3 +1,4 @@
+import type { BacktestArtifact, OriginalBacktestUnavailableReason, FreshBacktestConfiguration, FreshBacktestRequest, FreshBacktestResponse } from '@/types/backtest';
 import { useScanReportUpdates, type LatestScanReport, type ScanReport, type ScanReportCategory, type ScanReportMetadata } from './scanReports';
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
@@ -405,7 +406,34 @@ export interface LastStockScanRequest {
   request: StockScanRequestBody;
 }
 
+export class BacktestArtifactError extends Error {
+  constructor(public readonly reason: OriginalBacktestUnavailableReason, public readonly status: number) {
+    super(`Original backtest unavailable (${reason})`);
+    this.name = 'BacktestArtifactError';
+  }
+}
+
 export const api = {
+  getFreshBacktestConfiguration: (signal?: AbortSignal): Promise<FreshBacktestConfiguration> =>
+    fetch(`${BASE_URL}/api/backtest-artifacts/fresh/configuration`, {signal}).then(async res => {
+      if (!res.ok) throw new Error('Fresh configuration unavailable');
+      return res.json();
+    }),
+  runFreshBacktest: async (body: FreshBacktestRequest, signal?: AbortSignal): Promise<FreshBacktestResponse> => {
+    const res = await fetch(`${BASE_URL}/api/backtest-artifacts/fresh`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), signal,
+    });
+    if (!res.ok) throw new Error(res.status === 422 ? 'Configuration incomplete or invalid' : 'Fresh run failed');
+    return res.json();
+  },
+  getOriginalBacktest: async (artifactId: string, symbol: string, signal?: AbortSignal): Promise<BacktestArtifact> => {
+    const res = await fetch(`${BASE_URL}/api/backtest-artifacts/${encodeURIComponent(artifactId)}?symbol=${encodeURIComponent(symbol)}`, {signal});
+    if (!res.ok) {
+      const reason = res.status === 404 ? 'missing' : res.status === 410 ? 'expired' : res.status === 422 ? 'invalid_input' : res.status === 503 ? 'storage_unavailable' : 'failed';
+      throw new BacktestArtifactError(reason, res.status);
+    }
+    return res.json() as Promise<BacktestArtifact>;
+  },
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   /** Hard DELETE of one tracked row by rec_id (204; 404 when absent). A plain

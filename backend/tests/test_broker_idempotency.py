@@ -6,10 +6,29 @@ from fastapi.testclient import TestClient
 from app.data.ibkr_paper import OrderResult
 
 
+def _wipe_broker_attempts():
+    from app.database import engine
+    import sqlite3
+    if engine.url.get_backend_name() != "sqlite":
+        return
+    database = engine.url.database
+    if not database or database == ":memory:":
+        return
+    conn = sqlite3.connect(database, timeout=30)
+    try:
+        conn.execute("delete from broker_attempts")
+        conn.commit()
+    except sqlite3.OperationalError:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
 def _make_app():
     from app.routers.broker import router, _idempotency_cache, _idempotency_inflight
     _idempotency_cache.clear()     # tests must not leak state between runs
     _idempotency_inflight.clear()
+    _wipe_broker_attempts()
     app = FastAPI()
     app.include_router(router)
     return app
@@ -47,10 +66,8 @@ def test_duplicate_stock_order_within_window_is_deduped():
 
 
 def test_stale_duplicate_after_window_is_not_deduped():
-    """A duplicate submitted after the (short) dedup window has elapsed
-    represents a deliberate resubmit (e.g. scaling into a position) and must
-    NOT be silently absorbed — this is the false-positive bug an earlier
-    15s-window design had."""
+    """Time alone never authorizes another POST. A deliberate resubmit needs a
+    new explicit attempt id."""
     client = TestClient(_make_app())
     payload = {
         "broker": "ibkr_paper", "symbol": "AAPL", "action": "BUY", "effect": "OPEN",
@@ -61,11 +78,13 @@ def test_stale_duplicate_after_window_is_not_deduped():
                return_value=_mock_router("ORD1")) as build, \
          patch("app.routers.broker.time.monotonic", side_effect=lambda: fake_now[0]):
         first = client.post("/broker/stock-order", json=payload)
-        fake_now[0] += 5.0  # advance past the 3s window
+        fake_now[0] += 5.0  # advance past the old 3s window
         second = client.post("/broker/stock-order", json=payload)
+        third = client.post("/broker/stock-order", json={**payload, "attempt_id": "deliberate-resubmit"})
     assert first.json()["deduped"] is False
-    assert second.json()["deduped"] is False
-    assert build.call_count == 2, "a duplicate submitted after the window closes must not be deduped"
+    assert second.json()["deduped"] is True
+    assert third.json()["deduped"] is False
+    assert build.call_count == 2, "only an explicit new attempt id may dispatch again"
 
 
 def test_different_quantity_is_not_deduped():

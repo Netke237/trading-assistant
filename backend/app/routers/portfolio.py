@@ -1,4 +1,5 @@
 import asyncio
+import math
 import uuid
 from datetime import date, datetime, timezone
 from typing import Optional
@@ -19,7 +20,11 @@ from app.schemas import (
     ClosePositionRequest, ClosedPositionSchema,
     PerformanceResponse, PerformancePoint,
 )
-from app.services.portfolio_risk import account_value, AccountValueError, check_position_risk, orm_positions_to_risk, PortfolioPosition as RiskPosition
+from app.services.portfolio_exposure import (
+    capacity_positions, exposure_breach_warning, load_holds, lock_exposure,
+    restart_read, weighted_entry,
+)
+from app.services.portfolio_risk import account_value, AccountValueError, check_position_risk
 from app.services.portfolio_performance import (
     realized_pnl, bucket_realized_by_calendar, cumulative_curve, _contract_multiplier,
 )
@@ -44,6 +49,19 @@ _log = _logging.getLogger(__name__)
 # breached (referencePrice >= 0 is true for any real price).
 def _floor_stop(value: Optional[float]) -> Optional[float]:
     return value if value is not None and value > 0 else None
+
+
+def _positive_finite(value) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
+def _whole_qty(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 # ── Broker integration (NOT ACTIVE YET) ───────────────────────────────────────
@@ -212,13 +230,6 @@ async def update_position(
     body: PortfolioPositionUpdate,
     db: AsyncSession = Depends(get_db),
 ) -> PortfolioPositionSchema:
-    position = (await db.execute(
-        select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
-    )).scalar_one_or_none()
-    if position is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Position with rec_id '{rec_id}' not found.")
-
     # exclude_unset (not exclude_none) so a field the client never sent is left
     # alone, while `{"structuralStop": null}` still clears it — the drawer's
     # "0 means none" control relies on being able to null this back out.
@@ -242,16 +253,27 @@ async def update_position(
         if updates["activeTpMethod"] != "ladder" and _floor_stop(updates["resolvedTpPrice"]) is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                                 detail=f"activeTpMethod '{updates['activeTpMethod']}' needs a positive resolvedTpPrice.")
-    # Set only when the risk gate approved a qty increase at a SMALLER size
-    # than requested — mirrors POST /api/portfolio's resp.adjustedQty above,
-    # which exists so a caller is never silently shown a size the backend
-    # didn't actually persist.
+    # The pair check above writes nothing. Take the exposure guard, then
+    # re-read the row so quantity and entry are decided on the locked book.
+    await restart_read(db)
+    await lock_exposure(db)
+    db.expire_all()
+    position = (await db.execute(
+        select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
+    )).scalar_one_or_none()
+    if position is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Position with rec_id '{rec_id}' not found.")
+
+    # adjustedQty is set only for a legacy qty-only raise the gate resizes.
+    # A reported added fill stores the full quantity and leaves it unset.
     adjusted_qty: Optional[int] = None
+    exposure_breach: Optional[str] = None
     # A rejected qty must NOT block stop/structuralStop/targets from saving.
     # The frontend debounces edits per recId and merges whatever fields
     # changed within the same ~600ms window into one PATCH — a user who
     # tweaks Stop and then, moments later, types a Contracts value that fails
-    # the exposure gate would otherwise have BOTH edits silently dropped by a
+    # validation would otherwise have BOTH edits silently dropped by a
     # single early `raise`, with no indication the valid Stop edit was ever
     # lost. Instead: apply every other field unconditionally, commit, and
     # only raise for qty at the very end — so a qty rejection still reports
@@ -261,51 +283,92 @@ async def update_position(
 
     if "qty" in updates:
         qty = updates["qty"]
-        if qty is None or qty < 1:
+        if qty is None or not _whole_qty(qty) or qty < 1:
             qty_error = "qty must be an integer of at least 1."
         elif qty > position.qty:
-            # Increasing size is new risk, not a correction — re-run the same
-            # exposure gate POST /api/portfolio enforces at creation. A decrease
-            # only ever reduces exposure, so it skips this gate entirely and
-            # doesn't need portfolioValue at all.
-            try:
-                server_value = account_value()
-            except AccountValueError as exc:
-                qty_error = str(exc)
-            else:
-                others = (await db.execute(
-                    select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
-                )).scalars().all()
-                risk = check_position_risk(
-                    symbol=position.symbol,
-                    contract_id=position.contract,
-                    proposed_contracts=qty,
-                    entry_premium=position.entry_price,
-                    current_price=position.entry_price,
-                    portfolio=orm_positions_to_risk(others),
-                    portfolio_value=server_value,
-                )
-                if not risk.approved:
-                    qty_error = " ".join(risk.reasons)
-                elif risk.adjusted_size is not None and risk.adjusted_size <= position.qty:
-                    # STOCK-SENDS: an INCREASE must never save a smaller position.
-                    # The soft resize fits the cap below what is already held
-                    # (the cap or portfolio value moved since the row was
-                    # booked -- reachable for stocks now that they are judged at
-                    # their real share count), so the increase is refused and
-                    # the held qty stays.
-                    qty_error = (
-                        f"size_reduced_to_fit_exposure_limit: the position is already at or over "
-                        f"its exposure cap ({position.qty} held; the cap allows {risk.adjusted_size}). "
-                        f"Quantity not increased."
-                    )
+            # A reported fill sends a price or a base quantity. Price is
+            # checked before the base. A bad price or a stale base refuses the
+            # pair and leaves the stored quantity and entry alone. The fill
+            # itself is never resized to the cap.
+            price = updates.get("addedFillPrice")
+            reported_fill = "addedFillPrice" in updates or "expectedQty" in updates
+            if reported_fill and not _positive_finite(price):
+                qty_error = "added_fill_price_required"
+            elif reported_fill and (
+                "expectedQty" not in updates or not _whole_qty(updates.get("expectedQty"))
+            ):
+                qty_error = "expected_qty_required"
+            elif reported_fill and updates["expectedQty"] != position.qty:
+                qty_error = "stale_expected_qty"
+            elif reported_fill:
+                new_entry = weighted_entry(position.qty, position.entry_price, qty, float(price))
+                try:
+                    server_value = account_value()
+                except AccountValueError as exc:
+                    exposure_breach = f"exposure_breach: {exc}"
                 else:
-                    if risk.adjusted_size is not None:
-                        adjusted_qty = risk.adjusted_size
-                        qty = risk.adjusted_size
-                    position.qty = qty
+                    others = (await db.execute(
+                        select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
+                    )).scalars().all()
+                    holds = await load_holds(db)
+                    portfolio = capacity_positions(others, holds, cover_rows=[*others, position])
+                    risk = check_position_risk(
+                        symbol=position.symbol,
+                        contract_id=position.contract,
+                        proposed_contracts=qty,
+                        entry_premium=new_entry,
+                        current_price=new_entry,
+                        portfolio=portfolio,
+                        portfolio_value=server_value,
+                    )
+                    multiplier = _contract_multiplier(position.contract)
+                    combined = sum(p.capital_at_risk for p in portfolio) + new_entry * qty * multiplier
+                    exposure_breach = exposure_breach_warning(risk, combined=combined)
+                position.qty = qty
+                position.entry_price = new_entry
+            else:
+                # No fill was reported. The pre-T4 raise still resizes or
+                # refuses, and still saves the other fields in this PATCH.
+                try:
+                    server_value = account_value()
+                except AccountValueError as exc:
+                    qty_error = str(exc)
+                else:
+                    others = (await db.execute(
+                        select(PortfolioPositionModel).where(PortfolioPositionModel.id != position.id)
+                    )).scalars().all()
+                    holds = await load_holds(db)
+                    portfolio = capacity_positions(others, holds, cover_rows=[*others, position])
+                    risk = check_position_risk(
+                        symbol=position.symbol,
+                        contract_id=position.contract,
+                        proposed_contracts=qty,
+                        entry_premium=position.entry_price,
+                        current_price=position.entry_price,
+                        portfolio=portfolio,
+                        portfolio_value=server_value,
+                    )
+                    if not risk.approved:
+                        qty_error = " ".join(risk.reasons)
+                    elif risk.adjusted_size is not None and risk.adjusted_size <= position.qty:
+                        qty_error = (
+                            f"size_reduced_to_fit_exposure_limit: the position is already at or over "
+                            f"its exposure cap ({position.qty} held; the cap allows {risk.adjusted_size}). "
+                            f"Quantity not increased."
+                        )
+                    else:
+                        if risk.adjusted_size is not None:
+                            adjusted_qty = risk.adjusted_size
+                            qty = risk.adjusted_size
+                        position.qty = qty
         else:
-            position.qty = qty
+            # A decrease keeps the stored entry. A same-total retry does too,
+            # unless expectedQty names a base this lock no longer holds: that
+            # is the loser's stale fill, not a second average.
+            if "expectedQty" in updates and updates["expectedQty"] != position.qty:
+                qty_error = "stale_expected_qty"
+            else:
+                position.qty = qty
     if "stop" in updates:
         position.stop = _floor_stop(updates["stop"])
     if "structuralStop" in updates:
@@ -376,12 +439,16 @@ async def update_position(
             segments.append("premium_stop_below_one_cent")
             if adjusted_qty is not None:
                 segments.append(f"qty_saved_as_{adjusted_qty}")
+        if qty_error is None and exposure_breach:
+            segments.append(exposure_breach)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                             detail=" | ".join(segments))
 
     resp = PortfolioPositionSchema.from_orm_model(position)
     if adjusted_qty is not None:
         resp.adjustedQty = adjusted_qty
+    if exposure_breach:
+        resp.exposureBreach = exposure_breach
     return resp
 
 
@@ -398,6 +465,9 @@ async def delete_all_history_early(db: AsyncSession = Depends(get_db)) -> None:
 
 @router.delete('/portfolio/{rec_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_position(rec_id: str, db: AsyncSession = Depends(get_db)) -> None:
+    await restart_read(db)
+    await lock_exposure(db)
+    db.expire_all()
     result = await db.execute(
         select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
     )
@@ -425,6 +495,30 @@ async def close_position(
     body: ClosePositionRequest,
     db: AsyncSession = Depends(get_db),
 ) -> ClosedPositionSchema:
+    preview = (await db.execute(
+        select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
+    )).scalar_one_or_none()
+    if preview is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Position with rec_id '{rec_id}' not found.")
+    contract = preview.contract
+    # Release the preview snapshot before the quote, then lock and re-read.
+    # Daily-loss locking happens inside record_realized_loss, after this guard.
+    await restart_read(db)
+
+    exit_price = body.exitPrice
+    if exit_price is None:
+        async with httpx.AsyncClient(timeout=10) as client:
+            quote = await fetch_contract_quote_async(client, contract)
+        exit_price = (quote or {}).get("price") if isinstance(quote, dict) else None
+        if not exit_price:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Could not fetch a live exit price — please enter one.",
+            )
+
+    await lock_exposure(db)
+    db.expire_all()
     position = (await db.execute(
         select(PortfolioPositionModel).where(PortfolioPositionModel.rec_id == rec_id)
     )).scalar_one_or_none()
@@ -435,18 +529,6 @@ async def close_position(
     # qty to close: default = full; clamp 1..position.qty
     qty_to_close = body.qtyToClose if body.qtyToClose is not None else position.qty
     qty_to_close = max(1, min(int(qty_to_close), position.qty))
-
-    # exit price: explicit, else fetch the live quote, else 422
-    exit_price = body.exitPrice
-    if exit_price is None:
-        async with httpx.AsyncClient(timeout=10) as client:
-            quote = await fetch_contract_quote_async(client, position.contract)
-        exit_price = (quote or {}).get("price") if isinstance(quote, dict) else None
-        if not exit_price:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Could not fetch a live exit price — please enter one.",
-            )
 
     exit_date = body.exitDate or date.today().isoformat()
     dollar, pct = realized_pnl(position.entry_price, float(exit_price), qty_to_close, position.contract)

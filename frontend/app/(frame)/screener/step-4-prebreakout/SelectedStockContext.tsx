@@ -11,6 +11,7 @@ import {safetyFlagTooltip} from '@/lib/statusTooltips';
 import {toneForStatus} from '@/lib/status';
 import type {ScanSnapshot, ScanMode} from './scanThresholds';
 import styles from './page.module.css';
+import { RawEvidence } from './RawEvidence';
 
 type Row = PositionCardData | PreBreakoutResultRow | FibPullbackResultRow;
 type Live = {request: AnalyzeStockRequest; data: StockAnalysis; fetchedAt: string};
@@ -19,7 +20,7 @@ function supportedFundamentals(f: StockAnalysis['fundamentals']): f is Fundament
 }
 interface Context {row: Row | null; snapshot?: ScanSnapshot; mode: ScanMode; live: Live | null; reason: string;}
 const display = (v: unknown): string => v == null ? 'Unavailable' : typeof v === 'object' ? JSON.stringify(v) : String(v);
-function Raw({value, label}: {value: unknown; label: string}) {return <details className={styles.contextDisclosure}><summary>{label}</summary><pre>{JSON.stringify(value, null, 2) ?? 'Unavailable'}</pre></details>;}
+function Raw({value, label}: {value: unknown; label: string}) {return <RawEvidence value={value} label={label}/>;}
 function horizonFor(label?: string): AnalyzeStockRequest['horizon'] | null {
  if (!label) return null;
  if (/^intraday\b/i.test(label)) return 'Intraday';
@@ -93,6 +94,7 @@ export function SelectedStockScores({context:c, supplementary=false}: {context:C
  const horizon=original?horizonFor(c.snapshot?.scope.horizon):c.live?.request.horizon??null;
  const e=source?compatibleExplanation(source.stock_explanation,source.symbol,source.direction,horizon,source.stock_score):null;
  const signalKnown=original || c.live?.data.strategy?.strategy==='pullback_ema';
+ const completeDisclosure=useMemo(()=>original??(source?{rules:c.live?.data.rules,gate_flags:source.gate_flags,backtest:signalKnown?source.backtest:null,confidence:signalKnown?source.confidence:null,confidence_text:signalKnown?source.confidence_text:null,earnings_days:source.earnings_days,earnings_veto:source.earnings_veto}:null),[original,source,signalKnown,c.live?.data.rules]);
  return <section role="region" aria-label={supplementary?"Supplementary live stock score context":"Selected stock score context"} className={styles.contextSection}>
   <Text size={14} weight={500}>{c.row?.symbol??'Selected stock'} · {supplementary?'Supplementary live stock score context':'Stock score context'}</Text>
   {original?<Text size={11} tone="secondary">Original Pullback PositionCardData evidence · {original.direction} · {c.snapshot?.scope.horizon??'Captured horizon unavailable'}</Text>:c.live?<LiveScope live={c.live}/>:<Text size={12} tone="dim">{c.reason}</Text>}
@@ -106,7 +108,7 @@ export function SelectedStockScores({context:c, supplementary=false}: {context:C
    const component=e?.components[key];return <div className={styles.contextCard} key={key} aria-label={`${key==='vol'?'Volatility':key} component`}><Text size={13} weight={500}>{key==='vol'?'Volatility':key[0].toUpperCase()+key.slice(1)}</Text>{component?<><Data size={18}>{component.measured?component.raw_score:'Unmeasured'}</Data><Text size={11}>Status {component.status} · Raw score {component.raw_score} · Measured {String(component.measured)}</Text><Text size={11}>Weight {component.weight} · Contribution {component.contribution}</Text><Raw label={`${key} notes, observations and configuration`} value={component}/></>:<Text size={12} tone="dim">Unavailable — no compatible component evidence.</Text>}</div>;
   })}</div>
   {e&&<><Raw label="Scorer caps and safety explanations" value={e.caps}/><Raw label="Applied gate configuration" value={e.gate_config}/><Raw label="Complete authoritative score evidence" value={e}/></>}
-  {source&&<Raw label={original?'Complete original Pullback disclosure':'Complete live score rules and qualification flags'} value={original??{rules:c.live?.data.rules,gate_flags:source.gate_flags,backtest:signalKnown?source.backtest:null,confidence:signalKnown?source.confidence:null,confidence_text:signalKnown?source.confidence_text:null,earnings_days:source.earnings_days,earnings_veto:source.earnings_veto}}/>}
+  {source&&<Raw label={original?'Complete original Pullback disclosure':'Complete live score rules and qualification flags'} value={completeDisclosure}/>}
   {original && !e && c.live && <SelectedStockScores context={c} supplementary/>}
  </section>;
 }

@@ -1,0 +1,120 @@
+{
+  "source_baseline": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "coverage_status": "incremental runtime evidence; final Task3 reconciliation and independent audit required",
+  "complete": false,
+  "counts": {
+    "observations": 240,
+    "observed": 230,
+    "unavailable_attempts": 10,
+    "route_entries": 45,
+    "route_entries_with_evidence": 45,
+    "explicit_surface_observations": 101,
+    "slot_soft_hard_pairs": 14,
+    "demonstrated_ui_findings": 2
+  },
+  "pending_discovery": [
+    {
+      "id": "pending:semantic-closure",
+      "owner": "A",
+      "detail": "Module closure includes all reachable imports/re-exports and co-located JSX functions; symbol-level use and condition feasibility require reconciliation. No claim that every candidate renders on every associated route.",
+      "runtime_disposition": "Semantic source closure overapproximates runtime renders; Task3 must reconcile observed instances without claiming imported components rendered"
+    },
+    {
+      "id": "pending:dynamic-identities",
+      "owner": "A",
+      "detail": "AST map callsites enumerate repeated source definitions, not each data-dependent row, tab option, chart series or nested tree node. Runtime must attach fixture row/node identity and parent conditions; no finite production instance count claimed.",
+      "runtime_disposition": "Synthetic journal rows, setup rows, tuning folds and option-contract identities attached where reached; production instance count remains unbounded"
+    },
+    {
+      "id": "pending:conditional-disclosure-exhaustiveness",
+      "owner": "A",
+      "detail": "Native role/title/details and class hints plus custom JSX calls discover candidates, not proof of semantic disclosure exhaustiveness. Manually reconcile CSS hover/focus tooltips, DOM portals, imperative charts/context menus, non-JSX render factories and dynamically chosen component registries.",
+      "runtime_disposition": "Runtime details/builder/imperative chart probes attached; unreached disclosures remain pending owning lanes/Task3"
+    },
+    {
+      "id": "pending:state-applicability",
+      "owner": "A",
+      "detail": "Nine-state template is conservatively pending for all instances. Domain lanes B-I must split zero/false/null/absent and cancel/error scenarios, provide fixtures and source-backed N/A where appropriate; no universal fixture or state pass claimed.",
+      "runtime_disposition": "Lane-A shared navigation/boundaries only; B-I numeric/persistence and J presentation state requirements remain pending"
+    },
+    {
+      "id": "pending:slot-history",
+      "owner": "A",
+      "detail": "Each primary route has applicable exact slot page or nearest default in roots. Soft navigation may retain earlier slot content; Task 2 must map retained instances to their source entry instead of treating current URL closure as exhaustive history.",
+      "runtime_disposition": "A evidence collected: retained origin versus hard fallback plus history/storage readback; Task3 reconciles source IDs"
+    },
+    {
+      "id": "pending:private-crash-exposure",
+      "owner": "A",
+      "source": "frontend/app/__test-crash/page.tsx",
+      "line": 5,
+      "detail": "Resolve private underscore source against actual Next route manifest and dev/prod response; do not claim Frame error-boundary coverage from this source.",
+      "runtime_disposition": "Dev URL visibly404, not crash; production runtime not run"
+    },
+    {
+      "id": "pending:backend-restart",
+      "owner": "I",
+      "detail": "No backend run/restart performed in source task. Recovery mock plus browser reload coverage is not a real database/process restart certification.",
+      "runtime_disposition": "UNTESTED: no real backend process, DB or restart; mock recovery/reload is not backend restart"
+    },
+    {
+      "id": "pending:shared-component-ownership",
+      "owner": "A",
+      "detail": "Definition owners use domain/path defaults and explicit Settings section handoff. Reused chart/report/portfolio widgets can require multiple numeric lanes in route context; owning lanes must confirm interactions and do not infer one owner is sole arithmetic authority.",
+      "runtime_disposition": "Retain source lane assignments; runtime is not owner sign-off"
+    }
+  ],
+  "unavailable_attempts": [
+    {
+      "id": "hard:/screener",
+      "artifact": "evidence/observations.json",
+      "error": "Unexpected route: http://127.0.0.1:3017/screener, expected /screener/step-1-regime"
+    },
+    {
+      "id": "navigation:primary",
+      "artifact": "evidence/observations.json",
+      "error": "primary link failed /analysis"
+    },
+    {
+      "id": "redirects:asserted",
+      "artifact": "interactive-attempt-1/observations.json",
+      "error": "page.waitForURL: Timeout 45000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation to \"**/screener/step-4-stocks\" until \"load\"\n  navigated to \"http://127.0.0.1:3017/screener/step-4-ranking\"\n============================================================"
+    },
+    {
+      "id": "alerts:builder",
+      "artifact": "interactive-attempt-1/observations.json",
+      "error": "locator.click: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /New (rule|alert)/i })\u001b[22m\n"
+    },
+    {
+      "id": "options:populated-disclosures",
+      "artifact": "interactive-attempt-1/observations.json",
+      "error": "locator.waitFor: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Explain', exact: true }).first() to be visible\u001b[22m\n"
+    },
+    {
+      "id": "boundary:frame-loading",
+      "artifact": "interactive-attempt-1/observations.json",
+      "error": "locator.waitFor: Timeout 4000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('status').filter({ hasText: /^Loading…$/ }) to be visible\u001b[22m\n"
+    },
+    {
+      "id": "options:populated-disclosures",
+      "artifact": "interactive-evidence/observations.json",
+      "error": "locator.waitFor: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Explain', exact: true }).first() to be visible\u001b[22m\n"
+    },
+    {
+      "id": "chart:imperative-nested",
+      "artifact": "interactive-evidence/observations.json",
+      "error": "locator.waitFor: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('Period', { exact: true }) to be visible\u001b[22m\n"
+    },
+    {
+      "id": "setup:populated-row-disclosures",
+      "artifact": "interactive-evidence/observations.json",
+      "error": "locator.waitFor: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('AAPL', { exact: true }).first() to be visible\u001b[22m\n"
+    },
+    {
+      "id": "options:confirmed-nested-chain",
+      "artifact": "followup-attempt-1/observations.json",
+      "error": "locator.click: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /^Explain score for/ }).first()\u001b[22m\n"
+    }
+  ],
+  "domain_gate": "All displayed-number/broker/persistence arithmetic certification remains pending owning lanes B-I; presentation J pending; no real backend/external/mutation traffic permitted"
+}

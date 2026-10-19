@@ -39,6 +39,7 @@ _DOMAINS = {
     'trend_method': {'crossover', 'additive', 'relative_strength'},
     'ma_type': {'EMA', 'SMA'}, 'additive_ma_type': {'EMA', 'SMA'}, 'pullback_ma_type': {'EMA', 'SMA'},
     'timeframe': {'15min', 'daily', '1d', '1D', 'weekly', '1W'},
+    'backtest_artifact_status': {'available', 'unsupported', 'insufficient_history', 'invalid_input', 'failed', 'invalid_evidence', 'storage_unavailable', 'capture_unavailable', 'original_unavailable'},
     'params_source': {'tuned', 'baseline'}, 'next_event_label': {'earnings', 'dividend'},
     'right': {'C', 'P', 'call', 'put'}, 'sizing_basis': {'off', 'measured', 'floor:unmeasured'},
     'stockConfidence': {'PASS', 'CAUTION', 'REJECT', 'PENDING', 'NO_DATA'},
@@ -105,6 +106,8 @@ def _safe_string(key, value):
         return bool(_TICKER.fullmatch(value)) or value in PRESET_UNIVERSES or value in {'SECTOR:'+s for s in SECTOR_ETF_TO_NAME}
     if key in {'scan_id', 'previous_run_id', 'report_run_id'}:
         return bool(re.fullmatch(r'[a-fA-F0-9\-]{8,64}', value))
+    if key == 'backtest_artifact_id':
+        return bool(re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', value))
     if key == 'timestamp':
         return bool(re.fullmatch(r'\d{4}-\d\d-\d\dT[\d:.+Z\-]{8,30}', value))
     if key in {'reason', 'detail'}:
@@ -183,6 +186,7 @@ def project_terminal_record(symbol, terminal, code, *, observations=None, thresh
 
 @dataclass
 class Collector:
+    report_run_id: str | None = field(default=None, init=False)
     request: dict
     unavailable: list[str] = field(default_factory=list)
     expanded: list | None = None
@@ -357,6 +361,7 @@ async def run_reported_scan(request, *, category, trigger, callback, response=No
         except (scan_reports.ScanReportStorageError, ValueError, TypeError):
             log.error('scan report begin unavailable')
             raise HTTPException(503, 'Scan report storage unavailable', headers={HEADERS[2]: 'unavailable'}) from None
+        c.report_run_id = run['run_id']
         try:
             result = await callback()
         except asyncio.CancelledError:

@@ -1,0 +1,7 @@
+.controls { padding: 16px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: var(--text-primary); }
+.controls fieldset { display: grid; gap: 12px; margin: 12px 0; border: 1px solid var(--border-subtle); }
+.controls label { display: grid; gap: 4px; font-weight: 400; }
+.controls input, .controls select, .controls textarea, .controls button { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-subtle); padding: 8px; }
+.controls button { cursor: pointer; margin: 8px 8px 8px 0; }
+.controls button:disabled { cursor: default; opacity: .5; }
+.controls pre { overflow-x: auto; white-space: pre-wrap; }

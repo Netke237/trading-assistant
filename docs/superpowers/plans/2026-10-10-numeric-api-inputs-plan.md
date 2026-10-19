@@ -57,6 +57,18 @@ Results:
   Several of these are persisted (portfolio JSON columns, alert history, schedules).
 - **Already in place:** 21 `allow_inf_nan=False` sites (e.g. `PortfolioPositionCreate.entryPrice`, `ArmRequest.limit_price/entry_premium`). Also `main.py:353` `request_validation_handler` (decision `P6-SCOPE-2026-09-30`), which makes a 422 that echoes a non-finite input serialisable instead of a 500. This phase builds on that handler.
 
+### Deliberate inventory extension — CANDIDATE-BACKTEST-CHART (2026-10-15)
+
+The original 34-leaf inventory above is retained as historical evidence. The current route-wide ratchet pins **35 untyped leaves**, adding exactly:
+
+| Route | Parameter kind | Leaf kind | Schema path |
+|---|---|---|---|
+| `POST /api/backtest-artifacts/fresh` | body | any-dict | `request.<FreshBacktestRequest>.params` |
+
+`FreshBacktestRequest.params` deliberately carries a strategy-dependent object. Its dict value schema is untyped, but its whole-model validator calls `validate_parameters` before the endpoint runs. For each supported daily strategy it requires the complete signature-derived key set, rejects unknown keys, checks strict scalar types (including rejecting numeric strings and booleans as numbers), bounds integer/float parameters and signal-window requirements, requires finite floats, and requires an explicit null historical `current_price`. Multi-strategy configuration requires unique supported daily variants, an integer confirmation count within the selected count, and an exact matching `variant_params` key set; the same validator recursively checks every selected variant's complete parameters. It does not accept ambient parameter defaults.
+
+The application-wide `NonFiniteJsonGuard` additionally rejects NaN/Infinity/overflowing numeric literals at any depth before request validation. `test_fresh_backtest.py::test_nonfinite_params_rejected_before_history_or_engine` uses the real `create_app()` stack to pin HTTP 422 for direct and multi-nested literals and nonfinite strings, asserts neither historical data nor the backtest engine runs, and confirms the same finite configuration reaches history. The inventory walker still requires exact set/count equality, probes every typed float leaf, and has no float allowlist. Future untyped additions still fail until deliberately documented and covered.
+
 ## 2. Validation outcome (one rule, everywhere)
 
 Any non-finite number in a request input gets **HTTP 422** with FastAPI's standard shape: `{"detail": [{"type", "loc", "msg", "input"}]}`. That shape is what `frontend/lib/api.ts` `apiError` reads. "Non-finite number" covers:

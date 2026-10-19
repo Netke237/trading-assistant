@@ -27,12 +27,18 @@ class SignalPoint:
     entry: float
     stop: float
     target: float
+    market: bool = False
+    rr_multiple: float | None = None
+    setup_age: int = 0
 
 
 def effective_params(strategy: str, params: dict | None) -> dict:
     """The params the signal function actually receives, as the backtest
     builds them: ``get_exit(strategy)`` under ``params``; for
     ``mean_reversion_multi`` ``params`` itself (the merged shape)."""
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_entries import setup_params
+        return setup_params(strategy, params)
     from app.services.strategy_param_store import get_exit
     if strategy == "mean_reversion_multi":
         return dict(params or {})
@@ -64,6 +70,9 @@ def signal_series(bars: list[dict], strategy: str, direction: str,
     """One entry per bar: the signal the backtest would compute at that bar's
     close (``None`` = no signal). A signal function that raises propagates
     (the backtest would fail the whole run)."""
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_entries import setup_series
+        return setup_series(bars, strategy, direction, params)
     from app.services.strategy_engine import SIGNAL_WINDOW_BARS
     direction = normalize_direction(direction)
     fn = _signal_fn(strategy)

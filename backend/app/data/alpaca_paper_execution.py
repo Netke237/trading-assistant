@@ -12,6 +12,7 @@ import logging
 import httpx
 
 from app.data.ibkr_paper import BrokerOrder, OrderResult
+from app.data.order_errors import OrderPreflightRefusedError, OrderSubmissionUnknownError
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class AlpacaPaperAdapter:
     def place_order(self, order: BrokerOrder) -> OrderResult:
         """Place a paper stock order on Alpaca. Raises RuntimeError on failure."""
         if order.sec_type != "STK":
-            raise ValueError(
+            raise OrderPreflightRefusedError(
                 "AlpacaPaperAdapter only supports stock (STK) orders — "
                 f"received sec_type='{order.sec_type}'"
             )
@@ -61,12 +62,23 @@ class AlpacaPaperAdapter:
                 timeout=self._timeout,
             )
         except Exception as exc:
-            raise RuntimeError(f"Alpaca paper order failed: connection error — {exc}") from exc
+            raise OrderSubmissionUnknownError(
+                f"Alpaca paper order failed: connection error — {exc}"
+            ) from exc
         if resp.status_code >= 400:
-            raise RuntimeError(
+            raise OrderSubmissionUnknownError(
                 f"Alpaca paper order failed: HTTP {resp.status_code} — {resp.text[:200]}"
             )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise OrderSubmissionUnknownError(
+                f"Alpaca paper order failed: response was not JSON — {exc}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise OrderSubmissionUnknownError(
+                "Alpaca paper order failed: response was not an order object"
+            )
         return OrderResult(
             order_id=data.get("id", "unknown"),
             status=data.get("status", "unknown"),
