@@ -26,7 +26,7 @@
       "agent": "codex",
       "branch": "board/app-audit-b-cap-units-815b7410",
       "claimed_at": "2026-10-19T08:23:12Z",
-      "expires_at": "2026-10-19T11:23:17Z",
+      "expires_at": "2026-10-19T11:24:00Z",
       "note": "Resume approved plan and build 407 under user-transferred issue 350",
       "task": "APP-AUDIT-B-CAP-UNITS"
     }
