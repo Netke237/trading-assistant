@@ -39,3 +39,41 @@ export const useThemeStore = create<ThemeState>()(
     }
   )
 );
+
+/**
+ * Safely parse a raw JSON string from storage into a validated Theme.
+ * Returns null if the string is empty, invalid JSON, or contains an unsupported theme value.
+ */
+export function parseTheme(raw: string | null | undefined): Theme | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    const t = parsed?.state?.theme;
+    if (t === 'light' || t === 'dark') return t;
+  } catch {
+    // Malformed JSON or unreadable format
+  }
+  return null;
+}
+
+/**
+ * Synchronize the in-memory theme store from localStorage or an incoming cross-tab storage payload.
+ * If raw is null (storage cleared or key deleted), resets to default 'dark'.
+ * If raw is corrupted JSON, leaves current state untouched.
+ * If parsed theme differs from current state, updates useThemeStore.
+ */
+export function syncThemeFromStorage(raw?: string | null): void {
+  if (typeof window === 'undefined') return;
+  const value = raw !== undefined ? raw : localStorage.getItem(THEME_STORAGE_KEY);
+  if (value === null) {
+    if (useThemeStore.getState().theme !== 'dark') {
+      useThemeStore.setState({ theme: 'dark' });
+    }
+    return;
+  }
+  const parsed = parseTheme(value);
+  if (parsed && useThemeStore.getState().theme !== parsed) {
+    useThemeStore.setState({ theme: parsed });
+  }
+}
+
