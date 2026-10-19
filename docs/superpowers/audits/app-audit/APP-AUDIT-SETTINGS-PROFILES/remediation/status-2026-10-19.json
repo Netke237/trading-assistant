@@ -1,0 +1,386 @@
+{
+  "as_of_utc": "2026-10-19T05:49:57.811845+00:00",
+  "scope": "All 25 confirmed defects retained for remediation. New discovery limited to approved Options/Stocks/Pre-Breakout UI changes and direct behavior (#233/#234/#235; direct reports dependency #236).",
+  "implemented": 0,
+  "merged_and_retested": 0,
+  "total": 25,
+  "completion_basis": "Recorded workflow milestones; not elapsed time or code percentage. Discovery/evidence audit earns no fix progress.",
+  "ratings_policy": "docs/agents/task-ratings.md",
+  "issues": [
+    {
+      "issue": 368,
+      "url": "https://github.com/Netke237/trading-assistant/issues/368",
+      "title": "Options millions market-cap filters are sent as dollars",
+      "size": "M",
+      "complexity": 4,
+      "completion_percent": 20,
+      "milestone": "Approved plan; build #407 pending",
+      "rationale": "UI/API unit conversion plus persisted legacy schedule provenance and guard",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 369,
+      "url": "https://github.com/Netke237/trading-assistant/issues/369",
+      "title": "252-day VIX percentile uses 259 prior bars",
+      "size": "S",
+      "complexity": 2,
+      "completion_percent": 20,
+      "milestone": "Approved plan; build #408 pending",
+      "rationale": "Bounded percentile-window correction with independent boundary fixtures",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ]
+    },
+    {
+      "issue": 370,
+      "url": "https://github.com/Netke237/trading-assistant/issues/370",
+      "title": "Appearance row density resets when the Settings section remounts",
+      "size": "S",
+      "complexity": 2,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Persist and restore one appearance preference across remount/reload",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ]
+    },
+    {
+      "issue": 371,
+      "url": "https://github.com/Netke237/trading-assistant/issues/371",
+      "title": "Settings footer confirms Saved after a failed or unsubmitted backend save",
+      "size": "L",
+      "complexity": 5,
+      "completion_percent": 10,
+      "milestone": "Revised plan; second independent review pending",
+      "rationale": "Multiple save channels, canonical server acknowledgment and cross-mount transaction ownership",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ]
+    },
+    {
+      "issue": 372,
+      "url": "https://github.com/Netke237/trading-assistant/issues/372",
+      "title": "Late Settings timezone response overwrites an operator edit",
+      "size": "S",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Coordinate initial timezone load with dirty edits and asynchronous responses",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 373,
+      "url": "https://github.com/Netke237/trading-assistant/issues/373",
+      "title": "Strategy scan stores zero override that the backend rejects",
+      "size": "M",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Align Settings numeric validation and zero/default semantics with backend schemas",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 374,
+      "url": "https://github.com/Netke237/trading-assistant/issues/374",
+      "title": "Failed schedule writes change API state while disk and scheduler retain old values",
+      "size": "L",
+      "complexity": 4,
+      "completion_percent": 10,
+      "milestone": "Plan drafted; completed review record recovery pending",
+      "rationale": "Four schedule stores need atomic candidate persistence, rollback, locking and restart/concurrency coverage",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 375,
+      "url": "https://github.com/Netke237/trading-assistant/issues/375",
+      "title": "Notifications help text renders a literal Unicode escape",
+      "size": "XS",
+      "complexity": 1,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Correct a localized escaped help-text literal",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ]
+    },
+    {
+      "issue": 377,
+      "url": "https://github.com/Netke237/trading-assistant/issues/377",
+      "title": "Tuning schedule says every day despite saved weekday selection",
+      "size": "XS",
+      "complexity": 1,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Render saved weekday selection accurately in the existing schedule hint",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ]
+    },
+    {
+      "issue": 380,
+      "url": "https://github.com/Netke237/trading-assistant/issues/380",
+      "title": "Stocks manual and scheduled requests drop universe price/cap filters",
+      "size": "M",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued; dependency #343",
+      "rationale": "Propagate price/cap filters through manual and scheduled Stocks request paths",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 381,
+      "url": "https://github.com/Netke237/trading-assistant/issues/381",
+      "title": "Malformed current-version profile crashes the Search Profile controls",
+      "size": "L",
+      "complexity": 5,
+      "completion_percent": 10,
+      "milestone": "Plan drafted; independent review pending",
+      "rationale": "Current-version validation plus future-version write barrier, raw-byte preservation and recovery",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ]
+    },
+    {
+      "issue": 382,
+      "url": "https://github.com/Netke237/trading-assistant/issues/382",
+      "title": "Options score-weight percent overrides are applied as raw multipliers",
+      "size": "L",
+      "complexity": 4,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Normalize five score-weight overrides across requests and persisted legacy schedules",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 383,
+      "url": "https://github.com/Netke237/trading-assistant/issues/383",
+      "title": "Stocks requests ignore Step3 confidence threshold overrides",
+      "size": "M",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Trace per-run confidence overrides from Step 3 into Stocks scoring and gate results",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 384,
+      "url": "https://github.com/Netke237/trading-assistant/issues/384",
+      "title": "Entry Quality controls reach requests but do not affect the trade plan",
+      "size": "L",
+      "complexity": 4,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Thread Entry Quality configuration into backend trade-plan calculations and verify changed outputs",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 385,
+      "url": "https://github.com/Netke237/trading-assistant/issues/385",
+      "title": "Stop percentages display fractions and clamp a typed 3 percent to 100 percent",
+      "size": "M",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Reconcile fraction/percentage display, parsing, clamping and saved/request boundaries",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 386,
+      "url": "https://github.com/Netke237/trading-assistant/issues/386",
+      "title": "Old regime response overwrites the newer direction-aligned scan gate",
+      "size": "M",
+      "complexity": 4,
+      "completion_percent": 10,
+      "milestone": "Plan drafted; independent review pending",
+      "rationale": "Own asynchronous regime responses across request generations and mount lifetimes; verify three-mode gates",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 387,
+      "url": "https://github.com/Netke237/trading-assistant/issues/387",
+      "title": "Shared Run Scan confirmation is bypassed in Stocks and Pre-Breakout",
+      "size": "S",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Apply shared reject confirmation consistently to all three scan modes",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 388,
+      "url": "https://github.com/Netke237/trading-assistant/issues/388",
+      "title": "Regime VIX percentile labels render incorrect ordinal suffixes",
+      "size": "XS",
+      "complexity": 1,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Use correct ordinal suffix rules including teen boundaries",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ]
+    },
+    {
+      "issue": 398,
+      "url": "https://github.com/Netke237/trading-assistant/issues/398",
+      "title": "Failed Search Profile writes leave changed profiles active until reload",
+      "size": "M",
+      "complexity": 4,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Prevent in-memory profile publication after failed durable CRUD writes; preserve recoverable data",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 399,
+      "url": "https://github.com/Netke237/trading-assistant/issues/399",
+      "title": "Theme changes do not synchronize across tabs as Settings promises",
+      "size": "S",
+      "complexity": 2,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Synchronize explicit theme preference between tabs and rendered theme state",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ]
+    },
+    {
+      "issue": 400,
+      "url": "https://github.com/Netke237/trading-assistant/issues/400",
+      "title": "An ordinary Settings edit in a stale tab overwrites unrelated saved values",
+      "size": "L",
+      "complexity": 5,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Prevent concurrent stale-tab writes from replacing unrelated persisted Settings fields",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ]
+    },
+    {
+      "issue": 401,
+      "url": "https://github.com/Netke237/trading-assistant/issues/401",
+      "title": "Saving after invalid scan schedule YAML overwrites the only recovery bytes",
+      "size": "M",
+      "complexity": 4,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Preserve invalid YAML bytes and enforce explicit recovery before schedule persistence",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ]
+    },
+    {
+      "issue": 402,
+      "url": "https://github.com/Netke237/trading-assistant/issues/402",
+      "title": "Scheduled scan failures and unresolvable profile selections give no explanation",
+      "size": "M",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Surface server validation/write and profile-resolution errors in schedule controls",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ]
+    },
+    {
+      "issue": 403,
+      "url": "https://github.com/Netke237/trading-assistant/issues/403",
+      "title": "A schedule with a missing profile visually selects a different saved profile",
+      "size": "S",
+      "complexity": 2,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Represent missing profile references without visually selecting a different valid profile",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ]
+    },
+    {
+      "issue": 404,
+      "url": "https://github.com/Netke237/trading-assistant/issues/404",
+      "title": "An unavailable timezone readback displays an editable default without an error",
+      "size": "S",
+      "complexity": 3,
+      "completion_percent": 0,
+      "milestone": "Queued",
+      "rationale": "Distinguish failed timezone readback from confirmed defaults and control editing/retry state",
+      "estimate_status": "provisional; recheck after clean plan review",
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ]
+    }
+  ]
+}

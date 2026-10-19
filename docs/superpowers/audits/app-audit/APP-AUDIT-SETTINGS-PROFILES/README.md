@@ -154,3 +154,11 @@ receive supplemental evidence rather than duplicate issues.
 | [#402](https://github.com/Netke237/trading-assistant/issues/402) | Scheduled scan failures and unresolvable profile selections give no explanation |
 | [#403](https://github.com/Netke237/trading-assistant/issues/403) | A schedule with a missing profile visually selects a different saved profile |
 | [#404](https://github.com/Netke237/trading-assistant/issues/404) | An unavailable timezone readback displays an editable default without an error |
+
+## Remediation coordination — 2026-10-19
+
+Kenneth confirmed that all 25 identified defects must be retained and fixed; none is parked. Finish the six started phases, then the other 19 in dependency order. Further discovery is restricted to the approved Options, Stocks and Pre-Breakout UI changes (#233/#234/#235) and directly affected behavior, including isolated reports (#236).
+
+The dated [25-task progress and ratings snapshot](remediation/status-2026-10-19.md) distinguishes planning milestones from implemented fixes and records effort/complexity estimates. The [machine-readable snapshot](remediation/status-2026-10-19.json) includes a rationale per task. At capture time, no product fix was implemented or merged. The [started-work evidence](remediation/scope-and-started-evidence-2026-10-19.json) preserves plan hashes, existing counters and the #374 review-record recovery obligation.
+
+Required rating labels and completion milestones now live in [the repository policy](../../../../agents/task-ratings.md), referenced by the audit skill and board/coordinator workflows. This is a reporting change; historical review verdicts above apply only to their recorded exact scopes. It does not make this draft PR ready to merge or clear application acceptance.

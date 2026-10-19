@@ -132,5 +132,17 @@
     ],
     "reviewed_head": "c0e41c2c21c5307fc00ef4c47e70e5da72b33327",
     "record": "review-code-r2.md"
+  },
+  "remediation_coordination": {
+    "decision_date": "2026-10-19",
+    "user_instruction": "Retain and fix all 25 confirmed defects; none parked. Finish six started phases, then remaining 19 in dependency order.",
+    "new_discovery_scope": "Approved Options/Stocks/Pre-Breakout UI changes #233/#234/#235 and directly affected behavior, including isolated reports #236; no new whole-codebase audit.",
+    "ratings_policy": "docs/agents/task-ratings.md",
+    "dated_snapshot": "remediation/status-2026-10-19.json",
+    "report": "remediation/status-2026-10-19.md",
+    "started_work_evidence": "remediation/scope-and-started-evidence-2026-10-19.json",
+    "ownership": "Root #350 claim recovered with matching branch and agent-in-progress checks; child labels are coordinator tracking metadata, not implementation claims.",
+    "review_status": "This new workflow/reporting delta is outside the historical exact review scopes; no new clean audit verdict or merge readiness is claimed.",
+    "label_publication": "remediation/label-publication-2026-10-19.json"
   }
 }

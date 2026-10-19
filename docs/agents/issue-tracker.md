@@ -38,6 +38,8 @@ Labels:
 | `agent-in-progress` | An implementer subagent is working it. |
 | `blocked` | Stopped; the reason is in a comment and under "Needs Kenneth" in the tracking issue. |
 | `<phase-id-kebab>` | Groups every issue of one phase, e.g. `stocks-step-merge-s1`. |
+| `size:XS` / `size:S` / `size:M` / `size:L` / `size:XL` | Exactly one required effort estimate per phase/defect/build ticket; see `task-ratings.md`. |
+| `complexity:1` through `complexity:5` | Exactly one required technical-difficulty rating per task, independent of priority/severity. |
 
 - **Sub-issue link** (child under the tracking issue): `gh api --method POST repos/Netke237/trading-assistant/issues/<tracker>/sub_issues -F sub_issue_id=<child-db-id>`.
 - **Blocked-by edge**: `gh api --method POST repos/Netke237/trading-assistant/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>`.

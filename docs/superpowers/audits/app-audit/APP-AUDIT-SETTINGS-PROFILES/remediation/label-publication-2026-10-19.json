@@ -1,0 +1,647 @@
+{
+  "verified_at_utc": "2026-10-19T06:00:24.805644+00:00",
+  "defect_count": 25,
+  "build_ticket_count": 2,
+  "unrelated_labels_preserved": true,
+  "defects": [
+    {
+      "issue": 368,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "completion_percent": 20,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/368#issuecomment-6260651668",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 369,
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ],
+      "completion_percent": 20,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/369#issuecomment-6260655265",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 370,
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/370#issuecomment-6260658970",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 371,
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ],
+      "completion_percent": 10,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6260662462",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 372,
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/372#issuecomment-6260666225",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 373,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/373#issuecomment-6260669832",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 374,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "completion_percent": 10,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/374#issuecomment-6260673565",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 375,
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/375#issuecomment-6260677181",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 377,
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/377#issuecomment-6260680809",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 380,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/380#issuecomment-6260684509",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 381,
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ],
+      "completion_percent": 10,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/381#issuecomment-6260688139",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 382,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/382#issuecomment-6260691894",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 383,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/383#issuecomment-6260695506",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 384,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/384#issuecomment-6260699191",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 385,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/385#issuecomment-6260702701",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 386,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "completion_percent": 10,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/386#issuecomment-6260706391",
+      "preserved_labels": [
+        "agent-in-progress",
+        "board-item",
+        "priority:app-audit",
+        "tracking"
+      ]
+    },
+    {
+      "issue": 387,
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/387#issuecomment-6260710074",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 388,
+      "labels": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/388#issuecomment-6260713711",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 398,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/398#issuecomment-6260717108",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 399,
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/399#issuecomment-6260720727",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 400,
+      "labels": [
+        "size:L",
+        "complexity:5"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/400#issuecomment-6260724331",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 401,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/401#issuecomment-6260727804",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 402,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/402#issuecomment-6260731202",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 403,
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/403#issuecomment-6260734734",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    },
+    {
+      "issue": 404,
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ],
+      "completion_percent": 0,
+      "comment": "https://github.com/Netke237/trading-assistant/issues/404#issuecomment-6260738437",
+      "preserved_labels": [
+        "board-item",
+        "priority:app-audit"
+      ]
+    }
+  ],
+  "build_tickets": [
+    {
+      "issue": 407,
+      "parent": 368,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "comment": "https://github.com/Netke237/trading-assistant/issues/407#issuecomment-6260742322"
+    },
+    {
+      "issue": 408,
+      "parent": 369,
+      "labels": [
+        "size:S",
+        "complexity:2"
+      ],
+      "comment": "https://github.com/Netke237/trading-assistant/issues/408#issuecomment-6260746328"
+    }
+  ],
+  "final_readback": [
+    {
+      "issue": 368,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:M",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 369,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:2",
+        "priority:app-audit",
+        "size:S",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 370,
+      "labels": [
+        "board-item",
+        "complexity:2",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 371,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:5",
+        "priority:app-audit",
+        "size:L",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 372,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 373,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 374,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:L",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 375,
+      "labels": [
+        "board-item",
+        "complexity:1",
+        "priority:app-audit",
+        "size:XS"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 377,
+      "labels": [
+        "board-item",
+        "complexity:1",
+        "priority:app-audit",
+        "size:XS"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 380,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 381,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:5",
+        "priority:app-audit",
+        "size:L",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 382,
+      "labels": [
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:L"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 383,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 384,
+      "labels": [
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:L"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 385,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 386,
+      "labels": [
+        "agent-in-progress",
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:M",
+        "tracking"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 387,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 388,
+      "labels": [
+        "board-item",
+        "complexity:1",
+        "priority:app-audit",
+        "size:XS"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 398,
+      "labels": [
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 399,
+      "labels": [
+        "board-item",
+        "complexity:2",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 400,
+      "labels": [
+        "board-item",
+        "complexity:5",
+        "priority:app-audit",
+        "size:L"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 401,
+      "labels": [
+        "board-item",
+        "complexity:4",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 402,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 403,
+      "labels": [
+        "board-item",
+        "complexity:2",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 404,
+      "labels": [
+        "board-item",
+        "complexity:3",
+        "priority:app-audit",
+        "size:S"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 407,
+      "labels": [
+        "agent-in-progress",
+        "complexity:4",
+        "size:M"
+      ],
+      "state": "OPEN"
+    },
+    {
+      "issue": 408,
+      "labels": [
+        "agent-in-progress",
+        "complexity:2",
+        "size:S"
+      ],
+      "state": "OPEN"
+    }
+  ]
+}
