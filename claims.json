@@ -29,6 +29,14 @@
       "expires_at": "2026-10-19T13:30:35Z",
       "note": "Fix Appearance row density persistence across remount/reload (#370)",
       "task": "APP-AUDIT-B-DENSITY"
+    },
+    {
+      "agent": "gemini",
+      "branch": "board/app-audit-b-percentile-text-3b7308fa",
+      "claimed_at": "2026-10-19T11:05:01Z",
+      "expires_at": "2026-10-19T14:05:01Z",
+      "note": "Fix Regime VIX percentile ordinal suffixes (#388)",
+      "task": "APP-AUDIT-B-PERCENTILE-TEXT"
     }
   ]
 }
