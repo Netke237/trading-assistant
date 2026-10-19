@@ -4685,7 +4685,7 @@
         "pattern": "def classify_nightly_symbol",
         "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
       },
-      "notes": "Plan only (2026-10-19). PLAN STAGE CAPPED, NOT CLEAN: round 1 five findings fixed, round 2 one finding fixed, round 3 two findings (R3-F1, R3-F2) left OPEN per audit_rule. Waiting for Kenneth: how to proceed past the cap (additional authorized plan stage, accept a stated bounded provider-lag residual, D1-b only, or split Stage A ledger out), plus decisions Q0, D1-D5 in plan section 8. Build also waits for PR #390.",
+      "notes": "Plan only (2026-10-19). PLAN STAGE CAPPED, NOT CLEAN: round 1 five findings fixed, round 2 one finding fixed, round 3 two findings (R3-F1, R3-F2) left OPEN per audit_rule. Waiting for Kenneth: how to proceed past the cap (additional authorized plan stage, accept a stated bounded provider-lag residual, D1-b only, or split Stage A ledger out), plus decisions Q0, D1-D5 in plan section 8. Build also waits for PR #390. 2026-10-19: Kenneth accepted the provider-lag residual (decision HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19) -> R3-F2 becomes an accepted residual; R3-F1 still open.",
       "audit_history": [
         {
           "round": 1,
@@ -6743,6 +6743,11 @@
       "id": "MEAS-DAY2-ANSWERS-2026-10-11",
       "q": "MEAS two-day proposal table (#121, RESULTS-SHEET 'Proposal table', day-2 reading f808df49): answer every row.",
       "a": "Kenneth, chat 2026-10-11 (recorded on #121 by a session on his behalf): min_stock_score 55 -> 45 YES for both directions, one key in contract_rules.yaml, no per-direction key and no code change (shipped separately as OPTIONS-UNDERLYING-FLOOR-45); bearish_min_trend keep 30 Swing / 40 Position; confidence_reject_below keep 35; regime_sizing.min_mult keep 0.3; iv_rank_pass_max / iv_rank_caution_max / preferred_iv_rank_max stay at their seeds until MEAS-EXTRA-DAYS (#189) has >= 30 rank rows per horizon; report-only rows change nothing. Every row answered -> MEAS-ALL-PROPOSALS-ANSWERED. Kenneth asked in chat 2026-10-14 for the day-2 paperwork (record, audit, PR) to be done."
+    },
+    {
+      "id": "HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19",
+      "q": "HISTORY-INCREMENTAL-NIGHTLY plan stage capped (R3-F1/R3-F2 open). An incremental nightly either detects that Tiingo has caught up with a dividend Alpaca already applied, or accepts a stated residual: pre-2020 adjusted prices up to 0.5% off (inside the seam tolerance) until the next revalidation or event when the provider lags Alpaca by more than PROVIDER_LAG_DAYS. Accept?",
+      "a": "Kenneth, 2026-10-19 (in chat): 'i accept this risk'. Covers R3-F2 as a stated, accepted residual. Does NOT by itself authorize an additional plan stage or close R3-F1; the plan stays audit_clean false until Kenneth decides how to proceed past the cap."
     }
   ],
   "pending_kenneth": [
