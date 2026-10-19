@@ -18,6 +18,7 @@ import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPrese
 import { Row, SectionIntro } from './SettingsRow';
 import { IvThresholdsSection } from './IvThresholdsSection';
 import { useRiskStore } from '@/lib/riskStore';
+import { useThemeStore, type Density } from '@/lib/theme';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
@@ -213,7 +214,8 @@ function SaveButton() {
 /* ---------- Theme ---------- */
 
 function ThemeForm() {
-  const [density, setDensity] = useState<'Comfortable' | 'Compact'>('Comfortable');
+  const density = useThemeStore((s) => s.density);
+  const setDensity = useThemeStore((s) => s.setDensity);
   return (
     <>
       <SectionIntro
@@ -227,10 +229,10 @@ function ThemeForm() {
         <select
           className={styles.input}
           value={density}
-          onChange={(e) => setDensity(e.target.value as 'Comfortable' | 'Compact')}
+          onChange={(e) => setDensity(e.target.value as Density)}
         >
-          <option>Comfortable</option>
-          <option>Compact</option>
+          <option value="Comfortable">Comfortable</option>
+          <option value="Compact">Compact</option>
         </select>
       </Row>
     </>
