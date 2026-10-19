@@ -15,14 +15,6 @@
       "expires_at": "2026-10-19T15:13:34Z",
       "note": "Fix tuning schedule cadence hint to reflect selected weekdays (#377)",
       "task": "APP-AUDIT-B-TUNING-HINT"
-    },
-    {
-      "agent": "gemini",
-      "branch": "board/app-audit-b-percentile-text-3b7308fa",
-      "claimed_at": "2026-10-19T12:12:55Z",
-      "expires_at": "2026-10-19T15:12:55Z",
-      "note": "Self-merge PR #417 for APP-AUDIT-B-PERCENTILE-TEXT (#388)",
-      "task": "APP-AUDIT-B-PERCENTILE-TEXT"
     }
   ]
 }
