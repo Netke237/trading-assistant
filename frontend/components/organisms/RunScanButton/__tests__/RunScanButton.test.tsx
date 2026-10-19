@@ -478,3 +478,237 @@ it('does not route or toast an obsolete stock continuation', async () => {
     expect(mockPush).not.toHaveBeenCalled(); expect(toast).not.toHaveBeenCalled();
   } finally { toast.mockRestore(); }
 });
+
+describe('RunScanButton — cross-mode regime REJECT gate (#387)', () => {
+  beforeEach(() => {
+    resetStores();
+    jest.clearAllMocks();
+  });
+
+  it('shows REJECT dialog in stocks mode and halts execution until confirmed', async () => {
+    useScanStore.setState({
+      screenerMode: 'stocks',
+      activeStrategy: 'pullback_ema',
+      combinedRegime: 'REJECT',
+      context: { direction: 'Bullish', horizon: 'Swing (5–15d)' },
+    } as any);
+
+    (runStockScan as jest.Mock).mockResolvedValue({
+      scan_id: 'stock-scan-1',
+      timestamp: 't',
+      candidates: [],
+      rejected: [],
+    });
+
+    render(<RunScanButton />);
+    const runBtn = screen.getByRole('button', { name: /run stock scan/i });
+
+    // Initial click prompts dialog; does NOT run scan or navigate
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Market regime is REJECT')).toBeInTheDocument();
+    expect(runStockScan).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // Click Cancel -> dialog closes; still nothing run or navigated
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(runStockScan).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // Click Run Stock Scan again -> dialog reappears
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Click Proceed anyway -> runs stock scan and navigates to step-6-backtest
+    const proceedBtn = screen.getByRole('button', { name: /proceed anyway/i });
+    await act(async () => {
+      fireEvent.click(proceedBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(runStockScan).toHaveBeenCalledWith('pullback_ema');
+    expect(mockPush).toHaveBeenCalledWith('/screener/step-6-backtest');
+  });
+
+  it('shows REJECT dialog in prebreakout mode and halts routing until confirmed', async () => {
+    useScanStore.setState({
+      screenerMode: 'prebreakout',
+      combinedRegime: 'REJECT',
+      context: { direction: 'Bullish', horizon: 'Swing (5–15d)' },
+    } as any);
+
+    render(<RunScanButton />);
+    const runBtn = screen.getByRole('button', { name: /go to setup scanner/i });
+
+    // Initial click prompts dialog; does NOT navigate
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Market regime is REJECT')).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // Click Cancel -> dialog closes; still not navigated
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    // Click again -> dialog reappears
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Click Proceed anyway -> navigates to /screener/step-4-prebreakout
+    const proceedBtn = screen.getByRole('button', { name: /proceed anyway/i });
+    await act(async () => {
+      fireEvent.click(proceedBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPush).toHaveBeenCalledWith('/screener/step-4-prebreakout');
+  });
+
+  it('shows REJECT dialog in options mode and halts options scan POST until confirmed', async () => {
+    useScanStore.setState({
+      screenerMode: 'options',
+      combinedRegime: 'REJECT',
+      context: { direction: 'Bullish', horizon: 'Swing (5–15d)', horizonPreset: 'Swing' },
+    } as any);
+
+    mockPostScanBody.mockResolvedValue({
+      scan_id: 'SCAN-1',
+      timestamp: '2026-05-10T10:00:00',
+      candidates: [],
+      rejected: [],
+    } as any);
+
+    render(<RunScanButton />);
+    const runBtn = screen.getByRole('button', { name: /run scan/i });
+
+    // Initial click prompts dialog; does NOT fire scan POST
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Market regime is REJECT')).toBeInTheDocument();
+    expect(mockPostScanBody).not.toHaveBeenCalled();
+
+    // Click Cancel -> dialog closes; does NOT fire scan POST
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+    await act(async () => {
+      fireEvent.click(cancelBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPostScanBody).not.toHaveBeenCalled();
+
+    // Click again -> dialog reappears
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Click Proceed anyway -> fires options scan POST
+    const proceedBtn = screen.getByRole('button', { name: /proceed anyway/i });
+    await act(async () => {
+      fireEvent.click(proceedBtn);
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPostScanBody).toHaveBeenCalled();
+  });
+
+  it('does not show dialog and executes directly when combinedRegime is PASS', async () => {
+    // Stocks mode with PASS
+    useScanStore.setState({
+      screenerMode: 'stocks',
+      activeStrategy: 'pullback_ema',
+      combinedRegime: 'PASS',
+    } as any);
+    (runStockScan as jest.Mock).mockResolvedValue({ scan_id: 's', timestamp: 't', candidates: [], rejected: [] });
+
+    const { unmount } = render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run stock scan/i }));
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(runStockScan).toHaveBeenCalledWith('pullback_ema');
+    unmount();
+
+    // Prebreakout mode with PASS
+    jest.clearAllMocks();
+    useScanStore.setState({
+      screenerMode: 'prebreakout',
+      combinedRegime: 'PASS',
+    } as any);
+
+    const { unmount: unmount2 } = render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /go to setup scanner/i }));
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPush).toHaveBeenCalledWith('/screener/step-4-prebreakout');
+    unmount2();
+
+    // Options mode with PASS
+    jest.clearAllMocks();
+    useScanStore.setState({
+      screenerMode: 'options',
+      combinedRegime: 'PASS',
+      context: { direction: 'Bullish', horizon: 'Swing (5–15d)', horizonPreset: 'Swing' },
+    } as any);
+    mockPostScanBody.mockResolvedValue({ scan_id: 's', timestamp: 't', candidates: [], rejected: [] } as any);
+
+    render(<RunScanButton />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /run scan/i }));
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPostScanBody).toHaveBeenCalled();
+  });
+
+  it('re-prompts on subsequent click after confirmed run when combinedRegime remains REJECT', async () => {
+    useScanStore.setState({
+      screenerMode: 'prebreakout',
+      combinedRegime: 'REJECT',
+      context: { direction: 'Bullish', horizon: 'Swing (5–15d)' },
+    } as any);
+
+    render(<RunScanButton />);
+    const runBtn = screen.getByRole('button', { name: /go to setup scanner/i });
+
+    // First run: prompt and proceed
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /proceed anyway/i }));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
+
+    // Second click: must re-prompt because regimeConfirmedRef was reset to false
+    await act(async () => {
+      fireEvent.click(runBtn);
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(mockPush).toHaveBeenCalledTimes(1); // not called again without confirm
+  });
+});
