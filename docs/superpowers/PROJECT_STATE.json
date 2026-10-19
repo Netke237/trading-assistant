@@ -5245,7 +5245,7 @@
       "id": "APP-AUDIT-B-STRATEGY-VALIDATION",
       "name": "Reject invalid Settings strategy scan overrides (#373)",
       "status": "in_progress",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-strategy-validation-plan.md",
       "branch": "board/app-audit-b-strategy-validation-3c020642",
@@ -5254,8 +5254,10 @@
         "remediation from #350"
       ],
       "plan_stage": {
-        "rounds": 1,
-        "clean": false
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "/root/plan_audit_r2 reviewed plan SHA256 1903C4300505F760EDE8E9E4403CEA1E48E368ED7A37F6DB1CC722866D6E19E0: 0 gate findings; plan-r2.md"
       },
       "code_stage": {
         "rounds": 0,
@@ -5279,6 +5281,18 @@
             "F1 fix awaits plan round 2"
           ],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "/root/plan_audit_r2",
+          "reviewed": "plan diff ca5870b3..780aec35; SHA256 1903C4300505F760EDE8E9E4403CEA1E48E368ED7A37F6DB1CC722866D6E19E0",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "verify": {
@@ -5287,7 +5301,7 @@
         "pattern": "assertStrategyScanOverrides",
         "note": "Presence only; tests and independent audit establish behavior."
       },
-      "completion_pct": 10,
+      "completion_pct": 20,
       "size": "M",
       "complexity": 3
     }
