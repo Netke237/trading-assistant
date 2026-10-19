@@ -1,6 +1,6 @@
 # HISTORY-INCREMENTAL-NIGHTLY — incremental nightly daily-bar ingestion
 
-**Tracking issue:** #413 · **Phase id:** `HISTORY-INCREMENTAL-NIGHTLY` · **Status:** plan only. Kenneth's decisions recorded 2026-10-19 (§8); plan stage 2 (rounds 4–6) authorized to fix R3-F1
+**Tracking issue:** #413 · **Phase id:** `HISTORY-INCREMENTAL-NIGHTLY` · **Status:** plan APPROVED (plan round 5 clean, 2026-10-19); no code yet. Kenneth's decisions recorded (§8); build waits for PR #390
 **Depends on:** STOCKS-HORIZON-HISTORY, HISTORY-SINGLE-PROVIDER-REBUILD (both on main); **open PR #390** (`HISTORY-INGEST-GAPS`) must be merged before the build starts (§9).
 **Unchanged by this phase:** `scheduling.history_years` = 17 (decision T1-HISTORY-BACKFILL-2026-10-09), the seam tolerance (0.5 % on five shared dates), the single-provider rebuild path and its "never deletes" rule, the 17-year prune, `rebuild=true` / `force_backfill=true` manual runs (they stay full re-fetches).
 
@@ -244,7 +244,8 @@ No other open claim touches `history_backfill.py`, `ingestion_job.py`, `tiingo.p
 | 1 (plan 1) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | whole plan at bb0b0ebb vs the code and PR #390's diff | 5 | all fixed at 61530009 |
 | 2 (plan 2) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | `git diff bb0b0ebb 61530009` (the round-1 fixes) + interactions | 1 | fixed at 69950537 |
 | 3 (plan 3) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | `git diff 61530009 69950537` (the round-2 fix) + interactions | 2 | **NOT FIXED — plan-stage cap of three rounds reached; audit stopped, plan NOT clean** |
-| 4 (plan stage 2, round 1) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | `git diff 85feb24e 9833e279` (R3-F1 fix + section-8 decisions) + interactions | 1 | fixed in this revision |
+| 4 (plan stage 2, round 1) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | `git diff 85feb24e 9833e279` (R3-F1 fix + section-8 decisions) + interactions | 1 | fixed at 828c907d |
+| 5 (plan stage 2, round 2) | fresh `gate-auditor` subagent, bmad-review-adversarial-general | `git diff 9833e279 828c907d` (the R4-F1 fix) + interactions | 0 | **CLEAN — plan approved** |
 
 Round 1 findings (common root: on-demand `get_bars` writes rows between nights):
 - **R1-F1** `SINGLE_PROVIDER_CURRENT` keyed on the newest row's `fetched_at` could be satisfied by an on-demand append after an ex-date → a basis step survives. Fixed: keyed on the new nightly-only `window_verified_at` (2.6 step 1); B2 test 8.
@@ -277,3 +278,5 @@ Round 4 (stage 2, round 1): the P(E) change closes R3-F1 for every operator time
 - **R4-F1 (Medium)** no planned test isolates `RESCALE` condition (iii): the listed fixture sits inside the T6 window, where T6 alone already forces `FULL`, so an implementation without (iii) passes every planned test while double-applying an event Alpaca applies more than L days late (or an Alpaca correction of an old step). Fixed: B1 now has two fixtures that keep T1–T6 true so only (iii) can refuse.
 
 Logged below the gate in round 4 (not fixed): 2.4's "all written by one nightly write" ignores on-demand Alpaca appends (they only cause `FULL` or a stricter check); coarse Alpaca rounding could create spurious steps (efficiency only); Alpaca applying an event more than one evening before P(E) (no evidence either way); acceptance 6.2 / B2 test 3 wording omits the visible-step and `F < P(E)` requirements; B2 test 5(i) trusts from E+L+1, not E+L; 2.8's "symmetric" Alpaca-lag residual is overstated, since (iii) sends that case to `FULL`; F's commit time may cross midnight ET (hours at the window end); `REVALIDATE` may fire while a `CONFIRM` is due (today-equivalent).
+
+Round 5 (stage 2, round 2): **zero gate-level findings — plan stage clean.** The auditor confirmed both R4-F1 fixtures are constructible under 2.2–2.4, keep T1–T6 true, fail if (iii) is removed and assert `FULL`; code claims re-checked at 828c907d. Below the gate (for the implementer, not fixed here): count "X + L + 1" in **trading** days (a calendar-day reading can land inside the T6 window); assert "no prefix factor multiplied" in a B2 test (B1 is a pure classifier); fixture (a) needs a dividend under 0.5 %; fixture (b) needs E after the fifth reference date.

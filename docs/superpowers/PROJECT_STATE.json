@@ -4669,7 +4669,7 @@
       "summary": "Nightly daily-bar ingestion fetches only recent bars; the Tiingo prefix is re-downloaded only on an adjustment change (detected from Alpaca factors), an incomplete history or an unverifiable seam; all four Tiingo limits enforced from a persisted ledger. history_years stays 17.",
       "name": "Incremental nightly history ingestion",
       "status": "not_started",
-      "audit_rounds": 4,
+      "audit_rounds": 5,
       "audit_clean": false,
       "branch": "claude/fervent-davinci-ded941",
       "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
@@ -4680,7 +4680,7 @@
         "pattern": "def classify_nightly_symbol",
         "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
       },
-      "notes": "Plan only (2026-10-19). Plan stage 1 (rounds 1-3) capped: 5+1 findings fixed, R3-F1 open, R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19). Kenneth authorized plan stage 2 (rounds 4-6, HISTORY-INCREMENTAL-STAGE2-2026-10-19) and accepted the section-8 proposals (HISTORY-INCREMENTAL-DECISIONS-2026-10-19). R3-F1 fix applied; round 4 (stage 2 round 1): 1 finding (R4-F1, test gap) fixed; round 5 covers only that fix. Build waits for a clean plan round and for PR #390.",
+      "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. No code yet; audit_clean stays false until the code stages are audited. Build (stages A ledger, B incremental writer, C Settings line) waits for PR #390.",
       "audit_history": [
         {
           "round": 1,
@@ -4736,9 +4736,28 @@
           "findings": [
             "R4-F1 (Medium) no planned test isolates RESCALE condition (iii) F < P(E); listed fixture sits inside the T6 window"
           ],
-          "fixes": "B1 gains two fixtures keeping T1-T6 true so only (iii) refuses (late Alpaca step with F = X+L+1; changed old step with F >> E+L)",
+          "fixes": "B1 gains two fixtures keeping T1-T6 true so only (iii) refuses (late Alpaca step with F = X+L+1; changed old step with F >> E+L) (at 828c907d)",
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 5,
+          "stage": "plan",
+          "plan_stage": 2,
+          "stage_round": 2,
+          "reviewer": "gate-auditor subagent a49c6dbcbc21f3c46 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 9833e279 828c907d -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (R4-F1 fix) plus interactions",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "zero verified: reviewer traced both new B1 fixtures against sections 2.2-2.4 and update_history lines 179-280, confirmed T6 holds, only (iii) refuses, removal of (iii) fails them",
+          "below_gate_logged": [
+            "count X+L+1 in trading days",
+            "assert no prefix factor multiplied in a B2 test",
+            "fixture (a) needs dividend < 0.5%",
+            "fixture (b) needs E after the fifth reference date"
+          ]
         }
       ],
       "plan_stages": [
@@ -4747,8 +4766,9 @@
           "closed_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19"
         },
         {
-          "rounds": 1,
-          "opened_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19"
+          "rounds": 2,
+          "opened_by": "HISTORY-INCREMENTAL-STAGE2-2026-10-19",
+          "closed_by": "clean"
         }
       ]
     },
