@@ -7,14 +7,6 @@
       "expires_at": "2026-10-19T15:24:08Z",
       "note": "Fix Appearance row density persistence across remount/reload (#370)",
       "task": "APP-AUDIT-B-DENSITY"
-    },
-    {
-      "agent": "gemini",
-      "branch": "board/app-audit-b-tuning-hint-b1ebd61a",
-      "claimed_at": "2026-10-19T11:06:39Z",
-      "expires_at": "2026-10-19T15:30:34Z",
-      "note": "Fix tuning schedule cadence hint to reflect selected weekdays (#377)",
-      "task": "APP-AUDIT-B-TUNING-HINT"
     }
   ]
 }
