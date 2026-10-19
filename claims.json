@@ -21,6 +21,14 @@
       "expires_at": "2026-10-19T11:24:00Z",
       "note": "Resume approved plan and build 407 under user-transferred issue 350",
       "task": "APP-AUDIT-B-CAP-UNITS"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/fervent-davinci-ded941",
+      "claimed_at": "2026-10-19T08:42:47Z",
+      "expires_at": "2026-10-19T11:42:47Z",
+      "note": "Plan only: incremental nightly daily-bar ingestion (Tiingo prefix only on adjustment change)",
+      "task": "HISTORY-INCREMENTAL-NIGHTLY"
     }
   ]
 }
