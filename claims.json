@@ -21,6 +21,14 @@
         }
       ],
       "task": "APP-AUDIT-B-RUN-GATE"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-theme-sync-ac527335",
+      "claimed_at": "2026-10-19T12:33:15Z",
+      "expires_at": "2026-10-19T15:33:15Z",
+      "note": "Fix cross-tab theme sync in ThemeProvider (#399)",
+      "task": "APP-AUDIT-B-THEME-SYNC"
     }
   ]
 }
