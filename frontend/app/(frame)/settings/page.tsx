@@ -11,7 +11,7 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
@@ -468,21 +468,37 @@ function ScanForm() {
 function OperatorTimezoneSection() {
   const [tz, setTz] = useState('Europe/Berlin');
   const [saveResult, setSaveResult] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isDirty = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     api.getSchedulingTimezone()
-      .then((r) => setTz(r.timezone))
+      .then((r) => {
+        if (!cancelled && !isDirty.current) {
+          setTz(r.timezone);
+        }
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    isDirty.current = true;
+    const submittedTz = tz;
     setSaveResult('');
     try {
-      await api.putSchedulingTimezone(tz);
+      const res = await api.putSchedulingTimezone(submittedTz);
+      setTz((current) => (current === submittedTz ? res.timezone : current));
       setSaveResult('Saved');
     } catch {
       setSaveResult('Save failed — check the timezone name');
     } finally {
+      setSaving(false);
       setTimeout(() => setSaveResult(''), 2500);
     }
   }
@@ -499,9 +515,17 @@ function OperatorTimezoneSection() {
             type="text"
             className={styles.input}
             value={tz}
-            onChange={(e) => setTz(e.target.value)}
+            onChange={(e) => {
+              isDirty.current = true;
+              setTz(e.target.value);
+            }}
           />
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave}
+            disabled={saving}
+          >
             Save
           </button>
           {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
