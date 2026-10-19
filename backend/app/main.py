@@ -211,24 +211,8 @@ async def lifespan(app: FastAPI):
         logger.warning("ingestion_scheduler startup failed: %s", _exc)
     # ── Startup catch-up: ingest if DB is stale ───────────────────────────
     try:
-        from app.services.ingestion_job import _should_ingest, start_ingestion_task
-        from app.services.historical_store import _last_stored_date
-        from app.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as _db:
-            _last = await _last_stored_date("SPY", _db)
-        if _should_ingest(_last):
-            try:
-                from app.data.universe_presets import expand_universe
-                _universe = list(dict.fromkeys(
-                    expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
-                ))
-            except Exception:
-                _universe = ["SPY"]
-            start_ingestion_task(_universe, years=6)
-            logger.info(
-                "startup: DB stale (last SPY date=%s), started ingestion for %d symbols",
-                _last, len(_universe),
-            )
+        from app.services.ingestion_job import startup_catch_up
+        await startup_catch_up()
     except Exception as _exc:
         logger.warning("startup catch-up failed: %s", _exc)
     # ── Fundamentals prefetch (background thread) ─────────────────────────

@@ -88,4 +88,4 @@ async def test_nightly_uses_same_retention(monkeypatch):
     monkeypatch.setattr(ingestion_job, "start_ingestion_task", start)
     monkeypatch.setattr(ingestion_scheduler, "_run_nightly_maintenance", AsyncMock())
     await ingestion_scheduler._run_nightly()
-    start.assert_called_once_with(["TEST"], years=19)
+    start.assert_called_once_with(["SPY", "TEST"], years=19)
