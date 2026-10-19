@@ -2,59 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-settings-profiles-9e622f43",
-      "claimed_at": "2026-10-17T03:06:38Z",
-      "expires_at": "2026-10-17T06:20:07Z",
-      "note": "Continue #350 follow-up evidence publication and independent code round2",
-      "task": "APP-AUDIT-SETTINGS-PROFILES"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-cap-units-96e70c96",
-      "claimed_at": "2026-10-17T04:30:50Z",
-      "expires_at": "2026-10-17T07:41:55Z",
-      "note": "User-authorized #350 remediation: issue#368",
-      "task": "APP-AUDIT-B-CAP-UNITS"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-vix-window-14595bb2",
-      "claimed_at": "2026-10-17T04:31:30Z",
-      "expires_at": "2026-10-17T07:40:47Z",
-      "note": "User-authorized #350 remediation: issue#369",
-      "task": "APP-AUDIT-B-VIX-WINDOW"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-save-feedback-685245db",
-      "claimed_at": "2026-10-17T04:32:53Z",
-      "expires_at": "2026-10-17T07:42:01Z",
-      "note": "User-authorized #350 remediation: issue#371",
-      "task": "APP-AUDIT-B-SAVE-FEEDBACK"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-schedule-rollback-07ec76a0",
-      "claimed_at": "2026-10-17T04:33:20Z",
-      "expires_at": "2026-10-17T07:38:50Z",
-      "note": "User-authorized #350 remediation: issue#374",
-      "task": "APP-AUDIT-B-SCHEDULE-ROLLBACK"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-profile-validation-3b841177",
-      "claimed_at": "2026-10-17T04:33:47Z",
-      "expires_at": "2026-10-17T07:42:07Z",
-      "note": "User-authorized #350 remediation: issue#381",
-      "task": "APP-AUDIT-B-PROFILE-VALIDATION"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-regime-race-c553ef3a",
-      "claimed_at": "2026-10-17T04:34:13Z",
-      "expires_at": "2026-10-17T07:42:13Z",
-      "note": "User-authorized #350 remediation: issue#386",
-      "task": "APP-AUDIT-B-REGIME-RACE"
+      "branch": "board/meas-market-data-measurement-1090d5f3",
+      "claimed_at": "2026-10-19T04:30:58Z",
+      "expires_at": "2026-10-19T07:30:58Z",
+      "note": "#121 option 1-a: merge main into PR #319, PROJECT_STATE-only conflict, CI, self-merge (Kenneth 2026-10-15)",
+      "task": "MEAS-MARKET-DATA-MEASUREMENT"
     }
   ]
 }
