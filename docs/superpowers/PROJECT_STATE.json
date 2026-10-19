@@ -4669,13 +4669,13 @@
       "summary": "Nightly daily-bar ingestion fetches only recent bars; the Tiingo prefix is re-downloaded only on an adjustment change (detected from Alpaca factors), an incomplete history or an unverifiable seam; all four Tiingo limits enforced from a persisted ledger. history_years stays 17.",
       "name": "Incremental nightly history ingestion",
       "status": "not_started",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "branch": "claude/fervent-davinci-ded941",
       "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
       "tracking_issue": 413,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "audit_clean": false
       },
       "verify": {
@@ -4684,7 +4684,7 @@
         "pattern": "def classify_nightly_symbol",
         "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
       },
-      "notes": "Plan only (2026-10-19). Plan round 1: 5 gate findings, all fixed; round 2 covers only the fixes. Build waits for Kenneth's decisions Q0, D1-D5 in plan section 8 and for PR #390 to merge.",
+      "notes": "Plan only (2026-10-19). Plan round 1: 5 gate findings fixed; round 2: 1 gate finding fixed by replacing the adjustment mechanism. Round 3 (last under the cap) covers only the round-2 fix. Build waits for Kenneth's decisions Q0, D1-D5 in plan section 8 and for PR #390 to merge.",
       "audit_history": [
         {
           "round": 1,
@@ -4698,7 +4698,19 @@
             "R1-F4 D1-a accepts a lagging Tiingo prefix inside seam tolerance",
             "R1-F5 D1-a budget refusal drops yfinance fallback"
           ],
-          "fixes": "all five fixed in the plan revision (sections 2.2-2.8, 5, 6, 8; audit log section 11)",
+          "fixes": "all five fixed at 61530009 (R1-F4's mechanism later superseded in round 2)",
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent a9259d58b56853c80 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff bb0b0ebb 61530009 -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (round-1 fixes) plus interactions with the plan and code",
+          "findings": [
+            "R2-F1 lagging prefix written by a FULL-class path inside a provider-lag window is trusted by SUFFIX_ONLY and the acceptance check then blocks the repair"
+          ],
+          "fixes": "adjustment mechanism replaced: T6 lag-window trust condition (nightly full re-fetch until a fetch lands PROVIDER_LAG_DAYS after the latest Alpaca-visible ex-date), RESCALE with Alpaca's ratio on the event night, CONFIRM re-fetch after the lag window under D1-a; pending columns, EVENT_TOL and PREFIX_RECHECK removed",
           "outstanding": [],
           "clean": false
         }
