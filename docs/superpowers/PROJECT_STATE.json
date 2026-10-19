@@ -4859,7 +4859,8 @@
         "path": "backend/app/routers/regime.py",
         "pattern": "vix_closes\\[-253:-1\\]",
         "note": "Pins the 252-day VIX percentile slice [-253:-1] in get_regime."
-      }
+      },
+      "note": "SELF-MERGE PENDING, PR #411, audited head 71c48f75365496057d3b4343b14b5160228ae1da. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required."
     }
   ],
   "already_shipped": [
