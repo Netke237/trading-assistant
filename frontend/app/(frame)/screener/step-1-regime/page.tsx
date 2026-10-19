@@ -30,6 +30,7 @@ import type { MarketRegime, SectorTile, NewsItem, SentimentData } from '@/types/
 import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
 import { formatRegimeAge, formatRegimeAverage } from '@/lib/regimeDuration';
+import { formatOrdinal } from '@/lib/formatOrdinal';
 import { regimeStatusTooltip, regimeMetricTooltip, regimeNoDataTooltip } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -328,7 +329,7 @@ export default function Step1RegimePage() {
                       </Text>
                     ))}
                   {vix30 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix30)} percentile (30-day window)</Text>
                   )}
                 </>
               ) : intraOmm ? (
@@ -350,7 +351,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix30 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix30)} percentile (30-day window)</Text>
                   )}
                 </>
               ) : regime?.intraday_hmm_status === 'insufficient_data' ? (
@@ -384,7 +385,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix252)} percentile (252-day window)</Text>
                   )}
                 </>
               ) : (
@@ -414,7 +415,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix252)} percentile (252-day window)</Text>
                   )}
                 </>
               ) : (
