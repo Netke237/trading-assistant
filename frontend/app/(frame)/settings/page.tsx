@@ -27,6 +27,7 @@ import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
+import { DAY_LABELS, formatScheduleCadence } from './scheduleCadence';
 
 type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
 
@@ -595,8 +596,6 @@ function ScheduledScanRetentionSection() {
 }
 
 /* ---------- Part 3: profile-based scan scheduling ---------- */
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 function formatRunTime(iso: string): string {
   try {
@@ -2297,7 +2296,7 @@ function ScheduleSection({
   return (
     <>
       <SectionIntro title={title} blurb={blurb} />
-      <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
+      <Row label="Enable schedule" hint={formatScheduleCadence(showDaysOfWeek, daysOfWeek)} defaultValue="Off">
         <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
       </Row>
       <Row label="Run time (HH:MM)" hint="24-hour operator timezone (see Scan → Operator timezone)" defaultValue={defaultTime}>
