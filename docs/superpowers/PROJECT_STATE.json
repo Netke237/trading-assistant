@@ -5377,7 +5377,8 @@
       "completion_pct": 85,
       "size": "M",
       "complexity": 3,
-      "note": "Code round 1 clean. Plan 2 rounds clean, code 1 round clean. PR pending."
+      "note": "SELF-MERGE PENDING, PR #424, audited head 5bdc20618c03ac2e4a79dcb35dfd512f2e3cee54. Validates strategy overrides across editing, storage and requests (#373, #421). Plan round 2 clean, code round 1 clean.",
+      "pull_request": 424
     }
   ],
   "already_shipped": [
