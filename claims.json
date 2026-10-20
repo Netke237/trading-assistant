@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-notification-text-b7518ff6",
-      "claimed_at": "2026-10-20T16:37:02Z",
-      "expires_at": "2026-10-20T20:11:30Z",
-      "note": "Fix literal unicode escape in Notifications help text (#375)",
-      "task": "APP-AUDIT-B-NOTIFICATION-TEXT"
-    }
-  ]
+  "claims": []
 }
