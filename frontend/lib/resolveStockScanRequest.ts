@@ -171,8 +171,16 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     risk_pct: ctx.riskPct,
     shortlist_max_candidates: p.stockShortlistMax,
     overrides: stocksOverrides,
-    confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
-    confidence_reject_below: confidenceGate.enabled ? confidenceGate.rejectBelow : undefined,
+    confidence_caution_below: confidenceGate.enabled
+      ? (typeof rawOverrides.confidence_caution_below === 'number' && Number.isFinite(rawOverrides.confidence_caution_below)
+          ? rawOverrides.confidence_caution_below
+          : confidenceGate.cautionBelow)
+      : undefined,
+    confidence_reject_below: confidenceGate.enabled
+      ? (typeof rawOverrides.confidence_reject_below === 'number' && Number.isFinite(rawOverrides.confidence_reject_below)
+          ? rawOverrides.confidence_reject_below
+          : confidenceGate.rejectBelow)
+      : undefined,
     confidence_atr_mult_target: atrPair.target,
     confidence_atr_mult_stop: atrPair.stop,
     // Was two inline ternaries identical to these; routed through the shared
