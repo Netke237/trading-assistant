@@ -5244,7 +5244,7 @@
     {
       "id": "DECISION-25-DISABLED-E2E",
       "name": "Mocked 7-Step Screener Flow & RANK-Basis Volatility E2E",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-e2e-coverage-plan.md",
