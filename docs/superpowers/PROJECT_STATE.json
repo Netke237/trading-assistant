@@ -5822,7 +5822,7 @@
       "id": "APP-AUDIT-B-SAVE-FEEDBACK",
       "name": "Settings footer confirms Saved after a failed or unsubmitted save (#371)",
       "status": "not_started",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-save-feedback-plan.md",
       "branch": "board/app-audit-b-save-feedback-673f40fc",
@@ -5831,8 +5831,10 @@
         "remediation from #350"
       ],
       "plan_stage": {
-        "rounds": 2,
-        "clean": false
+        "rounds": 3,
+        "clean": false,
+        "closed_by": "cap",
+        "closure_evidence": "Plan round 3 (ada9d0942d4ddfcaa) reported 1 gate finding (R3-F1); cap of three plan rounds reached without a clean round. Fix written into the plan, unaudited. Needs Kenneth to open a new plan stage."
       },
       "code_stage": {
         "rounds": 0,
@@ -5871,11 +5873,28 @@
             "schedule-entry:<id>:<field> channels plus label/enabled displayed-vs-server drafts",
             "trackSave run includes every pre-request step (broker store write)"
           ],
-          "outstanding": [
-            "fixes await plan round 3 (last plan round)"
-          ],
+          "outstanding": [],
           "clean": false,
           "report": "docs/superpowers/audits/APP-AUDIT-B-SAVE-FEEDBACK/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "ada9d0942d4ddfcaa",
+          "reviewed": "round-2 fixes: git diff e9e22697 03e5d93c of the plan; SHA256 2d9e986b92849338cf55d8094e3798fb8af5bc2aecfac8fb5d4b7bfe8d8ac8fc",
+          "gate_findings": 1,
+          "findings": [
+            "R3-F1: an attempt already in flight when a section is left clears the newer discarded edit on success, so the footer says Saved for an edit never sent"
+          ],
+          "fixes": [
+            "Plan: discarded record stores the attempt sequence at discard; only an attempt begun after it clears it (UNAUDITED)"
+          ],
+          "outstanding": [
+            "R3-F1 fix unaudited; plan stage capped; needs a new plan stage from Kenneth"
+          ],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-SAVE-FEEDBACK/plan-r3.md"
         }
       ],
       "verify": {
@@ -5887,7 +5906,7 @@
       "completion_pct": 10,
       "size": "L",
       "complexity": 5,
-      "note": "Plan round 2: 3 gate findings fixed in the plan; plan round 3 (last) pending."
+      "note": "PLAN STAGE CAPPED (3 rounds, none clean; round 1 counted conservatively, unrecorded). R3-F1 fix written, unaudited. needs-kenneth: open a new plan stage? No tickets cut, no code written."
     }
   ],
   "already_shipped": [
