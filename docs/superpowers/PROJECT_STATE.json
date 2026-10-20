@@ -5242,6 +5242,65 @@
       "note": "Enforces shared direction-aligned combinedRegime === 'REJECT' confirmation across all three screener modes (#387). Plan round 1 clean, code round 1 clean. Merged via PR #420 at be45fcf4."
     },
     {
+      "id": "DECISION-25-DISABLED-E2E",
+      "name": "Mocked 7-Step Screener Flow & RANK-Basis Volatility E2E",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan": "docs/superpowers/plans/2026-10-20-e2e-coverage-plan.md",
+      "branch": "board/decision-25-disabled-e2e-e4cf6675",
+      "covers": [
+        "board item #175",
+        "board item #176",
+        "DECISION-27-RANK-COVERAGE"
+      ],
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 381e4e7d-ed7c-4ead-a11d-fa183002793e reviewed plan; exact scope verified, 0 gate findings; report docs/superpowers/audits/DECISION-25-DISABLED-E2E/plan-r1.md"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent b63ecfb9-83d8-43b5-881d-0a3d3696334d reviewed diff origin/main..HEAD (frontend/e2e/tests/iv-basis-rendering.spec.ts, frontend/e2e/tests/ws-g-happy-path-mocked.spec.ts); 0 gate findings; report docs/superpowers/audits/DECISION-25-DISABLED-E2E/code-r1.md"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "381e4e7d-ed7c-4ead-a11d-fa183002793e",
+          "reviewed": "docs/superpowers/plans/2026-10-20-e2e-coverage-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "b63ecfb9-83d8-43b5-881d-0a3d3696334d",
+          "reviewed": "origin/main..HEAD",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "frontend/e2e/tests/iv-basis-rendering.spec.ts",
+        "pattern": "IV rank ≤ 34 → PASS",
+        "note": "Presence probe for RANK-basis test case in iv-basis-rendering.spec.ts"
+      },
+      "note": "SELF-MERGE PENDING, PR #422, audited head 52d36ff4. Rewrites mocked 7-step screener flow for current step order (#175) and adds RANK-basis smoke E2E coverage (#176). Plan round 1 clean, code round 1 clean."
+    },
+    {
       "id": "APP-AUDIT-B-STRATEGY-VALIDATION",
       "name": "Reject invalid Settings strategy scan overrides (#373)",
       "status": "in_progress",
