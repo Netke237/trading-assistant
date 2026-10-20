@@ -15,14 +15,6 @@
       "expires_at": "2026-10-20T23:56:33Z",
       "note": "Fix stale Step 1 regime responses overwriting the gate (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/confidence-override-30d0e94e",
-      "claimed_at": "2026-10-20T21:19:43Z",
-      "expires_at": "2026-10-21T00:19:43Z",
-      "note": "take #383 Stocks requests ignore Step3 confidence threshold overrides",
-      "task": "APP-AUDIT-B-CONFIDENCE-OVERRIDE"
     }
   ]
 }
