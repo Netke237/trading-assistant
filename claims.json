@@ -3,14 +3,6 @@
     {
       "agent": "claude",
       "branch": "board/decision-25-disabled-e2e-e4cf6675",
-      "claimed_at": "2026-10-20T13:40:30Z",
-      "expires_at": "2026-10-20T17:23:24Z",
-      "note": "Rewrite happy-path mocked E2E for current step order (#175)",
-      "task": "DECISION-25-DISABLED-E2E"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/decision-25-disabled-e2e-e4cf6675",
       "claimed_at": "2026-10-20T13:40:40Z",
       "expires_at": "2026-10-20T17:23:24Z",
       "note": "Add RANK-basis mocked smoke E2E coverage (#176)",
