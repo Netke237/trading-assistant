@@ -10,8 +10,8 @@
       "id": "APP-AUDIT-B-SCHEDULE-FEEDBACK",
       "name": "Scheduled scan failures and unresolvable profile selections give no explanation (#402)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-schedule-feedback-plan.md",
       "branch": "board/app-audit-b-schedule-feedback-8f2427fd",
       "covers": [
@@ -25,10 +25,10 @@
         "closure_evidence": "Fresh independent subagent 386e77b8-f002-41fc-a753-1caa7dee65f1 reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-FEEDBACK/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": "",
-        "closure_evidence": ""
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 4a2a43d1-ba96-44d0-9ac8-baa4978a0b60 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-FEEDBACK/code-r1.md"
       },
       "audit_history": [
         {
@@ -37,6 +37,18 @@
           "stage_round": 1,
           "reviewer": "386e77b8-f002-41fc-a753-1caa7dee65f1",
           "reviewed": "docs/superpowers/plans/2026-10-20-app-audit-b-schedule-feedback-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "4a2a43d1-ba96-44d0-9ac8-baa4978a0b60",
+          "reviewed": "origin/main..HEAD",
           "gate_findings": 0,
           "findings": [],
           "fixes": [],
@@ -54,10 +66,10 @@
         "pattern": "schedule-entry-error",
         "note": "Pins schedule entry error display in settings/page.tsx."
       },
-      "completion_pct": 60,
+      "completion_pct": 80,
       "size": "M",
       "complexity": 3,
-      "note": "Implemented schedule update, validation, delete and profile resolution feedback (#402, #431). Ready for code audit."
+      "note": "Code round 1 clean. Ready for PR and CI checks."
     },
     {
       "id": "APP-AUDIT-B-NOTIFICATION-TEXT",
