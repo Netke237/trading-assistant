@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-regime-race-8d580f0a",
       "claimed_at": "2026-10-20T19:38:02Z",
-      "expires_at": "2026-10-20T22:57:40Z",
+      "expires_at": "2026-10-20T23:20:11Z",
       "note": "Fix stale Step 1 regime responses overwriting the gate (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
     }
