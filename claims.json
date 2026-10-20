@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-orphaned-schedule-profile-f7ef94c4",
       "claimed_at": "2026-10-20T17:58:34Z",
-      "expires_at": "2026-10-20T21:17:05Z",
+      "expires_at": "2026-10-20T21:18:58Z",
       "note": "A schedule with a missing profile visually selects a different saved profile (#403)",
       "task": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE"
     }
