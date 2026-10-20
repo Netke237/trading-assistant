@@ -28,6 +28,13 @@ import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
+import { DAY_LABELS, formatScheduleCadence } from './scheduleCadence';
+import {
+  isSchemaValidStrategyOverride,
+  validatePullbackToleranceDraft,
+  validateMaCrossoverLookbackDraft,
+  validateBreakoutVolumeMultDraft,
+} from '@/lib/strategyScanValidation';
 
 type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
 
@@ -597,8 +604,6 @@ function ScheduledScanRetentionSection() {
 }
 
 /* ---------- Part 3: profile-based scan scheduling ---------- */
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 function formatRunTime(iso: string): string {
   try {
@@ -2299,7 +2304,7 @@ function ScheduleSection({
   return (
     <>
       <SectionIntro title={title} blurb={blurb} />
-      <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
+      <Row label="Enable schedule" hint={formatScheduleCadence(showDaysOfWeek, daysOfWeek)} defaultValue="Off">
         <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
       </Row>
       <Row label="Run time (HH:MM)" hint="24-hour operator timezone (see Scan → Operator timezone)" defaultValue={defaultTime}>
@@ -2379,29 +2384,109 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
   field: 'pullbackTolerancePct' | 'maCrossoverLookback' | 'breakoutVolumeMult';
   label: string; unit: string; scale?: number; decimals?: number; min: number; max: number; step: number;
 }) {
-  const value = useScanParamsStore((s) => s[field]);
+  const storeValue = useScanParamsStore((s) => s[field]);
   const setParam = useScanParamsStore((s) => s.setParam);
   const f = 10 ** decimals;
+
+  const [draft, setDraft] = useState<string>(
+    storeValue === null ? '' : String(Math.round(storeValue * scale * f) / f),
+  );
+  const [error, setError] = useState<string | null>(() => {
+    if (storeValue !== null && !isSchemaValidStrategyOverride(field, storeValue)) {
+      return field === 'pullbackTolerancePct'
+        ? 'Invalid stored pullback tolerance. Enter a value between 0.5% and 15% or clear.'
+        : field === 'maCrossoverLookback'
+        ? 'Invalid stored MA crossover lookback. Enter an integer between 1 and 30 bars or clear.'
+        : 'Invalid stored breakout volume multiplier. Enter a value greater than 1.0× and at most 3.0× or clear.';
+    }
+    return null;
+  });
+
+  const lastSyncedValue = useRef<number | null>(storeValue);
+
+  useEffect(() => {
+    if (storeValue !== lastSyncedValue.current) {
+      lastSyncedValue.current = storeValue;
+      if (storeValue === null) {
+        setDraft('');
+        setError(null);
+      } else if (isSchemaValidStrategyOverride(field, storeValue)) {
+        setDraft(String(Math.round(storeValue * scale * f) / f));
+        setError(null);
+      }
+    }
+  }, [storeValue, scale, f, field]);
+
+  function handleChange(raw: string) {
+    setDraft(raw);
+    if (raw.trim() === '') {
+      setError(null);
+      setParam(field, null);
+      lastSyncedValue.current = null;
+      return;
+    }
+
+    const res =
+      field === 'pullbackTolerancePct'
+        ? validatePullbackToleranceDraft(raw)
+        : field === 'maCrossoverLookback'
+        ? validateMaCrossoverLookbackDraft(raw)
+        : validateBreakoutVolumeMultDraft(raw);
+
+    if (!res.valid) {
+      setError(res.error);
+    } else {
+      setError(null);
+      try {
+        setParam(field, res.value);
+        lastSyncedValue.current = res.value;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  function handleClear() {
+    setDraft('');
+    setError(null);
+    setParam(field, null);
+    lastSyncedValue.current = null;
+  }
+
   return (
-    <>
-      <input
-        type="number"
-        className={styles.numInput}
-        aria-label={label}
-        placeholder="follows horizon profile"
-        value={value === null ? '' : Math.round(value * scale * f) / f}
-        min={min} max={max} step={step}
-        onChange={(e) =>
-          setParam(field, e.target.value === '' ? null : Number(e.target.value) / scale)
-        }
-      />
-      <Text size={12} tone="secondary">{unit}</Text>
-      {value !== null && (
-        <button type="button" className={styles.btn} aria-label={`Clear ${label}`} onClick={() => setParam(field, null)}>
-          clear
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input
+          type="number"
+          className={styles.numInput}
+          aria-label={label}
+          placeholder="follows horizon profile"
+          value={draft}
+          min={min}
+          max={max}
+          step={step}
+          aria-invalid={!!error}
+          aria-errormessage={error ? `${field}-error` : undefined}
+          onChange={(e) => handleChange(e.target.value)}
+        />
+        <Text size={12} tone="secondary">{unit}</Text>
+        {(storeValue !== null || draft !== '') && (
+          <button
+            type="button"
+            className={styles.btn}
+            aria-label={`Clear ${label}`}
+            onClick={handleClear}
+          >
+            clear
+          </button>
+        )}
+      </div>
+      {error && (
+        <span id={`${field}-error`} role="alert">
+          <Text size={11} tone="reject">{error}</Text>
+        </span>
       )}
-    </>
+    </div>
   );
 }
 

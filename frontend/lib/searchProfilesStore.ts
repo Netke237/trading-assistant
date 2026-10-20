@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
 import { OVERRIDE_FIELDS } from '@/lib/scanParamsStore';
+import { assertStrategyScanOverrides } from '@/lib/strategyScanValidation';
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -33,6 +34,13 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
       dismissLegacyTargetPctNotice: () => set({ legacyTargetPctDropped: false }),
       staleScheduleEntryIds: [],
       saveProfile: (name, snapshot) => {
+        if (snapshot.strategyParams) {
+          assertStrategyScanOverrides({
+            pullbackTolerancePct: snapshot.strategyParams.pullbackTolerancePct,
+            maCrossoverLookback: snapshot.strategyParams.maCrossoverLookback,
+            breakoutVolumeMult: snapshot.strategyParams.breakoutVolumeMult,
+          });
+        }
         const now = new Date().toISOString();
         const id = genId();
         set((s) => ({
@@ -42,6 +50,13 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
         return id;
       },
       updateProfile: (id, snapshot) => {
+        if (snapshot.strategyParams) {
+          assertStrategyScanOverrides({
+            pullbackTolerancePct: snapshot.strategyParams.pullbackTolerancePct,
+            maCrossoverLookback: snapshot.strategyParams.maCrossoverLookback,
+            breakoutVolumeMult: snapshot.strategyParams.breakoutVolumeMult,
+          });
+        }
         set((s) => ({
           profiles: s.profiles.map((p) =>
             p.id === id ? { ...p, ...snapshot, updatedAt: new Date().toISOString() } : p),
@@ -238,9 +253,11 @@ async function resyncScheduleEntriesForProfile(profileId: string): Promise<void>
     try {
       resolvedRequest = resolveProfileToScanRequest(profile);
     } catch {
-      // Profile can't be resolved yet (e.g. stocks-mode, Step 5 never
-      // visited) — nothing valid to push; leave the entry as it is rather
-      // than pushing a request that would fail backend validation anyway.
+      // Profile can't be resolved or has invalid parameters.
+      // Mark the referencing entry stale instead of silently succeeding.
+      useSearchProfilesStore.setState((s) => ({
+        staleScheduleEntryIds: Array.from(new Set([...s.staleScheduleEntryIds, entry.id])),
+      }));
       continue;
     }
 

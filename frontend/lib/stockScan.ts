@@ -7,6 +7,7 @@ import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
 import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { StrategyScanValidationError } from './strategyScanValidation';
 import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
@@ -435,17 +436,22 @@ export async function runStockScanWithContinuation(
     // and then writes storage, so a QuotaExceededError out of the first write
     // would skip the second — and the one that must not be skipped is FAILED,
     // which is what re-enables the Run button.
-    const settingsUnreadable = building && !(err instanceof ScanSizingError);
+    const isValidationError = err instanceof StrategyScanValidationError;
+    const settingsUnreadable = building && !(err instanceof ScanSizingError) && !isValidationError;
     if (settingsUnreadable) console.error('runStockScan: building the stock-scan request failed', err);
     try {
       store.setStockScanError(
-        settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
+        isValidationError
+          ? err.message
+          : settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
       );
     } catch { /* see above — the null return is the signal that survives */ }
     try {
       if (current()) store.setScanState('FAILED');
     } catch { /* ditto */ }
-    const reason = settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest);
+    const reason = isValidationError
+      ? err.message
+      : settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest);
     store.setStockScanFeedback(token, { error: `Scan failed — ${reason}`, notice: null });
     return { kind: 'failure', token, reason };
   } finally {

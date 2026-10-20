@@ -9,6 +9,7 @@ import type { ConfidenceGate } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
 import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 import { sanitizeHoldDays, type TunedHorizon } from '@/lib/horizonPresets';
+import { assertStrategyScanOverrides } from '@/lib/strategyScanValidation';
 
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
 // Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
@@ -118,6 +119,12 @@ function override<K extends string, V>(key: K, value: V | null | undefined): Par
 
 export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockScanRequestBody {
   const p = ctx.params;
+  assertStrategyScanOverrides({
+    pullbackTolerancePct: p.pullbackTolerancePct,
+    maCrossoverLookback: p.maCrossoverLookback,
+    breakoutVolumeMult: p.breakoutVolumeMult,
+  });
+
   const rawOverrides = ctx.scanOverrides;
   const stocksOverrides = Object.fromEntries(
     Object.entries(rawOverrides).filter(([k]) => STOCKS_SCORER_KEYS.has(k)),
