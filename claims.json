@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-schedule-feedback-8f2427fd",
       "claimed_at": "2026-10-20T17:18:56Z",
-      "expires_at": "2026-10-20T20:18:56Z",
+      "expires_at": "2026-10-20T20:52:14Z",
       "note": "Scheduled scan failures and unresolvable profile selections give no explanation (#402)",
       "task": "APP-AUDIT-B-SCHEDULE-FEEDBACK"
     }
