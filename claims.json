@@ -2,19 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-density-7b892ac1",
-      "claimed_at": "2026-10-19T09:49:35Z",
-      "expires_at": "2026-10-19T15:24:08Z",
-      "note": "Fix Appearance row density persistence across remount/reload (#370)",
-      "task": "APP-AUDIT-B-DENSITY"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-strategy-validation-3c020642",
-      "claimed_at": "2026-10-19T13:56:16Z",
-      "expires_at": "2026-10-19T17:03:06Z",
-      "note": "Validate strategy scan overrides before persistence and requests (#373)",
-      "task": "APP-AUDIT-B-STRATEGY-VALIDATION"
+      "branch": "board/decision-25-disabled-e2e-e4cf6675",
+      "claimed_at": "2026-10-20T13:40:30Z",
+      "expires_at": "2026-10-20T16:40:30Z",
+      "note": "Rewrite happy-path mocked E2E for current step order (#175)",
+      "task": "DECISION-25-DISABLED-E2E"
     }
   ]
 }
