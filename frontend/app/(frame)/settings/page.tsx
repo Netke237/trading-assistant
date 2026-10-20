@@ -11,13 +11,14 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
 import { Row, SectionIntro } from './SettingsRow';
 import { IvThresholdsSection } from './IvThresholdsSection';
 import { useRiskStore } from '@/lib/riskStore';
+import { useThemeStore, type Density } from '@/lib/theme';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
@@ -27,6 +28,13 @@ import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
+import { DAY_LABELS, formatScheduleCadence } from './scheduleCadence';
+import {
+  isSchemaValidStrategyOverride,
+  validatePullbackToleranceDraft,
+  validateMaCrossoverLookbackDraft,
+  validateBreakoutVolumeMultDraft,
+} from '@/lib/strategyScanValidation';
 
 type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
 
@@ -213,7 +221,8 @@ function SaveButton() {
 /* ---------- Theme ---------- */
 
 function ThemeForm() {
-  const [density, setDensity] = useState<'Comfortable' | 'Compact'>('Comfortable');
+  const density = useThemeStore((s) => s.density);
+  const setDensity = useThemeStore((s) => s.setDensity);
   return (
     <>
       <SectionIntro
@@ -227,10 +236,10 @@ function ThemeForm() {
         <select
           className={styles.input}
           value={density}
-          onChange={(e) => setDensity(e.target.value as 'Comfortable' | 'Compact')}
+          onChange={(e) => setDensity(e.target.value as Density)}
         >
-          <option>Comfortable</option>
-          <option>Compact</option>
+          <option value="Comfortable">Comfortable</option>
+          <option value="Compact">Compact</option>
         </select>
       </Row>
     </>
@@ -466,24 +475,66 @@ function ScanForm() {
 function OperatorTimezoneSection() {
   const [tz, setTz] = useState('Europe/Berlin');
   const [saveResult, setSaveResult] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [isEdited, setIsEdited] = useState(false);
+  const isDirty = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     api.getSchedulingTimezone()
-      .then((r) => setTz(r.timezone))
-      .catch(() => {});
+      .then((r) => {
+        if (!cancelled) {
+          if (!isDirty.current) {
+            setTz(r.timezone);
+          }
+          setLoadError('');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('Failed to load timezone from server');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  async function handleRetry() {
+    isDirty.current = false;
+    setIsEdited(false);
+    try {
+      const r = await api.getSchedulingTimezone();
+      if (!isDirty.current) {
+        setTz(r.timezone);
+      }
+      setLoadError('');
+    } catch {
+      setLoadError('Failed to load timezone from server');
+    }
+  }
+
   async function handleSave() {
+    if (saving || (Boolean(loadError) && !isEdited)) return;
+    setSaving(true);
+    isDirty.current = true;
+    const submittedTz = tz;
     setSaveResult('');
     try {
-      await api.putSchedulingTimezone(tz);
+      const res = await api.putSchedulingTimezone(submittedTz);
+      setTz((current) => (current === submittedTz ? res.timezone : current));
       setSaveResult('Saved');
+      setLoadError('');
     } catch {
       setSaveResult('Save failed — check the timezone name');
     } finally {
+      setSaving(false);
       setTimeout(() => setSaveResult(''), 2500);
     }
   }
+
+  const isSaveDisabled = saving || (Boolean(loadError) && !isEdited);
 
   return (
     <>
@@ -497,12 +548,37 @@ function OperatorTimezoneSection() {
             type="text"
             className={styles.input}
             value={tz}
-            onChange={(e) => setTz(e.target.value)}
+            onChange={(e) => {
+              isDirty.current = true;
+              setIsEdited(true);
+              setTz(e.target.value);
+            }}
           />
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave}
+            disabled={isSaveDisabled}
+          >
             Save
           </button>
+          {loadError && (
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+          )}
           {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
+          {loadError && (
+            <span data-testid="timezone-load-error" className="timezone-load-error">
+              <Text size={11} tone="reject">
+                {loadError}
+              </Text>
+            </span>
+          )}
         </div>
       </Row>
     </>
@@ -572,8 +648,6 @@ function ScheduledScanRetentionSection() {
 
 /* ---------- Part 3: profile-based scan scheduling ---------- */
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
-
 function formatRunTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString(undefined, {
@@ -642,7 +716,7 @@ function ScheduledScansSection() {
     }
   }
 
-  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>) {
+  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>): Promise<{ ok: boolean; error?: string }> {
     const next = { ...entry, ...patch };
     try {
       await api.updateScanScheduleEntry(entry.id, {
@@ -654,16 +728,27 @@ function ScheduledScansSection() {
         window_end_hour: next.window_end_hour,
       });
       void refresh();
-    } catch {
+      return { ok: true };
+    } catch (err) {
       // Leave the list stale rather than silently reverting the UI's optimistic value.
+      const error = err instanceof Error
+        ? `Could not update schedule entry: ${err.message}`
+        : 'Could not update schedule entry — check backend is reachable.';
+      return { ok: false, error };
     }
   }
 
-  async function deleteEntry(id: string) {
+  async function deleteEntry(id: string): Promise<{ ok: boolean; error?: string }> {
     try {
       await api.deleteScanScheduleEntry(id);
       void refresh();
-    } catch { /* best-effort */ }
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error
+        ? `Could not delete schedule entry: ${err.message}`
+        : 'Could not delete schedule entry — check backend is reachable.';
+      return { ok: false, error };
+    }
   }
 
   async function runNow(id: string) {
@@ -692,8 +777,8 @@ function ScheduledScansSection() {
           lastRun={lastRuns[entry.id] ?? null}
           stale={staleIds.includes(entry.id)}
           profiles={profiles.filter((p) => p.mode === entry.mode)}
-          onUpdate={(patch) => void updateEntry(entry, patch)}
-          onDelete={() => void deleteEntry(entry.id)}
+          onUpdate={(patch) => updateEntry(entry, patch)}
+          onDelete={() => deleteEntry(entry.id)}
           onRunNow={() => void runNow(entry.id)}
         />
       ))}
@@ -720,18 +805,36 @@ function ScheduleEntryRow({
   lastRun: ScanScheduleRun | null;
   stale: boolean;
   profiles: SearchProfile[];
-  onUpdate: (patch: Partial<ScanScheduleEntry>) => void;
-  onDelete: () => void;
+  onUpdate: (patch: Partial<ScanScheduleEntry>) => Promise<{ ok: boolean; error?: string }>;
+  onDelete: () => Promise<{ ok: boolean; error?: string }>;
   onRunNow: () => void;
 }) {
   const [label, setLabel] = useState(entry.label);
+  const [rowError, setRowError] = useState<string>('');
   useEffect(() => { setLabel(entry.label); }, [entry.label]);
+
+  const isProfileMissing = Boolean(entry.profile_id) && !profiles.some((p) => p.id === entry.profile_id);
+
+  const handleUpdate = async (patch: Partial<ScanScheduleEntry>) => {
+    const res = await onUpdate(patch);
+    if (!res.ok) {
+      setRowError(res.error || 'Could not update schedule entry — check backend is reachable.');
+    } else {
+      setRowError('');
+    }
+    return res;
+  };
 
   return (
     <div className={styles.row} style={{ alignItems: 'flex-start', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
       <div className={styles.rowLabel}>
         <span className={styles.defaultTag}>{entry.mode === 'options' ? 'Options' : 'Stocks'}</span>
         {stale && <Text size={11} tone="caution">May be out of date — last re-sync push failed</Text>}
+        {isProfileMissing && (
+          <Text size={11} tone="caution" className="schedule-missing-profile-warning">
+            Profile missing or deleted — select an available profile to reassign.
+          </Text>
+        )}
         {scheduleRiskIgnored(entry) && (
           <Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default (conviction-adjusted). Set it in Settings → Risk, then re-save the profile.</Text>
         )}
@@ -742,44 +845,71 @@ function ScheduleEntryRow({
             type="text"
             className={styles.input}
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={() => { if (label !== entry.label) onUpdate({ label }); }}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              if (rowError) setRowError('');
+            }}
+            onBlur={async () => {
+              if (label !== entry.label) {
+                await handleUpdate({ label });
+              }
+            }}
           />
           <select
             className={styles.input}
             value={entry.profile_id}
-            onChange={(e) => {
+            onChange={async (e) => {
               const p = profiles.find((pr) => pr.id === e.target.value);
               if (!p) return;
               try {
                 const resolved = resolveProfileToScanRequest(p);
-                onUpdate({
+                await handleUpdate({
                   profile_id: p.id, profile_name: p.name,
                   profile_synced_at: new Date().toISOString(), resolved_request: resolved,
                 });
-              } catch { /* leave entry pointed at old profile if this one can't resolve yet */ }
+              } catch (err) {
+                setRowError(err instanceof Error ? err.message : 'Could not resolve selected profile into a scan request.');
+              }
             }}
           >
+            {isProfileMissing && (
+              <option value={entry.profile_id} disabled>
+                {entry.profile_name || entry.profile_id} (missing)
+              </option>
+            )}
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select
             className={styles.input}
             value={entry.pattern}
-            onChange={(e) => onUpdate({
-              pattern: e.target.value as 'fixed_time' | 'loop',
-              fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
-              cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
-              window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
-              window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
-            })}
+            onChange={(e) => {
+              void handleUpdate({
+                pattern: e.target.value as 'fixed_time' | 'loop',
+                fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
+                cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
+                window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
+                window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
+              });
+            }}
           >
             <option value="fixed_time">Fixed time</option>
             <option value="loop">Loop (cadence + window)</option>
           </select>
-          <Toggle defaultOn={entry.enabled} onChange={(on) => onUpdate({ enabled: on })} />
+          <Toggle defaultOn={entry.enabled} onChange={(on) => void handleUpdate({ enabled: on })} />
           <button type="button" className={styles.btn} onClick={onRunNow}>Run now</button>
-          <button type="button" className={styles.btn} onClick={onDelete}>Delete</button>
+          <button type="button" className={styles.btn} onClick={async () => {
+            const res = await onDelete();
+            if (!res.ok) {
+              setRowError(res.error || 'Could not delete schedule entry — check backend is reachable.');
+            }
+          }}>Delete</button>
         </div>
+
+        {rowError && (
+          <div data-testid={`schedule-entry-error-${entry.id}`} className="schedule-entry-error" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text size={11} tone="reject">{rowError}</Text>
+          </div>
+        )}
 
         {entry.pattern === 'fixed_time' ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -788,9 +918,9 @@ function ScheduleEntryRow({
               type="time"
               className={styles.input}
               value={entry.fire_time ?? '09:00'}
-              onChange={(e) => onUpdate({ fire_time: e.target.value })}
+              onChange={(e) => void handleUpdate({ fire_time: e.target.value })}
             />
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -798,22 +928,29 @@ function ScheduleEntryRow({
             <input
               type="number" min={5} max={1440} className={styles.input} style={{ width: 70 }}
               value={entry.cadence_minutes ?? 60}
-              onChange={(e) => onUpdate({ cadence_minutes: Number(e.target.value) })}
+              onChange={async (e) => {
+                const val = Number(e.target.value);
+                if (val < 5 || val > 1440) {
+                  setRowError('Cadence must be between 5 and 1440 minutes.');
+                  return;
+                }
+                await handleUpdate({ cadence_minutes: val });
+              }}
             />
             <Text size={11} tone="secondary">min, between</Text>
             <input
               type="number" min={0} max={23} className={styles.input} style={{ width: 60 }}
               value={entry.window_start_hour ?? 9}
-              onChange={(e) => onUpdate({ window_start_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_start_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">and</Text>
             <input
               type="number" min={1} max={24} className={styles.input} style={{ width: 60 }}
               value={entry.window_end_hour ?? 17}
-              onChange={(e) => onUpdate({ window_end_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_end_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">(operator timezone)</Text>
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         )}
 
@@ -1693,7 +1830,7 @@ function NotificationForm() {
 
   return (
     <>
-      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
+      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only — leave blank to keep the existing saved value." />
 
       <Row
         label="Trade history retention (years)"
@@ -2273,7 +2410,7 @@ function ScheduleSection({
   return (
     <>
       <SectionIntro title={title} blurb={blurb} />
-      <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
+      <Row label="Enable schedule" hint={formatScheduleCadence(showDaysOfWeek, daysOfWeek)} defaultValue="Off">
         <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
       </Row>
       <Row label="Run time (HH:MM)" hint="24-hour operator timezone (see Scan → Operator timezone)" defaultValue={defaultTime}>
@@ -2353,29 +2490,109 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
   field: 'pullbackTolerancePct' | 'maCrossoverLookback' | 'breakoutVolumeMult';
   label: string; unit: string; scale?: number; decimals?: number; min: number; max: number; step: number;
 }) {
-  const value = useScanParamsStore((s) => s[field]);
+  const storeValue = useScanParamsStore((s) => s[field]);
   const setParam = useScanParamsStore((s) => s.setParam);
   const f = 10 ** decimals;
+
+  const [draft, setDraft] = useState<string>(
+    storeValue === null ? '' : String(Math.round(storeValue * scale * f) / f),
+  );
+  const [error, setError] = useState<string | null>(() => {
+    if (storeValue !== null && !isSchemaValidStrategyOverride(field, storeValue)) {
+      return field === 'pullbackTolerancePct'
+        ? 'Invalid stored pullback tolerance. Enter a value between 0.5% and 15% or clear.'
+        : field === 'maCrossoverLookback'
+        ? 'Invalid stored MA crossover lookback. Enter an integer between 1 and 30 bars or clear.'
+        : 'Invalid stored breakout volume multiplier. Enter a value greater than 1.0× and at most 3.0× or clear.';
+    }
+    return null;
+  });
+
+  const lastSyncedValue = useRef<number | null>(storeValue);
+
+  useEffect(() => {
+    if (storeValue !== lastSyncedValue.current) {
+      lastSyncedValue.current = storeValue;
+      if (storeValue === null) {
+        setDraft('');
+        setError(null);
+      } else if (isSchemaValidStrategyOverride(field, storeValue)) {
+        setDraft(String(Math.round(storeValue * scale * f) / f));
+        setError(null);
+      }
+    }
+  }, [storeValue, scale, f, field]);
+
+  function handleChange(raw: string) {
+    setDraft(raw);
+    if (raw.trim() === '') {
+      setError(null);
+      setParam(field, null);
+      lastSyncedValue.current = null;
+      return;
+    }
+
+    const res =
+      field === 'pullbackTolerancePct'
+        ? validatePullbackToleranceDraft(raw)
+        : field === 'maCrossoverLookback'
+        ? validateMaCrossoverLookbackDraft(raw)
+        : validateBreakoutVolumeMultDraft(raw);
+
+    if (!res.valid) {
+      setError(res.error);
+    } else {
+      setError(null);
+      try {
+        setParam(field, res.value);
+        lastSyncedValue.current = res.value;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  function handleClear() {
+    setDraft('');
+    setError(null);
+    setParam(field, null);
+    lastSyncedValue.current = null;
+  }
+
   return (
-    <>
-      <input
-        type="number"
-        className={styles.numInput}
-        aria-label={label}
-        placeholder="follows horizon profile"
-        value={value === null ? '' : Math.round(value * scale * f) / f}
-        min={min} max={max} step={step}
-        onChange={(e) =>
-          setParam(field, e.target.value === '' ? null : Number(e.target.value) / scale)
-        }
-      />
-      <Text size={12} tone="secondary">{unit}</Text>
-      {value !== null && (
-        <button type="button" className={styles.btn} aria-label={`Clear ${label}`} onClick={() => setParam(field, null)}>
-          clear
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input
+          type="number"
+          className={styles.numInput}
+          aria-label={label}
+          placeholder="follows horizon profile"
+          value={draft}
+          min={min}
+          max={max}
+          step={step}
+          aria-invalid={!!error}
+          aria-errormessage={error ? `${field}-error` : undefined}
+          onChange={(e) => handleChange(e.target.value)}
+        />
+        <Text size={12} tone="secondary">{unit}</Text>
+        {(storeValue !== null || draft !== '') && (
+          <button
+            type="button"
+            className={styles.btn}
+            aria-label={`Clear ${label}`}
+            onClick={handleClear}
+          >
+            clear
+          </button>
+        )}
+      </div>
+      {error && (
+        <span id={`${field}-error`} role="alert">
+          <Text size={11} tone="reject">{error}</Text>
+        </span>
       )}
-    </>
+    </div>
   );
 }
 

@@ -1,0 +1,54 @@
+{
+  "browser": "151.0.7922.173",
+  "boundary": "All API and websocket requests mocked; same browser document and actual Next navigation",
+  "events": [
+    {
+      "event": "request",
+      "id": 1
+    },
+    {
+      "event": "request",
+      "id": 2
+    },
+    {
+      "event": "request",
+      "id": 3
+    },
+    {
+      "event": "request",
+      "id": 4
+    },
+    {
+      "event": "response",
+      "id": 3,
+      "state": "Bull"
+    },
+    {
+      "event": "response",
+      "id": 4,
+      "state": "Bull"
+    },
+    {
+      "event": "response",
+      "id": 1,
+      "state": "Bear"
+    },
+    {
+      "event": "response",
+      "id": 2,
+      "state": "Bear"
+    }
+  ],
+  "before": {
+    "verdict": "PASS",
+    "body": "Skip to content\nBAMENDJOU\nOptions Screener\nIDLE\nPASS\nPRE\n·\n1h 39m\nConfig unknown\nConfig health unknown: config health: expected an object. Retrying every 30 s.\nCollapse\n\nNothing could be checked.\n\n1\nMarket Regime\n2\nUniverse\n3\nDirection + Horizon\n4\nStock Ranking\n5\nVol + Events\n6\nContracts\n7\nTrade Card\n← Exit Workflow\nIDLE\nOptions\nStocks\nPre-Breakout\nSTEP 1 OF 7\nMarket Regime\nMacro snapshot — advisory. REJECT prompts confirmation before proceeding.\nREGIME PASS\nAudit Bull\nWhat this measures\nBroad-market health of the US indices (SPX & NDX) — not your watchlist. The regime answers: “is the tide with or against a fresh directional trade?”\nHow it affects this scan\nPASS — proceed as scanned. CAUTION — position-size smaller, tighten stops. REJECT — wait or fade: a confirmation dialog will block Step 4.\nS&P 500 (SPY)\n0.00\n0.00%\n\t\n\t\n\n\t\n\t\nNasdaq 100 (QQQ)\n0.00\n0.00%\n\t\n\t\n\n\t\n\t\nEMA / VIX\nSPX & NDX vs 200-day EMA, plus VIX level\nRegime by Horizon\nSame macro signal — emphasis varies by timeframe\nINTRADAY\nCalculating…\nSWING\n↑ Bull\n10 bars · avg ≈5 strides of 20 bars · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nPOSITION\n↑ Bull\n10 bars · avg ≈5 strides of 20 bars · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nMarket Sentiment\nSwing · daily\nConviction\n0%\nNeutral — Market conviction: Neutral\nState Bull · sticky 80% · ≈5 strides of 20 bars\nAlignment\nOMM only\nSector heatmap\n0 up · 0 down · today\nMARKET NEWSNo news for current candidates.\nRun Scan\n←\nBack\nSTEP 1 OF 7\nNext: Universe\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+  },
+  "after": {
+    "verdict": "REJECT",
+    "body": "Skip to content\nBAMENDJOU\nOptions Screener\nIDLE\nPASS\nPRE\n·\n1h 39m\nConfig unknown\nConfig health unknown: config health: expected an object. Retrying every 30 s.\nCollapse\n\nNothing could be checked.\n\n1\nMarket Regime\n2\nUniverse\n3\nDirection + Horizon\n4\nStock Ranking\n5\nVol + Events\n6\nContracts\n7\nTrade Card\n← Exit Workflow\nIDLE\nOptions\nStocks\nPre-Breakout\nSTEP 1 OF 7\nMarket Regime\nMacro snapshot — advisory. REJECT prompts confirmation before proceeding.\nREGIME PASS\nAudit Bull\nWhat this measures\nBroad-market health of the US indices (SPX & NDX) — not your watchlist. The regime answers: “is the tide with or against a fresh directional trade?”\nHow it affects this scan\nPASS — proceed as scanned. CAUTION — position-size smaller, tighten stops. REJECT — wait or fade: a confirmation dialog will block Step 4.\nS&P 500 (SPY)\n0.00\n0.00%\n\t\n\t\n\n\t\n\t\nNasdaq 100 (QQQ)\n0.00\n0.00%\n\t\n\t\n\n\t\n\t\nEMA / VIX\nSPX & NDX vs 200-day EMA, plus VIX level\nRegime by Horizon\nSame macro signal — emphasis varies by timeframe\nINTRADAY\nCalculating…\nSWING\n↑ Bull\n10 bars · avg ≈5 strides of 20 bars · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nPOSITION\n↑ Bull\n10 bars · avg ≈5 strides of 20 bars · Stable\n80% chance of staying in this regime\n10% chance of switching to Bear\n10% chance of switching to Choppy\nMarket Sentiment\nSwing · daily\nConviction\n0%\nNeutral — Market conviction: Neutral\nState Bull · sticky 80% · ≈5 strides of 20 bars\nAlignment\nOMM only\nSector heatmap\n0 up · 0 down · today\nMARKET NEWSNo news for current candidates.\nRun Scan\n←\nBack\nSTEP 1 OF 7\nNext: Universe\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+  },
+  "expected_after": "PASS (latest Bull + Bullish)",
+  "actual_after": "REJECT",
+  "unexpected_reject_dialog": true,
+  "errors": []
+}

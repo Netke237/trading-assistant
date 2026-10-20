@@ -1,0 +1,255 @@
+...........F..................FF........................................ [ 79%]
+...................                                                      [100%]
+=================================== FAILURES ===================================
+_ test_an_unmeasurable_intraday_fire_sizes_at_the_floor_never_full[intraday0] __
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x7f6570773e90>
+intraday = [{'close': 50.0, 'high': 50.5, 'low': 49.5, 'open': 50.0, ...}, {'close': 50.0, 'high': 50.5, 'low': 49.5, 'open': 50....0.0, 'high': 50.5, 'low': 49.5, 'open': 50.0, ...}, {'close': 50.0, 'high': 50.5, 'low': 49.5, 'open': 50.0, ...}, ...]
+
+    @pytest.mark.parametrize("intraday", [INTRADAY[:10]])
+    def test_an_unmeasurable_intraday_fire_sizes_at_the_floor_never_full(mocker, intraday):
+        """The gate abstains on the same input; SIZING-4's floor still bounds it."""
+        from app.data.ibkr_paper import OrderResult
+        sent = {}
+        mocker.patch("app.data.market.fetch_intraday_candles", return_value=intraday)
+        mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+        mocker.patch("app.services.auto_trader.execute_option_order",
+                     side_effect=lambda s: sent.setdefault("qty", s.quantity) and OrderResult("a4", "ok", "ibkr_paper"))
+        mocker.patch("app.services.regime_monitor.get_last_conviction",
+                     side_effect=AssertionError("SPX cache read"))
+        svc = at.AutoTradeService()
+        svc.arm(_armed("Intraday"))
+>       svc.fire()
+
+test_a4_intraday_regime_bars.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <app.services.auto_trader.AutoTradeService object at 0x7f6570694650>
+portfolio_snapshot = None, portfolio_value = None
+attempt_id = 'ba06d39a011d4871b791fb1e3a3c7d72', expect = None
+daily_risk_hooks = None, exposure_hooks = None
+
+    def fire(self, portfolio_snapshot: list | None = None,
+             portfolio_value: float | None = None,
+             attempt_id: str | None = None,
+             expect: ArmedStrategy | None = None,
+             daily_risk_hooks=None,
+             exposure_hooks=None) -> FiredOrder:
+        """Execute the armed strategy.
+    
+        Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
+        provided, runs an exposure cap check before executing — raises if the
+        caps would be breached. Pass portfolio_snapshot=None to skip the check
+        (backward-compat path for tests and callers without DB access).
+    
+        `attempt_id` STAMPS EVERY HISTORY ROW THIS ATTEMPT WRITES, so a caller
+        that must find out what its own attempt did can match on it. Target
+        2a-alert round 1, F1: `maybe_fire_on_scan` used to identify its row by
+        SLICE INDEX — `history[history_len:]` captured before the call — and
+        under two concurrent scans the loser read the winner's row. A slice
+        index names a position in a list two threads append to; an id names an
+        attempt. Defaults to a fresh uuid4 so a direct caller (the `/fire`
+        endpoint) still writes well-formed rows without knowing about this.
+    
+        `expect` MAKES THE ATTEMPT FIRE ONE PARTICULAR ARMED ORDER OR NONE.
+        Passed by callers that read the armed slot, decided something about
+        what they read, and only then called — `maybe_fire_on_scan` checks the
+        staleness of the order it read. Without it, a disarm-and-re-arm inside
+        the window (a manual POST /auto-trade/fire, whose fire() runs on
+        `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, while the scan
+        trigger runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s — two executors,
+        so neither serialises the other) had this attempt fire AAPL on the
+        strength of MSFT's age check and then alert about MSFT for a row that
+        says AAPL — F1's third interleaving. Identity, not equality: a re-arm
+        with an equal-valued strategy is still a different decision. Mismatch
+        refuses BEFORE the disarm, so the new order stays armed and the next
+        scan gets it.
+        """
+        supplied_attempt = attempt_id is not None
+        attempt_id = attempt_id or uuid.uuid4().hex
+    
+        with self._lock:
+            if not self._state.armed or self._state.strategy is None:
+                raise ArmPreservedError("AutoTrader not armed — cannot fire")
+            if expect is not None and self._state.strategy is not expect:
+                raise ArmPreservedError(
+                    "AutoTrader re-armed since this attempt read it "
+                    "— armed state preserved for the next trigger"
+                )
+            _symbol = self._state.strategy.symbol
+            _option_symbol = self._state.strategy.option_symbol
+            _probed_strategy = self._state.strategy
+            # An unsupported arm is consumed even outside market hours. Take it
+            # under the same lock as the identity check; record outside the lock.
+            unvalidated = self._state.strategy.direction == "Bearish"
+            if unvalidated:
+                strategy = self._state.strategy
+                self._state.armed = False
+                self._state.strategy = None
+                self._consumed_attempts.append(attempt_id)
+    
+        if unvalidated:
+            self._refuse_unvalidated(attempt_id, strategy)
+    
+        # Halt check outside lock — network call must not hold the lock.
+        # Armed state is preserved: we haven't disarmed yet.
+        if not _market_is_open(_symbol):
+            raise ArmPreservedError(
+                f"Market closed or {_symbol} halted "
+                f"— armed state preserved for retry"
+            )
+    
+        _qs = _option_quote_state(_option_symbol)
+        if _qs != "live":
+            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
+>           raise ArmPreservedError(
+                f"No live option quote for {_option_symbol} ({_qs}) "
+                "— armed state preserved for retry"
+            )
+E           app.services.auto_trader.ArmPreservedError: No live option quote for AAPL260620C00185000 (session_closed) — armed state preserved for retry
+
+/workspace/trading-assistant/backend/app/services/auto_trader.py:2810: ArmPreservedError
+------------------------------ Captured log call -------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:2809 No live option quote for AAPL260620C00185000 (session_closed) — armed state preserved
+___ test_r5_a_series_left_under_min_obs_by_the_drop_is_unmeasured_and_floors ___
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x7f656de49010>
+
+    def test_r5_a_series_left_under_min_obs_by_the_drop_is_unmeasured_and_floors(mocker):
+        """min_obs is 60: 59 completed + 1 forming used to measure; now it abstains."""
+        from app.data.ibkr_paper import OrderResult
+        from app.services.auto_trader import ArmedStrategy
+        sent = {}
+        mocker.patch("app.data.market.fetch_intraday_candles", return_value=_bars(59))
+        mocker.patch("app.services.auto_trader._market_is_open", return_value=True)
+        mocker.patch("app.services.auto_trader.execute_option_order",
+                     side_effect=lambda s: sent.setdefault("qty", s.quantity) and OrderResult("x", "ok", "ibkr_paper"))
+        svc = at.AutoTradeService()
+        svc.arm(ArmedStrategy(
+            broker="ibkr_paper", symbol="AAPL", option_symbol="AAPL260620C00185000",
+            action="BUY", direction="Bullish", quantity=4, order_type="LMT", limit_price=2.5,
+            conid=None, entry_premium=2.5, portfolio_value=100_000.0, horizon="Intraday",
+        ))
+>       svc.fire()
+
+test_a4b_completed_intraday_bars.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <app.services.auto_trader.AutoTradeService object at 0x7f656de48cd0>
+portfolio_snapshot = None, portfolio_value = None
+attempt_id = '6f0e5b117f0a44b78aa00a9bd79b5f6a', expect = None
+daily_risk_hooks = None, exposure_hooks = None
+
+    def fire(self, portfolio_snapshot: list | None = None,
+             portfolio_value: float | None = None,
+             attempt_id: str | None = None,
+             expect: ArmedStrategy | None = None,
+             daily_risk_hooks=None,
+             exposure_hooks=None) -> FiredOrder:
+        """Execute the armed strategy.
+    
+        Disarms on the fire attempt (fail-closed). If portfolio_snapshot is
+        provided, runs an exposure cap check before executing — raises if the
+        caps would be breached. Pass portfolio_snapshot=None to skip the check
+        (backward-compat path for tests and callers without DB access).
+    
+        `attempt_id` STAMPS EVERY HISTORY ROW THIS ATTEMPT WRITES, so a caller
+        that must find out what its own attempt did can match on it. Target
+        2a-alert round 1, F1: `maybe_fire_on_scan` used to identify its row by
+        SLICE INDEX — `history[history_len:]` captured before the call — and
+        under two concurrent scans the loser read the winner's row. A slice
+        index names a position in a list two threads append to; an id names an
+        attempt. Defaults to a fresh uuid4 so a direct caller (the `/fire`
+        endpoint) still writes well-formed rows without knowing about this.
+    
+        `expect` MAKES THE ATTEMPT FIRE ONE PARTICULAR ARMED ORDER OR NONE.
+        Passed by callers that read the armed slot, decided something about
+        what they read, and only then called — `maybe_fire_on_scan` checks the
+        staleness of the order it read. Without it, a disarm-and-re-arm inside
+        the window (a manual POST /auto-trade/fire, whose fire() runs on
+        `routers/auto_trade._FIRE_EXECUTOR`'s worker thread, while the scan
+        trigger runs on `routers/scan._SCAN_FIRE_EXECUTOR`'s — two executors,
+        so neither serialises the other) had this attempt fire AAPL on the
+        strength of MSFT's age check and then alert about MSFT for a row that
+        says AAPL — F1's third interleaving. Identity, not equality: a re-arm
+        with an equal-valued strategy is still a different decision. Mismatch
+        refuses BEFORE the disarm, so the new order stays armed and the next
+        scan gets it.
+        """
+        supplied_attempt = attempt_id is not None
+        attempt_id = attempt_id or uuid.uuid4().hex
+    
+        with self._lock:
+            if not self._state.armed or self._state.strategy is None:
+                raise ArmPreservedError("AutoTrader not armed — cannot fire")
+            if expect is not None and self._state.strategy is not expect:
+                raise ArmPreservedError(
+                    "AutoTrader re-armed since this attempt read it "
+                    "— armed state preserved for the next trigger"
+                )
+            _symbol = self._state.strategy.symbol
+            _option_symbol = self._state.strategy.option_symbol
+            _probed_strategy = self._state.strategy
+            # An unsupported arm is consumed even outside market hours. Take it
+            # under the same lock as the identity check; record outside the lock.
+            unvalidated = self._state.strategy.direction == "Bearish"
+            if unvalidated:
+                strategy = self._state.strategy
+                self._state.armed = False
+                self._state.strategy = None
+                self._consumed_attempts.append(attempt_id)
+    
+        if unvalidated:
+            self._refuse_unvalidated(attempt_id, strategy)
+    
+        # Halt check outside lock — network call must not hold the lock.
+        # Armed state is preserved: we haven't disarmed yet.
+        if not _market_is_open(_symbol):
+            raise ArmPreservedError(
+                f"Market closed or {_symbol} halted "
+                f"— armed state preserved for retry"
+            )
+    
+        _qs = _option_quote_state(_option_symbol)
+        if _qs != "live":
+            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
+>           raise ArmPreservedError(
+                f"No live option quote for {_option_symbol} ({_qs}) "
+                "— armed state preserved for retry"
+            )
+E           app.services.auto_trader.ArmPreservedError: No live option quote for AAPL260620C00185000 (session_closed) — armed state preserved for retry
+
+/workspace/trading-assistant/backend/app/services/auto_trader.py:2810: ArmPreservedError
+------------------------------ Captured log call -------------------------------
+WARNING  app.services.auto_trader:auto_trader.py:2809 No live option quote for AAPL260620C00185000 (session_closed) — armed state preserved
+______________________ test_regime_config_blocks_present _______________________
+
+    def test_regime_config_blocks_present():
+>       cfg = yaml.safe_load(CFG.read_text())
+
+test_regime_gate.py:7: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/workspace/.tools/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/tmp/config/scoring_rules.yaml'), mode = 'r', buffering = -1
+encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: '/tmp/config/scoring_rules.yaml'
+
+/workspace/.tools/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py:1044: FileNotFoundError
+=========================== short test summary info ============================
+FAILED test_a4_intraday_regime_bars.py::test_an_unmeasurable_intraday_fire_sizes_at_the_floor_never_full[intraday0]
+FAILED test_a4b_completed_intraday_bars.py::test_r5_a_series_left_under_min_obs_by_the_drop_is_unmeasured_and_floors
+FAILED test_regime_gate.py::test_regime_config_blocks_present - FileNotFoundE...
+3 failed, 88 passed, 2 deselected in 4.93s

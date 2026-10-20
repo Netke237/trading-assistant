@@ -15,7 +15,7 @@
    * failure mode is the headings drifting off their data, which is the exact
    * defect this table was just fixed for. */
   gap: var(--table-row-gap, var(--space-3));
-  min-height: 44px;
+  min-height: var(--table-row-min-height, 44px);
   padding: 0 var(--space-3) 0 10px; /* left padding accounts for 2px border */
   border-bottom: 1px solid var(--border-subtle);
   border-left: 2px solid var(--border-subtle);
@@ -64,3 +64,9 @@
   background: var(--bg-surface-3);
 }
 .selected:hover { background: var(--bg-surface-3); }
+
+.row[data-density="compact"],
+:global([data-density="compact"]) .row {
+  min-height: 32px;
+}
+

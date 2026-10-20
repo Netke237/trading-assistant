@@ -1,0 +1,539 @@
+{
+  "A_head": "e72b15a58b69267150143c0922d37ca92272c844",
+  "A_source": "27fe5182a90ae1b40bee53bdf01484b92dab136c",
+  "A_inventory_complete": false,
+  "source_inventory_sha256": "f9dd2bbcc1c56f527ee61c66009d75528baaba39cc8ced28f7633eb44085d1aa",
+  "source_links_sha256": "42311626020e69128f5a30096b8c1a5c2d1f959414f11f7e77474bf397c0df93",
+  "B_prior_count": 36,
+  "B_current_count": 36,
+  "ids_equal": true,
+  "new_B_ids": [],
+  "removed_B_ids": [],
+  "observations_selected": 12,
+  "definitions": [
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-1-regime/page.tsx#Step1RegimePage",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-2-universe/page.tsx#Step2Page",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#ParamRow",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SectionBlock",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#Step3Page",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SubGroupBlock",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/IvThresholdsSection.tsx#IvThresholdsSection",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#AtrPairRow",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#DaysOfWeekPicker",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#FundamentalsGateSection",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OperatorTimezoneSection",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OverrideInput",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#PremiumStopSettingNotes",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm",
+      "A_runtime_observations": [
+        {
+          "observation_id": "settings:regime",
+          "artifact": "evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:regime"
+          ]
+        },
+        {
+          "observation_id": "settings:section:regime",
+          "artifact": "interactive-attempt-1/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:regime"
+          ]
+        },
+        {
+          "observation_id": "settings:section:regime",
+          "artifact": "interactive-evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:regime"
+          ]
+        }
+      ],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "runtime source binding plus lane evidence; no blanket state/numeric completion"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SaveButton",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScanForm",
+      "A_runtime_observations": [
+        {
+          "observation_id": "settings:scan",
+          "artifact": "evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:scan"
+          ]
+        },
+        {
+          "observation_id": "settings:section:scan",
+          "artifact": "interactive-attempt-1/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:scan"
+          ]
+        },
+        {
+          "observation_id": "settings:section:scan",
+          "artifact": "interactive-evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:scan"
+          ]
+        }
+      ],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "runtime source binding plus lane evidence; no blanket state/numeric completion"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleEntryRow",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleSection",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SpreadsSection",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm",
+      "A_runtime_observations": [
+        {
+          "observation_id": "settings:strategy",
+          "artifact": "evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:strategy"
+          ]
+        },
+        {
+          "observation_id": "settings:section:strategy",
+          "artifact": "interactive-attempt-1/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:strategy"
+          ]
+        },
+        {
+          "observation_id": "settings:section:strategy",
+          "artifact": "interactive-evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:strategy"
+          ]
+        }
+      ],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "runtime source binding plus lane evidence; no blanket state/numeric completion"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm",
+      "A_runtime_observations": [
+        {
+          "observation_id": "settings:theme",
+          "artifact": "evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:theme"
+          ]
+        },
+        {
+          "observation_id": "settings:section:theme",
+          "artifact": "interactive-attempt-1/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:theme"
+          ]
+        },
+        {
+          "observation_id": "settings:section:theme",
+          "artifact": "interactive-evidence/observations.json",
+          "state": "normal",
+          "source_state_requirement_ids": [
+            "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+          ],
+          "fixture_identities": [
+            "settings-section:theme"
+          ]
+        }
+      ],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "runtime source binding plus lane evidence; no blanket state/numeric completion"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#Toggle",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#Row",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#SectionIntro",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/molecules/ConfigHealthChip/index.tsx#ConfigHealthChip",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/molecules/RegimeIndicator/index.tsx#RegimeIndicator",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/molecules/RenameProfileDialog/index.tsx#RenameProfileDialog",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/molecules/SaveProfileDialog/index.tsx#SaveProfileDialog",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/ConfigHealthBanner/index.tsx#ConfigHealthBanner",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/NavItems/index.tsx#SettingsIcon",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/SearchProfileBar/index.tsx#SearchProfileBar",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#NumField",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#ResetToProfile",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#SectionHeader",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel",
+      "A_runtime_observations": [],
+      "B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "no explicit A runtime binding in this increment; retain B-specific evidence/residual obligations"
+    }
+  ],
+  "remaining": "A Task3 final semantic/runtime inventory and independent audit remain open. Observed route/state rows never certify numeric/persistence outcomes.",
+  "definitions_with_explicit_A_runtime_binding": 4
+}

@@ -303,6 +303,13 @@ describe('runStockScan', () => {
         useScanStore.setState({ setStockScanResult: original } as never);
       }
     });
+
+    it('an invalid strategy override reports the specific validation message instead of broad reset guidance', async () => {
+      useScanParamsStore.setState({ pullbackTolerancePct: 0 });
+      await runStockScan('pullback_ema');
+      expect(useScanStore.getState().stockScanError).toContain('Pullback tolerance must be greater than 0%');
+      expect(consoleError).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -1,0 +1,649 @@
+{
+  "source_commit": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "runtime": "3.11.16",
+  "harness_sha256": "87a81f59742e71ede7889f32a666819e41be69d991c9912c64bb8b43f7cd2881",
+  "fixture_sha256": "cc5f42354095d7f5374a1ab6a1c8206376ab25d084287ffe0bed36216732d709",
+  "provenance_sha256": "cacb98e4729a215fb3443549fb246abf935fc886d129962cdf4f2a121e9bc805",
+  "fixture_encoding": "Sanitized, pretty-printed provider JSON containing every returned bar field/value; SHA covers these normalized fixture bytes, not verbatim HTTP transport bytes.",
+  "validation": {
+    "bar_count": 2480,
+    "duplicate_timestamps": 0,
+    "strictly_ascending": true,
+    "eastern_vs_provider_epoch_mismatch_indices": [],
+    "invalid_finite_ohlc_volume_indices": [],
+    "aligned_to_15min": true,
+    "first_epoch": 1788235200,
+    "last_epoch": 1792036800,
+    "per_eastern_date": {
+      "2026-09-01": 79,
+      "2026-09-02": 80,
+      "2026-09-03": 80,
+      "2026-09-04": 80,
+      "2026-09-08": 80,
+      "2026-09-09": 80,
+      "2026-09-10": 80,
+      "2026-09-11": 80,
+      "2026-09-14": 80,
+      "2026-09-15": 80,
+      "2026-09-16": 80,
+      "2026-09-17": 80,
+      "2026-09-18": 80,
+      "2026-09-21": 80,
+      "2026-09-22": 80,
+      "2026-09-23": 80,
+      "2026-09-24": 80,
+      "2026-09-25": 80,
+      "2026-09-28": 80,
+      "2026-09-29": 80,
+      "2026-09-30": 80,
+      "2026-10-01": 80,
+      "2026-10-02": 80,
+      "2026-10-05": 80,
+      "2026-10-06": 80,
+      "2026-10-07": 80,
+      "2026-10-08": 80,
+      "2026-10-09": 80,
+      "2026-10-12": 80,
+      "2026-10-13": 80,
+      "2026-10-14": 80,
+      "2026-10-15": 1
+    }
+  },
+  "cutoff": {
+    "frozen_utc": "2026-10-16T20:29:54.556538+00:00",
+    "feed_lag_seconds": 0,
+    "bar_seconds": 900,
+    "completed": 2480,
+    "dropped": 0,
+    "last_bar_utc": "2026-10-15T04:00:00+00:00"
+  },
+  "source_config_hashes": {
+    "backend/app/data/market.py": "2b4e4ea0ae2ea131ed93c487670494812111db0e7c192021f0e60635e4b40d1b",
+    "backend/app/services/regime_hmm.py": "eb83eb5e517f06af9556dec6c2dddf753f54ce9bf6c875f4a269418fbfd6e830",
+    "backend/app/services/regime_omm.py": "52ea35ea18e54ebffd255e2d75d6e4bcebb14fd21f41dacb5107a758d66f07a6",
+    "backend/app/routers/regime.py": "67401b378945d0efb12b36c61f07f9843c25debb5a6db3c3431ac51608d25f25",
+    "backend/app/schemas/__init__.py": "d5cedfa22e1249d0d216e23851eecb6cf207d0b4fa8528de5d94920cb860890a",
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/requirements.txt": "a19f70c7742649daca8f72c979e18455b6d40df77560e04688d4019d4bb5861a",
+    "frontend/lib/regimeDuration.ts": "0de1bbac9a2f168dcf44b6e2ad615704602bb4fb0c053282e521d12db58aa692"
+  },
+  "dependencies": {
+    "numpy": {
+      "version": "2.4.6",
+      "record_sha256": "adb4916801ac86be4eba1529b15eaa574a0920bf78a1ea1e44e672f860ea9dfe"
+    },
+    "scipy": {
+      "version": "1.17.1",
+      "record_sha256": "4cd9d4db7fbf310e5d9f26a88bc5fd0aca93a95cf23a23f178287a3c7e3580a0"
+    },
+    "scikit-learn": {
+      "version": "1.9.1",
+      "record_sha256": "8bdd4e833ddbe71085009a84e4b72878f9bc580162b27a5998622c1984dcc796"
+    },
+    "hmmlearn": {
+      "version": "0.3.3",
+      "record_sha256": "bbf7c614f45f8ef2328686a1b2068a836aab0f4f149adc62c5dc357fb2d29928"
+    },
+    "fastapi": {
+      "version": "0.141.1",
+      "record_sha256": "0cb712616945818833c471a86f46b97b2102ae394176787f3f75a14d8a5a2a89"
+    },
+    "pydantic": {
+      "version": "2.13.4",
+      "record_sha256": "17ede917c5a22e23aa8d976f9b71175ca7da3ec17b379e4a484eac2c7e99b26c"
+    }
+  },
+  "hmm": {
+    "fit_bars": 800,
+    "fit_returns": 799,
+    "inference_tail_returns": 30,
+    "parameters": {
+      "start": [
+        0.11316630442418683,
+        0.8868336955741434,
+        1.6698808212402466e-12
+      ],
+      "trans": [
+        [
+          0.0009060387370848533,
+          0.9990939612629068,
+          8.364751105197391e-15
+        ],
+        [
+          0.9917755701552138,
+          0.008224429836747982,
+          8.038309700015371e-12
+        ],
+        [
+          0.7646244496166303,
+          0.23537555019663337,
+          1.8673636466845863e-10
+        ]
+      ],
+      "means": [
+        -1.0614009462719256e-05,
+        9.559368065665775e-06,
+        -2.2036233656149852e-05
+      ],
+      "variances": [
+        2.5569816419939373e-05,
+        2.5362093679899035e-05,
+        3100172.0467070835
+      ]
+    },
+    "inference_tail_values": [
+      0.0001622997221428757,
+      -0.0011488955673401976,
+      -0.001533622728808648,
+      3.905029678222003e-05,
+      -0.0009697111692503997,
+      0.0010357968795805645,
+      -0.00022126197417752076,
+      -0.0005728047907309,
+      6.512875955758623e-06,
+      0.0002670261750778964,
+      0.0012957078862381559,
+      3.251334672895047e-05,
+      0.0008843342783571539,
+      -0.0007796055196071084,
+      7.802137785760984e-05,
+      -3.900764549863005e-05,
+      0.00015603666861713095,
+      -0.00020801643329818918,
+      -6.50186603554629e-05,
+      -0.00020807324178121338,
+      0.0002341311134236,
+      0.00011703815443838829,
+      -0.0014693070851807969,
+      -0.0006641143839363812,
+      0.0003128624109040534,
+      0.00013104587504448304,
+      5.118715783229545e-05,
+      -0.0005209622172151669,
+      -0.0003648636322174232,
+      -0.0018771264322864976
+    ],
+    "scalar_terminal_posterior": [
+      0.7933214460744222,
+      0.20667855392557788,
+      1.976839311317815e-17
+    ],
+    "actual_terminal_posterior": [
+      0.7933214460744327,
+      0.20667855392557768,
+      1.9768393113178486e-17
+    ],
+    "posterior_max_absolute_error": 1.0436096431476471e-14,
+    "model_monitor_converged": true,
+    "iterations": 6,
+    "log_likelihood_history": [
+      2024.706651500377,
+      3458.6424748311792,
+      3481.1147718081897,
+      3484.648164567667,
+      3484.9371554734016,
+      3484.943959569677
+    ],
+    "scope": "Actual unchanged seed=42/n_iter=100 fit. Scalar inference reproduces fitted-model output; optimizer correctness, calibration and predictive accuracy are not independently established."
+  },
+  "omm": {
+    "parameters": {
+      "lookback": 26,
+      "threshold": 0.002,
+      "smoothing": 0.2,
+      "window": 500,
+      "min_obs": 100
+    },
+    "current_observations": 123,
+    "transition_counts": [
+      [
+        0,
+        2,
+        3
+      ],
+      [
+        1,
+        1,
+        2
+      ],
+      [
+        3,
+        2,
+        5
+      ]
+    ],
+    "sampled_labels": [
+      "Bull",
+      "Choppy",
+      "Bear",
+      "Bull",
+      "Choppy",
+      "Bear",
+      "Choppy",
+      "Bull",
+      "Choppy",
+      "Choppy",
+      "Bull",
+      "Bear",
+      "Choppy",
+      "Choppy",
+      "Choppy",
+      "Choppy",
+      "Choppy",
+      "Bull",
+      "Bear",
+      "Bear"
+    ],
+    "min_obs_real_prefix_boundaries": {
+      "99": {
+        "input_bars": 158,
+        "last_epoch": 1788391800,
+        "current_observations": 99
+      },
+      "100": {
+        "input_bars": 159,
+        "last_epoch": 1788392700,
+        "current_observations": 100
+      }
+    },
+    "units": {
+      "age_unit": "consecutive 15-minute input bars",
+      "average_duration_unit": "26-input-bar transition strides",
+      "stride_bars": 26,
+      "nominal_stride_hours": 6.5,
+      "observed_26_bar_elapsed_hours_min": 6.5,
+      "observed_26_bar_elapsed_hours_max": 82.5,
+      "sampled_regular_session_bars": 806,
+      "all_session_bar_count": 2480,
+      "current_age_bars": 1,
+      "current_age_nominal_minutes": 15,
+      "caveat": "All-session input includes overnight bars and gaps. 26 bars is not one trading day/session; no calendar/session conversion is certified."
+    }
+  },
+  "checks": [
+    {
+      "name": "frozen_completed_bar_filter",
+      "expected": {
+        "count": 2480,
+        "sha256": "7fdce7108a9cabc7295477dcf7a25e16b0818b9feea286719cf262ae101cede5",
+        "first": 1788235200,
+        "last": 1792036800
+      },
+      "actual": {
+        "count": 2480,
+        "sha256": "7fdce7108a9cabc7295477dcf7a25e16b0818b9feea286719cf262ae101cede5",
+        "first": 1788235200,
+        "last": 1792036800
+      },
+      "passed": true
+    },
+    {
+      "name": "actual_adapter_single_mocked_marketdata_call",
+      "expected": 1,
+      "actual": 1,
+      "passed": true
+    },
+    {
+      "name": "actual_adapter_session_filter",
+      "expected": "all",
+      "actual": "all",
+      "passed": true
+    },
+    {
+      "name": "actual_adapter_parse",
+      "expected": {
+        "count": 2480,
+        "sha256": "fa6f273d279a74d33e3dbfda73f57082f07774f4f9c226a2cc595167006bd86f",
+        "first": {
+          "time": 1788235200,
+          "open": 766.9,
+          "high": 766.92,
+          "low": 766.9,
+          "close": 766.92,
+          "volume": 386
+        },
+        "last": {
+          "time": 1792036800,
+          "open": 766.04,
+          "high": 766.04,
+          "low": 765.69,
+          "close": 765.69,
+          "volume": 3051
+        }
+      },
+      "actual": {
+        "count": 2480,
+        "sha256": "fa6f273d279a74d33e3dbfda73f57082f07774f4f9c226a2cc595167006bd86f",
+        "first": {
+          "time": 1788235200,
+          "open": 766.9,
+          "high": 766.92,
+          "low": 766.9,
+          "close": 766.92,
+          "volume": 386
+        },
+        "last": {
+          "time": 1792036800,
+          "open": 766.04,
+          "high": 766.04,
+          "low": 765.69,
+          "close": 765.69,
+          "volume": 3051
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "completion_lag_0_delta_-1",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "name": "completion_lag_0_delta_0",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "completion_lag_0_delta_1",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "completion_lag_900_delta_-1",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "name": "completion_lag_900_delta_0",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "completion_lag_900_delta_1",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "hmm_fit_inputs_cap_800_bars_799_returns",
+      "expected": {
+        "count": 799,
+        "sha256": "bc17a5d7bfea4eeadc66baca338163775b996e9c3ff435e42ef7bd3b977a41c5",
+        "first": 0.00035242520753926514,
+        "last": -0.0018771264322864976
+      },
+      "actual": {
+        "count": 799,
+        "sha256": "bc17a5d7bfea4eeadc66baca338163775b996e9c3ff435e42ef7bd3b977a41c5",
+        "first": 0.00035242520753926514,
+        "last": -0.0018771264322864976
+      },
+      "passed": true
+    },
+    {
+      "name": "scalar_forward_terminal_posterior_error_below_1e-12",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "hmm_actual_fit_scalar_inference_and_transition_diagonal",
+      "expected": {
+        "state": "Trending",
+        "p_stay": 0.0009,
+        "p_transition": [
+          {
+            "to": "Choppy",
+            "prob": 0.9991
+          }
+        ]
+      },
+      "actual": {
+        "state": "Trending",
+        "p_stay": 0.0009,
+        "p_transition": [
+          {
+            "to": "Choppy",
+            "prob": 0.9991
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "hmm_199_bar_minimum",
+      "expected": null,
+      "actual": null,
+      "passed": true
+    },
+    {
+      "name": "omm_scalar_labels",
+      "expected": {
+        "count": 2480,
+        "sha256": "38659cb914b71ffc730de0ea8a0dedbf3c4ab7fa1a822bcef741f57356650829",
+        "first": "Choppy",
+        "last": "Bear"
+      },
+      "actual": {
+        "count": 2480,
+        "sha256": "38659cb914b71ffc730de0ea8a0dedbf3c4ab7fa1a822bcef741f57356650829",
+        "first": "Choppy",
+        "last": "Bear"
+      },
+      "passed": true
+    },
+    {
+      "name": "omm_current_row_age_duration_stability_conviction",
+      "expected": {
+        "state": "Bear",
+        "p_stay": 0.25,
+        "transition_row": [
+          0.25,
+          0.25,
+          0.5
+        ],
+        "state_order": [
+          "Bull",
+          "Bear",
+          "Choppy"
+        ],
+        "regime_age_days": 1,
+        "avg_regime_duration": 1.3,
+        "stability": "Fragile",
+        "conviction_pct": 0
+      },
+      "actual": {
+        "state": "Bear",
+        "p_stay": 0.25,
+        "transition_row": [
+          0.25,
+          0.25,
+          0.5
+        ],
+        "state_order": [
+          "Bull",
+          "Bear",
+          "Choppy"
+        ],
+        "regime_age_days": 1,
+        "avg_regime_duration": 1.3,
+        "stability": "Fragile",
+        "conviction_pct": 0
+      },
+      "passed": true
+    },
+    {
+      "name": "omm_min_obs_123",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "omm_min_obs_124",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "name": "omm_real_prefix_default_min_obs_count_99",
+      "expected": false,
+      "actual": false,
+      "passed": true
+    },
+    {
+      "name": "omm_real_prefix_default_min_obs_count_100",
+      "expected": true,
+      "actual": true,
+      "passed": true
+    },
+    {
+      "name": "supplemental_threshold_1002.0",
+      "expected": "Choppy",
+      "actual": "Choppy",
+      "passed": true
+    },
+    {
+      "name": "supplemental_threshold_998.0",
+      "expected": "Choppy",
+      "actual": "Choppy",
+      "passed": true
+    },
+    {
+      "name": "supplemental_threshold_1002.00001",
+      "expected": "Bull",
+      "actual": "Bull",
+      "passed": true
+    },
+    {
+      "name": "supplemental_threshold_997.99999",
+      "expected": "Bear",
+      "actual": "Bear",
+      "passed": true
+    },
+    {
+      "name": "route_hmm_provider_arguments",
+      "expected": {
+        "symbol": "SPY",
+        "interval": "15min",
+        "days": 55
+      },
+      "actual": {
+        "symbol": "SPY",
+        "interval": "15min",
+        "days": 55
+      },
+      "passed": true
+    },
+    {
+      "name": "route_fallback_provider_arguments",
+      "expected": {
+        "symbol": "SPY",
+        "interval": "15min",
+        "days": 55
+      },
+      "actual": {
+        "symbol": "SPY",
+        "interval": "15min",
+        "days": 55
+      },
+      "passed": true
+    },
+    {
+      "name": "route_hmm_state_probabilities",
+      "expected": {
+        "state": "Trending",
+        "p_stay": 0.0009,
+        "p_transition": [
+          {
+            "to": "Choppy",
+            "prob": 0.9991
+          }
+        ]
+      },
+      "actual": {
+        "state": "Trending",
+        "p_stay": 0.0009,
+        "p_transition": [
+          {
+            "to": "Choppy",
+            "prob": 0.9991
+          }
+        ]
+      },
+      "passed": true
+    },
+    {
+      "name": "route_hmm_status",
+      "expected": "ok",
+      "actual": "ok",
+      "passed": true
+    },
+    {
+      "name": "route_fallback_status",
+      "expected": "unavailable",
+      "actual": "unavailable",
+      "passed": true
+    },
+    {
+      "name": "route_fallback_scalar_values_and_stride",
+      "expected": {
+        "state": "Bear",
+        "p_stay": 0.25,
+        "stability": "Fragile",
+        "regime_age_days": 1,
+        "avg_regime_duration": 1.3,
+        "transition_row": [
+          0.25,
+          0.25,
+          0.5
+        ],
+        "state_order": [
+          "Bull",
+          "Bear",
+          "Choppy"
+        ],
+        "duration_stride_bars": 26,
+        "conviction_pct": null,
+        "conviction_label": null
+      },
+      "actual": {
+        "state": "Bear",
+        "p_stay": 0.25,
+        "stability": "Fragile",
+        "regime_age_days": 1,
+        "avg_regime_duration": 1.3,
+        "duration_stride_bars": 26,
+        "transition_row": [
+          0.25,
+          0.25,
+          0.5
+        ],
+        "state_order": [
+          "Bull",
+          "Bear",
+          "Choppy"
+        ],
+        "conviction_pct": null,
+        "conviction_label": null
+      },
+      "passed": true
+    }
+  ],
+  "summary": {
+    "checks": 30,
+    "passed": 30,
+    "failed": []
+  },
+  "limits": [
+    "Configured-provider response provenance only; no independent certification of exchange-feed accuracy.",
+    "Fixture is September 1 to October 15, 2026; Step 1 requests 55 days. It exceeds the HMM 800-bar cap but does not certify every missing historical day.",
+    "Default offline replay mocks all network/provider calls; production merged yfinance/Tradier live coverage is not exercised.",
+    "Router HMM wiring uses captured real-fit output; only standalone helper performs actual optimizer fit.",
+    "No application boot, persistent settings, account, order, notification or recalibration action."
+  ]
+}

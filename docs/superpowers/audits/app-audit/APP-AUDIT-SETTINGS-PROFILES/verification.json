@@ -1,0 +1,70 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "frontend": {
+    "typecheck": {
+      "command": "cd frontend && npm run typecheck",
+      "exit_code": 0
+    },
+    "jest": {
+      "command": "cd frontend && npm run test -- --runInBand",
+      "exit_code": 0,
+      "suites_passed": 268,
+      "tests_passed": 5477,
+      "tests_total": 5477,
+      "duration_s": 316.194
+    }
+  },
+  "source_input_integrity": [
+    {
+      "file": "backend/config/contract_rules.yaml",
+      "sha256": "79e2ecb99848022ec9d912ee0e5812637a578bc5d8893161ae7b94e1822a4346",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/risk_rules.yaml",
+      "sha256": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/scoring_rules.yaml",
+      "sha256": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/settings.example.yaml",
+      "sha256": "3d6a4080a8f57fa1abe2b928e794661ce30a04829881a53eb6e2c849f9ee66dc",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/strategy_params.yaml",
+      "sha256": "6c0eb765bd79ea155fbea8288e46e2b7ac9ff1432c4843b5856827b033a35f3c",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/strategy_watches.yaml",
+      "sha256": "b6c55622832b2a9f471394269c367db2adb3c31ba719b12bc58ab9a217d2dd20",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "backend/config/universe_exclusions.yaml",
+      "sha256": "b02aa95512ec048e9cc78dfc174fb5c582f1ba8d77bae5886c95b8efac041acb",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "sha256": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "docs/search-profiles/search-profiles-export.json",
+      "sha256": "fd55f6651f969b16234d0e7198f7c33d2e9d048f6426556fe8c4e357f8e8515b",
+      "unchanged_after_probes": true
+    },
+    {
+      "file": "docs/search-profiles/import-search-profiles.js",
+      "sha256": "dad1cae4261b752bf49de3cb490f377a38fec79ff96db49105467df9e0d5a4c6",
+      "unchanged_after_probes": true
+    }
+  ],
+  "qualification": "Existing tests passing does not clear defects observed by separate evidence probes. All UI network responses are mocked; backend process checks use isolated minimal routers/stores, not app.main or real providers."
+}

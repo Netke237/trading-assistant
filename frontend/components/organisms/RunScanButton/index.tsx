@@ -71,6 +71,12 @@ export function RunScanButton() {
   const onClick = useCallback(() => {
     if (scanning) return;
 
+    const isRegimeOpposed = useScanStore.getState().combinedRegime === 'REJECT';
+    if (isRegimeOpposed && !regimeConfirmedRef.current) {
+      setShowRegimeConfirm(true);
+      return;
+    }
+
     if (screenerMode === 'prebreakout') {
       router.push('/screener/step-4-prebreakout');
       return;
@@ -158,11 +164,6 @@ export function RunScanButton() {
     // as page.tsx's weightsKey/scoringHz).
     const horizon: string = presetByKey(resolveParamsHorizon(presetKey, holdMax)).scoringHorizon;
 
-    const currentRegime = useScanStore.getState().combinedRegime;
-    if (currentRegime === 'REJECT' && !regimeConfirmedRef.current) {
-      setShowRegimeConfirm(true);
-      return;
-    }
 
     const scanOverrides = useScanStore.getState().scanOverrides;
     const gate = useSettingsStore.getState().confidenceGate;
@@ -239,8 +240,11 @@ export function RunScanButton() {
                 onClick={() => {
                   setShowRegimeConfirm(false);
                   regimeConfirmedRef.current = true;
-                  onClick();
-                  regimeConfirmedRef.current = false;
+                  try {
+                    onClick();
+                  } finally {
+                    regimeConfirmedRef.current = false;
+                  }
                 }}>
                 Proceed anyway
               </button>
