@@ -9,7 +9,7 @@
     {
       "id": "APP-AUDIT-B-TIMEZONE-LOAD-FAILURE",
       "name": "An unavailable timezone readback displays an editable default without an error (#404)",
-      "status": "planned",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-timezone-load-failure-plan.md",
@@ -63,7 +63,8 @@
         }
       ],
       "tickets": [
-        404
+        404,
+        437
       ],
       "verify": {
         "kind": "present",
@@ -71,10 +72,10 @@
         "pattern": "timezone-load-error",
         "note": "Pins timezone load error marker in OperatorTimezoneSection in settings/page.tsx."
       },
-      "completion_pct": 35,
+      "completion_pct": 60,
       "size": "S",
       "complexity": 3,
-      "note": "Plan round 2 clean (0 gate findings). Ready for implementation."
+      "note": "Implemented timezone initial load error display, retry handler, and unconfirmed default save protection (#404, #437). Ready for code audit."
     },
     {
       "id": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE",

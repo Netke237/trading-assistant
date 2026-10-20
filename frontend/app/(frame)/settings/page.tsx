@@ -476,24 +476,47 @@ function OperatorTimezoneSection() {
   const [tz, setTz] = useState('Europe/Berlin');
   const [saveResult, setSaveResult] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [isEdited, setIsEdited] = useState(false);
   const isDirty = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     api.getSchedulingTimezone()
       .then((r) => {
-        if (!cancelled && !isDirty.current) {
-          setTz(r.timezone);
+        if (!cancelled) {
+          if (!isDirty.current) {
+            setTz(r.timezone);
+          }
+          setLoadError('');
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('Failed to load timezone from server');
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  async function handleRetry() {
+    isDirty.current = false;
+    setIsEdited(false);
+    try {
+      const r = await api.getSchedulingTimezone();
+      if (!isDirty.current) {
+        setTz(r.timezone);
+      }
+      setLoadError('');
+    } catch {
+      setLoadError('Failed to load timezone from server');
+    }
+  }
+
   async function handleSave() {
-    if (saving) return;
+    if (saving || (Boolean(loadError) && !isEdited)) return;
     setSaving(true);
     isDirty.current = true;
     const submittedTz = tz;
@@ -502,6 +525,7 @@ function OperatorTimezoneSection() {
       const res = await api.putSchedulingTimezone(submittedTz);
       setTz((current) => (current === submittedTz ? res.timezone : current));
       setSaveResult('Saved');
+      setLoadError('');
     } catch {
       setSaveResult('Save failed — check the timezone name');
     } finally {
@@ -509,6 +533,8 @@ function OperatorTimezoneSection() {
       setTimeout(() => setSaveResult(''), 2500);
     }
   }
+
+  const isSaveDisabled = saving || (Boolean(loadError) && !isEdited);
 
   return (
     <>
@@ -524,6 +550,7 @@ function OperatorTimezoneSection() {
             value={tz}
             onChange={(e) => {
               isDirty.current = true;
+              setIsEdited(true);
               setTz(e.target.value);
             }}
           />
@@ -531,11 +558,27 @@ function OperatorTimezoneSection() {
             type="button"
             className={`${styles.btn} ${styles.btnPrimary}`}
             onClick={handleSave}
-            disabled={saving}
+            disabled={isSaveDisabled}
           >
             Save
           </button>
+          {loadError && (
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+          )}
           {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
+          {loadError && (
+            <span data-testid="timezone-load-error" className="timezone-load-error">
+              <Text size={11} tone="reject">
+                {loadError}
+              </Text>
+            </span>
+          )}
         </div>
       </Row>
     </>
