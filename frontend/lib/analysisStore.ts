@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
 import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { scanSizingFromRisk } from '@/lib/stockScan';
+import { useUniverseStore } from '@/lib/universeStore';
 
 export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
 
@@ -42,6 +43,7 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     };
   }
   const ctx = scan.context;
+  const u = useUniverseStore.getState();
   // The user's sizing (P3a); throws ScanSizingError on 0%, which `analyze`
   // shows as its error.
   const sizing = scanSizingFromRisk();
@@ -61,6 +63,11 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     // The scan context's hold, as runStockScan sends it (B6).
     holdMinDays: ctx?.holdMin,
     holdMaxDays: ctx?.holdMax,
+    minPriceRaw: u.minPriceRaw,
+    maxPriceRaw: u.maxPriceRaw,
+    minCapRaw: u.minCapRaw,
+    maxCapRaw: u.maxCapRaw,
+    capUnit: u.capUnit,
   });
   return { req: { ...rest, symbol, horizon: _horizonEnum(ctx?.horizon) }, basis: 'current-settings' };
 }
