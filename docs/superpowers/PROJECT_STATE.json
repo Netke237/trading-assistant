@@ -10,7 +10,7 @@
       "id": "APP-AUDIT-B-DENSITY",
       "name": "Appearance row density resets when the Settings section remounts",
       "status": "built",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-density-plan.md",
       "branch": "board/app-audit-b-density-5b985ea0",
@@ -25,10 +25,10 @@
         "closure_evidence": "Fresh independent subagent reviewed plan SHA256 d2ca053620bfc6e1caff8df313d03c6e719f57a7ceefcbc2680516f9c72e5cd2; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-DENSITY/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "Fresh independent subagent b3d1e67a-2f58-4e5d-b3c3-6d85679f37e7 reviewed commit eafbd7d6 (diff f08e4dfcfeded53690b522a90db3185c9bd2dd98..eafbd7d612ec78611aff4133c88178e8000faebf); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-DENSITY/code-r1.md"
+        "closure_evidence": "Fresh independent subagent 1ba62927-4c41-414f-b628-7a9a3ee8f57e reviewed diff origin/main..HEAD (commit 3b633d04); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-DENSITY/code-r2.md"
       },
       "audit_history": [
         {
@@ -54,6 +54,18 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "1ba62927-4c41-414f-b628-7a9a3ee8f57e",
+          "reviewed": "commit 3b633d04 (diff origin/main..HEAD)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "tickets": [
@@ -66,7 +78,7 @@
         "note": "Pins the persisted density field on ThemeState in theme.ts."
       },
       "pull_request": 414,
-      "note": "Integrating with main on board/app-audit-b-density-5b985ea0 to resolve merge conflict; code audit round 2 next."
+      "note": "Code round 2 clean. Plan 1 round clean, code 2 rounds clean. Conflict with origin/main resolved and audited clean. PR pending."
     },
     {
       "id": "A",
