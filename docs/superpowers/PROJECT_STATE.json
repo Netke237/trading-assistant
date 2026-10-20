@@ -66,10 +66,11 @@
         "pattern": "schedule-entry-error",
         "note": "Pins schedule entry error display in settings/page.tsx."
       },
-      "completion_pct": 80,
+      "completion_pct": 85,
       "size": "M",
       "complexity": 3,
-      "note": "Code round 1 clean. Ready for PR and CI checks."
+      "note": "SELF-MERGE PENDING, PR #432, audited head 57032944111be1ce42484a0d970e70a75f858fa7. Surface feedback for schedule update, validation, delete and profile errors (#402, #431). Plan round 1 clean, code round 1 clean.",
+      "pull_request": 432
     },
     {
       "id": "APP-AUDIT-B-NOTIFICATION-TEXT",
