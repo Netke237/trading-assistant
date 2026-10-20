@@ -77,8 +77,8 @@
         "pattern": "density: Density",
         "note": "Pins the persisted density field on ThemeState in theme.ts."
       },
-      "pull_request": 414,
-      "note": "Code round 2 clean. Plan 1 round clean, code 2 rounds clean. Conflict with origin/main resolved and audited clean. PR pending."
+      "pull_request": 426,
+      "note": "SELF-MERGE PENDING, PR #426, audited head 09665182e01df3f707f185ef3db1fa3114d59f7c. Persist Appearance row density across section remount/reload (#370). Plan round 1 clean, code round 2 clean."
     },
     {
       "id": "A",
