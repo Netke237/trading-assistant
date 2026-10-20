@@ -19,7 +19,7 @@
 
 import { test, expect, type Page } from '../fixtures';
 import { ScreenerPage } from '../pages/ScreenerPage';
-import { MOCK_SCAN_CANDIDATE } from '../fixtures/api-mocks';
+import { MOCK_SCAN_CANDIDATE, MOCK_OPTION_CHAIN } from '../fixtures/api-mocks';
 
 // Seeded at the store's CURRENT version so `migrate` is skipped. Seeding at an
 // older version would run the v12→v13 legacy strip over this blob and drop the
@@ -31,16 +31,16 @@ const SCAN_STORE_VERSION = 13;
  *  URL renders with candidates instead of its empty state. `context` is left
  *  null on purpose: every read of it on these pages is optional-chained with a
  *  default, and seeding one would assert coupling that does not exist. */
-async function seedCompletedScan(page: Page): Promise<void> {
+async function seedCompletedScan(page: Page, candidate: unknown = MOCK_SCAN_CANDIDATE): Promise<void> {
   await page.addInitScript(
-    ([key, version, candidate]) => {
+    ([key, version, c]) => {
       window.localStorage.setItem(key as string, JSON.stringify({
         version,
         state: {
           scanResult: {
             scan_id: 'iv-basis-e2e',
             timestamp: new Date().toISOString(),
-            candidates: [candidate],
+            candidates: [c],
             rejected: [],
           },
           scanState: 'COMPLETED',
@@ -48,7 +48,7 @@ async function seedCompletedScan(page: Page): Promise<void> {
         },
       }));
     },
-    [SCAN_STORE_KEY, SCAN_STORE_VERSION, MOCK_SCAN_CANDIDATE] as const,
+    [SCAN_STORE_KEY, SCAN_STORE_VERSION, candidate] as const,
   );
 }
 
@@ -101,5 +101,61 @@ test.describe('IV basis rendering (mocked) @smoke', () => {
     // "cheapest IV" sort.
     await expect(page.locator('[title="No implied-volatility data for this contract."]')).toHaveCount(1);
     await expect(page.getByText('0.0%')).toHaveCount(0);
+  });
+
+  test('Step 5 and Step 6 show an IV rank on the rank basis, and gate on the rank set', async ({ page }) => {
+    // Seed candidate carrying a true IV rank percentile (PHASE-A-NULL-IVRANK-2026-09-06 / #176)
+    const rankCandidate = {
+      ...MOCK_SCAN_CANDIDATE,
+      contractDetails: {
+        ...MOCK_SCAN_CANDIDATE.contractDetails,
+        ivRank: 20,
+        iv: 42,
+      },
+    };
+    await seedCompletedScan(page, rankCandidate);
+
+    // Override /api/contracts to provide contracts carrying ivRank
+    const rankChain = MOCK_OPTION_CHAIN.map((c) => ({
+      ...c,
+      ivRank: c.iv != null ? 20 : null,
+    }));
+    await page.route('**/api/contracts**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(rankChain),
+      });
+    });
+
+    // ── Step 5: Vol / Events ────────────────────────────────────────────────
+    await new ScreenerPage(page).goto(5);
+
+    // Cell title states the basis outright: "IV rank 20 — where today's implied volatility sits..."
+    const ivCell = page.locator('[title^="IV rank"]');
+    await expect(ivCell).toHaveCount(1);
+    await expect(ivCell).toContainText('20');
+    await expect(page.getByText('rank', { exact: true })).toBeVisible();
+
+    // Absolute basis label must NOT be present on this row
+    await expect(page.locator('[title^="Implied volatility"]')).toHaveCount(0);
+
+    // Gate sentence must quote the RANK threshold set (Swing: 34/55)
+    await expect(page.getByText(/IV rank ≤ 34 → PASS/)).toBeVisible();
+    await expect(page.getByText(/^IV ≤ \d+ → PASS/)).toHaveCount(0);
+
+    // ── Step 6: Contracts ───────────────────────────────────────────────────
+    await new ScreenerPage(page).goto(6);
+
+    // Column header derived via ivColumnLabel(ivBasesOf(contracts)) must read "IV RANK"
+    await expect(page.getByRole('button', { name: 'IV RANK', exact: true })).toBeVisible();
+
+    // The two strikes with volatility must render their IV rank with "rank" suffix
+    const rankContractCells = page.locator('[title^="IV rank"]');
+    await expect(rankContractCells).toHaveCount(2);
+    await expect(rankContractCells.first()).toContainText('20');
+
+    // The strike without reading remains as no data
+    await expect(page.locator('[title="No implied-volatility data for this contract."]')).toHaveCount(1);
   });
 });
