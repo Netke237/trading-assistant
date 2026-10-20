@@ -9,7 +9,7 @@
     {
       "id": "APP-AUDIT-B-NOTIFICATION-TEXT",
       "name": "Notifications help text renders literal Unicode escape (#375)",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-notification-text-plan.md",
@@ -43,7 +43,8 @@
         }
       ],
       "tickets": [
-        375
+        375,
+        428
       ],
       "verify": {
         "kind": "present",
@@ -51,10 +52,10 @@
         "pattern": "Passwords are write-only — leave blank",
         "note": "Pins literal em dash in Notifications SectionIntro blurb without unicode escape."
       },
-      "completion_pct": 30,
+      "completion_pct": 70,
       "size": "XS",
       "complexity": 1,
-      "note": "Plan round 1 clean. Ready to implement build ticket."
+      "note": "Implementation and regression tests complete (#375, #428). Notifications blurb renders em dash. Code audit next."
     },
     {
       "id": "APP-AUDIT-B-DENSITY",
