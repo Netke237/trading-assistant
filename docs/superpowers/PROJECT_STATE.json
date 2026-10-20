@@ -10,8 +10,8 @@
       "id": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE",
       "name": "A schedule with a missing profile visually selects a different saved profile (#403)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-orphaned-schedule-profile-plan.md",
       "branch": "board/app-audit-b-orphaned-schedule-profile-f7ef94c4",
       "covers": [
@@ -25,10 +25,10 @@
         "closure_evidence": "Fresh independent subagent 80300e2e-c5fb-43e7-96f4-383bbd7bef4f reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": "",
-        "closure_evidence": ""
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ab99bf76-8509-4fe3-bc8c-dc9194a8ebc8 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE/code-r1.md"
       },
       "audit_history": [
         {
@@ -37,6 +37,18 @@
           "stage_round": 1,
           "reviewer": "80300e2e-c5fb-43e7-96f4-383bbd7bef4f",
           "reviewed": "docs/superpowers/plans/2026-10-20-app-audit-b-orphaned-schedule-profile-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "ab99bf76-8509-4fe3-bc8c-dc9194a8ebc8",
+          "reviewed": "origin/main..HEAD",
           "gate_findings": 0,
           "findings": [],
           "fixes": [],
@@ -54,10 +66,11 @@
         "pattern": "isProfileMissing",
         "note": "Pins isProfileMissing check in ScheduleEntryRow in settings/page.tsx."
       },
-      "completion_pct": 60,
+      "completion_pct": 85,
       "size": "S",
       "complexity": 2,
-      "note": "Implemented explicit missing profile option and warning (#403, #434). Ready for code audit."
+      "note": "SELF-MERGE PENDING, PR #435, audited head 426d4a2c07ef27be636bb26a9785fbbfd31e9766. Display explicit missing profile option for orphaned schedule references (#403, #434). Plan round 1 clean, code round 1 clean.",
+      "pull_request": 435
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-FEEDBACK",
