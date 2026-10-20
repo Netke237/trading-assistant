@@ -69,7 +69,8 @@
       "completion_pct": 85,
       "size": "XS",
       "complexity": 1,
-      "note": "Code round 1 clean. Plan 1 round clean, code 1 round clean. PR pending."
+      "note": "SELF-MERGE PENDING, PR #429, audited head bc832b0c90e29758d62ddd97df1434fb55a16f94. Render readable em dash in Notifications help text (#375, #428). Plan round 1 clean, code round 1 clean.",
+      "pull_request": 429
     },
     {
       "id": "APP-AUDIT-B-DENSITY",
