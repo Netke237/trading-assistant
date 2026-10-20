@@ -673,7 +673,7 @@ function ScheduledScansSection() {
     }
   }
 
-  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>) {
+  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>): Promise<{ ok: boolean; error?: string }> {
     const next = { ...entry, ...patch };
     try {
       await api.updateScanScheduleEntry(entry.id, {
@@ -685,16 +685,27 @@ function ScheduledScansSection() {
         window_end_hour: next.window_end_hour,
       });
       void refresh();
-    } catch {
+      return { ok: true };
+    } catch (err) {
       // Leave the list stale rather than silently reverting the UI's optimistic value.
+      const error = err instanceof Error
+        ? `Could not update schedule entry: ${err.message}`
+        : 'Could not update schedule entry — check backend is reachable.';
+      return { ok: false, error };
     }
   }
 
-  async function deleteEntry(id: string) {
+  async function deleteEntry(id: string): Promise<{ ok: boolean; error?: string }> {
     try {
       await api.deleteScanScheduleEntry(id);
       void refresh();
-    } catch { /* best-effort */ }
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error
+        ? `Could not delete schedule entry: ${err.message}`
+        : 'Could not delete schedule entry — check backend is reachable.';
+      return { ok: false, error };
+    }
   }
 
   async function runNow(id: string) {
@@ -723,8 +734,8 @@ function ScheduledScansSection() {
           lastRun={lastRuns[entry.id] ?? null}
           stale={staleIds.includes(entry.id)}
           profiles={profiles.filter((p) => p.mode === entry.mode)}
-          onUpdate={(patch) => void updateEntry(entry, patch)}
-          onDelete={() => void deleteEntry(entry.id)}
+          onUpdate={(patch) => updateEntry(entry, patch)}
+          onDelete={() => deleteEntry(entry.id)}
           onRunNow={() => void runNow(entry.id)}
         />
       ))}
@@ -751,12 +762,23 @@ function ScheduleEntryRow({
   lastRun: ScanScheduleRun | null;
   stale: boolean;
   profiles: SearchProfile[];
-  onUpdate: (patch: Partial<ScanScheduleEntry>) => void;
-  onDelete: () => void;
+  onUpdate: (patch: Partial<ScanScheduleEntry>) => Promise<{ ok: boolean; error?: string }>;
+  onDelete: () => Promise<{ ok: boolean; error?: string }>;
   onRunNow: () => void;
 }) {
   const [label, setLabel] = useState(entry.label);
+  const [rowError, setRowError] = useState<string>('');
   useEffect(() => { setLabel(entry.label); }, [entry.label]);
+
+  const handleUpdate = async (patch: Partial<ScanScheduleEntry>) => {
+    const res = await onUpdate(patch);
+    if (!res.ok) {
+      setRowError(res.error || 'Could not update schedule entry — check backend is reachable.');
+    } else {
+      setRowError('');
+    }
+    return res;
+  };
 
   return (
     <div className={styles.row} style={{ alignItems: 'flex-start', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
@@ -773,22 +795,31 @@ function ScheduleEntryRow({
             type="text"
             className={styles.input}
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={() => { if (label !== entry.label) onUpdate({ label }); }}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              if (rowError) setRowError('');
+            }}
+            onBlur={async () => {
+              if (label !== entry.label) {
+                await handleUpdate({ label });
+              }
+            }}
           />
           <select
             className={styles.input}
             value={entry.profile_id}
-            onChange={(e) => {
+            onChange={async (e) => {
               const p = profiles.find((pr) => pr.id === e.target.value);
               if (!p) return;
               try {
                 const resolved = resolveProfileToScanRequest(p);
-                onUpdate({
+                await handleUpdate({
                   profile_id: p.id, profile_name: p.name,
                   profile_synced_at: new Date().toISOString(), resolved_request: resolved,
                 });
-              } catch { /* leave entry pointed at old profile if this one can't resolve yet */ }
+              } catch (err) {
+                setRowError(err instanceof Error ? err.message : 'Could not resolve selected profile into a scan request.');
+              }
             }}
           >
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -796,21 +827,34 @@ function ScheduleEntryRow({
           <select
             className={styles.input}
             value={entry.pattern}
-            onChange={(e) => onUpdate({
-              pattern: e.target.value as 'fixed_time' | 'loop',
-              fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
-              cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
-              window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
-              window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
-            })}
+            onChange={(e) => {
+              void handleUpdate({
+                pattern: e.target.value as 'fixed_time' | 'loop',
+                fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
+                cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
+                window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
+                window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
+              });
+            }}
           >
             <option value="fixed_time">Fixed time</option>
             <option value="loop">Loop (cadence + window)</option>
           </select>
-          <Toggle defaultOn={entry.enabled} onChange={(on) => onUpdate({ enabled: on })} />
+          <Toggle defaultOn={entry.enabled} onChange={(on) => void handleUpdate({ enabled: on })} />
           <button type="button" className={styles.btn} onClick={onRunNow}>Run now</button>
-          <button type="button" className={styles.btn} onClick={onDelete}>Delete</button>
+          <button type="button" className={styles.btn} onClick={async () => {
+            const res = await onDelete();
+            if (!res.ok) {
+              setRowError(res.error || 'Could not delete schedule entry — check backend is reachable.');
+            }
+          }}>Delete</button>
         </div>
+
+        {rowError && (
+          <div data-testid={`schedule-entry-error-${entry.id}`} className="schedule-entry-error" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text size={11} tone="reject">{rowError}</Text>
+          </div>
+        )}
 
         {entry.pattern === 'fixed_time' ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -819,9 +863,9 @@ function ScheduleEntryRow({
               type="time"
               className={styles.input}
               value={entry.fire_time ?? '09:00'}
-              onChange={(e) => onUpdate({ fire_time: e.target.value })}
+              onChange={(e) => void handleUpdate({ fire_time: e.target.value })}
             />
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -829,22 +873,29 @@ function ScheduleEntryRow({
             <input
               type="number" min={5} max={1440} className={styles.input} style={{ width: 70 }}
               value={entry.cadence_minutes ?? 60}
-              onChange={(e) => onUpdate({ cadence_minutes: Number(e.target.value) })}
+              onChange={async (e) => {
+                const val = Number(e.target.value);
+                if (val < 5 || val > 1440) {
+                  setRowError('Cadence must be between 5 and 1440 minutes.');
+                  return;
+                }
+                await handleUpdate({ cadence_minutes: val });
+              }}
             />
             <Text size={11} tone="secondary">min, between</Text>
             <input
               type="number" min={0} max={23} className={styles.input} style={{ width: 60 }}
               value={entry.window_start_hour ?? 9}
-              onChange={(e) => onUpdate({ window_start_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_start_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">and</Text>
             <input
               type="number" min={1} max={24} className={styles.input} style={{ width: 60 }}
               value={entry.window_end_hour ?? 17}
-              onChange={(e) => onUpdate({ window_end_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_end_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">(operator timezone)</Text>
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         )}
 
