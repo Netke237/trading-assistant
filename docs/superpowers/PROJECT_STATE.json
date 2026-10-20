@@ -5796,7 +5796,11 @@
         "path": "frontend/lib/resolveOptionsScanRequest.ts",
         "pattern": "cap_filter_units_version: 1",
         "note": "Presence probe only; independent code review and tests establish behavior."
-      }
+      },
+      "completion_pct": 70,
+      "size": "M",
+      "complexity": 4,
+      "validation": "Frontend5639/286 suites and typecheck pass. Backend unique segmented coverage9388pass/9skip;48 unchanged endpoint cases require temporary offline prefetch mocks, native full attempt stalled at inherited Tiingo admission. Full unmodified CI remains required. See audits/APP-AUDIT-B-CAP-UNITS/validation.md."
     }
   ],
   "already_shipped": [
