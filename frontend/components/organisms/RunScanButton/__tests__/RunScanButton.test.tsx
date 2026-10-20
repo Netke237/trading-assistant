@@ -1,3 +1,4 @@
+import { useUniverseStore } from '@/lib/universeStore';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { useScanStore } from '@/lib/scanStore';
@@ -477,4 +478,31 @@ it('does not route or toast an obsolete stock continuation', async () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /run scan|run stock scan/i })));
     expect(mockPush).not.toHaveBeenCalled(); expect(toast).not.toHaveBeenCalled();
   } finally { toast.mockRestore(); }
+});
+
+describe('Options manual cap units (#368)', () => {
+  it.each([
+    ['M', '25', 25_000_000], ['B', '2', 2_000_000_000],
+    ['M', '0.5', 500_000], ['B', '0.25', 250_000_000],
+    ['M', '0', 0], ['B', '0', 0],
+    ['M', '', undefined], ['B', '', undefined],
+  ] as const)('posts %s %s as %s USD for both bounds', async (capUnit, raw, usd) => {
+    jest.clearAllMocks();
+    resetStores();
+    useScanStore.setState({ combinedRegime: 'PASS', regime: 'PASS' });
+    useUniverseStore.setState({ pick: 'SP500', customRaw: '', minPriceRaw: '', maxPriceRaw: '', minCapRaw: raw, maxCapRaw: raw, capUnit });
+    mockPostScanBody.mockResolvedValue({ scan_id: 'CAP', timestamp: '2026-01-01T00:00:00Z', candidates: [], rejected: [] } as any);
+    render(<RunScanButton />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /run scan/i })); });
+    expect(mockPostScanBody).toHaveBeenCalledTimes(1);
+    const req = mockPostScanBody.mock.calls[0][0];
+    expect(req.min_cap_usd).toBe(usd);
+    expect(req.max_cap_usd).toBe(usd);
+    expect(req).toMatchObject({ cap_filter_units_version: 1 });
+    if (usd === undefined) {
+      expect(req).not.toHaveProperty('min_cap_usd');
+      expect(req).not.toHaveProperty('max_cap_usd');
+    }
+    useUniverseStore.getState().clearFilters();
+  });
 });
