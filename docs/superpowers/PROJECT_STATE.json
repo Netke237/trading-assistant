@@ -11,8 +11,8 @@
       "id": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
       "name": "Stocks requests ignore Step3 confidence threshold overrides (#383)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md",
       "branch": "board/confidence-override-30d0e94e",
       "covers": [
@@ -26,10 +26,10 @@
         "closure_evidence": "Fresh independent subagent 68607bdc-c740-47a2-9b4a-03d9b27985e8 reviewed plan docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-CONFIDENCE-OVERRIDE/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": "",
-        "closure_evidence": ""
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3bd81c8f-f29e-423d-85e0-1f8b294a38a4 reviewed diff 30d0e94e722ec51cf775de52adb22dc4ab1c61d8..01a00316 against plan docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-CONFIDENCE-OVERRIDE/code-r1.md"
       },
       "audit_history": [
         {
@@ -38,6 +38,18 @@
           "stage_round": 1,
           "reviewer": "68607bdc-c740-47a2-9b4a-03d9b27985e8",
           "reviewed": "docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "3bd81c8f-f29e-423d-85e0-1f8b294a38a4",
+          "reviewed": "30d0e94e722ec51cf775de52adb22dc4ab1c61d8..01a00316",
           "gate_findings": 0,
           "findings": [],
           "fixes": [],
@@ -55,10 +67,10 @@
         "pattern": "confidence_caution_below: confidenceGate\\.enabled \\? confidenceGate\\.cautionBelow : undefined",
         "note": "Defect marker: confidence_caution_below copied directly from confidenceGate.cautionBelow instead of respecting scanOverrides."
       },
-      "completion_pct": 70,
+      "completion_pct": 85,
       "size": "M",
       "complexity": 3,
-      "note": "Implementation and tests built. Ready for code audit."
+      "note": "Code round 1 clean. Ready for PR and CI."
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT-IDENTITY-CLICK",
