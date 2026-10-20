@@ -1724,7 +1724,7 @@ function NotificationForm() {
 
   return (
     <>
-      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
+      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only — leave blank to keep the existing saved value." />
 
       <Row
         label="Trade history retention (years)"
