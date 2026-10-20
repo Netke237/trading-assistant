@@ -9,6 +9,7 @@ reintroduce a lost-update race between concurrent requests).
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import threading
@@ -18,6 +19,8 @@ from pathlib import Path
 
 import yaml
 from sqlalchemy import delete, select
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "scan_schedule.yaml"
 
@@ -33,14 +36,39 @@ class ScanScheduleStore:
         self._path = path
         self._lock = threading.Lock()
         self._entries: dict[str, dict] = {}  # id -> entry dict, the in-memory canonical state
+        self._load_error: str | None = None
         if self._path.exists():
             self._load()
 
+    @property
+    def load_error(self) -> str | None:
+        with self._lock:
+            return self._load_error
+
+    def reload(self) -> None:
+        """Reload canonical state from disk."""
+        if self._path.exists():
+            self._load()
+        else:
+            with self._lock:
+                self._entries = {}
+                self._load_error = None
+
     def _load(self) -> None:
         try:
-            raw = yaml.safe_load(self._path.read_text()) or {}
-            entries = raw.get("entries", [])
-            migrate = int(raw.get("version", 1) or 1) < _SCHEMA_VERSION
+            content = self._path.read_text(encoding="utf-8")
+            raw = yaml.safe_load(content) or {}
+            if not isinstance(raw, dict):
+                raise ValueError(f"Root YAML must be a mapping, got {type(raw).__name__}")
+            try:
+                version_int = int(raw.get("version", 1) or 1)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"Invalid schema version: {raw.get('version')}") from exc
+            raw_entries = raw.get("entries", [])
+            if not isinstance(raw_entries, list):
+                raise ValueError(f"'entries' must be a list, got {type(raw_entries).__name__}")
+            entries = raw_entries
+            migrate = version_int < _SCHEMA_VERSION
             if migrate:
                 entries = [self._migrate_entry(e) for e in entries]
             loaded: dict[str, dict] = {}
@@ -52,11 +80,15 @@ class ScanScheduleStore:
                     continue  # malformed rows are dropped, not fatal
             with self._lock:
                 self._entries = loaded
+                self._load_error = None
                 if migrate:
                     self._backup()
                     self._save_locked()
-        except Exception:
-            pass
+        except Exception as exc:
+            with self._lock:
+                self._entries = {}
+                self._load_error = str(exc)
+            logger.warning("scan_schedule: failed to load %s: %s", self._path, exc)
 
     @staticmethod
     def _migrate_entry(entry: object) -> object:
@@ -69,11 +101,19 @@ class ScanScheduleStore:
             return {**entry, "resolved_request": migrate_saved_stock_request(entry["resolved_request"])}
         return entry
 
+    def _backup_corrupt(self) -> Path | None:
+        """Preserve unparseable or corrupt source YAML before overwriting it."""
+        if not self._path.exists():
+            return None
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = self._path.with_suffix(f".bak.{stamp}-{uuid.uuid4().hex[:8]}.yaml")
+        shutil.copy(self._path, backup_path)
+        return backup_path
+
     def _backup(self) -> None:
         """Copy the file aside before a migration rewrites it (as
         strategy_param_store.adopt() does)."""
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        shutil.copy(self._path, self._path.with_suffix(f".bak.{stamp}-{uuid.uuid4().hex[:8]}.yaml"))
+        self._backup_corrupt()
 
     def list(self) -> list[dict]:
         with self._lock:
@@ -107,9 +147,12 @@ class ScanScheduleStore:
     def _save_locked(self) -> None:
         """Must be called with self._lock already held."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        if self._load_error and self._path.exists():
+            self._backup_corrupt()
+            self._load_error = None
         tmp = self._path.with_suffix(".yaml.tmp")
         data = {"version": _SCHEMA_VERSION, "entries": list(self._entries.values())}
-        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
         os.replace(tmp, self._path)
 
 
