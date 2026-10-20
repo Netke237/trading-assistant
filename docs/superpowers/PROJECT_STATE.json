@@ -5303,7 +5303,7 @@
     {
       "id": "APP-AUDIT-B-STRATEGY-VALIDATION",
       "name": "Reject invalid Settings strategy scan overrides (#373)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-strategy-validation-plan.md",
@@ -5374,11 +5374,21 @@
         "pattern": "assertStrategyScanOverrides",
         "note": "Presence only; tests and independent audit establish behavior."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #424, audited head 5bdc20618c03ac2e4a79dcb35dfd512f2e3cee54. Validates strategy overrides across editing, storage and requests (#373, #421). Plan round 2 clean, code round 1 clean.",
-      "pull_request": 424
+      "note": "Merged via PR #424 at 2d1e54c4f4f3867da090028d0b84fbbfaeb64f31 (2026-10-20, board self-merge conditions verified): validate strategy overrides across editing, storage and requests (#373, #421); plan round 2 clean, code round 1 clean, exact-head CI passed before merge.",
+      "pull_request": 424,
+      "merged_sha": "2d1e54c4f4f3867da090028d0b84fbbfaeb64f31",
+      "self_merge_record": {
+        "verified_head_sha": "5bdc20618c03ac2e4a79dcb35dfd512f2e3cee54",
+        "pending_head_sha": "0c0ab72a957ae885e6fb5b479d4447cfd6900fc7",
+        "status_checks": "exact pending-head 0c0ab72a passed all CI checks (backend, frontend, test); self-merge executed per board.md step 7.",
+        "merged": true,
+        "merge_sha": "2d1e54c4f4f3867da090028d0b84fbbfaeb64f31",
+        "merged_at": "2026-10-20T16:01:26Z",
+        "verification": "gh pr view 424 returned MERGED and exact merge SHA 2d1e54c4; issues #373 and #421 CLOSED. Documentation-only reconciliation, no scope/tooling/source changes."
+      }
     }
   ],
   "already_shipped": [
@@ -7409,7 +7419,7 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase": "APP-AUDIT-B-STRATEGY-VALIDATION",
+  "active_phase": "",
   "active_phase_note": "",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
