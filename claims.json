@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-density-5b985ea0",
       "claimed_at": "2026-10-20T16:06:24Z",
-      "expires_at": "2026-10-20T19:21:54Z",
+      "expires_at": "2026-10-20T19:32:35Z",
       "note": "Rebase/integrate with main and self-merge for #370",
       "task": "APP-AUDIT-B-DENSITY"
     }
