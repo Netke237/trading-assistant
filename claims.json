@@ -15,6 +15,14 @@
       "expires_at": "2026-10-20T23:26:54Z",
       "note": "Fix stale Step 1 regime responses overwriting the gate (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/prebreakout-identity-click-acfcde26",
+      "claimed_at": "2026-10-20T20:45:04Z",
+      "expires_at": "2026-10-20T23:45:04Z",
+      "note": "take #364 Pre-Breakout identity-cell whitespace swallows candidate selection clicks",
+      "task": "APP-AUDIT-PREBREAKOUT-IDENTITY-CLICK"
     }
   ]
 }
