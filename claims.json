@@ -28,7 +28,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-save-feedback-673f40fc",
       "claimed_at": "2026-10-20T20:57:47Z",
-      "expires_at": "2026-10-20T23:57:47Z",
+      "expires_at": "2026-10-21T00:03:47Z",
       "note": "Resume #371: Settings save feedback must reflect real save outcome (plan from scratch; prior plan never pushed)",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
     }
