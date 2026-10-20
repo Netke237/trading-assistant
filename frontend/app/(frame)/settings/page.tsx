@@ -770,6 +770,8 @@ function ScheduleEntryRow({
   const [rowError, setRowError] = useState<string>('');
   useEffect(() => { setLabel(entry.label); }, [entry.label]);
 
+  const isProfileMissing = Boolean(entry.profile_id) && !profiles.some((p) => p.id === entry.profile_id);
+
   const handleUpdate = async (patch: Partial<ScanScheduleEntry>) => {
     const res = await onUpdate(patch);
     if (!res.ok) {
@@ -785,6 +787,11 @@ function ScheduleEntryRow({
       <div className={styles.rowLabel}>
         <span className={styles.defaultTag}>{entry.mode === 'options' ? 'Options' : 'Stocks'}</span>
         {stale && <Text size={11} tone="caution">May be out of date — last re-sync push failed</Text>}
+        {isProfileMissing && (
+          <Text size={11} tone="caution" className="schedule-missing-profile-warning">
+            Profile missing or deleted — select an available profile to reassign.
+          </Text>
+        )}
         {scheduleRiskIgnored(entry) && (
           <Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default (conviction-adjusted). Set it in Settings → Risk, then re-save the profile.</Text>
         )}
@@ -822,6 +829,11 @@ function ScheduleEntryRow({
               }
             }}
           >
+            {isProfileMissing && (
+              <option value={entry.profile_id} disabled>
+                {entry.profile_name || entry.profile_id} (missing)
+              </option>
+            )}
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select
