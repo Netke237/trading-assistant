@@ -116,3 +116,14 @@
   --shadow-overlay:  0 4px 16px rgba(0, 0, 0, 0.12);
   --shadow-popover:  0 8px 24px rgba(19, 23, 34, 0.13);
 }
+
+/* Row density */
+:root,
+[data-density="comfortable"] {
+  --table-row-min-height: 44px;
+}
+
+[data-density="compact"] {
+  --table-row-min-height: 32px;
+}
+

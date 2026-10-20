@@ -6,6 +6,7 @@
  */
 
 import type { Status } from '@/lib/status';
+import { useThemeStore } from '@/lib/theme';
 import styles from './TableRow.module.css';
 
 interface TableRowProps {
@@ -34,6 +35,7 @@ export function TableRow({
   className,
   children,
 }: TableRowProps) {
+  const density = useThemeStore((s) => s.density);
   return (
     <div
       role={onClick ? 'button' : 'row'}
@@ -45,6 +47,7 @@ export function TableRow({
          gate shipped 1740/1740 green, so a row could show a PASS band beside a
          REJECT badge. Publishing it is what lets a caller pin the two together. */
       data-status={status}
+      data-density={density.toLowerCase()}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
       onKeyDown={
