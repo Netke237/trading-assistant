@@ -3,6 +3,7 @@ import { useScanStore } from './scanStore';
 import { useScanParamsStore, OVERRIDE_FIELDS } from './scanParamsStore';
 import { useSettingsStore } from './settingsStore';
 import { horizonDisplayString, presetByKey, resolveParamsHorizon } from './horizonPresets';
+import { assertStrategyScanOverrides } from './strategyScanValidation';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
 
 export function captureCurrentSnapshot(mode: 'options' | 'stocks'): SearchProfileSnapshot {
@@ -64,6 +65,14 @@ export function captureCurrentSnapshot(mode: 'options' | 'stocks'): SearchProfil
 }
 
 export function applySearchProfile(profile: SearchProfile): void {
+  if (profile.strategyParams) {
+    assertStrategyScanOverrides({
+      pullbackTolerancePct: profile.strategyParams.pullbackTolerancePct,
+      maCrossoverLookback: profile.strategyParams.maCrossoverLookback,
+      breakoutVolumeMult: profile.strategyParams.breakoutVolumeMult,
+    });
+  }
+
   const u = useUniverseStore.getState();
   u.setPick(profile.universe.pick);
   u.setCustomRaw(profile.universe.customRaw);

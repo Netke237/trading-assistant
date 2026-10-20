@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { assertStrategyScanOverrides } from './strategyScanValidation';
 
 /**
  * STOCKS-HORIZON-T1 H5: the strategy fields are OVERRIDES of the backend
@@ -134,9 +135,23 @@ export const useScanParamsStore = create<ScanParamsStore>()(
   persist(
     (set) => ({
       ...DEFAULTS,
-      setParam: (key, value) => set({ [key]: value }),
+      setParam: (key, value) => {
+        if (key === 'pullbackTolerancePct' || key === 'maCrossoverLookback' || key === 'breakoutVolumeMult') {
+          if (value !== null && value !== undefined) {
+            assertStrategyScanOverrides({ [key]: value });
+          }
+        }
+        set({ [key]: value });
+      },
       resetToDefaults: () => set({ ...DEFAULTS }),
-      loadParams: (p) => set({ ...NO_OVERRIDES, ...p }),
+      loadParams: (p) => {
+        assertStrategyScanOverrides({
+          pullbackTolerancePct: p.pullbackTolerancePct,
+          maCrossoverLookback: p.maCrossoverLookback,
+          breakoutVolumeMult: p.breakoutVolumeMult,
+        });
+        set({ ...NO_OVERRIDES, ...p });
+      },
       setMeanReversionVariants:   (v) => set({ meanReversionVariants: v }),
       setMeanReversionMinConfirm: (v) => set({ meanReversionMinConfirm: v }),
       setVwapLookback:            (v) => set({ vwapLookback: v }),
