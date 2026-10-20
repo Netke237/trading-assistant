@@ -5817,10 +5817,11 @@
         "pattern": "applyRegimeResponse",
         "note": "Pins the shared latest-regime-fetch guard used by Steps 1-3."
       },
-      "completion_pct": 80,
+      "completion_pct": 85,
       "size": "M",
       "complexity": 4,
-      "note": "Newest applied /api/regime response owns the shared gate; Steps 1-3 send one request shape (#386, #440). Plan round 2 clean, code round 1 clean. Browser retest PASS in all three modes. PR pending."
+      "note": "SELF-MERGE PENDING, PR #442, audited head 3b573df6. Newest applied /api/regime response owns the shared gate; Steps 1-3 send one request shape (#386, #440). Plan round 2 clean, code round 1 clean. Browser retest PASS in all three modes.",
+      "pull_request": 442
     }
   ],
   "already_shipped": [
