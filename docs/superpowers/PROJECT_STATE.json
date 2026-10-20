@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
       "name": "Stocks requests ignore Step3 confidence threshold overrides (#383)",
-      "status": "planned",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md",
@@ -46,7 +46,8 @@
         }
       ],
       "tickets": [
-        383
+        383,
+        448
       ],
       "verify": {
         "kind": "defect_marker",
@@ -54,10 +55,10 @@
         "pattern": "confidence_caution_below: confidenceGate\\.enabled \\? confidenceGate\\.cautionBelow : undefined",
         "note": "Defect marker: confidence_caution_below copied directly from confidenceGate.cautionBelow instead of respecting scanOverrides."
       },
-      "completion_pct": 30,
+      "completion_pct": 70,
       "size": "M",
       "complexity": 3,
-      "note": "Plan round 1 clean. Ready for implementation."
+      "note": "Implementation and tests built. Ready for code audit."
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT-IDENTITY-CLICK",
