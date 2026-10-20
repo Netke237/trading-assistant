@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/prebreakout-identity-click-acfcde26",
-      "claimed_at": "2026-10-20T20:45:04Z",
-      "expires_at": "2026-10-20T23:45:04Z",
-      "note": "take #364 Pre-Breakout identity-cell whitespace swallows candidate selection clicks",
-      "task": "APP-AUDIT-PREBREAKOUT-IDENTITY-CLICK"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-save-feedback-673f40fc",
       "claimed_at": "2026-10-20T20:57:47Z",
       "expires_at": "2026-10-21T00:13:31Z",
