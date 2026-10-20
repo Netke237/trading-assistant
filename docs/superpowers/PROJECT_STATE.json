@@ -10,7 +10,7 @@
       "id": "APP-AUDIT-B-NOTIFICATION-TEXT",
       "name": "Notifications help text renders literal Unicode escape (#375)",
       "status": "built",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-notification-text-plan.md",
       "branch": "board/app-audit-b-notification-text-b7518ff6",
@@ -25,8 +25,10 @@
         "closure_evidence": "Fresh independent subagent 3ea573be-6af7-4fcd-ae33-075c53f7a3e8 reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-NOTIFICATION-TEXT/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 76e7d628-6704-4bb6-bf93-c442dbaa4b4c reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-NOTIFICATION-TEXT/code-r1.md"
       },
       "audit_history": [
         {
@@ -35,6 +37,18 @@
           "stage_round": 1,
           "reviewer": "3ea573be-6af7-4fcd-ae33-075c53f7a3e8",
           "reviewed": "docs/superpowers/plans/2026-10-20-app-audit-b-notification-text-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "76e7d628-6704-4bb6-bf93-c442dbaa4b4c",
+          "reviewed": "origin/main..HEAD",
           "gate_findings": 0,
           "findings": [],
           "fixes": [],
@@ -52,10 +66,10 @@
         "pattern": "Passwords are write-only — leave blank",
         "note": "Pins literal em dash in Notifications SectionIntro blurb without unicode escape."
       },
-      "completion_pct": 70,
+      "completion_pct": 85,
       "size": "XS",
       "complexity": 1,
-      "note": "Implementation and regression tests complete (#375, #428). Notifications blurb renders em dash. Code audit next."
+      "note": "Code round 1 clean. Plan 1 round clean, code 1 round clean. PR pending."
     },
     {
       "id": "APP-AUDIT-B-DENSITY",
