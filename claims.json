@@ -7,6 +7,14 @@
       "expires_at": "2026-10-21T13:02:00Z",
       "note": "Fix stocks scan resolving stale universe context instead of universeStore (#343)",
       "task": "STOCKS-CUSTOM-UNIVERSE"
+    },
+    {
+      "agent": "claude",
+      "branch": "main",
+      "claimed_at": "2026-10-21T10:35:43Z",
+      "expires_at": "2026-10-21T13:35:43Z",
+      "note": "Verify Pre-Breakout, Fibonacci and Pullback end to end (#353)",
+      "task": "APP-AUDIT-PREBREAKOUT"
     }
   ]
 }
