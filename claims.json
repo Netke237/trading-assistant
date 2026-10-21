@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-save-feedback-e801c2d4",
       "claimed_at": "2026-10-21T04:22:04Z",
-      "expires_at": "2026-10-21T07:22:13Z",
+      "expires_at": "2026-10-21T07:23:02Z",
       "note": "Resume #371 authorized second plan stage; preserve prior3rounds; sizeL complexity5",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
     },
