@@ -1,0 +1,166 @@
+{
+  "browser": "155.0.8059.41",
+  "base": "http://127.0.0.1:3027",
+  "boundary": "All API and websocket requests mocked; same browser document and actual Next navigation",
+  "results": [
+    {
+      "mode": "options",
+      "events": [
+        {
+          "event": "request",
+          "id": 1
+        },
+        {
+          "event": "request",
+          "id": 2
+        },
+        {
+          "event": "request",
+          "id": 3
+        },
+        {
+          "event": "request",
+          "id": 4
+        },
+        {
+          "event": "response",
+          "id": 3,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 4,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 1,
+          "state": "Bear"
+        },
+        {
+          "event": "response",
+          "id": 2,
+          "state": "Bear"
+        }
+      ],
+      "before": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "after": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "expected_after": "PASS (latest Bull + Bullish)",
+      "actual_after": "PASS",
+      "reject_dialog": false,
+      "errors": []
+    },
+    {
+      "mode": "stocks",
+      "events": [
+        {
+          "event": "request",
+          "id": 1
+        },
+        {
+          "event": "request",
+          "id": 2
+        },
+        {
+          "event": "request",
+          "id": 3
+        },
+        {
+          "event": "request",
+          "id": 4
+        },
+        {
+          "event": "response",
+          "id": 3,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 4,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 1,
+          "state": "Bear"
+        },
+        {
+          "event": "response",
+          "id": 2,
+          "state": "Bear"
+        }
+      ],
+      "before": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "after": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "expected_after": "PASS (latest Bull + Bullish)",
+      "actual_after": "PASS",
+      "reject_dialog": false,
+      "errors": []
+    },
+    {
+      "mode": "prebreakout",
+      "events": [
+        {
+          "event": "request",
+          "id": 1
+        },
+        {
+          "event": "request",
+          "id": 2
+        },
+        {
+          "event": "request",
+          "id": 3
+        },
+        {
+          "event": "request",
+          "id": 4
+        },
+        {
+          "event": "response",
+          "id": 3,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 4,
+          "state": "Bull"
+        },
+        {
+          "event": "response",
+          "id": 1,
+          "state": "Bear"
+        },
+        {
+          "event": "response",
+          "id": 2,
+          "state": "Bear"
+        }
+      ],
+      "before": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "after": {
+        "verdict": "PASS",
+        "headline": "REGIME PASS\nAudit Bull"
+      },
+      "expected_after": "PASS (latest Bull + Bullish)",
+      "actual_after": "PASS",
+      "reject_dialog": false,
+      "errors": []
+    }
+  ]
+}
