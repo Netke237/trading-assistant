@@ -126,7 +126,7 @@
       "completion_pct": 80,
       "size": "M",
       "complexity": 4,
-      "note": "Code round 1 clean (0 gate findings). Reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md verified. Ready for PR and self-merge (#356)."
+      "note": "SELF-MERGE PENDING, PR #470, audited head 6c933421. Lane H reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md (#356). Plan round 3 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-RAIL-DESTINATION-PARITY",
