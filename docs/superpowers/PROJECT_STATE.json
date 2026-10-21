@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-PREBREAKOUT",
       "name": "Lane E — verify Pre-Breakout, Fibonacci and Pullback end to end (#353)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/app-audit-prebreakout-b4f0d823",
       "tracking_issue": 353,
@@ -30,7 +30,7 @@
         "pattern": "APP-AUDIT-PREBREAKOUT",
         "note": "Pins the final Pre-Breakout audit report for Lane E (#353)."
       },
-      "completion_pct": 30,
+      "completion_pct": 80,
       "size": "L",
       "complexity": 4,
       "audit_history": [
@@ -61,7 +61,7 @@
           "findings": []
         }
       ],
-      "note": "Lane E Pre-Breakout / Fib / Pullback audit (#353). Plan round 2 clean (0 gate findings). Plan stage closed clean in 2 rounds."
+      "note": "Reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-PREBREAKOUT/report.md completed. Ready for Code Audit Round 1 (#353)."
     },
     {
       "id": "APP-AUDIT-PERSISTENCE",
