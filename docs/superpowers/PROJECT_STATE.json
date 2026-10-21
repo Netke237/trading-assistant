@@ -14,17 +14,97 @@
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
       "branch": "board/app-audit-broker-portfolio-c4b17ff3",
       "tracking_issue": 354,
-      "audit_rounds": 0,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 9864f499-f467-4439-941e-aff661efd50d reviewed diff 30e88233..ed5c1529; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-BROKER-PORTFOLIO/plan-r3.md"
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "d00d3aea-493c-4f1f-8815-65d0ed8a769c",
+          "reviewed": "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md@3cd38f00..HEAD",
+          "gate_findings": 12,
+          "findings": [
+            "Hallucinated POST /broker/batch-option-order and misattribution of option order execution to SendToBrokerDialog",
+            "Inverted sign and missing order-type validation in Tastytrade paper adapter audit",
+            "Tradier paper endpoint URL and equity/option side mapping discrepancy",
+            "Fictitious conid resolution and order multiplier in IBKR paper adapter",
+            "Complete misstatement of premium_cap_basis mechanics",
+            "Hallucinated sector exposure caps (max_sector_pct)",
+            "Inaccurate state machine states in BrokerAttemptService",
+            "Omission of idless option submissions and prepared_order linkage",
+            "Erroneous schema assertions for PortfolioPositionModel",
+            "False assertion on target rung rescaling for partial ladders",
+            "Misattribution of manual position closing to EditDrawer.tsx and unaudited no-op sendToBroker stub",
+            "Missing state-space matrix and audit artifact requirements from issue #354"
+          ],
+          "fixes": [
+            "Documented SendToBrokerDialog as offline basket tracker and targeted POST /broker/option-order",
+            "Corrected Tastytrade limit order requirement and price sign: price = -abs(limit) for BUY/debit, price = abs(limit) for SELL/credit",
+            "Corrected Tradier endpoint to POST .../accounts/{account_id}/orders, 4-way side mappings, and rate-limit governor admit check",
+            "Corrected IBKR pre-resolved conid contract (conidex/secType) and multiplier=100 for options",
+            "Corrected premium_cap_basis to portfolio_risk.py formula: max(mid, limit_price) for LMT, ask or mid + spread/2 for MKT",
+            "Replaced sector caps with actual exposure hold and release mechanisms in portfolio_exposure.py",
+            "Corrected attempt state lifecycle to lowercase states (preparing -> dispatching -> completed/failed)",
+            "Added idless option submission coverage with backend _prepare_idless and prepared_order matching",
+            "Aligned PortfolioPositionModel schema assertions with database columns (qty, cost_basis, entry_price, multiplier)",
+            "Corrected target rung rescaling to preserve runner leg and rescale only active target rungs",
+            "Corrected manual position close path to CloseModal.tsx and highlighted unrouted sendToBroker=True stub in portfolio.py",
+            "Added 9-state state space verification matrix and standardized Lane F audit artifact specifications"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-BROKER-PORTFOLIO/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "53a03845-e750-46a5-a198-6bad9aa468d7",
+          "reviewed": "git diff d632995f..30e88233 -- docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
+          "gate_findings": 5,
+          "findings": [
+            "State space matrix Failed/Cancelled row asserted no position created on 500 errors, contradicting save-first retention with ORDER-UNKNOWN note (verdict=keep)",
+            "IBKR order ticket payload asserted wrong keys (conid, ticker) instead of conidex/secType",
+            "IBKR confirmation question handler asserted OrderAdmissionRefusedError instead of HTTPException(502)",
+            "Residual batch processing reference in State Space Matrix",
+            "Contract string called canonical OCC representation instead of internal composite key {symbol}|{strike}|{expiry}|{right}"
+          ],
+          "fixes": [
+            "Updated matrix to reflect classifyDirectFailure: 422 deletes row (verdict=delete), 500/unknown retains row with ORDER-UNKNOWN note (verdict=keep)",
+            "Aligned IBKR payload keys with _build_payload: conidex and secType",
+            "Updated IBKR confirmation question expectation to HTTPException(status_code=502)",
+            "Removed residual batch processing reference in state space matrix",
+            "Clarified internal composite contract string key vs OCC symbol"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-BROKER-PORTFOLIO/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "9864f499-f467-4439-941e-aff661efd50d",
+          "reviewed": "git diff 30e88233..ed5c1529 -- docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-BROKER-PORTFOLIO/plan-r3.md"
+        }
+      ],
       "tickets": [
         354
       ],
@@ -34,10 +114,10 @@
         "pattern": "APP-AUDIT-BROKER-PORTFOLIO reconciliation report",
         "note": "Pins the reconciliation report for Broker & Portfolio audit (#354)."
       },
-      "completion_pct": 10,
+      "completion_pct": 30,
       "size": "L",
       "complexity": 5,
-      "note": "Lane F audit taken. Planning stage in progress."
+      "note": "Lane F audit plan stage clean after 3 rounds. Building verification harnesses and tickets."
     },
     {
       "id": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
