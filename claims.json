@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/dhr-evidence-exclusion-03ca67ab",
+      "claimed_at": "2026-10-21T07:43:25Z",
+      "expires_at": "2026-10-21T10:43:25Z",
+      "note": "DHR scope:evidence exclusion (yfinance 2016 spin-off jump)",
+      "task": "DHR-EVIDENCE-EXCLUSION"
+    }
+  ]
 }
