@@ -10,8 +10,8 @@
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
       "name": "Failed schedule writes change API state while disk and scheduler retain old values (#374)",
-      "status": "planning",
-      "audit_rounds": 0,
+      "status": "ready",
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-schedule-rollback-plan.md",
       "branch": "board/app-audit-b-schedule-rollback-7eefd461",
@@ -20,14 +20,25 @@
         "remediation from #350 (finding item 5)"
       ],
       "plan_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan Round 1 audited clean with 0 gate findings by subagent 7a41b7c1-9a80-46ed-8c5f-c5356bd470e8"
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent 7a41b7c1-9a80-46ed-8c5f-c5356bd470e8",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Plan Round 1: 0 gate findings. Atomicity under lock, in-memory rollback, sidecar cleanup in finally block, and scheduler configure isolation verified clean."
+        }
+      ],
       "tickets": [],
       "verify": {
         "kind": "present",
@@ -35,10 +46,10 @@
         "pattern": "_save_locked",
         "note": "Pins get method in backend/app/services/ingestion_schedule_store.py."
       },
-      "completion_pct": 10,
+      "completion_pct": 20,
       "size": "L",
       "complexity": 4,
-      "note": "Drafting plan: atomic schedule store rollback on failed save across ingestion, edgar, sp500, tuning stores."
+      "note": "Plan round 1 clean (0 gate findings). Ready for implementation tickets and build."
     },
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
