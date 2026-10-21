@@ -6085,7 +6085,9 @@
       "completion_pct": 85,
       "size": "M",
       "complexity": 4,
-      "validation": "Frontend5639/286 suites and typecheck pass. Backend unique segmented coverage9388pass/9skip;48 unchanged endpoint cases require temporary offline prefetch mocks, native full attempt stalled at inherited Tiingo admission. Full unmodified CI remains required. See audits/APP-AUDIT-B-CAP-UNITS/validation.md."
+      "validation": "Frontend5639/286 suites and typecheck pass. Backend unique segmented coverage9388pass/9skip;48 unchanged endpoint cases require temporary offline prefetch mocks, native full attempt stalled at inherited Tiingo admission. Full unmodified CI remains required. See audits/APP-AUDIT-B-CAP-UNITS/validation.md.",
+      "merge_status": "SELF-MERGE PENDING, PR #454, audited head d86e80d1b983f44fe4fd97b7e87f13d4098cb1dd",
+      "pull_request": "https://github.com/Netke237/trading-assistant/pull/454"
     }
   ],
   "already_shipped": [
