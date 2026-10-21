@@ -90,7 +90,7 @@
           "report": "docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r2.md"
         }
       ],
-      "note": "Lane E Pre-Breakout reconciliation report and verification suites (#353). Plan round 2 clean, code round 2 clean. Audit clean; ready for self-merge.",
+      "note": "SELF-MERGE PENDING, PR #473, audited head 9f12528c. Lane E Pre-Breakout reconciliation report and verification suites (#353). Plan round 2 clean, code round 2 clean.",
       "code_stage": {
         "rounds": 2,
         "clean": true,
