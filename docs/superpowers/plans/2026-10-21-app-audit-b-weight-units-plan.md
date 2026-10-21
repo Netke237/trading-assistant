@@ -16,7 +16,7 @@
 ## 2. Gate Compliance & Invariants
 
 - **Numeric Gate:** Prevent wrong scores (e.g. 3235 instead of 67) from reaching scan results, candidate rankings, and position cards.
-- **Persistence Gate:** Saved Search Profiles in `localStorage` and Scan Schedules in `scan_schedule.yaml` must not be corrupted. Legacy entries with whole percentages (e.g., 40) or fractions (0.40) must load and evaluate cleanly.
+- **Persistence Gate:** Saved Search Profiles in `localStorage` and Scan Schedules in `scan_schedule.yaml` must not be corrupted. Legacy entries with whole percentages (e.g., 40) or fractions (0.40) must load, migrate, and evaluate cleanly.
 - **Options Mode Invariant:** Only the overridden weight is changed; untouched weights retain their horizon defaults without recalibration.
 - **Stocks Mode Invariant:** Overridden weights are normalized before event-zeroing and sum renormalization (`weights = {k: v / total_w for k, v in weights.items()}`).
 - **Scorer Test Parity:** Existing unit tests in `backend/tests/test_overrides.py` passing fractions (`0.9`, `0.123`, `0.5`, `1`) continue to pass without regression.
@@ -28,7 +28,7 @@
 
 ### A. Backend Scorer Normalization (`backend/app/scoring/stock_scorer.py`)
 In `stock_scorer.py`:
-1. Define a helper:
+1. Define an idempotent normalization helper:
    ```python
    def _normalize_weight(val: float | int | None) -> float:
        if val is None:
@@ -38,6 +38,10 @@ In `stock_scorer.py`:
            return f / 100.0
        return max(0.0, f)
    ```
+   Properties:
+   - For percentage values `val > 1.0` (e.g. `40`, `100`), maps to `val / 100.0` (`0.40`, `1.0`).
+   - For canonical fractions `val <= 1.0` (e.g. `0.40`, `0.9`, `0.123`, `1.0`), returns the fraction unchanged.
+   - Idempotent: `_normalize_weight(_normalize_weight(x)) == _normalize_weight(x)`.
 2. In `score_stock` override handling (lines 1130–1136):
    Apply `_normalize_weight(val)` when assigning:
    ```python
@@ -49,9 +53,9 @@ In `stock_scorer.py`:
    ```
 
 ### B. Frontend Request Resolvers (`frontend/lib/`)
-To ensure canonical unit propagation and eliminate ambiguity between 1% (0.01) and 100% (1.0):
-1. In `frontend/lib/resolveStockScanRequest.ts`, `frontend/lib/resolveOptionsScanRequest.ts`, and `frontend/lib/scanScheduleResolve.ts`:
-   Normalize weight override values before attaching to `overrides`:
+To ensure canonical unit propagation into API payloads:
+1. In `frontend/lib/resolveStockScanRequest.ts` and `frontend/lib/resolveOptionsScanRequest.ts`:
+   Define and apply an idempotent normalization helper on score weight keys:
    ```ts
    const SCORE_WEIGHT_KEYS = new Set([
      'weight_trend',
@@ -63,23 +67,61 @@ To ensure canonical unit propagation and eliminate ambiguity between 1% (0.01) a
 
    export function normalizeWeightOverride(val: unknown): unknown {
      if (typeof val !== 'number' || !Number.isFinite(val)) return val;
-     if (val > 1) return val / 100;
-     if (val === 1) return 0.01;
+     if (val > 1.0) return val / 100.0;
      return Math.max(0, val);
    }
    ```
-   Apply `normalizeWeightOverride` to any of the 5 score weight keys present in `scanOverrides`.
+   Apply `normalizeWeightOverride` when populating `stocksOverrides` in `buildStockScanRequestBody` and `effectiveOverrides` in `buildOptionsScanRequestBody`.
+2. `frontend/lib/scanScheduleResolve.ts` calls `buildOptionsScanRequestBody` and `buildStockScanRequestBody` directly; it must NOT apply a separate redundant normalization pass on `profile.scanOverrides`.
+3. Idempotency guarantee: whether a value is passed through once or multiple times, `f(1.0) == 1.0` and `f(0.40) == 0.40`, preventing double-scaling corruption.
 
 ### C. Schedule Migration & Legacy Compatibility (`backend/app/services/scan_schedule_store.py`)
 In `scan_schedule_store.py`:
-Ensure `_migrate_entry` normalizes any score-weight keys in `entry["resolved_request"]["overrides"]` if `val > 1.0`.
+1. Bump schema version: `_SCHEMA_VERSION = 3`.
+2. Update `_migrate_entry`:
+   Support migrating both `mode == "stocks"` and `mode == "options"`:
+   ```python
+   SCORE_WEIGHT_KEYS = {"weight_trend", "weight_pullback", "weight_trigger", "weight_event", "weight_vol"}
+
+   @staticmethod
+   def _migrate_entry(entry: object) -> object:
+       """v1 -> v2: stocks entry drops strategy fields, sets params_horizon.
+          v2 -> v3: weight overrides in resolved_request are normalized to canonical fractions."""
+       if not (isinstance(entry, dict) and isinstance(entry.get("resolved_request"), dict)):
+           return entry
+
+       e = dict(entry)
+       req = dict(e["resolved_request"])
+       
+       # v1 -> v2 stocks migration
+       if e.get("mode") == "stocks":
+           from app.services.horizon_profiles import migrate_saved_stock_request
+           req = migrate_saved_stock_request(req)
+
+       # v2 -> v3 weight normalization for both stocks and options
+       ov = req.get("overrides")
+       if isinstance(ov, dict):
+           updated_ov = dict(ov)
+           changed = False
+           for k in SCORE_WEIGHT_KEYS:
+               v = updated_ov.get(k)
+               if isinstance(v, (int, float)) and v > 1.0:
+                   updated_ov[k] = float(v) / 100.0
+                   changed = True
+           if changed:
+               req["overrides"] = updated_ov
+
+       e["resolved_request"] = req
+       return e
+   ```
+3. Existing backup-before-migration and atomic write under lock in `_load()` will safely back up any version-2 file to `.bak` and persist the migrated version-3 file.
 
 ---
 
 ## 4. Verification & Testing Plan
 
 1. **Audit Fixture Test:**
-   Run `python docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/controls/backend-parameters.py`.
+   Run `backend/.venv/Scripts/python.exe docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/controls/backend-parameters.py`.
    Assert `"40 percent trend weight unit"` passes.
 2. **Backend Unit Tests:**
    Create `backend/tests/test_weight_units.py`:
@@ -89,17 +131,20 @@ Ensure `_migrate_entry` normalizes any score-weight keys in `entry["resolved_req
      - `weight_trigger: 40` -> 65 (contribution 16)
      - `weight_event: 40` -> 64 (contribution 8)
      - `weight_vol: 40` -> 89 (contribution 40)
-   - Test Stocks mode renormalization with 40% weight override.
+   - Test Stocks mode renormalization with 40% weight override (`unrounded_score == 67.368`, rounded to `67`).
    - Test boundary values: 0%, 100%, 0.5%, 1%, default.
-   - Test existing fractions (`0.9`, `0.123`) passed directly.
+   - Test existing fractions (`0.9`, `0.123`, `1`) passed directly without modification.
+   - Test schedule store migration: v2 entry with `{weight_trend: 40}` in both stocks and options modes upgrades to v3 with `{weight_trend: 0.40}`.
 3. **Frontend Tests:**
    Add tests in `frontend/lib/__tests__/resolveWeightOverrides.test.ts` verifying:
-   - `buildStockScanRequestBody` normalizes 40 -> 0.40, 1 -> 0.01, 100 -> 1.0, 0 -> 0.
-   - `buildOptionsScanRequestBody` normalizes 40 -> 0.40, 1 -> 0.01, 100 -> 1.0, 0 -> 0.
-   - `scanScheduleResolve` propagates normalized fractions into scheduled scan requests.
+   - `buildStockScanRequestBody` normalizes 40 -> 0.40, 100 -> 1.0, 0 -> 0, and preserves fractions 0.40 -> 0.40.
+   - `buildOptionsScanRequestBody` normalizes 40 -> 0.40, 100 -> 1.0, 0 -> 0, and preserves fractions 0.40 -> 0.40.
+   - Idempotency: multiple invocations do not alter values.
+   - Scheduled scan requests produced via `scanScheduleResolve` carry normalized decimal fractions.
 4. **Regression Tests:**
    - `backend/tests/test_overrides.py`
    - `backend/tests/test_stock_scan_overrides.py`
+   - `backend/tests/test_scan_schedule_recovery.py`
    - `npm run typecheck`
    - `npm run test`
    - `python scripts/state.py` (zero drift)
