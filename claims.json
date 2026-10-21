@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-schedule-rollback-7eefd461",
-      "claimed_at": "2026-10-21T06:56:49Z",
-      "expires_at": "2026-10-21T10:33:00Z",
-      "note": "Resume #374: atomic schedule store rollback on failed write",
-      "task": "APP-AUDIT-B-SCHEDULE-ROLLBACK"
-    }
-  ]
+  "claims": []
 }
