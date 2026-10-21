@@ -7295,6 +7295,65 @@
           ]
         }
       ]
+    },
+    {
+      "id": "BACKEND-LAN-BIND",
+      "owner": "agent",
+      "name": "Backend bind and CORS origins from .env (live app dark after a 127.0.0.1 restart)",
+      "summary": "start-backend.bat reads BAMENDJOU_BACKEND_BIND from the root .env (default 127.0.0.1) and its kill loop also stops 0.0.0.0/BIND_HOST listeners; CORS_EXTRA_ORIGINS adds explicit LAN origins, '*' refused. Recovers stash c857febc.",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan": "docs/superpowers/plans/2026-10-21-backend-lan-bind-plan.md",
+      "branch": "claude/backend-lan-bind-66ab3139",
+      "depends_on": [],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/config.py",
+        "pattern": "^def cors_origins\\(settings",
+        "note": "PRESENCE ONLY of cors_origins."
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent aa0bebf8e67e00d21 reviewed the plan at 6937a687; 0 gate findings; docs/superpowers/audits/BACKEND-LAN-BIND/plan-r1.md"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent adb6c6b6e8f64e5dd reviewed git diff 0386bf5d 614c8e34; 0 gate findings; docs/superpowers/audits/BACKEND-LAN-BIND/code-r1.md"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "aa0bebf8e67e00d21",
+          "reviewed": "docs/superpowers/plans/2026-10-21-backend-lan-bind-plan.md@6937a687",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/BACKEND-LAN-BIND/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "adb6c6b6e8f64e5dd",
+          "reviewed": "git diff 0386bf5d 614c8e34",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/BACKEND-LAN-BIND/code-r1.md"
+        }
+      ],
+      "notes": "Requested by Kenneth in chat 2026-10-21. Not merged; PR for Kenneth. After merge, pull main into C:\\GitHub\trading-assistant; the next start-backend.bat restart binds per .env (already BAMENDJOU_BACKEND_BIND=0.0.0.0)."
     }
   ],
   "already_shipped": [
