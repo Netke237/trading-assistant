@@ -15,11 +15,11 @@
       "branch": "board/app-audit-monitoring-7fb31a2c",
       "tracking_issue": 355,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "verify": {
@@ -31,8 +31,57 @@
       "completion_pct": 10,
       "size": "L",
       "complexity": 5,
-      "audit_history": [],
-      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Authored execution plan docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "subagent e5af6694-ecf4-4a6c-a6f5-07a02f9e898d (independent adversarial auditor)",
+          "scope": "Whole plan docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md against Issue #355, Watchlist, Alerts, Strategy Watch, Auto-Trade, and Schedulers",
+          "findings": [
+            "F-1: useWatchedContractsStore asserted version 1 and missing grading Record<string, ContractGrading> and v3 migration.",
+            "F-2: useWatchlistStore operations misstated (asserted toggleSymbol, hasSymbol).",
+            "F-3: useWatchlistUiStore misstated as tab manager instead of ephemeral selectedSymbol rail sync.",
+            "F-4: Watchlist tabs and columns misstated (Stocks/Contracts columns and omitted Composite tab).",
+            "F-5: Context rail @contextRail/watchlist inventory misstated (market cap distribution, portfolio overlap, quick scan).",
+            "F-6: useAlertStore vs useChartAlertStore separation conflated (AlertRule placed in useAlertStore instead of useChartAlertStore).",
+            "F-7: AlertRule schema misstated as flat instead of group.conditions tree.",
+            "F-8: alertEngine.ts vs chartAlertEngine.ts confused for multi-bar candle indicators and 2-bar crossing detection.",
+            "F-9: Backend chart alert endpoints misstated as /chart/alerts instead of /alerts/rules.",
+            "F-10: Strategy Watch toggle endpoint misstated as /api/strategy-watch/{id}/enabled instead of /api/strategy-watch/{watch_id}.",
+            "F-11: Strategy Watch state machine asserted 5 phases and 7 strategies instead of 2 phases (idle, armed), 5 event types, and 5 valid daily strategies (excluding vwap).",
+            "F-12: useAutoTradeStore state model misstated and omitted critical partialize exclusion of armed fields on reload.",
+            "F-13: Auto-trade endpoints misstated as POST /auto-trade/disarm and GET /auto-trade/history instead of DELETE /auto-trade/arm and GET /auto-trade/status.",
+            "F-14: Pre-trade safety gates confused RegimeGateConfigError (500) with RegimeHeadwindError (400), and misstated event veto as caution window instead of max(reject, hold).",
+            "F-15: sent_log.py misstated as cooldown throttler instead of append-only audit log.",
+            "F-16: chart_alert_scheduler.py omitted from scheduled automation inventory.",
+            "F-17: Context rails for Alerts and Strategy Watch asserted dedicated components instead of generic RailQuickLook shims."
+          ],
+          "fixes": [
+            "Updated useWatchedContractsStore to schema version 3, methods add/remove/clearGrading/isWatched, and grading map migration.",
+            "Corrected useWatchlistStore operations to addSymbol, removeSymbol, isWatched, syncFromBackend.",
+            "Clarified useWatchlistUiStore as ephemeral selectedSymbol sync and tab state as local page state.",
+            "Documented all 3 Watchlist tabs (stocks, contracts, composite) and exact rendered columns.",
+            "Corrected @contextRail/watchlist inventory to Status breakdown, Flags, SymbolNotes, RailQuickLook.",
+            "Clarified store separation between portfolio toasts (useAlertStore v3) and chart alert rules (useChartAlertStore).",
+            "Aligned AlertRule schema with types/alerts.ts group.conditions tree.",
+            "Identified chartAlertEngine.ts for candle indicator evaluation and crossing operators, distinguishing alertEngine.ts for portfolio positions.",
+            "Corrected backend chart alert endpoints to /alerts/rules, /alerts/history, /alerts/rules/{id}.",
+            "Corrected Strategy Watch toggle endpoint to PATCH /api/strategy-watch/{watch_id}.",
+            "Updated Strategy Watch state machine to idle and armed phases, 5 emitted event types, and 5 valid daily strategies.",
+            "Aligned useAutoTradeStore state model and documented partialize exclusion of armed fields ensuring disarm on reload.",
+            "Corrected auto-trade endpoints to DELETE /auto-trade/arm and GET /auto-trade/status.",
+            "Corrected pre-trade gates: RegimeHeadwindError (400) vs RegimeGateConfigError (500), and event veto max(reject, hold).",
+            "Clarified sent_log.py as append-only audit log and upstream cooldown enforcement.",
+            "Added chart_alert_scheduler.py to scheduled automation inventory.",
+            "Noted generic RailQuickLook shims for Alerts and Strategy Watch context rails."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/plan-r1.md"
+        }
+      ],
+      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Plan round 1 completed with 17 gate findings (remediated). Ready for Plan Audit Round 2."
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT",
