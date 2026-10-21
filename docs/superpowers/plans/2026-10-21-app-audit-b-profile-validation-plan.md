@@ -59,56 +59,91 @@ Create a pure validation module defining strict shape guards:
    - `createdAt`: `typeof p.createdAt === 'string' && p.createdAt.trim().length > 0 && !isNaN(Date.parse(p.createdAt))`.
    - `updatedAt`: `typeof p.updatedAt === 'string' && p.updatedAt.trim().length > 0 && !isNaN(Date.parse(p.updatedAt))`.
    - `direction`: `p.direction === 'Bullish' || p.direction === 'Bearish'`.
-   - `universe`: non-null object with `typeof p.universe.pick === 'string'`, `typeof p.universe.customRaw === 'string'`, `p.universe.capUnit === 'M' || p.universe.capUnit === 'B'`.
+   - `universe`: non-null, non-array object requiring:
+     - `typeof p.universe.pick === 'string' && p.universe.pick.trim().length > 0`
+     - `typeof p.universe.customRaw === 'string'`
+     - `p.universe.capUnit === 'M' || p.universe.capUnit === 'B'`
+     - `typeof p.universe.minPriceRaw === 'string'`
+     - `typeof p.universe.maxPriceRaw === 'string'`
+     - `typeof p.universe.minCapRaw === 'string'`
+     - `typeof p.universe.maxCapRaw === 'string'` (resolves F-5: ensures price/cap fields are string primitives, preventing `Number(null) === 0` sending 0 to backend)
    - `horizonPreset`: `typeof p.horizonPreset === 'string' && p.horizonPreset.trim().length > 0`.
-   - `holdMin`: `typeof p.holdMin === 'number' && !isNaN(p.holdMin)`.
-   - `holdMax`: `typeof p.holdMax === 'number' && !isNaN(p.holdMax)`.
+   - `holdMin`: `typeof p.holdMin === 'number' && Number.isFinite(p.holdMin)`.
+   - `holdMax`: `typeof p.holdMax === 'number' && Number.isFinite(p.holdMax)`.
    - `scanOverrides`: `typeof p.scanOverrides === 'object' && p.scanOverrides !== null && !Array.isArray(p.scanOverrides)`.
-   - `scanSettings`: `typeof p.scanSettings === 'object' && p.scanSettings !== null && typeof p.scanSettings.confidenceGate === 'object' && p.scanSettings.confidenceGate !== null`.
-   - If `p.mode === 'stocks'`:
-     - If `p.strategy !== undefined`: must be string.
-     - If `p.strategyParams !== undefined`: must be non-null object.
+   - `scanSettings`:
+     - non-null, non-array object
+     - `confidenceGate`: non-null, non-array object with:
+       - `typeof p.scanSettings.confidenceGate.enabled === 'boolean'`
+       - `typeof p.scanSettings.confidenceGate.cautionBelow === 'number' && Number.isFinite(p.scanSettings.confidenceGate.cautionBelow)`
+       - `typeof p.scanSettings.confidenceGate.rejectBelow === 'number' && Number.isFinite(p.scanSettings.confidenceGate.rejectBelow)`
+       - `atrMult`: non-null, non-array object containing `intraday`, `swing`, and `position` sub-objects, each having finite numeric `target` and `stop` (resolves F-6: prevents `TypeError: Cannot read properties of undefined (reading 'intraday'/'swing'/'position')` in `atrMultForHorizon` / `resolveProfileToScanRequest`)
+   - Strategy & StrategyParams co-presence (resolves F-7):
+     - If `p.mode === 'stocks'`:
+       - `strategy` and `strategyParams` must be both undefined OR both present:
+         `((p.strategy === undefined && p.strategyParams === undefined) || (typeof p.strategy === 'string' && p.strategy.trim().length > 0 && typeof p.strategyParams === 'object' && p.strategyParams !== null && !Array.isArray(p.strategyParams)))`.
+     - If `p.mode === 'options'`:
+       - `p.strategy === undefined && p.strategyParams === undefined` (options profiles do not carry stocks strategy state).
+
 2. `sanitizeSearchProfiles(profiles: unknown): SearchProfile[]`:
    - If `!Array.isArray(profiles)`, returns `[]`.
    - Filters entries using `isValidSearchProfile`.
    - Returns only structurally valid profiles.
 
+3. `safeCompareTimestamps(a?: string | null, b?: string | null): number`:
+   - Pure comparator for descending order: `(b || '').localeCompare(a || '')`.
+
 ### B. Store Rehydration, Migration & Future-Version Write Barrier (`frontend/lib/searchProfilesStore.ts`)
-1. **Migration Sanitization**:
-   - In `migrate(persistedState, version)`:
-     - After running version-specific branches (<3, <4, <5), apply `sanitizeSearchProfiles`:
-       `st.profiles = sanitizeSearchProfiles(st.profiles);`
-     - Ensures corrupt or malformed profiles never enter `state.profiles`.
-2. **Future-Version Write Barrier in Storage Adapter**:
-   Wrap `localStorage` in a dedicated storage adapter for `useSearchProfilesStore`:
+1. **Sanitization Hooks Across All Versions (resolves F-1)**:
+   - In Zustand's persist middleware, `migrate(persistedState, version)` only runs when `storedVersion !== options.version`. It does NOT execute when the stored payload is already version 5!
+   - Therefore, profile sanitization must be enforced in two complementary locations:
+     a. **In `options.merge(persistedState, currentState)`**:
+        ```ts
+        merge: (persistedState, currentState) => {
+          const typed = persistedState as Partial<SearchProfilesState> | undefined;
+          return {
+            ...currentState,
+            ...typed,
+            profiles: sanitizeSearchProfiles(typed?.profiles ?? currentState.profiles),
+          };
+        }
+        ```
+        `options.merge` runs unconditionally on every hydration across all schema versions (whether migrated, matching, or future), guaranteeing that malformed profiles never enter the Zustand store state in memory.
+     b. **In `storage.getItem`**:
+        Directly sanitizes profiles before returning the state object to Zustand.
+     c. **In `migrate`**:
+        Applies `st.profiles = sanitizeSearchProfiles(st.profiles)` at the end of legacy migration branches (<3, <4, <5).
+
+2. **Custom Storage Adapter `PersistStorage<PersistedSearchProfiles>` (resolves F-2, F-3, F-4)**:
+   - Define `PersistedSearchProfiles = Pick<SearchProfilesState, 'profiles' | 'legacyTargetPctDropped'>`.
+   - Directly implement `PersistStorage<PersistedSearchProfiles>` and supply it directly to `persist(..., { storage: searchProfilesPersistStorage })` **WITHOUT** wrapping in `createJSONStorage`. (Resolves F-2: avoids `createJSONStorage` calling `JSON.parse("[object Object]")` and crashing).
    - `CURRENT_VERSION = 5`.
-   - `getItem(name: string)`:
+   - `getItem(name: string): StorageValue<PersistedSearchProfiles> | null`:
      - Reads raw string from `localStorage.getItem(name)`.
-     - If null, empty, or unparseable JSON, passes through to default handling.
+     - If null, empty, or unparseable JSON, returns null.
      - Parses JSON:
        - If `typeof parsed.version === 'number' && parsed.version > CURRENT_VERSION`:
          - Future envelope detected (e.g. `version: 9999` with `futureAuditSentinel`).
-         - Cache future envelope metadata in a module-scoped record: `activeFutureEnvelope = { raw: rawString, version: parsed.version, parsed }`.
-         - Extract and sanitize profiles from `parsed.state?.profiles`:
+         - Extract and sanitize profiles compatible with current version:
            `const safeProfiles = sanitizeSearchProfiles(parsed.state?.profiles);`
          - Return to Zustand: `{ state: { profiles: safeProfiles, legacyTargetPctDropped: false }, version: CURRENT_VERSION }`.
-         - **Key Mechanism**: Because `deserializedStorageValue.version === options.version (5)`, Zustand's `hydrate()` evaluates `version !== options.version` as `false`. Zustand does **not** flag `migrated = true` and does **not** call `setItem()` during hydration!
-         - **Result**: `localStorage.getItem('bamendjou:search-profiles')` remains 100% byte-for-byte identical to the original future envelope (`beforeRaw === afterRaw`).
+         - **Key Mechanism**: Because `deserializedStorageValue.version === options.version (5)`, Zustand's hydration logic evaluates `version !== options.version` as `false`. Zustand does **not** flag `migrated = true` and does **not** trigger an automatic `setItem()` overwrite during hydration!
+         - **Result**: `localStorage.getItem('bamendjou:search-profiles')` remains 100% byte-for-byte identical to the original future envelope (`beforeRaw === afterRaw`), completely satisfying Finding S3.
        - If `parsed.version <= CURRENT_VERSION`:
-         - Clear `activeFutureEnvelope = null`.
-         - Return parsed object.
-   - `setItem(name: string, value: StorageValue<SearchProfilesState>)`:
-     - If `activeFutureEnvelope` is set (a future envelope is on disk):
-       - Re-read `localStorage.getItem(name)`. If it still contains a future version (`version > CURRENT_VERSION`):
-         - Parse the stored future envelope:
-           `const envelope = JSON.parse(currentRaw);`
-         - Update `envelope.state.profiles = value.state.profiles;`
-         - If `value.state.legacyTargetPctDropped !== undefined`: `envelope.state.legacyTargetPctDropped = value.state.legacyTargetPctDropped;`
-         - Preserve `envelope.version` (e.g. 9999) and all unknown root/state properties (e.g. `futureAuditSentinel`)!
-         - Write back `localStorage.setItem(name, JSON.stringify(envelope))`.
-         - Never downgrade `version` to 5!
-     - Else:
+         - Return `{ state: { profiles: sanitizeSearchProfiles(parsed.state?.profiles), legacyTargetPctDropped: parsed.state?.legacyTargetPctDropped === true }, version: parsed.version }`.
+   - `setItem(name: string, value: StorageValue<PersistedSearchProfiles>): void`:
+     - **Direct Disk Inspection at Write Time (resolves F-3)**:
+       Do NOT rely on an in-memory flag (which would race cross-tab writes). Instead, inspect `localStorage.getItem(name)` directly at write time.
+     - **Strict Write Barrier on Future Envelopes (resolves F-4)**:
+       If `localStorage.getItem(name)` contains a payload with `version > CURRENT_VERSION`:
+       - Refuse to overwrite or mutate it from an older client!
+       - Log a console warning: `[searchProfilesStore] Write barrier: refusing write to newer schema version ${currentEnvelope.version} (current: ${CURRENT_VERSION})`.
+       - Return immediately without calling `localStorage.setItem`.
+       - Disk bytes remain 100% byte-exact (`beforeRaw === afterRaw`), preserving future-version profiles (e.g. unknown modes) and future sentinels intact.
+     - If `localStorage.getItem(name)` is null, malformed, or has `version <= CURRENT_VERSION`:
        - Normal write: `localStorage.setItem(name, JSON.stringify(value))`.
+   - `removeItem(name: string): void`:
+     - Calls `localStorage.removeItem(name)`.
 
 ### C. Component Defense in `SearchProfileBar/index.tsx`
 1. Defensively filter and sort `modeProfiles`:
@@ -116,10 +151,10 @@ Create a pure validation module defining strict shape guards:
    const modeProfiles = profiles
      .filter(isValidSearchProfile)
      .filter((p) => p.mode === activeMode)
-     .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+     .sort((a, b) => safeCompareTimestamps(a.updatedAt, b.updatedAt));
    ```
 2. Safe fallback:
-   If `a.updatedAt` or `b.updatedAt` is missing or null, `(b.updatedAt || '').localeCompare(a.updatedAt || '')` treats missing timestamps as lowest priority without throwing.
+   `safeCompareTimestamps(a.updatedAt, b.updatedAt)` uses `(b || '').localeCompare(a || '')`, treating missing or empty timestamps as lowest priority without throwing.
 3. If no valid profiles exist for `activeMode`, the dropdown renders standard default options safely without errors.
 
 ---
@@ -134,24 +169,29 @@ Create a pure validation module defining strict shape guards:
 2. **`frontend/lib/__tests__/searchProfileValidation.test.ts`** (NEW):
    - Unit tests covering `isValidSearchProfile`:
      - Valid options profile passes.
-     - Valid stocks profile passes.
+     - Valid stocks profile passes (both with and without strategy & strategyParams).
      - `updatedAt: null` or invalid date string fails.
      - `createdAt: null` or invalid date string fails.
      - Missing or empty `id` / `name` fails.
      - Invalid `mode` fails.
      - Missing `direction` or invalid string fails.
-     - Corrupt `universe` or `scanSettings` fails.
+     - `universe` missing string fields (`minPriceRaw`, `maxPriceRaw`, `minCapRaw`, `maxCapRaw`) fails (resolves F-5).
+     - `confidenceGate` missing `atrMult` or missing horizon pairs fails (resolves F-6).
+     - Stocks profile with `strategyParams` but missing `strategy` fails (resolves F-7).
+     - Options profile with stocks `strategy` or `strategyParams` fails.
      - `sanitizeSearchProfiles` filters out malformed items and preserves valid items.
 
 3. **`frontend/lib/searchProfilesStore.ts`**:
-   - Imports `isValidSearchProfile` and `sanitizeSearchProfiles`.
-   - Wraps storage with future-version write barrier in `createJSONStorage`.
-   - In `migrate`: applies `sanitizeSearchProfiles` across all versions.
-   - Preserves future envelopes on subsequent writes without downgrade.
+   - Imports `isValidSearchProfile`, `sanitizeSearchProfiles`, and `safeCompareTimestamps`.
+   - Implements `searchProfilesPersistStorage: PersistStorage<PersistedSearchProfiles>` directly without `createJSONStorage` (resolves F-2).
+   - In `searchProfilesPersistStorage.getItem`: returns current version for future envelopes to suppress hydration rewrite (satisfies S3).
+   - In `searchProfilesPersistStorage.setItem`: inspects `localStorage.getItem` directly at write time (resolves F-3) and refuses write if disk contains `version > CURRENT_VERSION` (resolves F-4).
+   - In `persist`: adds `options.merge` with `sanitizeSearchProfiles` (resolves F-1).
+   - In `migrate`: applies `sanitizeSearchProfiles` across legacy version branches (<3, <4, <5).
 
 4. **`frontend/components/organisms/SearchProfileBar/index.tsx`**:
    - Uses `isValidSearchProfile` to filter profiles.
-   - Uses safe timestamp comparator `(b.updatedAt || '').localeCompare(a.updatedAt || '')`.
+   - Uses `safeCompareTimestamps(a.updatedAt, b.updatedAt)`.
 
 5. **`frontend/components/organisms/SearchProfileBar/__tests__/SearchProfileBar.malformed.test.tsx`** (NEW):
    - Integration tests:
@@ -161,9 +201,9 @@ Create a pure validation module defining strict shape guards:
      - Renders `SearchProfileBar` on Step 3: asserts Search Profile control renders without crash and dropdown is visible and accessible.
      - Future-version envelope (`version: 9999` with `futureAuditSentinel`):
        - Rehydrates store and opens Step 3.
-       - Asserts `localStorage.getItem('bamendjou:search-profiles')` preserves `version: 9999` and `futureAuditSentinel`.
+       - Asserts `localStorage.getItem('bamendjou:search-profiles')` preserves `version: 9999` and `futureAuditSentinel` byte-for-byte (`beforeRaw === afterRaw`).
        - Asserts dropdown still displays the profile in UI.
-       - Asserts modifying or saving a profile does not downgrade version to 5 or strip `futureAuditSentinel`.
+       - Asserts subsequent `saveProfile` does not downgrade version to 5 or strip `futureAuditSentinel` on disk.
 
 6. **`docs/superpowers/PROJECT_STATE.json`**:
    - Register phase `APP-AUDIT-B-PROFILE-VALIDATION`:

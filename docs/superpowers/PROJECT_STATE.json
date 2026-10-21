@@ -15,11 +15,11 @@
       "branch": "board/app-audit-b-profile-validation-0d83ab07",
       "tracking_issue": 381,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-profile-validation-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false,
         "closed_by": null,
         "closure_evidence": null
@@ -30,10 +30,28 @@
         "pattern": "isValidSearchProfile",
         "note": "Pins that search profiles are strictly validated against corrupt or malformed shapes."
       },
-      "completion_pct": 10,
+      "completion_pct": 20,
       "size": "L",
       "complexity": 5,
-      "audit_history": []
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "fresh subagent (62cee8e5-b069-4a8d-a27c-a5f531642c0b)",
+          "scope": "initial plan docs/superpowers/plans/2026-10-21-app-audit-b-profile-validation-plan.md against controls/findings.md C3 and followup/storage/findings.md S3",
+          "findings_count": 7,
+          "findings": [
+            "F-1: Zustand migrate only runs when stored version differs from configured version; migrate does not run on version 5 -> hook sanitizeSearchProfiles into options.merge and storage.getItem.",
+            "F-2: createJSONStorage expects string storage; returning { state, version } throws SyntaxError -> implement PersistStorage<PersistedSearchProfiles> directly.",
+            "F-3: activeFutureEnvelope flag in memory misses cross-tab or external writes -> inspect localStorage.getItem(name) directly at write time in setItem.",
+            "F-4: Mutating future envelope overwrites and discards future unknown modes -> enforce strict write barrier refusing writes when stored version > CURRENT_VERSION.",
+            "F-5: universe validation did not require minPriceRaw, maxPriceRaw, minCapRaw, maxCapRaw to be strings -> require string primitives in isValidSearchProfile.",
+            "F-6: confidenceGate missing atrMult causes TypeError in resolveProfileToScanRequest -> require atrMult with per-horizon target and stop pairs in isValidSearchProfile.",
+            "F-7: stocks strategy and strategyParams must be co-present or co-absent -> enforce co-presence in isValidSearchProfile."
+          ],
+          "clean": false
+        }
+      ]
     },
     {
       "id": "APP-AUDIT-PERSISTENCE",
