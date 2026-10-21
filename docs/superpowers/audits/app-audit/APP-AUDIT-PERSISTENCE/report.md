@@ -47,12 +47,12 @@ The persistence audit covered five primary domains:
 | `riskStore` | `bamendjou-risk-v1` | 4 | **Pass**. Migrates v3 by clamping out-of-bounds exposure values to fallback safe limits. |
 | `settingsStore` | `bamendjou-settings` | 24 | **Pass**. Backfills markov preset configuration, shortlist cap, and premium stop percentage. |
 | `drawingStore` | `bamendjou:drawings` | 1 | **Pass**. Preserves existing drawing arrays without loss. |
-| `searchProfilesStore` | `bamendjou:search-profiles` | 0 | **Pass**. Correctly serializes and retrieves saved parameter profiles. |
+| `searchProfilesStore` | `bamendjou:search-profiles` | 5 | **Pass**. Migrates v4 to v5 (normalizing target profit percentages); correctly serializes and retrieves saved parameter profiles. |
 | `scanParamsStore` | `bamendjou:scan-params` | 12 | **Pass**. Verifies strategy overrides without storing horizon presets (horizon preset lives in `scanStore`). |
-| `scanStore` | `bamendjou-scan-store` | 0 | **Pass**. Retains context across screener modes; validates scan request matching against stored context. |
-| `structureStore` | `bamendjou:structure` | 0 | **Pass**. In-memory and persisted market structure caching. |
-| `autoTradeStore` | `bamendjou-auto-trade` | 0 | **Pass**. Auto-trade kill-switch and active configuration preservation. |
-| `themeStore` | `bamendjou:theme` | 0 | **Pass**. Theme choice ('dark' / 'light') preserved for no-flash bootstrap script. |
+| `scanStore` | `bamendjou-scan-store` | 19 | **Pass**. Migrates v0..v18 to v19 (horizon preset backfills, duration/run stamps); retains context across screener modes; validates scan request matching against stored context. |
+| `structureStore` | `bamendjou:structure` | 2 | **Pass**. Migrates v1 to v2 (structure visibility flags); in-memory and persisted market structure caching. |
+| `autoTradeStore` | `bamendjou-auto-trade` | 2 | **Pass**. Migrates v1 to v2 (autoMode normalization, demoting armed to manual on reload); auto-trade kill-switch and active configuration preservation. |
+| `themeStore` | `bamendjou:theme` | 1 | **Pass**. Theme choice ('dark' / 'light') preserved for no-flash bootstrap script. |
 
 ### 3.2 Direct Browser Storage Call Sites (6 Sites)
 
@@ -74,7 +74,8 @@ The persistence audit covered five primary domains:
    - Rollback to original in-memory state if validation fails during save.
    - `ScanScheduleStore` schema version 3 migration converts legacy weight percentages to fractional representations.
 3. **Relational Models & Storage Engines**:
-   - `app.database.Base`: 14 relational tables verified in SQLite (`portfolio_positions`, `watchlist_symbols`, `audit_events`, `alert_rules`, `alert_history`, `closed_positions`, `equity_snapshots`, `fundamentals`, `fundamentals_cache`, `sp500_tickers`, `exposure_guards`, `exposure_holds`, `daily_risk_budgets`, `scheduled_scan_runs`).
+   - `app.database.Base`: 14 relational tables verified in SQLite (`portfolio_positions`, `watchlist_symbols`, `audit_events`, `alert_rules`, `alert_history`, `broker_attempts`, `closed_positions`, `daily_risk_attempts`, `daily_risk_budgets`, `daily_risk_losses`, `equity_snapshots`, `exposure_guards`, `exposure_holds`, `fundamentals`).
+   - `ScheduledScanRunBase`: 1 dedicated SQLite table (`scheduled_scan_runs`).
    - `OhlcvBase`: 2 dedicated SQLite caching tables (`ohlcv_daily`, `ohlcv_history_state`).
    - `ScanReportBase`: 3 dedicated SQLite caching tables (`scan_reports`, `scan_report_heads`, `backtest_artifacts`).
    - Alembic single-head integrity verified statically: exactly one single head revision exists in `backend/migrations/versions/`.

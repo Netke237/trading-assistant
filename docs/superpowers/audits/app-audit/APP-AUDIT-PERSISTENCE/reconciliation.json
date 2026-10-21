@@ -135,14 +135,74 @@
       "id": "store:frontend/lib/scanStore.ts#useScanStore",
       "source": "frontend/lib/scanStore.ts",
       "storage_key": "bamendjou-scan-store",
-      "version": 0,
+      "version": 19,
       "migration_tested": true,
       "evidence": [
         "frontend/lib/__tests__/auditPersistence.test.ts:272-300",
         "frontend/lib/__tests__/auditPersistence.test.ts:325-368",
         "storage-matrix.json"
       ],
-      "disposition": "verified; context alignment, cross-mode transitions (options/stocks/prebreakout)"
+      "disposition": "verified; inline v0..v18 -> v19 migrations, context alignment, cross-mode transitions (options/stocks/prebreakout)"
+    },
+    {
+      "id": "store:frontend/lib/scanParamsStore.ts#useScanParamsStore",
+      "source": "frontend/lib/scanParamsStore.ts",
+      "storage_key": "bamendjou:scan-params",
+      "version": 12,
+      "migration_tested": true,
+      "evidence": [
+        "storage-matrix.json",
+        "frontend-storage-catalog.md"
+      ],
+      "disposition": "verified; strategy overrides without storing horizon presets"
+    },
+    {
+      "id": "store:frontend/lib/searchProfilesStore.ts#useSearchProfilesStore",
+      "source": "frontend/lib/searchProfilesStore.ts",
+      "storage_key": "bamendjou:search-profiles",
+      "version": 5,
+      "migration_tested": true,
+      "evidence": [
+        "storage-matrix.json",
+        "frontend-storage-catalog.md"
+      ],
+      "disposition": "verified; migrates v4 to v5 target profit percentages"
+    },
+    {
+      "id": "store:frontend/lib/autoTradeStore.ts#useAutoTradeStore",
+      "source": "frontend/lib/autoTradeStore.ts",
+      "storage_key": "bamendjou-auto-trade",
+      "version": 2,
+      "migration_tested": true,
+      "evidence": [
+        "storage-matrix.json",
+        "frontend-storage-catalog.md"
+      ],
+      "disposition": "verified; migrates v1 to v2 demoting armed to manual on reload"
+    },
+    {
+      "id": "store:frontend/lib/structureStore.ts#useStructureStore",
+      "source": "frontend/lib/structureStore.ts",
+      "storage_key": "bamendjou:structure",
+      "version": 2,
+      "migration_tested": true,
+      "evidence": [
+        "storage-matrix.json",
+        "frontend-storage-catalog.md"
+      ],
+      "disposition": "verified; migrates v1 to v2 structure visibility flags"
+    },
+    {
+      "id": "store:frontend/lib/theme.ts#useThemeStore",
+      "source": "frontend/lib/theme.ts",
+      "storage_key": "bamendjou:theme",
+      "version": 1,
+      "migration_tested": true,
+      "evidence": [
+        "storage-matrix.json",
+        "frontend-storage-catalog.md"
+      ],
+      "disposition": "verified; theme mode persistence for no-flash bootstrap"
     },
     {
       "id": "backend:backend/app/services/credential_store.py#CredentialStore",
@@ -173,10 +233,20 @@
       "table_count": 14,
       "migration_tested": true,
       "evidence": [
-        "backend/tests/test_audit_persistence_lane_i.py:141-155",
+        "backend/tests/test_audit_persistence_lane_i.py:133-151",
         "backend-durable-stores.md"
       ],
-      "disposition": "verified; 14 core relational models created cleanly in SQLite"
+      "disposition": "verified; 14 core relational models created cleanly in SQLite (portfolio_positions, watchlist_symbols, alert_rules, alert_history, audit_events, broker_attempts, closed_positions, daily_risk_attempts, daily_risk_budgets, daily_risk_losses, equity_snapshots, exposure_guards, exposure_holds, fundamentals)"
+    },
+    {
+      "id": "backend:backend/app/models/scheduled_scan_run.py#ScheduledScanRunBase",
+      "source": "backend/app/models/scheduled_scan_run.py",
+      "table_count": 1,
+      "migration_tested": true,
+      "evidence": [
+        "backend-durable-stores.md"
+      ],
+      "disposition": "verified; 1 dedicated SQLite model for scheduled scan runs (scheduled_scan_runs)"
     },
     {
       "id": "backend:backend/app/models/ohlcv_daily.py#OhlcvBase",

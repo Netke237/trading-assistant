@@ -35,23 +35,28 @@ The backend separates database persistence across distinct storage engines depen
   3. `audit_events`: System audit events and user action trails.
   4. `alert_rules`: User-configured price, technical, and composite alert rules.
   5. `alert_history`: Historical alert trigger records and delivery confirmations.
-  6. `closed_positions`: Historical closed trades, realized P&L, exit reasons.
-  7. `equity_snapshots`: Periodic portfolio equity curve tracking.
-  8. `fundamentals`: SEC EDGAR parsed corporate financial ratios and scores.
-  9. `fundamentals_cache`: Raw XBRL cache for rapid re-computation.
-  10. `sp500_tickers`: S&P 500 membership cache and liquidity tracking.
-  11. `exposure_guards`: Dynamic risk exposure guardrails.
-  12. `exposure_holds`: Active capital lock records per strategy/asset.
-  13. `daily_risk_budgets`: Daily risk allocation caps and cumulative draws.
-  14. `scheduled_scan_runs`: Execution logs and outcome status of automated scheduled scans.
+  6. `broker_attempts`: Durable broker order dispatch records and idempotency locks.
+  7. `closed_positions`: Historical closed trades, realized P&L, exit reasons.
+  8. `daily_risk_attempts`: Intraday execution attempts tracked against daily risk limits.
+  9. `daily_risk_budgets`: Daily risk allocation caps and cumulative draws.
+  10. `daily_risk_losses`: Cumulative daily realized and unrealized loss tallies.
+  11. `equity_snapshots`: Periodic portfolio equity curve tracking.
+  12. `exposure_guards`: Dynamic risk exposure guardrails.
+  13. `exposure_holds`: Active capital lock records per strategy/asset.
+  14. `fundamentals`: SEC EDGAR parsed corporate financial ratios and scores.
 
-### B. Dedicated Historical Price Store (`OhlcvBase`)
+### B. Dedicated Scheduled Scan Run Store (`ScheduledScanRunBase`)
+- **Engine**: Dedicated SQLite store (`scan_schedules.db`).
+- **Models**:
+  1. `scheduled_scan_runs`: Execution logs, status, error payloads, and result JSON of automated scheduled scans.
+
+### C. Dedicated Historical Price Store (`OhlcvBase`)
 - **Engine**: Dedicated SQLite store (`ohlcv_cache.db`).
 - **Models**:
   1. `ohlcv_daily`: Daily OHLCV price bars, volume, split adjustments, dividend cash, fetched timestamp.
   2. `ohlcv_history_state`: Per-symbol historical tracking floor date, seam date, provider provenance, basis verification signatures.
 
-### C. Dedicated Scan Report Cache (`ScanReportBase`)
+### D. Dedicated Scan Report Cache (`ScanReportBase`)
 - **Engine**: Dedicated SQLite store (`scan_reports.db`).
 - **Models**:
   1. `scan_reports`: Category, generation counter, execution status, and serialized envelope JSON payloads.
