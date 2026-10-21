@@ -29,6 +29,14 @@
       "expires_at": "2026-10-21T21:18:34Z",
       "note": "Take #178: Reconcile per-channel watch delivery and stuck-alert policy",
       "task": "DECISION-34-WATCH-DELIVERY-RESIDUALS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-broker-portfolio-c4b17ff3",
+      "claimed_at": "2026-10-21T18:22:33Z",
+      "expires_at": "2026-10-21T21:22:33Z",
+      "note": "Take #354: Verify broker payloads, risk gates and Portfolio reconciliation",
+      "task": "APP-AUDIT-BROKER-PORTFOLIO"
     }
   ]
 }
