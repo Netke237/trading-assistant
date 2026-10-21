@@ -6240,7 +6240,8 @@
       "completion_pct": 85,
       "size": "S",
       "complexity": 3,
-      "note": "Code round 1 clean (0 gate findings). 404 is treated as final on unconfirmed-save removal, deleting note cleanly and clearing ownership lock (#171)."
+      "note": "SELF-MERGE PENDING, PR #458, audited head 853771e6. 404 is treated as final on unconfirmed-save removal, deleting note cleanly and clearing ownership lock (#171). Plan round 1 clean, code round 1 clean.",
+      "pull_request": 458
     }
   ],
   "already_shipped": [
