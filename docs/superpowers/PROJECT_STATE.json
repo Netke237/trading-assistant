@@ -11,8 +11,8 @@
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
       "name": "Options score-weight percent overrides are applied as raw multipliers (#382)",
       "status": "built",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-weight-units-plan.md",
       "branch": "board/app-audit-b-weight-units-03d94520",
       "covers": [
@@ -26,10 +26,10 @@
         "closure_evidence": "Plan Round 3 audited clean with 0 gate findings by subagent ae3ebafc-3ea4-4a06-a080-e10dd5ed2478"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": "",
-        "closure_evidence": ""
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code Round 1 audited clean with 0 gate findings by subagent d31a6e35-c050-43be-8685-1d5a1d3897ed"
       },
       "audit_history": [
         {
@@ -55,6 +55,14 @@
           "clean": true,
           "findings_count": 0,
           "notes": "Plan Round 3: 0 gate findings. Frontend resolver normalization, legacy schedule migration with backup, and test plan disentanglement verified clean."
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "reviewer": "subagent d31a6e35-c050-43be-8685-1d5a1d3897ed",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Code Round 1: 0 gate findings. Verified _normalize_weight, scan schedule v3 migration with backup, frontend resolver scaling, and regression test suites."
         }
       ],
       "tickets": [
@@ -66,10 +74,10 @@
         "pattern": "_normalize_weight",
         "note": "Pins weight_trend handling in backend/app/scoring/stock_scorer.py."
       },
-      "completion_pct": 70,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "Implemented score-weight percent overrides unit normalization. Ready for independent code audit."
+      "note": "Code Round 1 clean (0 gate findings). Both plan and code audits clean. Ready for PR and self-merge."
     },
     {
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
