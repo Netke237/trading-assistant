@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/app-audit-prebreakout-b4f0d823",
       "claimed_at": "2026-10-21T10:36:14Z",
-      "expires_at": "2026-10-21T14:13:26Z",
+      "expires_at": "2026-10-21T14:27:33Z",
       "note": "Verify Pre-Breakout, Fibonacci and Pullback end to end (#353)",
       "task": "APP-AUDIT-PREBREAKOUT"
     }
