@@ -1332,17 +1332,13 @@ export default function Step7Page() {
     const { patchNote, removeNote } = useDirectSendNotesStore.getState();
     patchNote(note.recId, { removing: true, status: null });
     try {
-      // A 404 is final only when the server had already answered this send's
-      // save before the note existed (ORDER-UNKNOWN, NOT-REMOVED). On
-      // SAVE-UNCONFIRMED the create may still be in flight, so it is not.
-      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+      // A 404 is final across all note kinds (including SAVE-UNCONFIRMED: Kenneth 2026-10-15 decision, #171).
+      await removeTrackedRow(note.recId, true);
       removeNote(note.recId);
     } catch (e) {
       patchNote(note.recId, {
         removing: false,
-        status: note.kind === 'save-unconfirmed' && isNotFound(e)
-          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
-          : `Remove failed: ${whyOf(e)}. Try again.`,
+        status: `Remove failed: ${whyOf(e)}. Try again.`,
       });
     }
   }
