@@ -61,7 +61,7 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "Atomic schedule store rollback across all 4 stores (#374, #462). Plan round 1 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #463, audited head a4fbb1c6. Atomic schedule store rollback across all 4 stores (#374, #462). Plan round 1 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
