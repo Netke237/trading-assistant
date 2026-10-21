@@ -5,6 +5,7 @@ import { Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { captureCurrentSnapshot, applySearchProfile, stableStringify } from '@/lib/searchProfileSnapshot';
+import { isValidSearchProfile, safeCompareTimestamps } from '@/lib/searchProfileValidation';
 import { SaveProfileDialog } from '@/components/molecules/SaveProfileDialog';
 import { RenameProfileDialog } from '@/components/molecules/RenameProfileDialog';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
@@ -36,8 +37,9 @@ export function SearchProfileBar() {
   const activeMode = screenerMode as 'options' | 'stocks';
 
   const modeProfiles = profiles
+    .filter(isValidSearchProfile)
     .filter((p) => p.mode === activeMode)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => safeCompareTimestamps(a.updatedAt, b.updatedAt));
   const selected = modeProfiles.find((p) => p.id === selectedId) ?? null;
 
   const isDirty = selected

@@ -1,15 +1,114 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
 import { api } from '@/lib/api';
 import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
 import { OVERRIDE_FIELDS } from '@/lib/scanParamsStore';
 import { assertStrategyScanOverrides } from '@/lib/strategyScanValidation';
+import { sanitizeSearchProfiles } from '@/lib/searchProfileValidation';
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
+
+export const CURRENT_SEARCH_PROFILES_SCHEMA_VERSION = 5;
+
+export type PersistedSearchProfiles = Pick<SearchProfilesState, 'profiles' | 'legacyTargetPctDropped'>;
+
+/**
+ * Storage adapter with future-version write barrier (Finding S3).
+ *
+ * 1. Read / Rehydration:
+ *    If disk contains a future schema version (e.g. 9999), return CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+ *    to Zustand hydration logic. Zustand evaluates deserializedStorageValue.version === options.version (5)
+ *    as true, bypassing migrate and not calling setItem() during hydration. Disk bytes remain
+ *    100% byte-for-byte exact (beforeRaw === afterRaw).
+ *
+ * 2. Writes (saveProfile / updateProfile / deleteProfile):
+ *    Directly inspects localStorage.getItem(name) at write time. If a future version is present
+ *    on disk, refuses writes completely to prevent discarding future-version profiles, unknown fields,
+ *    or sentinels.
+ */
+export const searchProfilesPersistStorage: PersistStorage<PersistedSearchProfiles> = {
+  getItem: (name: string): StorageValue<PersistedSearchProfiles> | null => {
+    if (typeof window === 'undefined') return null;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const version = typeof parsed.version === 'number' ? parsed.version : 0;
+      const state = (parsed.state && typeof parsed.state === 'object') ? parsed.state : {};
+      const legacyTargetPctDropped = (state as Record<string, unknown>).legacyTargetPctDropped === true;
+
+      if (version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION) {
+        const profiles = sanitizeSearchProfiles((state as Record<string, unknown>).profiles);
+        return {
+          state: {
+            profiles,
+            legacyTargetPctDropped,
+          },
+          version: CURRENT_SEARCH_PROFILES_SCHEMA_VERSION,
+        };
+      }
+
+      const rawProfiles = (state as Record<string, unknown>).profiles;
+      const profiles = version >= CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+        ? sanitizeSearchProfiles(rawProfiles)
+        : (Array.isArray(rawProfiles) ? rawProfiles as SearchProfile[] : []);
+
+      return {
+        state: {
+          profiles,
+          legacyTargetPctDropped,
+        },
+        version,
+      };
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: StorageValue<PersistedSearchProfiles>): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      const currentRaw = localStorage.getItem(name);
+      if (currentRaw) {
+        try {
+          const currentEnvelope = JSON.parse(currentRaw);
+          if (
+            typeof currentEnvelope?.version === 'number' &&
+            currentEnvelope.version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+          ) {
+            console.warn(
+              `[searchProfilesStore] Write barrier: refusing write to newer schema version ${currentEnvelope.version} (current: ${CURRENT_SEARCH_PROFILES_SCHEMA_VERSION})`,
+            );
+            return;
+          }
+        } catch {
+          // malformed disk contents; proceed to standard write
+        }
+      }
+      localStorage.setItem(name, JSON.stringify(value));
+    } catch {
+      // quota exceeded or storage disabled
+    }
+  },
+  removeItem: (name: string): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
 
 interface SearchProfilesState {
   profiles: SearchProfile[];
@@ -78,10 +177,7 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
     }),
     {
       name: 'bamendjou:search-profiles',
-      storage: createJSONStorage(() => {
-        if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return localStorage;
-      }),
+      storage: searchProfilesPersistStorage,
       skipHydration: true,
       version: 5,
       migrate: (persistedState, version) => {
@@ -215,6 +311,14 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
           });
         }
         return st as unknown as SearchProfilesState;
+      },
+      merge: (persistedState, currentState) => {
+        const typed = persistedState as Partial<SearchProfilesState> | undefined;
+        return {
+          ...currentState,
+          ...typed,
+          profiles: sanitizeSearchProfiles(typed?.profiles ?? currentState.profiles),
+        };
       },
       partialize: (state) => ({ profiles: state.profiles, legacyTargetPctDropped: state.legacyTargetPctDropped }),
     },
