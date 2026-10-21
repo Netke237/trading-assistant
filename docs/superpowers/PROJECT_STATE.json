@@ -61,7 +61,7 @@
       "completion_pct": 80,
       "size": "M",
       "complexity": 3,
-      "note": "Code round 1 clean (0 gate findings by subagent f1cbc4be-6d9e-4242-b9c6-e412cb05bf40). Opening PR."
+      "note": "SELF-MERGE PENDING, PR #466, audited head 79408111. Context rail destination parity on soft and hard navigation (#395, #464). Plan round 1 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
