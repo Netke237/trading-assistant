@@ -8,6 +8,244 @@
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
   "phases": [
     {
+      "id": "APP-AUDIT-MONITORING",
+      "name": "Lane G \u2014 verify Watchlist, alerts, Strategy Watch and scheduled automation (#355)",
+      "status": "built",
+      "owner": "agent",
+      "branch": "board/app-audit-monitoring-7fb31a2c",
+      "tracking_issue": 355,
+      "plan": "docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md",
+      "audit_rounds": 5,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean"
+      },
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-MONITORING/report.md",
+        "pattern": "APP-AUDIT-MONITORING",
+        "note": "Pins the final Monitoring audit report for Lane G (#355)."
+      },
+      "completion_pct": 100,
+      "size": "L",
+      "complexity": 5,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "subagent e5af6694-ecf4-4a6c-a6f5-07a02f9e898d (independent adversarial auditor)",
+          "scope": "Whole plan docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md against Issue #355, Watchlist, Alerts, Strategy Watch, Auto-Trade, and Schedulers",
+          "findings": [
+            "F-1: useWatchedContractsStore asserted version 1 and missing grading Record<string, ContractGrading> and v3 migration.",
+            "F-2: useWatchlistStore operations misstated (asserted toggleSymbol, hasSymbol).",
+            "F-3: useWatchlistUiStore misstated as tab manager instead of ephemeral selectedSymbol rail sync.",
+            "F-4: Watchlist tabs and columns misstated (Stocks/Contracts columns and omitted Composite tab).",
+            "F-5: Context rail @contextRail/watchlist inventory misstated (market cap distribution, portfolio overlap, quick scan).",
+            "F-6: useAlertStore vs useChartAlertStore separation conflated (AlertRule placed in useAlertStore instead of useChartAlertStore).",
+            "F-7: AlertRule schema misstated as flat instead of group.conditions tree.",
+            "F-8: alertEngine.ts vs chartAlertEngine.ts confused for multi-bar candle indicators and 2-bar crossing detection.",
+            "F-9: Backend chart alert endpoints misstated as /chart/alerts instead of /alerts/rules.",
+            "F-10: Strategy Watch toggle endpoint misstated as /api/strategy-watch/{id}/enabled instead of /api/strategy-watch/{watch_id}.",
+            "F-11: Strategy Watch state machine asserted 5 phases and 7 strategies instead of 2 phases (idle, armed), 5 event types, and 5 valid daily strategies (excluding vwap).",
+            "F-12: useAutoTradeStore state model misstated and omitted critical partialize exclusion of armed fields on reload.",
+            "F-13: Auto-trade endpoints misstated as POST /auto-trade/disarm and GET /auto-trade/history instead of DELETE /auto-trade/arm and GET /auto-trade/status.",
+            "F-14: Pre-trade safety gates confused RegimeGateConfigError (500) with RegimeHeadwindError (400), and misstated event veto as caution window instead of max(reject, hold).",
+            "F-15: sent_log.py misstated as cooldown throttler instead of append-only audit log.",
+            "F-16: chart_alert_scheduler.py omitted from scheduled automation inventory.",
+            "F-17: Context rails for Alerts and Strategy Watch asserted dedicated components instead of generic RailQuickLook shims."
+          ],
+          "fixes": [
+            "Updated useWatchedContractsStore to schema version 3, methods add/remove/clearGrading/isWatched, and grading map migration.",
+            "Corrected useWatchlistStore operations to addSymbol, removeSymbol, isWatched, syncFromBackend.",
+            "Clarified useWatchlistUiStore as ephemeral selectedSymbol sync and tab state as local page state.",
+            "Documented all 3 Watchlist tabs (stocks, contracts, composite) and exact rendered columns.",
+            "Corrected @contextRail/watchlist inventory to Status breakdown, Flags, SymbolNotes, RailQuickLook.",
+            "Clarified store separation between portfolio toasts (useAlertStore v3) and chart alert rules (useChartAlertStore).",
+            "Aligned AlertRule schema with types/alerts.ts group.conditions tree.",
+            "Identified chartAlertEngine.ts for candle indicator evaluation and crossing operators, distinguishing alertEngine.ts for portfolio positions.",
+            "Corrected backend chart alert endpoints to /alerts/rules, /alerts/history, /alerts/rules/{id}.",
+            "Corrected Strategy Watch toggle endpoint to PATCH /api/strategy-watch/{watch_id}.",
+            "Updated Strategy Watch state machine to idle and armed phases, 5 emitted event types, and 5 valid daily strategies.",
+            "Aligned useAutoTradeStore state model and documented partialize exclusion of armed fields ensuring disarm on reload.",
+            "Corrected auto-trade endpoints to DELETE /auto-trade/arm and GET /auto-trade/status.",
+            "Corrected pre-trade gates: RegimeHeadwindError (400) vs RegimeGateConfigError (500), and event veto max(reject, hold).",
+            "Clarified sent_log.py as append-only audit log and upstream cooldown enforcement.",
+            "Added chart_alert_scheduler.py to scheduled automation inventory.",
+            "Noted generic RailQuickLook shims for Alerts and Strategy Watch context rails."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "subagent 0c090e64-f43b-4c04-b76e-8383a2dfb68c (independent adversarial auditor)",
+          "scope": "Plan Round 1 fixes and interactions across docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md",
+          "findings": [
+            "F-1: useWatchedContractsStore persisted state asserted as contracts: string[] instead of ids: string[] in Zustand store and partialize.",
+            "F-2: Strategy Watch schedule and evaluate endpoints asserted as POST /api/strategy-watch/schedule and POST /api/strategy-watch/evaluate-now instead of PUT /api/strategy-watch/schedule and POST /api/strategy-watch/evaluate."
+          ],
+          "fixes": [
+            "Updated useWatchedContractsStore persisted state to ids: string[], grading: Record<string, ContractGrading>.",
+            "Updated Strategy Watch endpoints to GET/PUT /api/strategy-watch/schedule and POST /api/strategy-watch/evaluate."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "subagent 4b33217d-7361-427d-8ce5-429e1d7ea6aa (independent adversarial auditor)",
+          "scope": "Plan Round 2 fixes and interactions across docs/superpowers/plans/2026-10-21-app-audit-monitoring-plan.md",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/plan-r3.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent a7234a27-4bf6-46c4-a6cd-bc16dd1e2397 (independent adversarial auditor)",
+          "scope": "Whole target diff against origin/main including report.md, defects.json, provenance.json, test_audit_monitoring_lane_g.py, auditMonitoringLaneG.test.ts",
+          "findings": [
+            "F-1: useChartAlertStore persistence key asserted as bamendjou:alerts (unversioned) in report.md table instead of version 2 with migrateChartAlerts and partialize.",
+            "F-2: Strategy Watch state machine lifecycle on reversal asserted as transitioning phase to idle in report.md instead of flipping direction to opposite_dir and remaining in phase: armed.",
+            "F-3: Strategy Watch exit evaluation math in report.md asserted as candle low/high breaches instead of candle close <= stop / close >= target.",
+            "F-4: useChartAlertStore toasts property in report.md not explicitly noted as transient and excluded from localStorage persistence via partialize.",
+            "F-5: provenance.json head_commit cited pre-authoring plan commit 91548b82 instead of deliverable commit 30a33dac.",
+            "F-6: test_strategy_watch_evaluator.py (26) and test_auto_trader_event_veto.py (14) test counts in report.md and provenance.json diverged from actual collected test counts (23 and 30).",
+            "F-7: auditMonitoringLaneG.test.ts alert store separation tests lacked explicit assertions on persist options name and version."
+          ],
+          "fixes": [
+            "Updated useChartAlertStore in report.md table and Section 3.2 to bamendjou:alerts (v2) with migrateChartAlerts and partialize exclusion of toasts.",
+            "Corrected reversal lifecycle in report.md to remain in phase: armed with opposite_dir and new entry/stop/target levels, adding test_strategy_watch_state_machine_reversal_stays_armed to test_audit_monitoring_lane_g.py.",
+            "Corrected exit_stop and exit_target in report.md to candle close comparisons (close <= stop, close >= target for Bullish).",
+            "Explicitly noted toasts as transient in-memory notifications excluded from localStorage in report.md.",
+            "Updated head_commit to 30a33dac in provenance.json.",
+            "Updated test counts in report.md and provenance.json to 23 for strategy_watch_evaluator and 30 for auto_trader_event_veto (14 for audit_monitoring_lane_g, total 125).",
+            "Added explicit persist.getOptions() assertions for store names and schema versions in auditMonitoringLaneG.test.ts."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/code-r1.md"
+        },
+        {
+          "round": 5,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "subagent 5ba902dd-de30-41eb-bd0b-65ade0d3b9f8 (independent adversarial auditor)",
+          "scope": "Remediation diff 30a33dac..HEAD (report.md, provenance.json, auditMonitoringLaneG.test.ts, test_audit_monitoring_lane_g.py) and interactions across whole deliverable",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/code-r2.md"
+        }
+      ],
+      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Plan clean in round 3, code clean in round 2. All 124 tests pass, typecheck clean, zero drift."
+    },
+    {
+      "id": "APP-AUDIT-PREBREAKOUT",
+      "name": "Lane E \u2014 verify Pre-Breakout, Fibonacci and Pullback end to end (#353)",
+      "status": "built",
+      "owner": "agent",
+      "branch": "board/app-audit-prebreakout-b4f0d823",
+      "tracking_issue": 353,
+      "plan": "docs/superpowers/plans/2026-10-21-app-audit-prebreakout-plan.md",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 738322ce-712c-4cca-b90a-02a53037c76f reviewed Round 1 fixes F-1..F-11 and interactions; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/plan-r2.md"
+      },
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PREBREAKOUT/report.md",
+        "pattern": "APP-AUDIT-PREBREAKOUT",
+        "note": "Pins the final Pre-Breakout audit report for Lane E (#353)."
+      },
+      "completion_pct": 80,
+      "size": "L",
+      "complexity": 4,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent c0141f78-6cb4-45d1-8fcd-c434ab7deaa2 (independent adversarial auditor)",
+          "scope": "Whole plan docs/superpowers/plans/2026-10-21-app-audit-prebreakout-plan.md against Issue #353, Step 4 Pre-Breakout surfaces, stock_scan.py, strategy_engine.py, candidateChart.ts, useOriginalBacktest.ts",
+          "findings": [
+            "F-1: Pre-Breakout confidence base weights misstated as 35/25/40 instead of 30/25/45 (and 24/20/36/20 when Fib enabled).",
+            "F-2: Pre-Breakout scanner endpoint misstated as POST /api/stock-scan/prebreakout instead of POST /api/scan/prebreakout.",
+            "F-3: Fibonacci scan endpoint misstated as POST /api/stock-scan/fibonacci instead of POST /api/scan/fib-pullback.",
+            "F-4: PreBreakoutParamsPanel defaults misstated (atrCompressionRatio 0.85, atrAvgLookback 20, rangeAtrMult 3.0, volCompressionRatio 0.90, resistanceProximityPct 0.08, swingLookback 50).",
+            "F-5: FibPullbackParamsPanel defaults misstated (fibSwingLookback 100, fibLevels [38.2, 61.8], fibTolerancePct 0.015, emaFilterPeriod 20).",
+            "F-6: ATR calculation misstated as Wilder ATR instead of 14-period True Range rolling SMA via _atr_series.",
+            "F-7: SelectedSetupChart scanChartLines misstated to plot nonexistent ATR bands and entry/stop levels.",
+            "F-8: Pullback vectorised backtest runner function misnamed as run_stock_backtest instead of run_strategy_backtest.",
+            "F-9: Fibonacci confidence formula boundary condition for dist_pct is None (0) and tolerance scaling omitted.",
+            "F-10: Candidate Chart artifact hydration endpoint omitted mandatory ?symbol={symbol} query parameter.",
+            "F-11: Snapshot integer parameter truncation verification (truncPreBreakoutInts, truncFibInts) omitted from state tasks."
+          ]
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "subagent 738322ce-712c-4cca-b90a-02a53037c76f (independent adversarial auditor)",
+          "scope": "Round 1 fixes (F-1 through F-11) and interactions in docs/superpowers/plans/2026-10-21-app-audit-prebreakout-plan.md",
+          "findings": []
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent 883e1a89-a631-41e8-9ea0-c15d61c6a6c7 (independent adversarial auditor)",
+          "scope": "Exact diff origin/main..HEAD (214b03aa) across report.md, defects.json, provenance.json, test_audit_prebreakout_lane_e.py, and auditPrebreakoutLaneE.test.ts",
+          "findings": [
+            "Finding F-1: Pre-Breakout confidence synthesis and component scores misstated as round(...) instead of float intermediate scores and integer truncation int(...) in report.md:53, 67, 73, 80, 83 and test_audit_prebreakout_lane_e.py:84."
+          ],
+          "fixes": [
+            "Updated report.md:53, 67, 73 to remove round(...) on S_ATR, S_Vol, S_Prox component formulas; updated lines 80, 83 to specify Python int(...) integer truncation on confidence synthesis; added audit note highlighting truncation toward zero in strategy_engine.py:1644, 1650 vs Fib round(...).",
+            "Updated backend/tests/test_audit_prebreakout_lane_e.py:84, 120 to assert int(expected_score) and int(sig.confidence_breakdown[unrounded])."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r1.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "subagent f7ccf1a2-7e2c-4176-890d-7962b692ca9f (independent adversarial auditor)",
+          "scope": "Round 1 fixes (Finding F-1 remediation) and interactions in diff 214b03aa..9f12528c",
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r2.md"
+        }
+      ],
+      "note": "SELF-MERGE PENDING, PR #473, audited head 9f12528c. Lane E Pre-Breakout reconciliation report and verification suites (#353). Plan round 2 clean, code round 2 clean.",
+      "code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent f7ccf1a2-7e2c-4176-890d-7962b692ca9f reviewed Round 1 fixes (Finding F-1 remediation) and interactions; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r2.md"
+      }
+    },
+    {
       "id": "APP-AUDIT-PERSISTENCE",
       "name": "Lane I \u2014 cross-store migrations, reloads, restarts and data recovery audit (#357)",
       "status": "built",
@@ -8888,7 +9126,7 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase_note": "Branch claude/ingest-skip-excluded-efd46479: INGEST-SKIP-EXCLUDED code round 1 clean, PR #459 pending Kenneth. Previous active phase STOCKS-CUSTOM-UNIVERSE.",
+  "active_phase_note": "Branch claude/ingest-skip-excluded-efd46479: INGEST-SKIP-EXCLUDED code round 1 clean, PR #459 pending Kenneth. Previous active phase APP-AUDIT-MONITORING.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [
