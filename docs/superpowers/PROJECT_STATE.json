@@ -83,7 +83,8 @@
           "clean": true,
           "report": "docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/code-r1.md"
         }
-      ]
+      ],
+      "note": "SELF-MERGE PENDING, PR #485, audited head 5385b744. Entry Quality controls reach requests but do not affect the trade plan (#384). Plan round 2 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
