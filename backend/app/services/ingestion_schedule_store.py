@@ -44,17 +44,28 @@ class IngestionScheduleStore:
 
     def set(self, enabled: bool, time: str) -> None:
         with self._lock:
-            self._data["enabled"] = bool(enabled)
-            self._data["time"] = time
-        self._save()
+            candidate = dict(self._data)
+            candidate["enabled"] = bool(enabled)
+            candidate["time"] = time
+            self._save_locked(candidate)
+            self._data = candidate
 
-    def _save(self) -> None:
+    def _save_locked(self, candidate: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".yaml.tmp")
+        try:
+            tmp.write_text(yaml.dump(candidate, default_flow_style=False), encoding="utf-8")
+            os.replace(tmp, self._path)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+
+    def _save(self) -> None:
         with self._lock:
-            data_copy = dict(self._data)
-        tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
-        os.replace(tmp, self._path)
+            self._save_locked(self._data)
 
 
 _store_path = Path(

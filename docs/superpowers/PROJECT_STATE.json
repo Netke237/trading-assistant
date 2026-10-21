@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
       "name": "Failed schedule writes change API state while disk and scheduler retain old values (#374)",
-      "status": "ready",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-schedule-rollback-plan.md",
@@ -39,17 +39,19 @@
           "notes": "Plan Round 1: 0 gate findings. Atomicity under lock, in-memory rollback, sidecar cleanup in finally block, and scheduler configure isolation verified clean."
         }
       ],
-      "tickets": [],
+      "tickets": [
+        "#462"
+      ],
       "verify": {
         "kind": "present",
         "path": "backend/app/services/ingestion_schedule_store.py",
         "pattern": "_save_locked",
         "note": "Pins get method in backend/app/services/ingestion_schedule_store.py."
       },
-      "completion_pct": 20,
+      "completion_pct": 80,
       "size": "L",
       "complexity": 4,
-      "note": "Plan round 1 clean (0 gate findings). Ready for implementation tickets and build."
+      "note": "Built: atomic schedule store rollback across all 4 stores with tests. Ready for Code Audit Round 1."
     },
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",

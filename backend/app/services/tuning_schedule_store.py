@@ -40,19 +40,30 @@ class TuningScheduleStore:
 
     def set(self, enabled: bool, time: str, days_of_week: list[int] | None = None) -> None:
         with self._lock:
-            self._data["enabled"] = bool(enabled)
-            self._data["time"] = time
+            candidate = dict(self._data)
+            candidate["enabled"] = bool(enabled)
+            candidate["time"] = time
             if days_of_week is not None:
-                self._data["days_of_week"] = list(days_of_week)
-        self._save()
+                candidate["days_of_week"] = list(days_of_week)
+            self._save_locked(candidate)
+            self._data = candidate
 
-    def _save(self) -> None:
+    def _save_locked(self, candidate: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".yaml.tmp")
+        try:
+            tmp.write_text(yaml.dump(candidate, default_flow_style=False), encoding="utf-8")
+            os.replace(tmp, self._path)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+
+    def _save(self) -> None:
         with self._lock:
-            data_copy = dict(self._data)
-        tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
-        os.replace(tmp, self._path)
+            self._save_locked(self._data)
 
 
 _store_path = Path(os.getenv("BAMENDJOU_TUNING_SCHEDULE_PATH", str(_DEFAULT_PATH)))
