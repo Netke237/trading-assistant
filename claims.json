@@ -15,6 +15,14 @@
       "expires_at": "2026-10-21T07:05:45Z",
       "note": "claim APP-AUDIT-B-STOP-PERCENT-UNITS (#385)",
       "task": "APP-AUDIT-B-STOP-PERCENT-UNITS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-save-feedback-e801c2d4",
+      "claimed_at": "2026-10-21T04:22:04Z",
+      "expires_at": "2026-10-21T07:22:04Z",
+      "note": "Resume #371 authorized second plan stage; preserve prior3rounds; sizeL complexity5",
+      "task": "APP-AUDIT-B-SAVE-FEEDBACK"
     }
   ]
 }
