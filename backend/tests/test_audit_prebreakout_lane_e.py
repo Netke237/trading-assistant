@@ -78,10 +78,11 @@ def test_prebreakout_confidence_weights_and_components():
     assert weights["proximity"] == pytest.approx(0.45, abs=1e-4)
     assert sum(weights.values()) == pytest.approx(1.0, abs=1e-4)
 
-    # Verify score calculation: total_score = sum(score * weight)
+    # Verify score calculation: total_score = sum(score * weight) truncated via int(...)
     components = sig.confidence_breakdown["components"]
     expected_score = sum(c["score"] * c["weight"] for c in components.values())
-    assert sig.confidence == round(expected_score)
+    assert sig.confidence == int(expected_score)
+    assert sig.confidence == int(sig.confidence_breakdown["unrounded"])
 
 
 def test_prebreakout_fib_enabled_weights():
@@ -110,6 +111,10 @@ def test_prebreakout_fib_enabled_weights():
     assert weights["proximity"] == pytest.approx(0.36, abs=1e-4)
     assert weights["fib"] == pytest.approx(0.20, abs=1e-4)
     assert sum(weights.values()) == pytest.approx(1.0, abs=1e-4)
+    components = sig.confidence_breakdown["components"]
+    expected_score = sum(c["score"] * c["weight"] for c in components.values())
+    assert sig.confidence == int(expected_score)
+    assert sig.confidence == int(sig.confidence_breakdown["unrounded"])
 
 
 def test_fibonacci_confidence_formula():

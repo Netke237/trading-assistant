@@ -50,7 +50,7 @@ All numerical and persistence mechanisms were verified against the project's num
   $$R_{ATR} = \frac{ATR_{\text{current}}}{\frac{1}{M} \sum_{k=0}^{M-1} ATR_{t-k}} \le \text{atr\_compression\_ratio}$$
   where $M = \text{atr\_avg\_lookback}$ (default **20**).
   Component score:
-  $$S_{ATR} = \min\left(100, \, \max\left(0, \, \text{round}\left(100 \times \left(1 - \frac{R_{ATR}}{\text{atr\_compression\_ratio}}\right)\right)\right)\right)$$
+  $$S_{ATR} = \min\left(100, \, \max\left(0, \, 100 \times \left(1 - \frac{R_{ATR}}{\text{atr\_compression\_ratio}}\right)\right)\right)$$
 - **Range Consolidation Gate:**
   Consolidation high-low range over $K = \text{range\_lookback\_bars}$ (default **10**):
   $$\text{Range}_K = \max_{k \in [0, K-1]} H_{t-k} - \min_{k \in [0, K-1]} L_{t-k}$$
@@ -64,24 +64,26 @@ All numerical and persistence mechanisms were verified against the project's num
   $$R_{Vol} = \frac{V_{\text{current}}}{\frac{1}{20} \sum_{k=0}^{19} V_{t-k}} \le \text{vol\_compression\_ratio}$$
   where $\text{vol\_compression\_ratio}$ defaults to **0.90**.
   Component score:
-  $$S_{Vol} = \min\left(100, \, \max\left(0, \, \text{round}\left(100 \times \left(1 - \frac{R_{Vol}}{\text{vol\_compression\_ratio}}\right)\right)\right)\right)$$
+  $$S_{Vol} = \min\left(100, \, \max\left(0, \, 100 \times \left(1 - \frac{R_{Vol}}{\text{vol\_compression\_ratio}}\right)\right)\right)$$
 - **Swing Level & Proximity:**
   Lookback window $L = \text{swing\_lookback}$ (default **50**).
   - **Bullish:** Swing High $S_H = \max_{k \in [1, L]} H_{t-k}$. Distance $D = \frac{S_H - C_{\text{current}}}{C_{\text{current}}}$.
     Gate: $0 < D \le \text{resistance\_proximity\_pct}$ (default **0.08** [8%]).
     Component score:
-    $$S_{Prox} = \min\left(100, \, \max\left(0, \, \text{round}\left(100 \times \left(1 - \frac{D}{\text{resistance\_proximity\_pct}}\right)\right)\right)\right)$$
+    $$S_{Prox} = \min\left(100, \, \max\left(0, \, 100 \times \left(1 - \frac{D}{\text{resistance\_proximity\_pct}}\right)\right)\right)$$
   - **Bearish:** Swing Low $S_L = \min_{k \in [1, L]} L_{t-k}$. Distance $D = \frac{C_{\text{current}} - S_L}{C_{\text{current}}}$.
     Gate: $0 < D \le \text{resistance\_proximity\_pct}$.
     Component score calculated analogously.
 
 #### Total Confidence Synthesis
 - **Base Mode (`fib_enabled=False`):**
-  $$\text{Confidence} = \text{round}\left(0.30 \times S_{ATR} + 0.25 \times S_{Vol} + 0.45 \times S_{Prox}\right)$$
-  Sum of weights: $0.30 + 0.25 + 0.45 = 1.00$ (100%). Clamped strictly to $[0, 100]$.
+  $$\text{Confidence} = \text{int}\left(0.30 \times S_{ATR} + 0.25 \times S_{Vol} + 0.45 \times S_{Prox}\right)$$
+  Sum of weights: $0.30 + 0.25 + 0.45 = 1.00$ (100%). Truncated toward zero via Python `int(...)`, clamped strictly to $[0, 100]$.
 - **Fibonacci-Augmented Mode (`fib_enabled=True`):**
-  $$\text{Confidence} = \text{round}\left(0.24 \times S_{ATR} + 0.20 \times S_{Vol} + 0.36 \times S_{Prox} + 0.20 \times S_{Fib}\right)$$
-  Sum of weights: $0.24 + 0.20 + 0.36 + 0.20 = 1.00$ (100%).
+  $$\text{Confidence} = \text{int}\left(0.24 \times S_{ATR} + 0.20 \times S_{Vol} + 0.36 \times S_{Prox} + 0.20 \times S_{Fib}\right)$$
+  Sum of weights: $0.24 + 0.20 + 0.36 + 0.20 = 1.00$ (100%). Truncated toward zero via Python `int(...)`.
+
+  *Audit Verification & Truncation Mechanism:* In `breakout_setup_signal` (`backend/app/services/strategy_engine.py:1644, 1650`), intermediate component scores ($S_{ATR}, S_{Vol}, S_{Prox}, S_{Fib}$) are maintained as raw unrounded floats, and total confidence is synthesized via Python integer truncation (`confidence = int(unrounded)`), which truncates fractional values toward zero. This is in contrast to Fibonacci pullback (`stock_scan.py:2293, 2295`), which synthesizes confidence using `round(...)`.
 
 ---
 
