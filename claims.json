@@ -15,6 +15,14 @@
       "expires_at": "2026-10-21T18:11:10Z",
       "note": "Resume #371 after interruption; preserve all prior review attempts; sizeL complexity5",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/backend-lan-bind-66ab3139",
+      "claimed_at": "2026-10-21T15:31:10Z",
+      "expires_at": "2026-10-21T18:31:10Z",
+      "note": "Persist LAN bind + CORS_EXTRA_ORIGINS in start-backend.bat/config (Kenneth asked in chat 2026-10-21)",
+      "task": "BACKEND-LAN-BIND"
     }
   ]
 }
