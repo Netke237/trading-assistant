@@ -19,7 +19,7 @@
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "verify": {
@@ -31,8 +31,28 @@
       "completion_pct": 10,
       "size": "L",
       "complexity": 4,
-      "audit_history": [],
-      "note": "Lane E Pre-Breakout, Fibonacci and Pullback end-to-end audit (#353). Execution plan prepared."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent c0141f78-6cb4-45d1-8fcd-c434ab7deaa2 (independent adversarial auditor)",
+          "scope": "Whole plan docs/superpowers/plans/2026-10-21-app-audit-prebreakout-plan.md against Issue #353, Step 4 Pre-Breakout surfaces, stock_scan.py, strategy_engine.py, candidateChart.ts, useOriginalBacktest.ts",
+          "findings": [
+            "F-1: Pre-Breakout confidence base weights misstated as 35/25/40 instead of 30/25/45 (and 24/20/36/20 when Fib enabled).",
+            "F-2: Pre-Breakout scanner endpoint misstated as POST /api/stock-scan/prebreakout instead of POST /api/scan/prebreakout.",
+            "F-3: Fibonacci scan endpoint misstated as POST /api/stock-scan/fibonacci instead of POST /api/scan/fib-pullback.",
+            "F-4: PreBreakoutParamsPanel defaults misstated (atrCompressionRatio 0.85, atrAvgLookback 20, rangeAtrMult 3.0, volCompressionRatio 0.90, resistanceProximityPct 0.08, swingLookback 50).",
+            "F-5: FibPullbackParamsPanel defaults misstated (fibSwingLookback 100, fibLevels [38.2, 61.8], fibTolerancePct 0.015, emaFilterPeriod 20).",
+            "F-6: ATR calculation misstated as Wilder ATR instead of 14-period True Range rolling SMA via _atr_series.",
+            "F-7: SelectedSetupChart scanChartLines misstated to plot nonexistent ATR bands and entry/stop levels.",
+            "F-8: Pullback vectorised backtest runner function misnamed as run_stock_backtest instead of run_strategy_backtest.",
+            "F-9: Fibonacci confidence formula boundary condition for dist_pct is None (0) and tolerance scaling omitted.",
+            "F-10: Candidate Chart artifact hydration endpoint omitted mandatory ?symbol={symbol} query parameter.",
+            "F-11: Snapshot integer parameter truncation verification (truncPreBreakoutInts, truncFibInts) omitted from state tasks."
+          ]
+        }
+      ],
+      "note": "Lane E Pre-Breakout, Fibonacci and Pullback end-to-end audit (#353). Plan round 1 reviewed (11 findings addressed in revised plan)."
     },
     {
       "id": "APP-AUDIT-PERSISTENCE",
