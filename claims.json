@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "claude/history-incremental-a-42b11ff4",
+      "claimed_at": "2026-10-21T14:51:45Z",
+      "expires_at": "2026-10-21T17:51:45Z",
+      "note": "Build Stage A (Tiingo usage ledger) on Kenneth's go, tracking #413",
+      "task": "HISTORY-INCREMENTAL-NIGHTLY"
+    }
+  ]
 }
