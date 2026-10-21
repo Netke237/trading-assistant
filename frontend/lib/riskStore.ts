@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { reportingLocalStorage } from './reportingLocalStorage';
 import type { Status } from '@/lib/status';
 import { riskBandStatus, worstStatus } from '@/lib/status';
 import { exposureMark } from '@/lib/portfolioTotals';
@@ -240,6 +241,10 @@ export const useRiskStore = create<RiskState>()(
     }),
     {
       name: 'bamendjou-risk-v1',
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return reportingLocalStorage('Risk limits (this browser)');
+      }),
       skipHydration: true,
       version: 4,
       migrate: migrateRisk,

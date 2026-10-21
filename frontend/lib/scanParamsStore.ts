@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { reportingLocalStorage } from './reportingLocalStorage';
 import { assertStrategyScanOverrides } from './strategyScanValidation';
 
 /**
@@ -159,6 +160,10 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return reportingLocalStorage('Strategy scan parameters (this browser)');
+      }),
       skipHydration: true,
       version: 12,
       migrate: migrateScanParams,
