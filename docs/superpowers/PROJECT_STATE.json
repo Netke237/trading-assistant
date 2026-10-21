@@ -7455,6 +7455,34 @@
           "closed_by": "clean",
           "closure_evidence": "Fresh /root/save371_plan_stage2_r3, plan SHA256d2eaffcb44ded6cc0e14abb943705763b71ad33bcb0e84cc75670d2346376fda; scoped second-pass zero gate findings; report plan-r6.md"
         }
+      ],
+      "tickets": [
+        480,
+        481,
+        482
+      ],
+      "build_units": [
+        {
+          "ticket": 480,
+          "task": "T1",
+          "status": "in_progress",
+          "size": "M",
+          "complexity": 4
+        },
+        {
+          "ticket": 481,
+          "task": "T2",
+          "status": "blocked_by_480",
+          "size": "M",
+          "complexity": 5
+        },
+        {
+          "ticket": 482,
+          "task": "T3",
+          "status": "blocked_by_481",
+          "size": "M",
+          "complexity": 5
+        }
       ]
     }
   ],
