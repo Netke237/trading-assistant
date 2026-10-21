@@ -2,7 +2,7 @@
   "audit_phase": "APP-AUDIT-BROKER-PORTFOLIO",
   "lane": "F",
   "target_issue": 354,
-  "head_commit": "3a449185",
+  "head_commit": "9c4667ff",
   "python": "Python 3.11.9",
   "node": "v20.x",
   "frameworks": {
