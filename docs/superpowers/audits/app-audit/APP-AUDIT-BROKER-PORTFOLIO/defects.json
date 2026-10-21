@@ -1,0 +1,32 @@
+[
+  {
+    "id": "DEFECT-BROKER-1",
+    "title": "Unrouted broker position close stub (_maybe_send_close_to_broker)",
+    "category": "broker-routing",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "backend/app/routers/portfolio.py:73-81 implements _maybe_send_close_to_broker as an unrouted no-op stub when sendToBroker=True. Manual closures record realized P&L and archive active positions in the database, but do not transmit order requests to Tradier, IBKR, Alpaca, or Tastytrade.",
+    "evidence": "backend/app/routers/portfolio.py:73-81; backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_unrouted_broker_exit_stub",
+    "remediation": "Documented operational boundary for live trade exit routing."
+  },
+  {
+    "id": "DEFECT-BROKER-2",
+    "title": "Offline basket tracker naming in SendToBrokerDialog",
+    "category": "presentation-usability",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "frontend/components/organisms/SendToBrokerDialog/index.tsx functions as an offline basket tracker that adds local positions with source='manual'. Real options orders are transmitted directly from step-7-trade-card/page.tsx via api.postOptionOrder, which can cause user confusion regarding order transmission from the dialog.",
+    "evidence": "frontend/components/organisms/SendToBrokerDialog/index.tsx; docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
+    "remediation": "Clarify UI copy indicating offline basket addition vs immediate live broker transmission."
+  },
+  {
+    "id": "DEFECT-BROKER-3",
+    "title": "Live broker paper gateway verification requires authorized local desktop session",
+    "category": "operational-environment",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "IBKR Client Portal gateway (port 7499) and local Tradier/Tastytrade sandbox accounts require active daemon sessions and valid API tokens on Kenneth's host machine. Verified via deterministic mock harnesses in test suites.",
+    "evidence": "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md:Section 4",
+    "remediation": "Live paper executions to be validated during authorized interactive sessions."
+  }
+]

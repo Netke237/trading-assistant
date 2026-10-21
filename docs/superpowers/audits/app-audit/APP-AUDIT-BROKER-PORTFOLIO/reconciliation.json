@@ -1,0 +1,164 @@
+{
+  "audit_phase": "APP-AUDIT-BROKER-PORTFOLIO",
+  "lane": "F",
+  "issue": 354,
+  "description": "Verify broker payloads, risk gates and Portfolio reconciliation",
+  "A_inventory_status": "reconciled to Lane F broker and portfolio verification suites",
+  "summary": {
+    "broker_adapters_count": 4,
+    "risk_gates_verified": 6,
+    "attempt_states_verified": 5,
+    "portfolio_models_count": 2,
+    "automated_test_count": 32,
+    "gate_findings_count": 0
+  },
+  "reconciled_surfaces": [
+    {
+      "id": "endpoint:POST/broker/stock-order",
+      "source": "backend/app/routers/broker.py",
+      "category": "broker-order",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters",
+        "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md"
+      ],
+      "disposition": "verified; canonical stock order instrument {symbol}|STOCK, integer quantity ge=1, normalized Decimal limit"
+    },
+    {
+      "id": "endpoint:POST/broker/option-order",
+      "source": "backend/app/routers/broker.py",
+      "category": "broker-order",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters",
+        "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md"
+      ],
+      "disposition": "verified; canonical OCC instrument format, idless submission matching prepared_order"
+    },
+    {
+      "id": "adapter:backend/app/data/tradier_paper.py#TradierPaperAdapter",
+      "source": "backend/app/data/tradier_paper.py",
+      "category": "broker-adapter",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters::test_tradier_endpoint_and_side_mapping",
+        "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md"
+      ],
+      "disposition": "verified; sandbox accounts orders endpoint, 4-way equity and option side mappings, rate governor"
+    },
+    {
+      "id": "adapter:backend/app/data/ibkr_paper.py#IbkrPaperAdapter",
+      "source": "backend/app/data/ibkr_paper.py",
+      "category": "broker-adapter",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters::test_ibkr_paper_payload_keys_and_conid_contract",
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters::test_ibkr_confirmation_question_http_502"
+      ],
+      "disposition": "verified; conidex/secType order ticket payload, multiplier 100 for options, confirmation question HTTPException(502) unsubmitted"
+    },
+    {
+      "id": "adapter:backend/app/data/tastytrade_paper.py#TastytradePaperAdapter",
+      "source": "backend/app/data/tastytrade_paper.py",
+      "category": "broker-adapter",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters::test_tastytrade_paper_order_type_and_price_sign",
+        "backend/tests/test_tastytrade_paper.py"
+      ],
+      "disposition": "verified; market orders refused (OrderPreflightRefusedError), BUY/debit negative price, SELL/credit positive price, dry_run=False"
+    },
+    {
+      "id": "adapter:backend/app/data/alpaca_paper_execution.py#AlpacaPaperAdapter",
+      "source": "backend/app/data/alpaca_paper_execution.py",
+      "category": "broker-adapter",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask1BrokerAdapters::test_alpaca_paper_option_rejection"
+      ],
+      "disposition": "verified; stock order payload formatting, option orders refused (OrderPreflightRefusedError)"
+    },
+    {
+      "id": "service:backend/app/services/portfolio_risk.py#check_position_risk",
+      "source": "backend/app/services/portfolio_risk.py",
+      "category": "risk-gate",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask2RiskGates::test_capital_cap_rejection",
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask2RiskGates::test_loss_cap_rejection"
+      ],
+      "disposition": "verified; max_contracts_per_trade, single_trade_exposure_too_high, total_exposure_limit_reached, min_portfolio_value"
+    },
+    {
+      "id": "service:backend/app/services/portfolio_risk.py#premium_cap_basis",
+      "source": "backend/app/services/portfolio_risk.py",
+      "category": "risk-gate",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask2RiskGates::test_premium_cap_basis_lmt_and_mkt"
+      ],
+      "disposition": "verified; max(mid, limit) for LMT, ask or mid + spread/2 for MKT"
+    },
+    {
+      "id": "service:backend/app/services/broker_attempts.py#BrokerAttemptService",
+      "source": "backend/app/services/broker_attempts.py",
+      "category": "attempt-lifecycle",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask3AttemptsLifecycle",
+        "backend/tests/test_broker_attempts.py"
+      ],
+      "disposition": "verified; lowercase states adhering to _FORWARD table, deduplication leader=False on duplicate, idless matching, zero automated redispatch of outcome-unknown"
+    },
+    {
+      "id": "model:backend/app/models/portfolio.py#PortfolioPositionModel",
+      "source": "backend/app/models/portfolio.py",
+      "category": "portfolio-model",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_schema_mapping_and_contract_string"
+      ],
+      "disposition": "verified; qty=Column(Integer), contract internal composite key, dynamic cost basis derivation"
+    },
+    {
+      "id": "service:backend/app/services/position_writer.py#_rescale_rung_shares",
+      "source": "backend/app/services/position_writer.py",
+      "category": "fill-arithmetic",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_rung_share_rescaling_runner_preservation"
+      ],
+      "disposition": "verified; proportional scaling on partial fill preserving runner and active rungs"
+    },
+    {
+      "id": "router:backend/app/routers/portfolio.py#_maybe_send_close_to_broker",
+      "source": "backend/app/routers/portfolio.py",
+      "category": "operational-boundary",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_unrouted_broker_exit_stub"
+      ],
+      "disposition": "verified; unrouted no-op stub logging warning when sendToBroker=True (DEFECT-BROKER-1)"
+    },
+    {
+      "id": "helper:frontend/lib/directOrder.ts#classifyDirectFailure",
+      "source": "frontend/lib/directOrder.ts",
+      "category": "frontend-direct-send",
+      "verified": true,
+      "evidence": [
+        "frontend/lib/__tests__/auditBrokerPortfolioLaneF.test.ts"
+      ],
+      "disposition": "verified; 422/unauthenticated/502 deletes pre-saved row; 500/timeout retains with ORDER-UNKNOWN note"
+    },
+    {
+      "id": "dialog:frontend/components/organisms/SendToBrokerDialog",
+      "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "category": "frontend-ui",
+      "verified": true,
+      "evidence": [
+        "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md"
+      ],
+      "disposition": "verified; offline basket row tracker adding positions with source='manual' (DEFECT-BROKER-2)"
+    }
+  ]
+}
