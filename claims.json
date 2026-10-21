@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-save-feedback-e801c2d4",
       "claimed_at": "2026-10-21T20:51:02Z",
-      "expires_at": "2026-10-22T00:10:28Z",
+      "expires_at": "2026-10-22T00:10:58Z",
       "note": "Resume same-session #371 after claim expiry; T1/T2 pushed, T3 next",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
     }
