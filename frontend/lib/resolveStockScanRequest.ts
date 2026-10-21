@@ -15,6 +15,19 @@ import type { CapUnit } from '@/lib/universeStore';
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
 // Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
 // (iv_abs_pass_max, iv_rank_pass_max) are excluded.
+export const SCORE_WEIGHT_KEYS = new Set([
+  'weight_trend',
+  'weight_pullback',
+  'weight_trigger',
+  'weight_event',
+  'weight_vol',
+]);
+
+export function normalizeWeightOverride(val: number | boolean | string): number | boolean | string {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return val;
+  return Math.max(0, val / 100.0);
+}
+
 const STOCKS_SCORER_KEYS = new Set([
   'weight_trend', 'weight_pullback', 'weight_trigger', 'weight_event', 'weight_vol',
   'trend_method', 'ma_type', 'fast_ema', 'slow_ema',
@@ -142,8 +155,10 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
   });
 
   const rawOverrides = ctx.scanOverrides;
-  const stocksOverrides = Object.fromEntries(
-    Object.entries(rawOverrides).filter(([k]) => STOCKS_SCORER_KEYS.has(k)),
+  const stocksOverrides: Record<string, number | boolean | string> = Object.fromEntries(
+    Object.entries(rawOverrides)
+      .filter(([k]) => STOCKS_SCORER_KEYS.has(k))
+      .map(([k, v]) => [k, SCORE_WEIGHT_KEYS.has(k) ? normalizeWeightOverride(v) : v]),
   );
 
   const confidenceGate = ctx.confidenceGate;
