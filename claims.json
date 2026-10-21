@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-profile-validation-0d83ab07",
       "claimed_at": "2026-10-21T12:18:27Z",
-      "expires_at": "2026-10-21T16:30:12Z",
+      "expires_at": "2026-10-21T16:37:05Z",
       "note": "Malformed current-version profile crashes Search Profile controls (#381)",
       "task": "APP-AUDIT-B-PROFILE-VALIDATION"
     }
