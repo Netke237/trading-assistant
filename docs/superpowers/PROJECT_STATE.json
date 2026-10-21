@@ -7359,7 +7359,7 @@
       "id": "DECISION-34-WATCH-DELIVERY-RESIDUALS",
       "name": "Per-channel watch delivery residuals & repeated stuck-alert policy",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md",
       "branch": "board/decision-34-watch-delivery-residuals-ee173a25",
@@ -7370,7 +7370,70 @@
         "pattern": "def _apply_cross_watch_proof\\(",
         "note": "PRESENCE probe for cross-watch proof delivery logic in strategy_watch_evaluator.py."
       },
-      "notes": "Addresses ticket 34 / issue #178 residuals decided by Kenneth on 2026-10-15: cross-watch delivery proof for two stuck alerts in a row, Gmail recipient check in ready_channels, and test gaps (M25, M33, test_strategy_watch_router.py:176)."
+      "notes": "Addresses ticket 34 / issue #178 residuals decided by Kenneth on 2026-10-15: cross-watch delivery proof for two stuck alerts in a row, Gmail recipient check in ready_channels, and test gaps (M25, M33, test_strategy_watch_router.py:176).",
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent 90ceda0c-0a90-46e5-b842-6d02edcc425c reviewed plan at 2a204fa4; 0 gate findings; docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r3.md"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "0085d9cc-f68c-4359-8c99-41fda1ce869e",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@bbc005ed",
+          "gate_findings": 4,
+          "findings": [
+            "FINDING-1: StrategyWatchStore has no get_watch method",
+            "FINDING-2: Stale snapshot in _deliver_or_queue overwriting queue",
+            "FINDING-3: _deliver_or_queue fails to record counted failure on new head",
+            "FINDING-4: Pseudocode omitted stuck.pop(c) on successful probe delivery"
+          ],
+          "fixes": [
+            "Fix 1: Look up watch via list_watches iterator",
+            "Fix 2: Fresh state re-read from store in _deliver_or_queue",
+            "Fix 3: Failure accounting on entry when probe fails and head dropped via proof",
+            "Fix 4: Explicitly pop stuck[c] on delivered probe"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "967ea2d7-f954-45c3-a831-310cfcb78090",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@8d64943a",
+          "gate_findings": 2,
+          "findings": [
+            "Finding 1: _deliver_or_queue re-reading fresh state only updated local variables committed, pend leaving t.committed, t.pending stale",
+            "Finding 2: Delivery proof tracking in _deliver_or_queue was nested exclusively under c in probes"
+          ],
+          "fixes": [
+            "Fix 1: Reassign t.committed, t.pending directly on transition object",
+            "Fix 2: Lift delivery proof tracking to iterate all targets of _send"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "90ceda0c-0a90-46e5-b842-6d02edcc425c",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@2a204fa4",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r3.md"
+        }
+      ]
     }
   ],
   "already_shipped": [
