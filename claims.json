@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-persistence-93803ca0",
       "claimed_at": "2026-10-21T08:27:48Z",
-      "expires_at": "2026-10-21T12:05:04Z",
+      "expires_at": "2026-10-21T12:08:52Z",
       "note": "Verify cross-store migrations, reloads, restarts and data recovery (#357)",
       "task": "APP-AUDIT-PERSISTENCE"
     }
