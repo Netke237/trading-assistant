@@ -77,7 +77,7 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "Code Round 1 clean (0 gate findings). Both plan and code audits clean. Ready for PR and self-merge."
+      "note": "SELF-MERGE PENDING, PR #461, audited head d2c4c0f1. Normalize score-weight percent overrides across scan requests (#382, #460). Plan round 3 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
