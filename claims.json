@@ -26,7 +26,7 @@
       "agent": "claude",
       "branch": "board/decision-34-watch-delivery-residuals-ee173a25",
       "claimed_at": "2026-10-21T17:39:03Z",
-      "expires_at": "2026-10-21T20:40:27Z",
+      "expires_at": "2026-10-21T21:18:34Z",
       "note": "Take #178: Reconcile per-channel watch delivery and stuck-alert policy",
       "task": "DECISION-34-WATCH-DELIVERY-RESIDUALS"
     },
