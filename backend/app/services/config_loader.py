@@ -509,3 +509,84 @@ def resolve_target_r_multiple(overrides: dict | None) -> float:
     if not math.isfinite(value) or not 0 < value <= 10:
         raise ValueError("rr_target_r_multiple must be finite and in (0, 10]")
     return value
+
+
+# Maps Step 3 "Entry Quality" panel override keys (frontend/lib/executionParamDefaults.ts)
+# onto scoring_rules.yaml entry_quality config block keys.
+_ENTRY_OVERRIDE_KEY_MAP = {
+    "entry_spread_tolerance_pct": "spread_tolerance_pct",
+    "entry_max_slippage_pct": "max_slippage_pct",
+    "entry_min_premium": "min_premium",
+}
+
+_ENTRY_OVERRIDE_CAPS = {
+    "entry_spread_tolerance_pct": 1.0,
+    "entry_max_slippage_pct": 1.0,
+    "entry_min_premium": 100.0,
+}
+
+
+def effective_entry_overrides(overrides: dict | None) -> dict[str, float]:
+    """The entry_* keys of `overrides` that resolve_entry_config applies,
+    as floats, keyed by their override names. Zero is a valid override value.
+    None or omitted keys are skipped.
+    """
+    out: dict[str, float] = {}
+    if not overrides:
+        return out
+    for override_key, cap in _ENTRY_OVERRIDE_CAPS.items():
+        if override_key in overrides:
+            val = overrides[override_key]
+            if val is not None:
+                try:
+                    val = float(val)
+                except (ValueError, TypeError):
+                    raise ValueError(
+                        f"invalid {override_key}={val!r}: must be a finite number in [0, {cap}]"
+                    )
+                if not math.isfinite(val) or val < 0 or val > cap:
+                    raise ValueError(
+                        f"invalid {override_key}={val!r}: must be a finite number in [0, {cap}]"
+                    )
+                out[override_key] = val
+    return out
+
+
+def resolve_entry_config(overrides: dict | None = None) -> EntryConfig:
+    """Return an EntryConfig constructed from per-request entry_* or direct keys,
+    falling back to scoring_rules.yaml's entry_quality defaults for omitted or None keys.
+
+    Zero (0 / 0.0) is an explicit, valid override value (e.g. 0% slippage or 0% spread tolerance).
+    Invalid, non-finite, negative, or above-cap values raise ValueError.
+    """
+    from app.scoring.entry_quality import EntryConfig
+
+    if not overrides:
+        return EntryConfig()
+
+    kwargs: dict[str, float] = {}
+    for override_key, cfg_key in _ENTRY_OVERRIDE_KEY_MAP.items():
+        cap = _ENTRY_OVERRIDE_CAPS[override_key]
+        raw_val = None
+        active_key = override_key
+        if override_key in overrides and overrides[override_key] is not None:
+            raw_val = overrides[override_key]
+            active_key = override_key
+        elif cfg_key in overrides and overrides[cfg_key] is not None:
+            raw_val = overrides[cfg_key]
+            active_key = cfg_key
+
+        if raw_val is not None:
+            try:
+                val = float(raw_val)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f"invalid {active_key}={raw_val!r}: must be a finite number in [0, {cap}]"
+                )
+            if not math.isfinite(val) or val < 0 or val > cap:
+                raise ValueError(
+                    f"invalid {active_key}={raw_val!r}: must be a finite number in [0, {cap}]"
+                )
+            kwargs[cfg_key] = val
+
+    return EntryConfig(**kwargs)
