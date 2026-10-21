@@ -98,3 +98,7 @@ Code stage: after T3 closes, `git merge origin/main`, rerun typecheck + full Jes
 Manual browser check: the Jest suites drive the real stores against jsdom `localStorage` and capture every API call, which is the regression evidence. A live-browser check of the three scenarios needs a backend whose `/settings/risk` can be made to fail and a browser with full storage; if not run, it is listed as not done in the PR.
 
 Milestones: 20% plan approved; 50% T1–T3 built; 70% acceptance + local checks; 85% code audit clean; 95% exact-head CI / pre-merge record; 100% verified merge.
+
+## Authorized second plan stage (2026-10-21)
+
+Owner response ["ok with both recommendations"](https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780) accepts the new plan-review stage and report-only footer contract. The original three plan rounds remain capped/nonclean and are preserved, including the conservatively counted unrecoverable first round. Stage2 has cap3, continuous plan rounds4–6. Its first review examines the R3-F1 correction (discard sequence versus in-flight attempt sequence) and interactions against current main `a1811c0e`, including newer Settings save/schedule feedback changes. No code or tickets until a clean plan round. The existing singular cap warning remains honest until the first new-stage result can be recorded in cumulative plan_stages; it does not authorize a fourth review of the old stage.

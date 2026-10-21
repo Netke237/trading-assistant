@@ -10,6 +10,7 @@ import { atrMultForHorizon } from '@/lib/settingsStore';
 import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 import { sanitizeHoldDays, type TunedHorizon } from '@/lib/horizonPresets';
 import { assertStrategyScanOverrides } from '@/lib/strategyScanValidation';
+import type { CapUnit } from '@/lib/universeStore';
 
 // Keys from scanStore.scanOverrides that stock_scorer.py reads via the overrides dict.
 // Options-only params (max_delta, min_dte, etc.) and the two IV ceilings
@@ -57,6 +58,11 @@ export interface ResolvedStockScanContext {
    *  is sent and the backend uses the scoring horizon's preset hold. */
   holdMinDays: number | undefined;
   holdMaxDays: number | undefined;
+  minPriceRaw?: string;
+  maxPriceRaw?: string;
+  minCapRaw?: string;
+  maxCapRaw?: string;
+  capUnit?: CapUnit;
 }
 
 /** Matches backend `StockScanRequest` (backend/app/schemas/stock_scan.py) field-for-field. */
@@ -88,6 +94,10 @@ export interface StockScanRequestBody {
   // legitimately omit them and rely on those defaults.
   account_size?: number;
   risk_pct?: number;
+  min_price?: number;
+  max_price?: number;
+  min_cap_usd?: number;
+  max_cap_usd?: number;
   shortlist_max_candidates?: number;
   overrides?: Record<string, number | boolean | string>;
   confidence_caution_below?: number;
@@ -113,6 +123,12 @@ export interface StockScanRequestBody {
 }
 
 /** `{ [key]: value }` when the override is set, else nothing. */
+function parseFilterNumber(raw?: string): number | undefined {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : undefined;
+}
+
 function override<K extends string, V>(key: K, value: V | null | undefined): Partial<Record<K, V>> {
   return value === null || value === undefined ? {} : ({ [key]: value } as Record<K, V>);
 }
@@ -142,12 +158,21 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
   const holdMax = ctx.holdMaxDays === undefined
     ? undefined
     : sanitizeHoldDays(ctx.holdMinDays ?? 0, ctx.holdMaxDays).hold_max_days;
+  const minPrice = parseFilterNumber(ctx.minPriceRaw);
+  const maxPrice = parseFilterNumber(ctx.maxPriceRaw);
+  const capMultiplier = ctx.capUnit === 'M' ? 1e6 : 1e9;
+  const minCap = parseFilterNumber(ctx.minCapRaw);
+  const maxCap = parseFilterNumber(ctx.maxCapRaw);
 
   return {
     universe: ctx.universe,
     direction: ctx.direction,
     horizon: ctx.horizon,
     strategy: ctx.strategy,
+    ...(minPrice !== undefined ? { min_price: minPrice } : {}),
+    ...(maxPrice !== undefined ? { max_price: maxPrice } : {}),
+    ...(minCap !== undefined ? { min_cap_usd: minCap * capMultiplier } : {}),
+    ...(maxCap !== undefined ? { max_cap_usd: maxCap * capMultiplier } : {}),
     // Strategy fields: only the overrides the user set (STOCKS-HORIZON-T1
     // H5); every other field takes the backend profile for params_horizon.
     ...override('pullback_tolerance_pct', p.pullbackTolerancePct),
@@ -171,8 +196,16 @@ export function buildStockScanRequestBody(ctx: ResolvedStockScanContext): StockS
     risk_pct: ctx.riskPct,
     shortlist_max_candidates: p.stockShortlistMax,
     overrides: stocksOverrides,
-    confidence_caution_below: confidenceGate.enabled ? confidenceGate.cautionBelow : undefined,
-    confidence_reject_below: confidenceGate.enabled ? confidenceGate.rejectBelow : undefined,
+    confidence_caution_below: confidenceGate.enabled
+      ? (typeof rawOverrides.confidence_caution_below === 'number' && Number.isFinite(rawOverrides.confidence_caution_below)
+          ? rawOverrides.confidence_caution_below
+          : confidenceGate.cautionBelow)
+      : undefined,
+    confidence_reject_below: confidenceGate.enabled
+      ? (typeof rawOverrides.confidence_reject_below === 'number' && Number.isFinite(rawOverrides.confidence_reject_below)
+          ? rawOverrides.confidence_reject_below
+          : confidenceGate.rejectBelow)
+      : undefined,
     confidence_atr_mult_target: atrPair.target,
     confidence_atr_mult_stop: atrPair.stop,
     // Was two inline ternaries identical to these; routed through the shared
