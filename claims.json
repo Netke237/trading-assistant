@@ -34,7 +34,7 @@
       "agent": "claude",
       "branch": "board/app-audit-broker-portfolio-1193800c",
       "claimed_at": "2026-10-21T18:11:43Z",
-      "expires_at": "2026-10-21T21:11:43Z",
+      "expires_at": "2026-10-21T21:17:35Z",
       "note": "Take #354: Verify broker payloads, risk gates and Portfolio reconciliation",
       "task": "APP-AUDIT-BROKER-PORTFOLIO"
     }
