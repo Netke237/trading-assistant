@@ -133,6 +133,11 @@ export function resolveProfileToScanRequest(
     // The profile's own hold, Custom included, as the options branch (B6).
     holdMinDays: profile.holdMin,
     holdMaxDays: profile.holdMax,
+    minPriceRaw: profile.universe.minPriceRaw,
+    maxPriceRaw: profile.universe.maxPriceRaw,
+    minCapRaw: profile.universe.minCapRaw,
+    maxCapRaw: profile.universe.maxCapRaw,
+    capUnit: profile.universe.capUnit,
   });
 }
 
