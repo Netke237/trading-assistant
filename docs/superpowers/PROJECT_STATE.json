@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-B-PROFILE-VALIDATION",
       "name": "Malformed current-version profile crashes Search Profile controls (#381)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/app-audit-b-profile-validation-0d83ab07",
       "tracking_issue": 381,
@@ -30,7 +30,7 @@
         "pattern": "isValidSearchProfile",
         "note": "Pins that search profiles are strictly validated against corrupt or malformed shapes."
       },
-      "completion_pct": 30,
+      "completion_pct": 70,
       "size": "L",
       "complexity": 5,
       "audit_history": [
