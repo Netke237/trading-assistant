@@ -12,7 +12,7 @@ The Settings footer button `SaveButton` (`frontend/app/(frame)/settings/page.tsx
 
 ## Contract
 
-The footer never reports success while the app knows that a Settings change is not saved. "Saved" means: no tracked save is still in flight, no tracked save's latest attempt failed, no tracked section holds an unsubmitted edit, and no tracked browser-storage write has failed since its last successful write. Otherwise the footer names every outstanding item in a persistent, accessible message.
+The footer never reports success while the app knows that a Settings change is not saved. "Saved" means: no tracked save is still in flight, no tracked save's latest attempt failed, no channel has an unconfirmed overlap, no tracked section holds an unsubmitted edit, and no tracked browser-storage write has failed since its last successful write. Otherwise the footer names every outstanding item in a persistent, accessible message.
 
 Out of scope (unchanged): which value each section sends, per-section save buttons and their existing inline messages (except brokers, below), the order of local-store write vs POST in each section, risk enforcement (#354), cross-tab lost updates (#400, serialized after this item), presentation polish (#358). The footer does **not** submit any section's draft to the backend: it reports it. Actions that are not settings saves (Run now / trigger, start tuning job, adopt params, add / delete / run a schedule entry, Test notification) are not tracked.
 
@@ -30,7 +30,7 @@ A non-persisted zustand store (no `persist()`, like `configHealthStore`: a store
 - `retryLocalWrites(): void` — for each failed storage key, `localStorage.setItem(key, pendingValue)`; success clears it, a throw keeps it failed.
 - `outstanding(): { channel, label, kind: 'failed' | 'draft' | 'discarded' | 'unconfirmed' | 'local', message }[]` — what the footer lists.
 
-A failed backend save stays recorded until a later attempt on the same channel succeeds or the page reloads, even if the section unmounts or its remount re-fetches the server value: the operator's edit was not saved, and that remains true.
+A failed backend save stays recorded until a later latest attempt on the same channel confirms successfully under A1 or the page reloads, even if the section unmounts or its remount re-fetches the server value: the operator's edit was not saved, and that remains true.
 
 ### A1. Overlapping backend saves are unconfirmed (R4-F1 correction)
 
