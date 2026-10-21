@@ -7299,8 +7299,8 @@
     {
       "id": "APP-AUDIT-B-SAVE-FEEDBACK",
       "name": "Settings footer confirms Saved after a failed or unsubmitted save (#371)",
-      "status": "not_started",
-      "audit_rounds": 5,
+      "status": "in_progress",
+      "audit_rounds": 6,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-save-feedback-plan.md",
       "branch": "board/app-audit-b-save-feedback-e801c2d4",
@@ -7403,18 +7403,32 @@
           ],
           "clean": false,
           "status": "interrupted, counted conservatively; no clean verdict claimed"
+        },
+        {
+          "round": 6,
+          "stage": "plan",
+          "stage_number": 2,
+          "stage_round": 3,
+          "reviewer": "/root/save371_plan_stage2_r3",
+          "reviewed": "plan at35f3677b, SHA256d2eaffcb44ded6cc0e14abb943705763b71ad33bcb0e84cc75670d2346376fda; R4-F1 correction and interactions",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-SAVE-FEEDBACK/plan-r6.md"
         }
       ],
       "verify": {
         "kind": "present",
-        "path": "frontend/lib/settingsSaveStatus.ts",
-        "pattern": "export function trackSave",
-        "note": "Presence only; tests and independent audit establish behavior."
+        "path": "frontend/app/(frame)/settings/page.tsx",
+        "pattern": "__UNBUILT_APP_AUDIT_B_SAVE_FEEDBACK__",
+        "note": "Placeholder until the whole T1-T3 phase is built, not merely the T1 helper. Coordinator replaces with actual final production presence probe after all build units close."
       },
-      "completion_pct": 10,
+      "completion_pct": 20,
       "size": "L",
       "complexity": 5,
-      "note": "Original3rounds preserved. Authorized stage2: round4 foundR4-F1 corrected; dispatched round5 lost with interruption and counted conservatively. One final permitted review remains (continuous6). No implementation/tickets before clean.",
+      "note": "Plan clean in authorized second stage at continuous6; original3capped/nonclean and interrupted5 preserved. Build T1-T3 next; code-stage0 remains unaudited.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -7435,20 +7449,13 @@
           "closure_evidence": "Plan round 3 (ada9d0942d4ddfcaa) reported 1 gate finding (R3-F1); cap of three plan rounds reached without a clean round. Fix written into the plan, unaudited. Needs Kenneth to open a new plan stage. Owner subsequently approved a second stage in issuecomment6307656780; this closes only the original interval at3 and does not certify a clean plan or authorize code."
         },
         {
-          "rounds": 2,
-          "clean": false,
-          "opened_by": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21"
+          "rounds": 3,
+          "clean": true,
+          "opened_by": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
+          "closed_by": "clean",
+          "closure_evidence": "Fresh /root/save371_plan_stage2_r3, plan SHA256d2eaffcb44ded6cc0e14abb943705763b71ad33bcb0e84cc75670d2346376fda; scoped second-pass zero gate findings; report plan-r6.md"
         }
-      ],
-      "pending_audit": {
-        "stage": "plan",
-        "stage_number": 2,
-        "stage_round": 3,
-        "continuous_round": 6,
-        "reviewer": "/root/save371_plan_stage2_r3",
-        "reviewed_head": "35f3677b5fd169b6d62017d4862d6ec3d74a81de",
-        "status": "dispatched; no verdict yet; must not silently replay if interrupted"
-      }
+      ]
     }
   ],
   "already_shipped": [
