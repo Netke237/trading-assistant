@@ -7,14 +7,6 @@
       "expires_at": "2026-10-21T07:27:07Z",
       "note": "Resume #371 authorized second plan stage; preserve prior3rounds; sizeL complexity5",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-weight-units-03d94520",
-      "claimed_at": "2026-10-21T05:00:42Z",
-      "expires_at": "2026-10-21T08:00:42Z",
-      "note": "Score-weight percent inputs reach scorer as multipliers (#382)",
-      "task": "APP-AUDIT-B-WEIGHT-UNITS"
     }
   ]
 }
