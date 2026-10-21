@@ -117,7 +117,7 @@
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent 97e5f667-a3e2-45d2-a8f7-8c3ce80dd624 reviewed diff 3582fc91..38da086c; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-PERSISTENCE/code-r2.md"
       },
-      "note": "Lane I persistence audit report docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/report.md (#357). Plan round 2 clean, code round 2 clean."
+      "note": "SELF-MERGE PENDING, PR #471, audited head aeed0c7b. Lane I persistence audit report docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/report.md (#357). Plan round 2 clean, code round 2 clean."
     },
     {
       "id": "APP-AUDIT-ANALYTICS-DATA",
