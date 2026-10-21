@@ -6439,9 +6439,9 @@
       "tracking_issue": 413,
       "verify": {
         "kind": "absent",
-        "path": "backend/app/services/history_incremental.py",
-        "pattern": "def classify_nightly_symbol",
-        "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
+        "path": "frontend/components/molecules/TiingoBudget/index.tsx",
+        "pattern": "TiingoBudget",
+        "note": "PRESENCE ONLY of the Stage C Settings -> Data molecule (the phase's last stage); absent until Stage C. Stage-level probes: HISTORY-INCREMENTAL-NIGHTLY-A / -B. Correctness requires tests and the per-stage audits."
       },
       "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C.",
       "audit_history": [
@@ -6596,11 +6596,11 @@
       "branch": "claude/history-incremental-b-687c68",
       "verify": {
         "kind": "absent",
-        "path": "backend/app/services/history_incremental.py",
-        "pattern": "def classify_nightly_symbol",
-        "note": "PRESENCE ONLY of the nightly classifier (flips to present with B1). Correctness requires tests and the independent stage audit."
+        "path": "backend/app/services/ingestion_job.py",
+        "pattern": "revalidation_skipped_budget",
+        "note": "PRESENCE ONLY: absent until B3 adds the two-pass run counters (flips to present when Stage B is built). Correctness requires tests and the independent stage audit."
       },
-      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21.",
+      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified.",
       "audit_history": []
     },
     {
