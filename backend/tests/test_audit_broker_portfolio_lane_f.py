@@ -177,6 +177,7 @@ class TestTask1BrokerAdapters:
             with pytest.raises(OrderAdmissionRefusedError) as exc_info:
                 adapter.place_order(order)
             assert "rate-limit budget busy" in str(exc_info.value)
+            mock_gov.admit_sync.assert_called_once_with("tradier_paper", admit_timeout=10.0)
 
     def test_ibkr_paper_payload_keys_and_conid_contract(self):
         """IBKR order ticket payload builder uses conidex/secType when conid is provided."""
@@ -291,11 +292,11 @@ class TestTask1BrokerAdapters:
 
     @pytest.mark.asyncio
     async def test_tastytrade_paper_option_leg_resolution(self):
-        """Tastytrade paper adapter resolves option legs via option chain."""
+        """Tastytrade paper adapter resolves option and stock legs via _resolve_leg."""
         adapter = TastytradePaperAdapter(account_id="5WA12345")
         mock_session = MagicMock()
 
-        # Missing option_symbol raises ValueError
+        # 1. Missing option_symbol raises ValueError
         order_missing_occ = BrokerOrder(
             symbol="AAPL",
             action="BUY",
@@ -309,7 +310,23 @@ class TestTask1BrokerAdapters:
         with pytest.raises(ValueError, match="OPT orders require order.option_symbol"):
             await adapter._resolve_leg(mock_session, order_missing_occ)
 
-        # Successful resolution matching option symbol in chain
+        # 2. Option contract NOT found in chain raises ValueError
+        order_not_found = BrokerOrder(
+            symbol="AAPL",
+            action="BUY",
+            effect="OPEN",
+            quantity=1,
+            order_type="LMT",
+            limit_price=3.50,
+            sec_type="OPT",
+            option_symbol="AAPL  250516C00999000",
+        )
+        with patch("app.data.tastytrade_paper.get_option_chain", new_callable=AsyncMock) as mock_chain:
+            mock_chain.return_value = {"2025-05-16": []}
+            with pytest.raises(ValueError, match="Option contract not found in chain"):
+                await adapter._resolve_leg(mock_session, order_not_found)
+
+        # 3. Successful option resolution matching option symbol in chain
         order_valid_occ = BrokerOrder(
             symbol="AAPL",
             action="BUY",
@@ -329,6 +346,24 @@ class TestTask1BrokerAdapters:
             leg = await adapter._resolve_leg(mock_session, order_valid_occ)
             assert leg == {"leg": "resolved"}
             mock_opt.build_leg.assert_called_once_with(2, "Buy to Open")
+
+        # 4. Stock leg resolution via Equity.get
+        stock_order = BrokerOrder(
+            symbol="AAPL",
+            action="BUY",
+            effect="OPEN",
+            quantity=10,
+            order_type="LMT",
+            limit_price=150.0,
+            sec_type="STK",
+        )
+        mock_equity = MagicMock()
+        mock_equity.build_leg.return_value = {"stock_leg": "resolved"}
+        with patch("app.data.tastytrade_paper.Equity.get", new_callable=AsyncMock) as mock_eq_get:
+            mock_eq_get.return_value = mock_equity
+            leg_stock = await adapter._resolve_leg(mock_session, stock_order)
+            assert leg_stock == {"stock_leg": "resolved"}
+            mock_eq_get.assert_called_once_with(mock_session, "AAPL")
 
     def test_alpaca_paper_option_rejection(self):
         """Alpaca paper adapter refuses option orders with OrderPreflightRefusedError."""
@@ -428,19 +463,23 @@ class TestTask2RiskGates:
 
     @pytest.mark.asyncio
     async def test_rejection_zero_state_invariant(self, tmp_path):
-        """A rejected order produces zero DB position rows and cleanly releases exposure holds."""
+        """A rejected order produces zero DB position rows and cleanly releases exposure holds via pipeline."""
         url = f"sqlite+aiosqlite:///{tmp_path / 'zero_state.db'}"
         engine = create_async_engine(url)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         factory = async_sessionmaker(engine, expire_on_commit=False)
 
-        # Check DB before: zero positions, zero exposure holds
+        # Check DB before: zero open positions, zero closed positions, zero exposure holds
         async with factory() as db:
-            count_before = (
+            count_open_before = (
                 await db.execute(select(func.count()).select_from(PortfolioPositionModel))
             ).scalar_one()
-            assert count_before == 0
+            assert count_open_before == 0
+            count_closed_before = (
+                await db.execute(select(func.count()).select_from(ClosedPositionModel))
+            ).scalar_one()
+            assert count_closed_before == 0
             holds_before = await load_holds(db)
             assert len(holds_before) == 0
 
@@ -467,31 +506,61 @@ class TestTask2RiskGates:
             assert len(holds) == 1
             assert holds[0].attempt_id == "att_rej_test"
 
-        # Attempt execution that raises preflight refusal
+        # Verify that broker order dispatch catches OrderPreflightRefusedError
+        # and triggers automatic exposure hold release via _release_open_risk
         mock_adapter = MagicMock()
         mock_adapter.place_order.side_effect = OrderPreflightRefusedError("Order rejected preflight")
         router = BrokerRouter(adapters={"ibkr_paper": mock_adapter})
 
-        with pytest.raises(OrderPreflightRefusedError):
-            order = BrokerOrder(
-                symbol="AAPL",
-                action="BUY",
-                effect="OPEN",
-                quantity=10,
-                order_type="LMT",
-                limit_price=150.0,
-            )
-            router.execute("ibkr_paper", order)
+        order = BrokerOrder(
+            symbol="AAPL",
+            action="BUY",
+            effect="OPEN",
+            quantity=10,
+            order_type="LMT",
+            limit_price=150.0,
+        )
 
-        # Clean release of the exposure hold upon preflight refusal
-        await release_hold("att_rej_test", sessions=factory)
+        mock_hooks = MagicMock()
+        mock_exposure_hooks = MagicMock()
+        mock_exposure_hooks.admit = MagicMock()
 
-        # Post-rejection zero-state invariant: zero DB positions created, zero active exposure holds
+        async def _do_release(att):
+            await release_hold(att, sessions=factory)
+
+        mock_exposure_hooks.release = MagicMock(side_effect=lambda att: asyncio.create_task(_do_release(att)))
+
+        # Calling _dispatch_order catches OrderPreflightRefusedError and automatically releases exposure hold
+        with patch("app.services.portfolio_risk.account_value", return_value=100000.0), \
+             patch("app.routers.broker._exposure_price", return_value="150.0"), \
+             patch("app.routers.broker._reserve_open_budget"):
+            with pytest.raises(OrderPreflightRefusedError):
+                broker_routes._dispatch_order(
+                    router_=router,
+                    broker="ibkr_paper",
+                    order=order,
+                    hooks=mock_hooks,
+                    attempt_id="att_rej_test",
+                    exposure_hooks=mock_exposure_hooks,
+                )
+
+        # Allow scheduled release task to run
+        await asyncio.sleep(0.05)
+
+        # Assert that production dispatch logic invoked exposure_hooks.release and hooks.resolve
+        mock_exposure_hooks.release.assert_called_once_with("att_rej_test")
+        mock_hooks.resolve.assert_called_once_with("att_rej_test", definitely_not_submitted=True, outcome="not_submitted")
+
+        # Post-rejection zero-state invariant: zero open positions, zero closed positions, zero active holds
         async with factory() as db:
-            count_after = (
+            count_open_after = (
                 await db.execute(select(func.count()).select_from(PortfolioPositionModel))
             ).scalar_one()
-            assert count_after == 0
+            assert count_open_after == 0
+            count_closed_after = (
+                await db.execute(select(func.count()).select_from(ClosedPositionModel))
+            ).scalar_one()
+            assert count_closed_after == 0
             holds_after = await load_holds(db)
             assert len(holds_after) == 0
 
@@ -683,7 +752,7 @@ class TestTask4PortfolioReconciliation:
         assert new_entry_2 == 110.0
 
     def test_rung_share_rescaling_runner_preservation(self):
-        """_rescale_rung_shares rescales active rungs while preserving runners."""
+        """_rescale_rung_shares rescales active rungs while preserving runners and tie-breaking."""
         # 100 asked, 2 rungs with 30 each (sum 60), leaving 40 runner shares (40%)
         rungs = [
             {"contractsToSell": 30, "price": 160.0},
@@ -705,32 +774,56 @@ class TestTask4PortfolioReconciliation:
         # Verify exact runner proportion preserved: 20/50 == 40/100 == 0.40
         assert runner_remaining / 50 == (100 - 60) / 100
 
+        # Fractional remainder & tie-breaker test:
+        # 3 rungs with 25 shares each (sum 75), asked=100, stored=50
+        # target_sum = (75 * 50) // 100 = 37
+        # each gets floor(25 * 50 / 100) = 12 (sum 36), leftover = 1
+        # Each has identical fractional remainder 50; tie-breaker gives leftover to earliest rung 0
+        rungs_tie = [
+            {"contractsToSell": 25, "price": 100.0},
+            {"contractsToSell": 25, "price": 110.0},
+            {"contractsToSell": 25, "price": 120.0},
+        ]
+        rescaled_tie = _rescale_rung_shares(rungs_tie, asked=100, stored=50)
+        assert [r["contractsToSell"] for r in rescaled_tie] == [13, 12, 12]
+        assert sum(r["contractsToSell"] for r in rescaled_tie) == 37
+        assert 50 - sum(r["contractsToSell"] for r in rescaled_tie) == 13
+
     def test_realized_pnl_calculation(self):
-        """Realized P&L invokes realized_pnl and respects is_short_stock_position sign inversion."""
-        # Stock long: exit=180, entry=150, qty=100 -> (180 - 150) * 1 * 100 = 3000.0, 20%
+        """Realized P&L matches routers/portfolio.py close_position formula and guards entry=0."""
+        def _calc_closed_pnl(entry_p, exit_p, qty, contract, direction):
+            dollar, pct = realized_pnl(entry_p, exit_p, qty, contract)
+            if is_short_stock_position(contract, direction):
+                dollar, pct = -dollar, -pct
+            return dollar, pct
+
+        # 1. Stock long: exit=180, entry=150, qty=100 -> (180 - 150) * 1 * 100 = 3000.0, 20%
         contract_stock = "AAPL|STOCK"
         assert not is_short_stock_position(contract_stock, "Bullish")
-        dollar_long, pct_long = realized_pnl(150.0, 180.0, 100, contract_stock)
+        dollar_long, pct_long = _calc_closed_pnl(150.0, 180.0, 100, contract_stock, "Bullish")
         assert dollar_long == 3000.0
         assert pct_long == 20.0
 
-        # Stock short: exit=130, entry=150, qty=100 -> (130 - 150) * 1 * 100 = -2000.0
+        # 2. Stock short: exit=130, entry=150, qty=100 -> (130 - 150) * 1 * 100 = -2000.0
         # is_short_stock_position("AAPL|STOCK", "Bearish") inverts sign to +2000.0, +13.33%
         assert is_short_stock_position(contract_stock, "Bearish")
-        dollar_short, pct_short = realized_pnl(150.0, 130.0, 100, contract_stock)
-        if is_short_stock_position(contract_stock, "Bearish"):
-            dollar_short, pct_short = -dollar_short, -pct_short
+        dollar_short, pct_short = _calc_closed_pnl(150.0, 130.0, 100, contract_stock, "Bearish")
         assert dollar_short == 2000.0
         assert pct_short == 13.33
 
-        # Option long: exit=7.50, entry=5.00, qty=2 contracts, multiplier 100
+        # 3. Option long: exit=7.50, entry=5.00, qty=2 contracts, multiplier 100
         # (7.50 - 5.00) * 100 * 2 = 500.0, 50.0%
         contract_opt = "AAPL|185|2025-05-16|C"
         assert _contract_multiplier(contract_opt) == 100
         assert not is_short_stock_position(contract_opt, "Bearish")  # Long put is NOT short stock
-        dollar_opt, pct_opt = realized_pnl(5.0, 7.50, 2, contract_opt)
+        dollar_opt, pct_opt = _calc_closed_pnl(5.0, 7.50, 2, contract_opt, "Bullish")
         assert dollar_opt == 500.0
         assert pct_opt == 50.0
+
+        # 4. Zero entry price guard: entry=0.0 returns pct=0.0 without zero-division error
+        dollar_zero, pct_zero = _calc_closed_pnl(0.0, 150.0, 10, contract_stock, "Bullish")
+        assert dollar_zero == 1500.0
+        assert pct_zero == 0.0
 
     def test_unrouted_broker_exit_stub(self):
         """_maybe_send_close_to_broker in routers/portfolio.py is an unrouted no-op stub."""

@@ -156,6 +156,8 @@ describe('Lane F Frontend Audit: Direct Order Classification & Portfolio Reconci
       expect(positions.length).toBe(1);
       expect(positions[0].contracts).toBe(5);
       expect(positions[0].contract).toBe('AAPL 185C 05/16');
+      // Optimistic client duplicate merging retains initial entry price pending backend sync
+      expect(positions[0].entryPrice).toBe(3.50);
 
       // Adding a position with different contract preserves separate rows
       const pos3 = makePosition({

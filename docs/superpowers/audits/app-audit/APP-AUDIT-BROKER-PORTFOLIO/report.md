@@ -207,7 +207,7 @@ All calculations, schemas, and state transitions strictly satisfy the project's 
 backend/.venv/Scripts/python.exe -m pytest tests/test_audit_broker_portfolio_lane_f.py -v
 ============================= test session starts =============================
 platform win32 -- Python 3.11.9, pytest-8.1.1, pluggy-1.6.0
-collected 20 items
+collected 21 items
 
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_canonical_order_normalization_stock PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_canonical_order_normalization_option PASSED
@@ -215,6 +215,7 @@ tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_tradi
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_ibkr_paper_payload_keys_and_conid_contract PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_ibkr_confirmation_question_http_502 PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_tastytrade_paper_order_type_and_price_sign PASSED
+tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_tastytrade_paper_option_leg_resolution PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask1BrokerAdapters::test_alpaca_paper_option_rejection PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask2RiskGates::test_premium_cap_basis_lmt_and_mkt PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask2RiskGates::test_capital_cap_rejection PASSED
@@ -230,7 +231,7 @@ tests/test_audit_broker_portfolio_lane_f.py::TestTask4PortfolioReconciliation::t
 tests/test_audit_broker_portfolio_lane_f.py::TestTask4PortfolioReconciliation::test_realized_pnl_calculation PASSED
 tests/test_audit_broker_portfolio_lane_f.py::TestTask4PortfolioReconciliation::test_unrouted_broker_exit_stub PASSED
 
-============================= 20 passed in 7.83s ==============================
+============================= 21 passed in 7.75s ==============================
 ```
 
 ### 6.2 Frontend Test Execution (Jest)
@@ -239,24 +240,24 @@ npm test -- auditBrokerPortfolioLaneF
 PASS lib/__tests__/auditBrokerPortfolioLaneF.test.ts
   Lane F Frontend Audit: Direct Order Classification & Portfolio Reconciliation
     Task 1 & Task 3: classifyDirectFailure lifecycle and preflight boundaries
-      √ classifies 422 pre-flight refusal as safe to delete pre-saved row (7 ms)
+      √ classifies 422 pre-flight refusal as safe to delete pre-saved row (6 ms)
       √ classifies unauthenticated broker credentials (503) as safe to delete (1 ms)
       √ classifies IBKR confirmation question refusal (502) as safe to delete (1 ms)
-      √ retains pre-saved position (verdict: keep) on 500 internal server error (1 ms)
-      √ retains pre-saved position (verdict: keep) on network drop / gateway timeout (504) (1 ms)
-      √ retains pre-saved position (verdict: keep) when broker reply lacks usable order ID
-      √ classifies successful submission with usable order ID as placed (1 ms)
-      √ enforces Tastytrade paper market order preflight refusal (1 ms)
-      √ formats broker labels truthfully across all supported paper adapters (1 ms)
+      √ retains pre-saved position (verdict: keep) on 500 internal server error (2 ms)
+      √ retains pre-saved position (verdict: keep) on network drop / gateway timeout (504) (5 ms)
+      √ retains pre-saved position (verdict: keep) when broker reply lacks usable order ID (2 ms)
+      √ classifies successful submission with usable order ID as placed (2 ms)
+      √ enforces Tastytrade paper market order preflight refusal (2 ms)
+      √ formats broker labels truthfully across all supported paper adapters (2 ms)
       √ distinguishes accepted/pending states from executed fills (2 ms)
     Task 4: Portfolio Store duplicate contract merging & domain keys
-      √ creates canonical contract composite key and display label (1 ms)
-      √ verifies portfolio position contracts count and contract labeling (1 ms)
+      √ creates canonical contract composite key and display label (2 ms)
+      √ merges duplicate contract positions in portfolioStore and sums contracts (96 ms)
 
 Test Suites: 1 passed, 1 total
 Tests:       12 passed, 12 total
 Snapshots:   0 total
-Time:        9.987 s
+Time:        12.701 s
 ```
 
 ### 6.3 Frontend Typecheck
