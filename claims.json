@@ -18,10 +18,16 @@
     },
     {
       "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-21T16:59:16Z",
-      "expires_at": "2026-10-21T19:59:16Z",
+      "branch": "board/app-audit-b-entry-overrides-384",
+      "claimed_at": "2026-10-21T16:59:38Z",
+      "expires_at": "2026-10-21T19:59:38Z",
       "note": "Take #384: Entry Quality controls reach requests but do not affect trade plan (Finding C6)",
+      "previous": [
+        {
+          "branch": "main",
+          "claimed_at": "2026-10-21T16:59:16Z"
+        }
+      ],
       "task": "APP-AUDIT-B-ENTRY-OVERRIDES"
     }
   ]
