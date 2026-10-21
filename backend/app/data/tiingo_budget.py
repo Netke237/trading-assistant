@@ -274,6 +274,28 @@ async def probe(send: Callable[[], Awaitable]) -> tuple[object | None, str | Non
     return resp, await exhausted_limit()
 
 
+def _window_label(span: timedelta) -> str:
+    if span >= timedelta(days=2):
+        return f"rolling {span.days} d"
+    return f"rolling {int(span.total_seconds() // 3600)} h"
+
+
+async def usage_summary() -> dict:
+    """Read-only view of the four limits, for the ingestion status endpoint.
+
+    Per limit: `used` (the same ledger query the admission check runs),
+    `limit`, `nightly_stop_at` (limit - nightly reserve; the limit itself where
+    there is no reserve) and `window`. Raises TiingoBudgetConfigError on an
+    invalid config and the database error when the ledger cannot be read.
+    """
+    limits = load_limits()
+    used, _ = await _usage(_utcnow(), None)
+    return {key: {"used": used[key], "limit": limits.limits[key],
+                  "nightly_stop_at": limits.stop_at(key, "nightly"),
+                  "window": _window_label(WINDOWS[key])}
+            for key in DEFAULT_LIMITS}
+
+
 async def prune_usage(older_than: timedelta = RETENTION) -> int:
     """Delete ledger rows older than `older_than` (40 days); returns the count."""
     cutoff = _utcnow() - older_than

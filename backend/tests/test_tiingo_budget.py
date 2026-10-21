@@ -463,3 +463,78 @@ async def test_unreadable_ledger_admits_and_logs(gov, http, monkeypatch, caplog)
     assert await fetch("ONE")
     assert len(http.calls) == 1
     assert "ledger" in caplog.text
+
+
+# ── A2 (#478): read-only usage summary for GET /api/data/ingest/status ────────
+
+@pytest.mark.asyncio
+async def test_usage_summary_reports_each_limit_from_the_ledger(ledger):
+    await seed(ledger,
+               (timedelta(minutes=10), "ONE", 100),     # in every window
+               (timedelta(minutes=70), "TWO", 50),      # outside the hour
+               (timedelta(hours=25), "ONE", 30),        # outside the day
+               (timedelta(days=5), None, 20),           # probe-like: no symbol
+               (timedelta(days=32), "OLD", 999))        # outside every window
+    async with ledger() as db:                          # another provider: never counted
+        db.add(Log(provider="alpaca", requested_at=NOW, symbol="X", response_bytes=7,
+                   status_code=200, caller="on_demand"))
+        await db.commit()
+    summary = await budget.usage_summary()
+    assert summary == {
+        "requests_per_hour": {"used": 1, "limit": 3, "nightly_stop_at": 3, "window": "rolling 1 h"},
+        "requests_per_day": {"used": 2, "limit": 5, "nightly_stop_at": 3, "window": "rolling 24 h"},
+        "symbols_per_month": {"used": 2, "limit": 2, "nightly_stop_at": 1, "window": "rolling 31 d"},
+        "bytes_per_month": {"used": 200, "limit": 1000, "nightly_stop_at": 600,
+                            "window": "rolling 31 d"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_defaults_when_config_block_absent(ledger, monkeypatch):
+    monkeypatch.setattr(budget, "_load_settings", lambda: {})
+    summary = await budget.usage_summary()
+    assert {k: (v["used"], v["limit"], v["nightly_stop_at"]) for k, v in summary.items()} == {
+        "requests_per_hour": (0, 50, 50),
+        "requests_per_day": (0, 1000, 900),
+        "symbols_per_month": (0, 500, 475),
+        "bytes_per_month": (0, 1_000_000_000, 900_000_000),
+    }
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_matches_the_admission_check(ledger):
+    """At used == nightly_stop_at the nightly is refused with the same numbers;
+    on-demand (stop at limit) is still admitted."""
+    await seed(ledger, *[(timedelta(hours=2), "ONE", 1)] * 3)
+    day = (await budget.usage_summary())["requests_per_day"]
+    assert (day["used"], day["nightly_stop_at"], day["limit"]) == (3, 3, 5)
+    reason = await budget._refusal("ONE", "nightly", NOW)
+    assert reason == (f"tiingo requests_per_day budget exhausted "
+                      f"({day['used']}/{day['nightly_stop_at']})")
+    assert await budget._refusal("ONE", "on_demand", NOW) is None
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_raises_on_invalid_config(ledger, monkeypatch):
+    monkeypatch.setattr(budget, "_load_settings", lambda: config(requests_per_hour=-1))
+    with pytest.raises(budget.TiingoBudgetConfigError, match="requests_per_hour"):
+        await budget.usage_summary()
+
+
+@pytest.mark.asyncio
+async def test_ingest_status_shows_tiingo_usage_from_the_ledger(ledger, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from app.main import create_app
+    from app.routers import ingestion
+
+    await seed(ledger, (timedelta(minutes=5), "ONE", 120))
+    monkeypatch.setattr(ingestion, "get_ingestion_state", lambda: {"status": "idle"})
+    monkeypatch.setattr(ingestion, "single_provider_symbols", AsyncMock(return_value={}))
+    async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://test") as ac:
+        resp = await ac.get("/api/data/ingest/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tiingo_usage"] == await budget.usage_summary()
+    assert body["tiingo_usage"]["bytes_per_month"] == {
+        "used": 120, "limit": 1000, "nightly_stop_at": 600, "window": "rolling 31 d"}
+    assert body["tiingo_usage_error"] is None
