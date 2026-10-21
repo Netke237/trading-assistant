@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-monitoring-7fb31a2c",
       "claimed_at": "2026-10-21T12:17:55Z",
-      "expires_at": "2026-10-21T15:22:38Z",
+      "expires_at": "2026-10-21T15:32:36Z",
       "note": "Verify Watchlist, alerts, Strategy Watch and scheduled automation (#355)",
       "task": "APP-AUDIT-MONITORING"
     },
