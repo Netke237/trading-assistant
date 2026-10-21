@@ -83,16 +83,19 @@ export async function removeNoteRow(note: DirectSendNote, confirm: (text: string
   const { patchNote, removeNote } = useDirectSendNotesStore.getState();
   patchNote(note.recId, { removing: true, status: null });
   try {
-    // A 404 is final only when the server had already answered this send's save
-    // before the note existed. On SAVE-UNCONFIRMED the create may still be in flight.
-    await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+    // A 404 is final across all note kinds (including SAVE-UNCONFIRMED: Kenneth 2026-10-15 decision, #171).
+    await removeTrackedRow(note.recId, true);
     removeNote(note.recId);
+    const ownership = useStockOrderOwnershipStore.getState();
+    for (const [sym, record] of Object.entries(ownership.bySymbol)) {
+      if (record.recId === note.recId && record.status === 'unknown') {
+        ownership.finish(sym, note.recId, null, '');
+      }
+    }
   } catch (e) {
     patchNote(note.recId, {
       removing: false,
-      status: note.kind === 'save-unconfirmed' && isNotFound(e)
-        ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
-        : `Remove failed: ${whyOf(e)}. Try again.`,
+      status: `Remove failed: ${whyOf(e)}. Try again.`,
     });
   }
 }
