@@ -10,6 +10,7 @@ import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
 import { StrategyScanValidationError } from './strategyScanValidation';
 import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
+import { useUniverseStore } from '@/lib/universeStore';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -334,6 +335,7 @@ export async function runStockScanWithContinuation(
     // The user's sizing from Settings → Risk, read now (P3a). Throws
     // ScanSizingError on a 0% max loss; the catch shows its message.
     const sizing = scanSizingFromRisk();
+    const uStore = useUniverseStore.getState();
     const requestBody = buildStockScanRequestBody({
       universe: context?.universe ? [context.universe] : ['SP500'],
       direction: context?.direction ?? 'Bullish',
@@ -351,6 +353,11 @@ export async function runStockScanWithContinuation(
       // veto window is max(reject_days, hold_max_days).
       holdMinDays: context?.holdMin,
       holdMaxDays: context?.holdMax,
+      minPriceRaw: uStore.minPriceRaw,
+      maxPriceRaw: uStore.maxPriceRaw,
+      minCapRaw: uStore.minCapRaw,
+      maxCapRaw: uStore.maxCapRaw,
+      capUnit: uStore.capUnit,
     });
     building = false;
 
