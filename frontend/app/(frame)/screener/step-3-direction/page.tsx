@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
 import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
@@ -694,7 +695,7 @@ export default function Step3Page() {
     // resolves Custom dynamically and passes every other key through unchanged.
     const scoringHz = presetByKey(resolveParamsHorizon(newHz, newMax)).scoringHorizon;
     setContext({
-      universe:      context?.universe ?? 'SP500',
+      universe:      context?.universe ?? useUniverseStore.getState().pick ?? 'SP500',
       direction:     newDir,
       horizon:       horizonDisplayString(scoringHz, newMin, newMax),
       horizonPreset: newHz,
