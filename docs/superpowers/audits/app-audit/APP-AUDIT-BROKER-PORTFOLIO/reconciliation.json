@@ -118,7 +118,27 @@
       "evidence": [
         "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_schema_mapping_and_contract_string"
       ],
-      "disposition": "verified; qty=Column(Integer), contract internal composite key, dynamic cost basis derivation"
+      "disposition": "verified; qty=Column(Integer), contract internal composite key, dynamic cost basis derivation via _contract_multiplier"
+    },
+    {
+      "id": "service:backend/app/services/portfolio_exposure.py#weighted_entry",
+      "source": "backend/app/services/portfolio_exposure.py",
+      "category": "added-fill-arithmetic",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_weighted_average_price_arithmetic"
+      ],
+      "disposition": "verified; (old_qty * old_entry + delta * fill_price) / new_qty exact weighted average calculation"
+    },
+    {
+      "id": "service:backend/app/services/portfolio_performance.py#realized_pnl",
+      "source": "backend/app/services/portfolio_performance.py",
+      "category": "realized-pnl-arithmetic",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_broker_portfolio_lane_f.py:TestTask4PortfolioReconciliation::test_realized_pnl_calculation"
+      ],
+      "disposition": "verified; (exit - entry) * multiplier * qty with multiplier=1 for stocks and 100 for options, signed via is_short_stock_position"
     },
     {
       "id": "service:backend/app/services/position_writer.py#_rescale_rung_shares",

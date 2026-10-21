@@ -133,7 +133,7 @@ All calculations, schemas, and state transitions strictly satisfy the project's 
   - Dynamic derivation: `cost_basis` and current valuation are dynamically derived as $\text{entry\_price} \times \text{qty} \times \text{multiplier}$ ($1$ for stocks, $100$ for options). No fictitious cost basis columns exist.
 
 #### Added Fills Weighted Average Entry Price
-- When a position receives additional shares/contracts via `confirmAddedFill` (`EditDrawer.tsx` / `position_writer.py`):
+- When a position receives additional shares/contracts via `confirmAddedFill` (`EditDrawer.tsx` -> `portfolioStore.ts:sendAddedFill` -> `routers/portfolio.py:update_position` -> `portfolio_exposure.py:weighted_entry`):
   $$\text{New Average Entry Price} = \frac{(\text{Old Qty} \times \text{Old Entry}) + (\text{Added Qty} \times \text{Added Price})}{\text{Old Qty} + \text{Added Qty}}$$
 - Validated via `TestTask4PortfolioReconciliation::test_weighted_average_price_arithmetic`: 10 shares @ $150 + 5 shares @ $165 $\to$ 15 shares @ $155.00 exact.
 
@@ -142,14 +142,14 @@ All calculations, schemas, and state transitions strictly satisfy the project's 
   - When stored quantity $\ge$ asked quantity: returns target rungs untouched.
   - When partial fill occurs (stored $<$ asked): scales target rungs down proportionally:
     $$\text{target\_sum} = \min\left(\text{stored}, \frac{\text{total} \times \text{stored}}{\text{asked}}\right)$$
-  - Preserves runner legs and active rungs without truncating target price definitions.
+  - Preserves runner legs and active rungs without truncating target price definitions. Tested with 100 asked, 50 stored, 60 rung shares (40 runner shares) $\to$ exact 30 rescaled rungs (15 each) and 20 runner shares preserved (40%).
 
 #### Realized P&L Calculation
-- `ClosedPositionModel` (`backend/app/models/closed_position.py`):
-  - Maps closed quantity to `qty_closed = Column(Integer, nullable=False)`.
-  - Stocks Long: $(\text{exit\_price} - \text{entry\_price}) \times \text{qty\_closed}$
-  - Stocks Short: $(\text{entry\_price} - \text{exit\_price}) \times \text{qty\_closed}$
-  - Options: $(\text{exit\_price} - \text{entry\_price}) \times \text{qty\_closed} \times 100$
+- `ClosedPositionModel` (`backend/app/models/closed_position.py`) stores `qty_closed = Column(Integer, nullable=False)`, `realized_pnl_dollar`, and `realized_pnl_pct`.
+- Math is computed in `portfolio_performance.py:realized_pnl` and signed via `is_short_stock_position` in `routers/portfolio.py:close_position`:
+  - Stocks Long: $(\text{exit\_price} - \text{entry\_price}) \times \text{qty\_closed} \times 1$
+  - Stocks Short: $(\text{entry\_price} - \text{exit\_price}) \times \text{qty\_closed} \times 1$ (sign-inverted via `is_short_stock_position("AAPL|STOCK", "Bearish")`)
+  - Options: $(\text{exit\_price} - \text{entry\_price}) \times \text{qty\_closed} \times 100$ (via `_contract_multiplier`)
 
 #### Operational Boundary: Unrouted Broker Exit Stub (DEFECT-BROKER-1)
 - Verified `_maybe_send_close_to_broker` in `backend/app/routers/portfolio.py:73-81`:

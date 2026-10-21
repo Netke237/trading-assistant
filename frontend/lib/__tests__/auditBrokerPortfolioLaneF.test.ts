@@ -127,17 +127,44 @@ describe('Lane F Frontend Audit: Direct Order Classification & Portfolio Reconci
       expect(label).toBe('AAPL 185C 05/16/25');
     });
 
-    it('verifies portfolio position contracts count and contract labeling', () => {
-      const pos = makePosition({
+    it('merges duplicate contract positions in portfolioStore and sums contracts', async () => {
+      // Reset store state
+      usePortfolioStore.setState({ positions: [] });
+
+      const pos1 = makePosition({
         symbol: 'AAPL',
         contract: 'AAPL 185C 05/16',
         contracts: 2,
         entryPrice: 3.50,
       });
 
-      expect(pos.contract).toBe('AAPL 185C 05/16');
-      expect(pos.contracts).toBe(2);
-      expect(pos.entryPrice).toBe(3.50);
+      const pos2 = makePosition({
+        symbol: 'AAPL',
+        contract: 'AAPL 185C 05/16',
+        contracts: 3,
+        entryPrice: 4.00,
+      });
+
+      // Add first position
+      await usePortfolioStore.getState().addPosition(pos1, { skipPost: true });
+      expect(usePortfolioStore.getState().positions.length).toBe(1);
+      expect(usePortfolioStore.getState().positions[0].contracts).toBe(2);
+
+      // Add second position with matching symbol & contract: triggers duplicate merging
+      await usePortfolioStore.getState().addPosition(pos2, { skipPost: true });
+      const positions = usePortfolioStore.getState().positions;
+      expect(positions.length).toBe(1);
+      expect(positions[0].contracts).toBe(5);
+      expect(positions[0].contract).toBe('AAPL 185C 05/16');
+
+      // Adding a position with different contract preserves separate rows
+      const pos3 = makePosition({
+        symbol: 'AAPL',
+        contract: 'AAPL 190C 05/16',
+        contracts: 1,
+      });
+      await usePortfolioStore.getState().addPosition(pos3, { skipPost: true });
+      expect(usePortfolioStore.getState().positions.length).toBe(2);
     });
   });
 });

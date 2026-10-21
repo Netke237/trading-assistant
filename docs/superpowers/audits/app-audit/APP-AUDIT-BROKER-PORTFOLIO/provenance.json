@@ -2,7 +2,7 @@
   "audit_phase": "APP-AUDIT-BROKER-PORTFOLIO",
   "lane": "F",
   "target_issue": 354,
-  "head_commit": "42ba811f",
+  "head_commit": "3a449185",
   "python": "Python 3.11.9",
   "node": "v20.x",
   "frameworks": {
@@ -24,7 +24,7 @@
     {
       "path": "backend/tests/test_audit_broker_portfolio_lane_f.py",
       "runner": "pytest",
-      "tests_passed": 20,
+      "tests_passed": 21,
       "tests_failed": 0
     },
     {

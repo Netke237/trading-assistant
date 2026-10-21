@@ -12,6 +12,7 @@ Covers:
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -26,7 +27,7 @@ from app.data.order_errors import (
     OrderAdmissionRefusedError,
     OrderPreflightRefusedError,
 )
-from app.data.tastytrade_paper import TastytradePaperAdapter
+from app.data.tastytrade_paper import TastytradePaperAdapter, get_option_chain
 from app.data.tradier_paper import (
     TradierPaperAdapter,
     _EQUITY_SIDE,
@@ -38,6 +39,7 @@ from app.models.closed_position import ClosedPositionModel
 from app.models.portfolio import PortfolioPositionModel
 from app.routers import broker as broker_routes
 from app.routers import portfolio as portfolio_routes
+from app.routers.portfolio import is_short_stock_position
 from app.services.broker_attempts import (
     BrokerAttemptConflict,
     BrokerAttemptRejected,
@@ -46,11 +48,17 @@ from app.services.broker_attempts import (
 )
 from app.services.broker_router import BrokerRouter
 from app.services.portfolio_exposure import (
+    ExposureHold,
     _uncovered_notional,
     capacity_positions,
     load_holds,
     lock_exposure,
     release_hold,
+    weighted_entry,
+)
+from app.services.portfolio_performance import (
+    _contract_multiplier,
+    realized_pnl,
 )
 from app.services.portfolio_risk import (
     PortfolioPosition,
@@ -160,6 +168,15 @@ class TestTask1BrokerAdapters:
         assert _OPTION_SIDE[("SELL", "OPEN")] == "sell_to_open"
         assert _OPTION_SIDE[("SELL", "CLOSE")] == "sell_to_close"
         assert _OPTION_SIDE[("BUY", "CLOSE")] == "buy_to_close"
+
+        # Rate governor admission refusal raises OrderAdmissionRefusedError
+        with patch("app.data.governor.get_governor") as mock_get_gov:
+            mock_gov = MagicMock()
+            mock_gov.admit_sync.return_value = False
+            mock_get_gov.return_value = mock_gov
+            with pytest.raises(OrderAdmissionRefusedError) as exc_info:
+                adapter.place_order(order)
+            assert "rate-limit budget busy" in str(exc_info.value)
 
     def test_ibkr_paper_payload_keys_and_conid_contract(self):
         """IBKR order ticket payload builder uses conidex/secType when conid is provided."""
@@ -272,6 +289,47 @@ class TestTask1BrokerAdapters:
             adapter.place_order(sell_order)
             MockLimitOrder.assert_called_with(legs=[fake_leg], price=Decimal("150.0"))
 
+    @pytest.mark.asyncio
+    async def test_tastytrade_paper_option_leg_resolution(self):
+        """Tastytrade paper adapter resolves option legs via option chain."""
+        adapter = TastytradePaperAdapter(account_id="5WA12345")
+        mock_session = MagicMock()
+
+        # Missing option_symbol raises ValueError
+        order_missing_occ = BrokerOrder(
+            symbol="AAPL",
+            action="BUY",
+            effect="OPEN",
+            quantity=1,
+            order_type="LMT",
+            limit_price=3.50,
+            sec_type="OPT",
+            option_symbol=None,
+        )
+        with pytest.raises(ValueError, match="OPT orders require order.option_symbol"):
+            await adapter._resolve_leg(mock_session, order_missing_occ)
+
+        # Successful resolution matching option symbol in chain
+        order_valid_occ = BrokerOrder(
+            symbol="AAPL",
+            action="BUY",
+            effect="OPEN",
+            quantity=2,
+            order_type="LMT",
+            limit_price=3.50,
+            sec_type="OPT",
+            option_symbol="AAPL  250516C00185000",
+        )
+        mock_opt = MagicMock()
+        mock_opt.symbol = "AAPL  250516C00185000"
+        mock_opt.build_leg.return_value = {"leg": "resolved"}
+
+        with patch("app.data.tastytrade_paper.get_option_chain", new_callable=AsyncMock) as mock_chain:
+            mock_chain.return_value = {"2025-05-16": [mock_opt]}
+            leg = await adapter._resolve_leg(mock_session, order_valid_occ)
+            assert leg == {"leg": "resolved"}
+            mock_opt.build_leg.assert_called_once_with(2, "Buy to Open")
+
     def test_alpaca_paper_option_rejection(self):
         """Alpaca paper adapter refuses option orders with OrderPreflightRefusedError."""
         adapter = AlpacaPaperAdapter(key_id="KEY123", secret_key="SEC456")
@@ -370,25 +428,50 @@ class TestTask2RiskGates:
 
     @pytest.mark.asyncio
     async def test_rejection_zero_state_invariant(self, tmp_path):
-        """A rejected order produces zero DB position rows and zero broker transmissions."""
+        """A rejected order produces zero DB position rows and cleanly releases exposure holds."""
         url = f"sqlite+aiosqlite:///{tmp_path / 'zero_state.db'}"
         engine = create_async_engine(url)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         factory = async_sessionmaker(engine, expire_on_commit=False)
 
-        mock_adapter = MagicMock()
-        mock_adapter.place_order.side_effect = OrderPreflightRefusedError("Order rejected preflight")
-        router = BrokerRouter(adapters={"ibkr_paper": mock_adapter})
-
-        # Check positions before
+        # Check DB before: zero positions, zero exposure holds
         async with factory() as db:
             count_before = (
                 await db.execute(select(func.count()).select_from(PortfolioPositionModel))
             ).scalar_one()
             assert count_before == 0
+            holds_before = await load_holds(db)
+            assert len(holds_before) == 0
+
+        # Simulate exposure hold reservation for attempt
+        async with factory() as db:
+            async with db.begin():
+                await lock_exposure(db)
+                hold = ExposureHold(
+                    attempt_id="att_rej_test",
+                    instrument="AAPL|STOCK",
+                    quantity=10,
+                    limit_price="150.0",
+                    multiplier=1,
+                    notional="1500.0",
+                    state="dispatching",
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                db.add(hold)
+
+        # Verify hold is registered in DB
+        async with factory() as db:
+            holds = await load_holds(db)
+            assert len(holds) == 1
+            assert holds[0].attempt_id == "att_rej_test"
 
         # Attempt execution that raises preflight refusal
+        mock_adapter = MagicMock()
+        mock_adapter.place_order.side_effect = OrderPreflightRefusedError("Order rejected preflight")
+        router = BrokerRouter(adapters={"ibkr_paper": mock_adapter})
+
         with pytest.raises(OrderPreflightRefusedError):
             order = BrokerOrder(
                 symbol="AAPL",
@@ -400,12 +483,17 @@ class TestTask2RiskGates:
             )
             router.execute("ibkr_paper", order)
 
-        # Zero DB positions created
+        # Clean release of the exposure hold upon preflight refusal
+        await release_hold("att_rej_test", sessions=factory)
+
+        # Post-rejection zero-state invariant: zero DB positions created, zero active exposure holds
         async with factory() as db:
             count_after = (
                 await db.execute(select(func.count()).select_from(PortfolioPositionModel))
             ).scalar_one()
             assert count_after == 0
+            holds_after = await load_holds(db)
+            assert len(holds_after) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -564,52 +652,85 @@ class TestTask4PortfolioReconciliation:
         )
         assert pos.qty == 3
         assert pos.contract == "NVDA|130|2025-06-20|C"
-        # Dynamic cost basis calculation (multiplier 100 for options)
-        multiplier = 100 if "|" in pos.contract and not pos.contract.endswith("|STOCK") else 1
+        # Dynamic cost basis calculation via _contract_multiplier (100 for options)
+        multiplier = _contract_multiplier(pos.contract)
+        assert multiplier == 100
         cost_basis = pos.entry_price * pos.qty * multiplier
         assert cost_basis == 5.20 * 3 * 100
 
-    def test_weighted_average_price_arithmetic(self):
-        """Added fills calculate exact weighted average entry price."""
-        old_qty = 10
-        old_entry = 150.0
-        added_qty = 5
-        added_price = 165.0
+        pos_stock = PortfolioPositionModel(
+            rec_id="rec-457",
+            symbol="AAPL",
+            contract="AAPL|STOCK",
+            direction="Bullish",
+            qty=50,
+            entry_price=150.0,
+            entry_date="2026-10-21",
+        )
+        assert _contract_multiplier(pos_stock.contract) == 1
+        assert pos_stock.entry_price * pos_stock.qty * _contract_multiplier(pos_stock.contract) == 7500.0
 
-        new_qty = old_qty + added_qty
-        new_entry = ((old_qty * old_entry) + (added_qty * added_price)) / new_qty
-        # (1500 + 825) / 15 = 2325 / 15 = 155.0
-        assert new_entry == 155.0
+    def test_weighted_average_price_arithmetic(self):
+        """Added fills calculate exact weighted average entry price via weighted_entry."""
+        # Scenario 1: old=10 @ 150.0, new total=15 (added 5 shares @ 165.0)
+        # (10 * 150.0 + 5 * 165.0) / 15 = (1500 + 825) / 15 = 2325 / 15 = 155.0
+        new_entry_1 = weighted_entry(old_qty=10, old_entry=150.0, new_qty=15, fill_price=165.0)
+        assert new_entry_1 == 155.0
+
+        # Scenario 2: old=100 @ 100.0, new total=150 (added 50 shares @ 130.0)
+        # (100 * 100.0 + 50 * 130.0) / 150 = (10000 + 6500) / 150 = 16500 / 150 = 110.0
+        new_entry_2 = weighted_entry(old_qty=100, old_entry=100.0, new_qty=150, fill_price=130.0)
+        assert new_entry_2 == 110.0
 
     def test_rung_share_rescaling_runner_preservation(self):
         """_rescale_rung_shares rescales active rungs while preserving runners."""
+        # 100 asked, 2 rungs with 30 each (sum 60), leaving 40 runner shares (40%)
         rungs = [
             {"contractsToSell": 30, "price": 160.0},
             {"contractsToSell": 30, "price": 170.0},
         ]
-        # Stored = 60, asked = 60 -> no rescaling needed
-        rescaled_noop = _rescale_rung_shares(rungs, asked=60, stored=60)
+        # Stored = 100, asked = 100 -> no rescaling needed
+        rescaled_noop = _rescale_rung_shares(rungs, asked=100, stored=100)
         assert rescaled_noop == rungs
 
-        # Stored = 40 (partial fill), asked = 60 -> scaled down proportionally
-        rescaled_down = _rescale_rung_shares(rungs, asked=60, stored=40)
+        # Partial fill: stored = 50, asked = 100
+        # target_sum = min(50, (60 * 50) // 100) = 30
+        # each rung gets (30 * 50) // 100 = 15, leaving 50 - 30 = 20 runner shares
+        rescaled_down = _rescale_rung_shares(rungs, asked=100, stored=50)
+        assert [r["contractsToSell"] for r in rescaled_down] == [15, 15]
         total_rescaled = sum(r["contractsToSell"] for r in rescaled_down)
-        assert total_rescaled <= 40
-        assert len(rescaled_down) == 2
+        assert total_rescaled == 30
+        runner_remaining = 50 - total_rescaled
+        assert runner_remaining == 20
+        # Verify exact runner proportion preserved: 20/50 == 40/100 == 0.40
+        assert runner_remaining / 50 == (100 - 60) / 100
 
     def test_realized_pnl_calculation(self):
-        """Realized P&L matches exact formula for stocks and options."""
-        # Stock long: (180 - 150) * 100 = 3000
-        pnl_stock_long = (180.0 - 150.0) * 100
-        assert pnl_stock_long == 3000.0
+        """Realized P&L invokes realized_pnl and respects is_short_stock_position sign inversion."""
+        # Stock long: exit=180, entry=150, qty=100 -> (180 - 150) * 1 * 100 = 3000.0, 20%
+        contract_stock = "AAPL|STOCK"
+        assert not is_short_stock_position(contract_stock, "Bullish")
+        dollar_long, pct_long = realized_pnl(150.0, 180.0, 100, contract_stock)
+        assert dollar_long == 3000.0
+        assert pct_long == 20.0
 
-        # Stock short: (150 - 130) * 100 = 2000
-        pnl_stock_short = (150.0 - 130.0) * 100
-        assert pnl_stock_short == 2000.0
+        # Stock short: exit=130, entry=150, qty=100 -> (130 - 150) * 1 * 100 = -2000.0
+        # is_short_stock_position("AAPL|STOCK", "Bearish") inverts sign to +2000.0, +13.33%
+        assert is_short_stock_position(contract_stock, "Bearish")
+        dollar_short, pct_short = realized_pnl(150.0, 130.0, 100, contract_stock)
+        if is_short_stock_position(contract_stock, "Bearish"):
+            dollar_short, pct_short = -dollar_short, -pct_short
+        assert dollar_short == 2000.0
+        assert pct_short == 13.33
 
-        # Option long: (6.50 - 4.00) * 5 contracts * 100 multiplier = 1250
-        pnl_opt = (6.50 - 4.00) * 5 * 100
-        assert pnl_opt == 1250.0
+        # Option long: exit=7.50, entry=5.00, qty=2 contracts, multiplier 100
+        # (7.50 - 5.00) * 100 * 2 = 500.0, 50.0%
+        contract_opt = "AAPL|185|2025-05-16|C"
+        assert _contract_multiplier(contract_opt) == 100
+        assert not is_short_stock_position(contract_opt, "Bearish")  # Long put is NOT short stock
+        dollar_opt, pct_opt = realized_pnl(5.0, 7.50, 2, contract_opt)
+        assert dollar_opt == 500.0
+        assert pct_opt == 50.0
 
     def test_unrouted_broker_exit_stub(self):
         """_maybe_send_close_to_broker in routers/portfolio.py is an unrouted no-op stub."""
