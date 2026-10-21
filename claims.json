@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/unresolved-save-ux-aed7bdd5",
-      "claimed_at": "2026-10-21T04:23:23Z",
-      "expires_at": "2026-10-21T07:51:41Z",
-      "note": "Dismiss unconfirmed saves after 404 (#171)",
-      "task": "UNRESOLVED-SAVE-UX"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/ingest-skip-excluded-efd46479",
       "claimed_at": "2026-10-21T04:28:10Z",
       "expires_at": "2026-10-21T07:28:10Z",
