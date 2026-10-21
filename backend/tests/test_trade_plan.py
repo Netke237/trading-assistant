@@ -343,3 +343,104 @@ def test_recompute_endpoint_rejects_rr_target_multiple_above_cap():
         "rr_target_r_multiple": 10.01,
     })
     assert r.status_code == 422
+
+# ── APP-AUDIT-B-ENTRY-OVERRIDES: entry_cfg & recompute entry overrides ───────
+
+def test_build_trade_plan_applies_entry_config():
+    from app.scoring.entry_quality import EntryConfig
+
+    # 1. Zero slippage override
+    p_zero_slip = _plan(entry_cfg=EntryConfig(max_slippage_pct=0.0))
+    assert p_zero_slip.entry.max_fill == 7.47
+
+    # 2. Default slippage (0.03)
+    p_default = _plan()
+    assert p_default.entry.max_fill == round(7.47 * 1.03, 2)
+    assert p_default.entry.quality_status == "PASS"
+
+    # 3. Dict override with high min premium (7.47 < 10.0 -> REJECT)
+    p_reject_prem = _plan(entry_cfg={"entry_min_premium": 10.0})
+    assert p_reject_prem.entry.quality_status == "REJECT"
+    assert "premium too low" in p_reject_prem.entry.quality_reasons
+
+
+def test_recompute_endpoint_applies_entry_overrides():
+    from app.routers.contracts import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    base_payload = {
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
+        "strike": 375, "dte": 185, "premium": 7.47, "delta": 0.24, "spread": 0.25,
+    }
+
+    # Default without entry overrides uses 3% slippage: 7.47 * 1.03 = 7.69
+    r_default = client.post("/api/contracts/recompute-plan", json=base_payload)
+    assert r_default.status_code == 200, r_default.text
+    assert r_default.json()["entry"]["maxFill"] == 7.69
+
+    # With entry_max_slippage_pct = 0, maxFill == premium (7.47)
+    r_zero_slip = client.post("/api/contracts/recompute-plan", json={
+        **base_payload,
+        "entry_max_slippage_pct": 0,
+    })
+    assert r_zero_slip.status_code == 200, r_zero_slip.text
+    assert r_zero_slip.json()["entry"]["maxFill"] == 7.47
+
+    # With custom slippage 0.05: 7.47 * 1.05 = 7.84
+    r_custom = client.post("/api/contracts/recompute-plan", json={
+        **base_payload,
+        "entry_max_slippage_pct": 0.05,
+    })
+    assert r_custom.status_code == 200, r_custom.text
+    assert r_custom.json()["entry"]["maxFill"] == 7.84
+
+
+def test_recompute_endpoint_rejects_invalid_entry_overrides():
+    from app.routers.contracts import router
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    base = {
+        "symbol": "AAPL", "direction": "Bullish", "stock_price": 318.73,
+        "strike": 375, "dte": 185, "premium": 7.47, "spread": 0.25,
+    }
+
+    # Negative spread tolerance
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_spread_tolerance_pct": -0.05,
+    })
+    assert r.status_code == 422
+
+    # Spread tolerance > 1.0
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_spread_tolerance_pct": 1.5,
+    })
+    assert r.status_code == 422
+
+    # Negative slippage
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_max_slippage_pct": -0.01,
+    })
+    assert r.status_code == 422
+
+    # Slippage > 1.0
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_max_slippage_pct": 1.01,
+    })
+    assert r.status_code == 422
+
+    # Negative min premium
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_min_premium": -0.5,
+    })
+    assert r.status_code == 422
+
+    # Min premium > 100
+    r = client.post("/api/contracts/recompute-plan", json={
+        **base, "entry_min_premium": 150.0,
+    })
+    assert r.status_code == 422
+

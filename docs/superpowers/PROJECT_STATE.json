@@ -139,6 +139,85 @@
       "note": "Lane F broker & portfolio reconciliation report and verification suites published (20 backend, 12 frontend passed). Sub-issues #487-#491 closed. Ready for code stage adversarial audit."
     },
     {
+      "id": "APP-AUDIT-B-ENTRY-OVERRIDES",
+      "name": "Entry Quality controls reach requests but do not affect the trade plan (#384)",
+      "status": "built",
+      "owner": "agent",
+      "branch": "board/app-audit-b-entry-overrides-384",
+      "tracking_issue": 384,
+      "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-entry-overrides-plan.md",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ebe7d138-7d95-45d9-93e4-56141c9a29a6 reviewed plan docs/superpowers/plans/2026-10-21-app-audit-b-entry-overrides-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/plan-r2.md"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3317a0de-2ad4-4c45-bf9f-dc8b8d95549a reviewed diff origin/main..HEAD (fac2b792); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/code-r1.md"
+      },
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/config_loader.py",
+        "pattern": "def resolve_entry_config",
+        "note": "Pins that resolve_entry_config exists."
+      },
+      "completion_pct": 100,
+      "size": "M",
+      "complexity": 4,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "subagent a5382b61-2235-4049-9955-266f94a5fa3c (independent adversarial auditor)",
+          "scope": "docs/superpowers/plans/2026-10-21-app-audit-b-entry-overrides-plan.md against Issue #384 and Finding C6",
+          "gate_findings": 1,
+          "findings": [
+            "F1-PLAN-ENTRY-SCAN-DISPATCH-OMISSION: Section 2.3 omitted passing entry_cfg=_entry_config to _process_symbol in tasks=[_process_symbol(...)] and lacked defensive resolution in _process_symbol"
+          ],
+          "fixes": [
+            "Added explicit task dispatch with entry_cfg=_entry_config and defensive fallback resolution in _process_symbol"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "subagent ebe7d138-7d95-45d9-93e4-56141c9a29a6 (independent adversarial auditor)",
+          "scope": "docs/superpowers/plans/2026-10-21-app-audit-b-entry-overrides-plan.md reviewing Round 1 fix and interactions",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent 3317a0de-2ad4-4c45-bf9f-dc8b8d95549a (independent adversarial auditor)",
+          "scope": "git diff origin/main..HEAD (fac2b792) against plan and Finding C6 defect specifications",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/code-r1.md"
+        }
+      ],
+      "note": "SELF-MERGE PENDING, PR #485, audited head 5385b744. Entry Quality controls reach requests but do not affect the trade plan (#384). Plan round 2 clean, code round 1 clean."
+    },
+    {
       "id": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
       "name": "Failed Search Profile writes leave changed profiles active until reload (#398)",
       "status": "built",
@@ -7485,6 +7564,106 @@
         }
       ],
       "notes": "Requested by Kenneth in chat 2026-10-21. Not merged; PR for Kenneth. After merge, pull main into C:\\GitHub\trading-assistant; the next start-backend.bat restart binds per .env (already BAMENDJOU_BACKEND_BIND=0.0.0.0)."
+    },
+    {
+      "id": "DECISION-34-WATCH-DELIVERY-RESIDUALS",
+      "name": "Per-channel watch delivery residuals & repeated stuck-alert policy",
+      "status": "built",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "plan": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md",
+      "branch": "board/decision-34-watch-delivery-residuals-ee173a25",
+      "depends_on": [],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/strategy_watch_evaluator.py",
+        "pattern": "def _apply_cross_watch_proof\\(",
+        "note": "PRESENCE probe for cross-watch proof delivery logic in strategy_watch_evaluator.py."
+      },
+      "notes": "Addresses ticket 34 / issue #178 residuals decided by Kenneth on 2026-10-15: cross-watch delivery proof for two stuck alerts in a row, Gmail recipient check in ready_channels, and test gaps (M25, M33, test_strategy_watch_router.py:176).",
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent 90ceda0c-0a90-46e5-b842-6d02edcc425c reviewed plan at 2a204fa4; 0 gate findings; docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r3.md"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "0085d9cc-f68c-4359-8c99-41fda1ce869e",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@bbc005ed",
+          "gate_findings": 4,
+          "findings": [
+            "FINDING-1: StrategyWatchStore has no get_watch method",
+            "FINDING-2: Stale snapshot in _deliver_or_queue overwriting queue",
+            "FINDING-3: _deliver_or_queue fails to record counted failure on new head",
+            "FINDING-4: Pseudocode omitted stuck.pop(c) on successful probe delivery"
+          ],
+          "fixes": [
+            "Fix 1: Look up watch via list_watches iterator",
+            "Fix 2: Fresh state re-read from store in _deliver_or_queue",
+            "Fix 3: Failure accounting on entry when probe fails and head dropped via proof",
+            "Fix 4: Explicitly pop stuck[c] on delivered probe"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "967ea2d7-f954-45c3-a831-310cfcb78090",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@8d64943a",
+          "gate_findings": 2,
+          "findings": [
+            "Finding 1: _deliver_or_queue re-reading fresh state only updated local variables committed, pend leaving t.committed, t.pending stale",
+            "Finding 2: Delivery proof tracking in _deliver_or_queue was nested exclusively under c in probes"
+          ],
+          "fixes": [
+            "Fix 1: Reassign t.committed, t.pending directly on transition object",
+            "Fix 2: Lift delivery proof tracking to iterate all targets of _send"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "90ceda0c-0a90-46e5-b842-6d02edcc425c",
+          "reviewed": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md@2a204fa4",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/plan-r3.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "d5e31692-f131-4831-a642-7d88c8bb2fc1",
+          "reviewed": "git diff origin/main..HEAD@923d34fa",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/code-r1.md"
+        }
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/code-r1.md"
+      },
+      "note": "SELF-MERGE PENDING, PR #486, audited head 923d34fa. Reconcile per-channel watch delivery and stuck-alert policy (#178). Plan round 3 clean, code round 1 clean."
     }
   ],
   "already_shipped": [

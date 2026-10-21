@@ -40,6 +40,7 @@ from app.services.config_loader import load_first_passage_cfg as _fp_cfg
 from app.services.config_loader import load_exit_plan_cfg as _ep_cfg
 from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
+from app.services.config_loader import resolve_entry_config
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -440,6 +441,12 @@ class RecomputePlanRequest(BaseModel):
     target_source: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
     rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
+    # Optional Entry Quality overrides — mirrors the same keys the scan endpoint
+    # accepts in ScanRequest.overrides, so a contract override recompute honors
+    # Step 3 Entry Quality parameters (APP-AUDIT-B-ENTRY-OVERRIDES).
+    entry_spread_tolerance_pct: float | None = Field(default=None, ge=0, le=1.0, allow_inf_nan=False)
+    entry_max_slippage_pct: float | None = Field(default=None, ge=0, le=1.0, allow_inf_nan=False)
+    entry_min_premium: float | None = Field(default=None, ge=0, le=100.0, allow_inf_nan=False)
     # The HOLDING preset key and typed hold range, feeding the repricing
     # horizon behind the Fixed % Ladder. Same names, same meaning and the same
     # "absent means Swing" default as FirstPassageRequest below — a Step-6
@@ -502,8 +509,17 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     # show "Heston repriced" on the initial scan card and "BS repriced (IV-derived)"
     # after a Step 6 override — see docs/superpowers/plans/
     # 2026-07-25-heston-pricing-in-trade-plan.md's "Out of scope" section.
+    _entry_overrides = {
+        k: v for k, v in {
+            "entry_spread_tolerance_pct": req.entry_spread_tolerance_pct,
+            "entry_max_slippage_pct": req.entry_max_slippage_pct,
+            "entry_min_premium": req.entry_min_premium,
+        }.items() if v is not None
+    }
+
     try:
         _rr_cfg_merged = _merge_rr_cfg(_rr_overrides)
+        _entry_cfg = resolve_entry_config(_entry_overrides) if _entry_overrides else None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -575,6 +591,7 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         target_source=_source or "arithmetic",
         stop_cost_fraction=_cost_fraction,
         quote_live=req.quote_live,
+        entry_cfg=_entry_cfg,
     )
 
     return RecomputePlanResponse(
