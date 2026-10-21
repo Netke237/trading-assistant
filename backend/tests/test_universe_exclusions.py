@@ -22,6 +22,7 @@ SCAN_SYMBOLS = {
 EVIDENCE_SYMBOLS = {
     "BIIB", "CNC", "DXCM", "EPAM", "FI", "FMC", "LCID", "MRNA", "NWL", "PDD", "SIRI",
     "MAA", "MU",
+    "DHR",
 }
 FEED_ENDED = {
     "PXD": "2024-05-03", "SWN": "2024-10-01", "MRO": "2024-11-22", "CTLT": "2024-12-18",
@@ -36,9 +37,9 @@ FEED_ENDED = {
 
 # ── 1. The shipped file ──────────────────────────────────────────────────────
 
-def test_shipped_file_has_exactly_the_37_symbols_and_scopes():
+def test_shipped_file_has_exactly_the_38_symbols_and_scopes():
     exclusions = load_exclusions()
-    assert len(exclusions) == 37
+    assert len(exclusions) == 38
     scan = {s for s, e in exclusions.items() if e.scope == "scan"}
     evidence = {s for s, e in exclusions.items() if e.scope == "evidence"}
     assert scan == SCAN_SYMBOLS
@@ -58,6 +59,9 @@ def test_shipped_reasons_carry_the_evidence():
         assert f"price feed ended {last}" in exclusions[sym].reason, sym
     assert "acquired" in exclusions["ANSS"].reason
     assert "acquired" in exclusions["SGEN"].reason
+    # DHR-EVIDENCE-EXCLUSION-2026-10-21: the yfinance rebuild's 2016 spin-off jump.
+    assert "2016-07-05" in exclusions["DHR"].reason
+    assert exclusions["DHR"].scope == "evidence"
     for sym in EVIDENCE_SYMBOLS:
         assert "bar-basis" in exclusions[sym].reason, sym
 

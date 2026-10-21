@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import cors_origins, get_settings
 from app.request_guards import NonFiniteJsonGuard
 from app.routers.health import router as health_router
 
@@ -391,7 +391,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"],
+        allow_origins=cors_origins(settings),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
