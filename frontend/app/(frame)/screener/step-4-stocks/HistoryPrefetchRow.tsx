@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { api, getLastDataRefresh } from '@/lib/api';
+import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { resolveUniverseSymbols } from '@/lib/universeResolution';
 import styles from './page.module.css';
 
 /** The Pre-warm history row, moved verbatim from Step 5 (step-5-strategy). */
@@ -31,7 +34,10 @@ export function HistoryPrefetchRow() {
 
   async function startPrefetch() {
     try {
-      const universe = context?.universe ? [context.universe] : ['SP500'];
+      const uStore = useUniverseStore.getState();
+      const activePick = context?.universe ?? uStore.pick;
+      const universe = resolveUniverseSymbols(activePick, uStore.customRaw, useWatchlistStore.getState().added);
+      if (universe.length === 0) return;
       await api.startHistoryPrefetch({ universe });
       setPrefetchStatus('running');
       prefetchPollRef.current = setInterval(async () => {

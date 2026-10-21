@@ -1,0 +1,787 @@
+{
+  "$schema": "docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/storage-matrix.schema.json",
+  "version": "1.0.0",
+  "phase": "APP-AUDIT-PERSISTENCE",
+  "lane": "I",
+  "source_baseline_sha": "e5be63a1fa97b95c354f34075676281845bd6385",
+  "generated_at": "2026-10-21T10:55:00Z",
+  "summary": {
+    "zustand_persist_stores_count": 15,
+    "direct_storage_callsites_count": 6,
+    "ephemeral_in_memory_stores_count": 13,
+    "backend_yaml_stores_count": 9,
+    "backend_database_models_count": 20
+  },
+  "zustand_persist_stores": [
+    {
+      "store_file": "frontend/lib/alertStore.ts",
+      "hook": "useAlertStore",
+      "storage_key": "bamendjou-alerts-v2",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 3,
+      "skip_hydration": true,
+      "partialize": {
+        "persisted_fields": [
+          "toasts",
+          "config",
+          "suppressedAlerts",
+          "firedAlerts"
+        ],
+        "omitted_fields": [
+          "actions",
+          "activeModal",
+          "isSubmitting"
+        ]
+      },
+      "migration": {
+        "handler": "migrateAlerts",
+        "supported_versions": [
+          "v0",
+          "v1",
+          "v2",
+          "v3"
+        ],
+        "rules": "v0..v2 -> v3 backfills STRUCTURAL_STOP_BREACHED into config.enabledTypes"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Falls back to initial defaults if unparseable",
+        "quota_fallback": "Logs error; toasts evicted FIFO if storage fails"
+      }
+    },
+    {
+      "store_file": "frontend/lib/autoTradeStore.ts",
+      "hook": "useAutoTradeStore",
+      "storage_key": "bamendjou-auto-trade",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 2,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "selectedBroker",
+          "autoMode"
+        ],
+        "omitted_fields": [
+          "status",
+          "isFiring",
+          "fireHistory",
+          "errors"
+        ],
+        "notes": "autoMode='armed' is demoted to 'manual' on serialization to prevent unexpected automated trades after reload"
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v1",
+          "v2"
+        ],
+        "rules": "v1 -> v2 ensures selectedBroker and valid autoMode enum"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to manual mode and empty broker",
+        "quota_fallback": "Silent drop of settings"
+      }
+    },
+    {
+      "store_file": "frontend/lib/chartAlertStore.ts",
+      "hook": "useChartAlertStore",
+      "storage_key": "bamendjou:alerts",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 2,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "rules",
+          "history"
+        ],
+        "omitted_fields": [
+          "activeRuleId",
+          "isDrawing",
+          "selectedLine"
+        ]
+      },
+      "migration": {
+        "handler": "migrateChartAlerts",
+        "supported_versions": [
+          "v1",
+          "v2"
+        ],
+        "rules": "v1 -> v2 validates trigger operator and notification channels"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to empty rules array",
+        "quota_fallback": "Tombstones retained in memory Set even if write fails"
+      }
+    },
+    {
+      "store_file": "frontend/lib/chartStore.ts",
+      "hook": "useChartStore",
+      "storage_key": "bamendjou:chart",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 2,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "symbol",
+          "symbolName",
+          "interval",
+          "chartType",
+          "activeIndicators",
+          "paneLayout"
+        ],
+        "omitted_fields": [
+          "crosshair",
+          "visibleRange",
+          "candleCache",
+          "indicatorsData"
+        ]
+      },
+      "migration": {
+        "handler": "migrateChartStore",
+        "supported_versions": [
+          "v1",
+          "v2"
+        ],
+        "rules": "v1 -> v2 migrates interval enum and indicator configurations"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to SPY / 1D / Candlestick",
+        "quota_fallback": "None"
+      }
+    },
+    {
+      "store_file": "frontend/lib/drawingStore.ts",
+      "hook": "useDrawingStore",
+      "storage_key": "bamendjou:drawings",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 1,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "drawings"
+        ],
+        "omitted_fields": [
+          "activeDrawingId",
+          "tool",
+          "isDrawing"
+        ]
+      },
+      "migration": {
+        "handler": "migrateDrawings",
+        "supported_versions": [
+          "v0",
+          "v1"
+        ],
+        "rules": "v0 -> v1 sanitizes drawing coordinates and timestamps"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to empty drawings map",
+        "quota_fallback": "Throws QuotaExceededError"
+      }
+    },
+    {
+      "store_file": "frontend/lib/portfolioStore.ts",
+      "hook": "usePortfolioStore",
+      "storage_key": "bamendjou-portfolio-v1",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 7,
+      "skip_hydration": true,
+      "partialize": {
+        "persisted_fields": [
+          "positions"
+        ],
+        "omitted_fields": [
+          "selectedPositionId",
+          "isSyncing",
+          "error",
+          "filter"
+        ]
+      },
+      "migration": {
+        "handler": "migratePortfolioPersist",
+        "supported_versions": [
+          "v0",
+          "v1",
+          "v2",
+          "v3",
+          "v4",
+          "v5",
+          "v6",
+          "v7"
+        ],
+        "rules": "Stop flooring, premiumStopPct normalization, IV basis stripping, holdMaxDays, premiumStopDollar removal. Note: Deduplication is handled on hydration in merge() via dedupePositions()."
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to empty positions array",
+        "quota_fallback": "Logs error"
+      }
+    },
+    {
+      "store_file": "frontend/lib/riskStore.ts",
+      "hook": "useRiskStore",
+      "storage_key": "bamendjou-risk-v1",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 4,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "limits",
+          "dailyRecommendations",
+          "lastResetDate",
+          "symbols",
+          "portfolioValueUpdatedAt"
+        ],
+        "omitted_fields": [
+          "isCalculating",
+          "lastCalculatedAt"
+        ]
+      },
+      "migration": {
+        "handler": "migrateRisk",
+        "supported_versions": [
+          "v0",
+          "v1",
+          "v2",
+          "v3",
+          "v4"
+        ],
+        "rules": "v3 -> v4 migrates max exposure limits and daily loss constraints"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to standard risk rules from risk_rules.yaml",
+        "quota_fallback": "Throws"
+      }
+    },
+    {
+      "store_file": "frontend/lib/scanParamsStore.ts",
+      "hook": "useScanParamsStore",
+      "storage_key": "bamendjou:scan-params",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 12,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": "All state fields (no partialize filter, full state serialized)",
+        "omitted_fields": []
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v0..v11",
+          "v12"
+        ],
+        "rules": "v11 -> v12 updates strategy override bounds and backtest win-rate thresholds. (Horizon presets belong to scanStore)."
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to default execution parameters",
+        "quota_fallback": "Throws"
+      }
+    },
+    {
+      "store_file": "frontend/lib/scanStore.ts",
+      "hook": "useScanStore",
+      "storage_key": "bamendjou-scan-store",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 19,
+      "skip_hydration": true,
+      "partialize": {
+        "persisted_fields": [
+          "scanResult",
+          "previousRun",
+          "context",
+          "scanAt",
+          "scanDurationMs",
+          "pickedContracts",
+          "scanState",
+          "screenerMode",
+          "activeStrategy",
+          "stockScanResult",
+          "stockScanRequest",
+          "previousStockScanResult",
+          "stockScanAt",
+          "optionsScanAt",
+          "stockBasket",
+          "lastOptionsScanStatus",
+          "lastOptionsScanUpdatedAt",
+          "lastStockScanStatus",
+          "lastStockScanUpdatedAt",
+          "lastStockScanStrategy",
+          "cardEdits"
+        ],
+        "omitted_fields": [
+          "isLoading",
+          "error",
+          "progress",
+          "rawApiResponse",
+          "ephemeral price maps (typed limit prices evicted by persistableCardEdits)"
+        ]
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v0..v18",
+          "v19"
+        ],
+        "rules": "v18 -> v19 updates trade card edit stamps and candidate representations. v<10 migrates horizon presets."
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to initial context and idle state",
+        "quota_fallback": "Evicts transient trees or fails write"
+      }
+    },
+    {
+      "store_file": "frontend/lib/searchProfilesStore.ts",
+      "hook": "useSearchProfilesStore",
+      "storage_key": "bamendjou:search-profiles",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 5,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "profiles",
+          "legacyTargetPctDropped"
+        ],
+        "omitted_fields": [
+          "activeProfileId",
+          "isSaving",
+          "isApplying"
+        ]
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v0..v4",
+          "v5"
+        ],
+        "rules": "v4 -> v5 normalizes target profit percentage representations and drops legacy target fields"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to empty profiles list",
+        "quota_fallback": "Surfaces error alert"
+      }
+    },
+    {
+      "store_file": "frontend/lib/settingsStore.ts",
+      "hook": "useSettingsStore",
+      "storage_key": "bamendjou-settings",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 24,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "broker",
+          "alertDeduplicationHours",
+          "markov",
+          "shortlistMaxCandidates",
+          "maxContractsPerChain",
+          "maxContractPrice",
+          "premiumStopPct",
+          "targetProfitPct",
+          "confidenceGate",
+          "fundamentalsGate",
+          "ibkrPaper",
+          "tradierPaper",
+          "tradierLive",
+          "alpacaPaper",
+          "tastytradePaper",
+          "spreads",
+          "scheduleConfig"
+        ],
+        "omitted_fields": [
+          "isSaving",
+          "isTestingConnection",
+          "connectionStatus"
+        ]
+      },
+      "migration": {
+        "handler": "migrateSettings",
+        "supported_versions": [
+          "v0..v23",
+          "v24"
+        ],
+        "rules": "v23 -> v24 handles timezone settings, broker endpoint configurations, and confidence gate normalization"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Falls back to default settings",
+        "quota_fallback": "Silent write failure"
+      }
+    },
+    {
+      "store_file": "frontend/lib/structureStore.ts",
+      "hook": "useStructureStore",
+      "storage_key": "bamendjou:structure",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 2,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": [
+          "visibility",
+          "structureVisible"
+        ],
+        "omitted_fields": [
+          "structuresCache",
+          "loading"
+        ]
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v1",
+          "v2"
+        ],
+        "rules": "v1 -> v2 updates swing level visibility flags"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to structureVisible=true",
+        "quota_fallback": "None"
+      }
+    },
+    {
+      "store_file": "frontend/lib/theme.ts",
+      "hook": "useThemeStore",
+      "storage_key": "bamendjou:theme",
+      "key_style": "colon",
+      "engine": "localStorage",
+      "current_version": 1,
+      "skip_hydration": false,
+      "partialize": {
+        "persisted_fields": "All state fields ('theme')",
+        "omitted_fields": []
+      },
+      "migration": {
+        "handler": "inline migrate callback",
+        "supported_versions": [
+          "v0",
+          "v1"
+        ],
+        "rules": "v0 -> v1 ensures theme is 'dark' or 'light'"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Defaults to 'dark'",
+        "quota_fallback": "None"
+      }
+    },
+    {
+      "store_file": "frontend/lib/watchedContractsStore.ts",
+      "hook": "useWatchedContractsStore",
+      "storage_key": "bamendjou-watched-contracts-v1",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 3,
+      "skip_hydration": true,
+      "partialize": {
+        "persisted_fields": [
+          "ids",
+          "grading"
+        ],
+        "omitted_fields": [
+          "isSyncing"
+        ]
+      },
+      "migration": {
+        "handler": "migrateWatchedContracts",
+        "supported_versions": [
+          "v0..v2",
+          "v3"
+        ],
+        "rules": "v1/v2 -> v3 preserves contract IDs and initializes grading map; sanitized by sanitizePersisted"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Sanitizes array of non-empty strings and plain object grading map",
+        "quota_fallback": "Throws"
+      }
+    },
+    {
+      "store_file": "frontend/lib/watchlistStore.ts",
+      "hook": "useWatchlistStore",
+      "storage_key": "bamendjou-watchlist-v1",
+      "key_style": "legacy_hyphen",
+      "engine": "localStorage",
+      "current_version": 1,
+      "skip_hydration": true,
+      "partialize": {
+        "persisted_fields": [
+          "added"
+        ],
+        "omitted_fields": [
+          "symbols",
+          "loading",
+          "filter"
+        ]
+      },
+      "migration": {
+        "handler": "migrateWatchlist",
+        "supported_versions": [
+          "v0",
+          "v1"
+        ],
+        "rules": "v0 -> v1 uppercases all symbol strings and trims whitespace"
+      },
+      "error_handling": {
+        "corrupt_fallback": "Falls back to SEED_SYMBOLS",
+        "quota_fallback": "Logs error"
+      }
+    }
+  ],
+  "direct_storage_callsites": [
+    {
+      "file": "frontend/app/layout.tsx",
+      "engine": "localStorage",
+      "key": "bamendjou:theme",
+      "key_style": "colon",
+      "purpose": "Inline no-flash theme script executed before React hydration"
+    },
+    {
+      "file": "frontend/app/(frame)/dashboard/page.tsx",
+      "engine": "localStorage",
+      "key": "bamendjou:showEarnings",
+      "key_style": "colon",
+      "purpose": "Persists earnings event visibility toggle ('1' | '0')"
+    },
+    {
+      "file": "frontend/app/(frame)/settings/page.tsx",
+      "engine": "sessionStorage",
+      "keys": [
+        "bamendjou:wfo:jobId",
+        "bamendjou:wfo:adopted"
+      ],
+      "key_style": "colon",
+      "purpose": "Walk-forward optimization active job tracking and adopted strategy names (JSON stringified array of Set<string>)"
+    },
+    {
+      "file": "frontend/components/molecules/CollapsibleSection/index.tsx",
+      "engine": "localStorage",
+      "keys": [
+        "bamendjou:tradecard-scores-collapsed",
+        "bamendjou:tradecard-ladder-collapsed",
+        "bamendjou:tradecard:*:scoring-evidence:collapsed"
+      ],
+      "key_style": "colon",
+      "purpose": "Persists collapsed state ('1' | '0') of TradeCard score breakdown, strike ladder, and score qualification evidence panels"
+    },
+    {
+      "file": "frontend/lib/audit.ts",
+      "engine": "localStorage",
+      "key": "bamendjou-audit-log",
+      "key_style": "legacy_hyphen",
+      "purpose": "FIFO audit event buffer for sensitive actions (APPROVE, SEND, REJECT) with automatic eviction on QuotaExceededError"
+    },
+    {
+      "file": "frontend/lib/chartAlertStore.ts",
+      "engine": "localStorage",
+      "key": "bamendjou:alert-tombstones",
+      "key_style": "colon",
+      "purpose": "Persists deleted chart alert IDs so they are not resurrected on server re-sync"
+    }
+  ],
+  "ephemeral_in_memory_stores": [
+    {
+      "store": "universeStore.ts",
+      "purpose": "Active universe picker selection and custom tickers"
+    },
+    {
+      "store": "tradeCardUiStore.ts",
+      "purpose": "TradeCard active tab and modal states"
+    },
+    {
+      "store": "portfolioUiStore.ts",
+      "purpose": "Portfolio table sort, filter, drawer state"
+    },
+    {
+      "store": "watchlistUiStore.ts",
+      "purpose": "Watchlist table sort and filter state"
+    },
+    {
+      "store": "configHealthStore.ts",
+      "purpose": "Cached backend configuration validation report"
+    },
+    {
+      "store": "directSendNotesStore.ts",
+      "purpose": "Ephemeral broker send note dialog draft"
+    },
+    {
+      "store": "journalStore.ts",
+      "purpose": "Backend API synchronized journal entries"
+    },
+    {
+      "store": "notesStore.ts",
+      "purpose": "Backend API synchronized symbol notes"
+    },
+    {
+      "store": "analysisStore.ts",
+      "purpose": "Single-symbol deep dive fetched data cache"
+    },
+    {
+      "store": "eventThresholdsStore.ts",
+      "purpose": "API-fetched horizon event reject/caution thresholds"
+    },
+    {
+      "store": "ivThresholdsStore.ts",
+      "purpose": "API-fetched horizon IV rank thresholds"
+    },
+    {
+      "store": "performanceStore.ts",
+      "purpose": "API-fetched portfolio historical performance"
+    },
+    {
+      "store": "strategyProfilesStore.ts",
+      "purpose": "Per-strategy parameter editing drafts in Settings"
+    }
+  ],
+  "backend_durable_yaml_stores": [
+    {
+      "file": "backend/app/services/scan_schedule_store.py",
+      "config_path": "backend/config/scan_schedules.yaml",
+      "schema_version": 3,
+      "atomicity": "Atomic rename via .tmp file under threading lock",
+      "backup": "Preserves .yaml.bak before write; restores on failed validation",
+      "migrations": "v1/v2 -> v3 migrates score weight overrides from percentage to decimal fractions"
+    },
+    {
+      "file": "backend/app/services/edgar_schedule_store.py",
+      "config_path": "backend/config/edgar_schedule.yaml",
+      "atomicity": "Atomic rollback to memory snapshot on write failure"
+    },
+    {
+      "file": "backend/app/services/ingestion_schedule_store.py",
+      "config_path": "backend/config/ingestion_schedule.yaml",
+      "atomicity": "Atomic rollback to memory snapshot on write failure"
+    },
+    {
+      "file": "backend/app/services/sp500_schedule_store.py",
+      "config_path": "backend/config/sp500_schedule.yaml",
+      "atomicity": "Atomic rollback to memory snapshot on write failure"
+    },
+    {
+      "file": "backend/app/services/tuning_schedule_store.py",
+      "config_path": "backend/config/tuning_schedule.yaml",
+      "atomicity": "Atomic rollback to memory snapshot on write failure"
+    },
+    {
+      "file": "backend/app/services/strategy_param_store.py",
+      "config_path": "backend/config/strategy_params.yaml",
+      "atomicity": "Atomic write with file lock"
+    },
+    {
+      "file": "backend/app/services/strategy_watch_store.py",
+      "config_path": "backend/config/strategy_watches.yaml",
+      "atomicity": "Atomic write with file lock"
+    },
+    {
+      "file": "backend/app/services/credential_store.py",
+      "config_path": "backend/config/local_credentials.yaml",
+      "atomicity": "Atomic write with 0600 permissions; deliberate plaintext with in-memory masking"
+    },
+    {
+      "file": "backend/app/services/settings_migrations.py",
+      "config_path": "backend/config/settings.yaml",
+      "atomicity": "Validates schema migration chain during startup"
+    }
+  ],
+  "backend_database_models": [
+    {
+      "model_file": "backend/app/models/portfolio.py",
+      "table": "portfolio_positions"
+    },
+    {
+      "model_file": "backend/app/models/watchlist.py",
+      "table": "watchlist_symbols"
+    },
+    {
+      "model_file": "backend/app/models/watched_contracts.py",
+      "table": "watched_contracts"
+    },
+    {
+      "model_file": "backend/app/models/alert.py",
+      "tables": [
+        "alert_rules",
+        "alert_history"
+      ]
+    },
+    {
+      "model_file": "backend/app/models/position_alert.py",
+      "table": "position_alert_history"
+    },
+    {
+      "model_file": "backend/app/models/broker_attempt.py",
+      "tables": [
+        "broker_attempts",
+        "exposure_guards",
+        "exposure_holds"
+      ]
+    },
+    {
+      "model_file": "backend/app/models/daily_risk.py",
+      "tables": [
+        "daily_risk_budgets",
+        "daily_risk_attempts",
+        "daily_risk_losses"
+      ]
+    },
+    {
+      "model_file": "backend/app/models/closed_position.py",
+      "table": "closed_positions"
+    },
+    {
+      "model_file": "backend/app/models/drawing.py",
+      "table": "drawings"
+    },
+    {
+      "model_file": "backend/app/models/symbol_note.py",
+      "table": "symbol_notes"
+    },
+    {
+      "model_file": "backend/app/models/journal.py",
+      "table": "journal_entries"
+    },
+    {
+      "model_file": "backend/app/models/scan_report.py",
+      "table": "scan_reports"
+    },
+    {
+      "model_file": "backend/app/models/scan_session.py",
+      "table": "scan_sessions"
+    },
+    {
+      "model_file": "backend/app/models/scheduled_scan_run.py",
+      "table": "scheduled_scan_runs"
+    },
+    {
+      "model_file": "backend/app/models/backtest_artifact.py",
+      "table": "backtest_artifacts"
+    },
+    {
+      "model_file": "backend/app/models/audit_event.py",
+      "table": "audit_events"
+    },
+    {
+      "model_file": "backend/app/models/fundamentals.py",
+      "table": "fundamentals"
+    },
+    {
+      "model_file": "backend/app/models/ohlcv_daily.py",
+      "tables": [
+        "ohlcv_daily",
+        "ohlcv_history_state"
+      ]
+    },
+    {
+      "model_file": "backend/app/models/heston.py",
+      "notes": "Heston stochastic volatility model classes (non-table)"
+    },
+    {
+      "model_file": "backend/app/models/heston_cache.py",
+      "notes": "In-memory / SQLite calibration cache"
+    }
+  ]
+}

@@ -11,6 +11,8 @@ import { Title, Text, Data } from '@/components/primitives';
 import { useUniverseStore } from '@/lib/universeStore';
 import type { Universe } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useScanStore } from '@/lib/scanStore';
+import { parseSymbols, resolveUniverseSymbols } from '@/lib/universeResolution';
 import { api, getLastDataRefresh } from '@/lib/api';
 import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import type { SectorTile, IndexChangeTile } from '@/types/domain';
@@ -25,18 +27,6 @@ const SECTOR_ETF_KEYS = [
 type SectorEtfKey = typeof SECTOR_ETF_KEYS[number];
 
 type CapUnit = 'M' | 'B';
-
-/** Parse raw textarea → unique upper-cased tickers (1–6 chars A–Z + digits). */
-function parseSymbols(raw: string): string[] {
-  return Array.from(
-    new Set(
-      raw
-        .split(/[\s,;\n]+/)
-        .map((s) => s.trim().toUpperCase())
-        .filter((s) => /^[A-Z][A-Z0-9.\-]{0,5}$/.test(s)),
-    ),
-  );
-}
 
 function parseNumOrNull(raw: string): number | null {
   if (raw.trim() === '') return null;
@@ -138,6 +128,21 @@ export default function Step2Page() {
     }
   }, []);
 
+  const handleSelectPick = useCallback((key: Universe) => {
+    setPick(key);
+    const ctx = useScanStore.getState().context;
+    if (ctx && ctx.universe !== key) {
+      useScanStore.getState().setContext({ ...ctx, universe: key });
+    }
+  }, [setPick]);
+
+  const updateCustomRaw = useCallback((newRaw: string) => {
+    setCustomRaw(newRaw);
+    if (pick === 'Custom' && (useScanStore.getState().stockScanResult || useScanStore.getState().scanResult)) {
+      useScanStore.getState().clearScanResults();
+    }
+  }, [setCustomRaw, pick]);
+
   const symbols  = useMemo(() => parseSymbols(customRaw), [customRaw]);
 
   const isWatchlistPick = pick === 'Watchlist';
@@ -190,7 +195,7 @@ export default function Step2Page() {
   }, [histStatus.status]);
 
   const handleLoadHistory = useCallback(async () => {
-    const universe = pick === 'Custom' ? symbols : [pick];
+    const universe = resolveUniverseSymbols(pick, customRaw, useWatchlistStore.getState().added);
     if (!universe.length) return;
     try {
       await api.startHistoryPrefetch({ universe, years: histYears });
@@ -268,7 +273,7 @@ export default function Step2Page() {
             <button
               key={o.key}
               type="button"
-              onClick={() => setPick(o.key)}
+              onClick={() => handleSelectPick(o.key)}
               className={cardClasses(o.key)}
               aria-pressed={pick === o.key}
               title={cardStatusTooltip(o.label, pick !== o.key ? statusForKey(o.key) : null, changePct)}
@@ -314,7 +319,7 @@ export default function Step2Page() {
             <button
               key={o.key}
               type="button"
-              onClick={() => setPick(o.key)}
+              onClick={() => handleSelectPick(o.key)}
               className={cardClasses(o.key)}
               aria-pressed={pick === o.key}
               title={cardStatusTooltip(o.label, pick !== o.key ? (o.tile?.status ?? null) : null, pct)}
@@ -524,7 +529,7 @@ export default function Step2Page() {
           className={formStyles.symInput}
           placeholder="AAPL NVDA TSLA SPY QQQ IWM …"
           value={customRaw}
-          onChange={(e) => setCustomRaw(e.target.value)}
+          onChange={(e) => updateCustomRaw(e.target.value)}
           disabled={!isCustom}
           aria-label="Custom ticker list"
         />
@@ -547,7 +552,7 @@ export default function Step2Page() {
                     .filter((s) => /^[A-Z][A-Z0-9.\-]{0,5}$/.test(s));
                   const unique = Array.from(new Set(lines));
                   if (unique.length > 0) {
-                    setCustomRaw(unique.join(' '));
+                    updateCustomRaw(unique.join(' '));
                   }
                 };
                 reader.readAsText(file);
@@ -578,7 +583,7 @@ export default function Step2Page() {
                   aria-label={`Remove ${s}`}
                   onClick={() => {
                     // Rewrite the raw textarea minus this symbol.
-                    setCustomRaw(symbols.filter((x) => x !== s).join(' '));
+                    updateCustomRaw(symbols.filter((x) => x !== s).join(' '));
                   }}
                 >
                   ×

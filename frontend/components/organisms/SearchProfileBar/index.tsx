@@ -5,6 +5,7 @@ import { Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { captureCurrentSnapshot, applySearchProfile, stableStringify } from '@/lib/searchProfileSnapshot';
+import { isValidSearchProfile, safeCompareTimestamps } from '@/lib/searchProfileValidation';
 import { SaveProfileDialog } from '@/components/molecules/SaveProfileDialog';
 import { RenameProfileDialog } from '@/components/molecules/RenameProfileDialog';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
@@ -36,8 +37,9 @@ export function SearchProfileBar() {
   const activeMode = screenerMode as 'options' | 'stocks';
 
   const modeProfiles = profiles
+    .filter(isValidSearchProfile)
     .filter((p) => p.mode === activeMode)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => safeCompareTimestamps(a.updatedAt, b.updatedAt));
   const selected = modeProfiles.find((p) => p.id === selectedId) ?? null;
 
   const isDirty = selected
@@ -148,6 +150,7 @@ export function SearchProfileBar() {
               setShowSaveDialog(false);
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err));
+              setShowSaveDialog(false);
             }
           }}
         />
@@ -156,14 +159,33 @@ export function SearchProfileBar() {
         <RenameProfileDialog
           currentName={selected.name}
           onClose={() => setShowRenameDialog(false)}
-          onSave={(name) => { renameProfile(selected.id, name); setShowRenameDialog(false); }}
+          onSave={(name) => {
+            try {
+              renameProfile(selected.id, name);
+              setError(null);
+              setShowRenameDialog(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              setShowRenameDialog(false);
+            }
+          }}
         />
       )}
       {showDeleteConfirm && selected && (
         <ConfirmDialog
           title={`Delete profile "${selected.name}"?`}
           onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={() => { deleteProfile(selected.id); setSelectedId(null); setShowDeleteConfirm(false); }}
+          onConfirm={() => {
+            try {
+              deleteProfile(selected.id);
+              setSelectedId(null);
+              setError(null);
+              setShowDeleteConfirm(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              setShowDeleteConfirm(false);
+            }
+          }}
         />
       )}
     </div>
