@@ -7,6 +7,14 @@
       "expires_at": "2026-10-21T10:43:25Z",
       "note": "DHR scope:evidence exclusion (yfinance 2016 spin-off jump)",
       "task": "DHR-EVIDENCE-EXCLUSION"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-rail-destination-parity-630d7589",
+      "claimed_at": "2026-10-21T07:45:17Z",
+      "expires_at": "2026-10-21T10:45:17Z",
+      "note": "Calendar and Settings retain previous context rail (#395)",
+      "task": "APP-AUDIT-RAIL-DESTINATION-PARITY"
     }
   ]
 }
