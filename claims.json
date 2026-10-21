@@ -23,14 +23,6 @@
       "expires_at": "2026-10-21T07:23:02Z",
       "note": "Resume #371 authorized second plan stage; preserve prior3rounds; sizeL complexity5",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-regime-race-8d580f0a",
-      "claimed_at": "2026-10-21T04:22:32Z",
-      "expires_at": "2026-10-21T07:22:32Z",
-      "note": "Dismiss unconfirmed saves after 404 (#171)",
-      "task": "UNRESOLVED-SAVE-UX"
     }
   ]
 }
