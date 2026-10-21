@@ -105,9 +105,28 @@
           "report": "docs/superpowers/audits/APP-AUDIT-BROKER-PORTFOLIO/plan-r3.md"
         }
       ],
-      "tickets": [
-        354
-      ],
+      "tickets": {
+        "T1": {
+          "issue": 487,
+          "status": "ready"
+        },
+        "T2": {
+          "issue": 488,
+          "status": "blocked"
+        },
+        "T3": {
+          "issue": 489,
+          "status": "blocked"
+        },
+        "T4": {
+          "issue": 490,
+          "status": "blocked"
+        },
+        "T5": {
+          "issue": 491,
+          "status": "blocked"
+        }
+      },
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/report.md",
