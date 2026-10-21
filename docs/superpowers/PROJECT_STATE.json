@@ -6264,7 +6264,7 @@
       "owner": "agent",
       "name": "Incremental nightly, Stage A: persisted Tiingo usage ledger",
       "summary": "provider_request_log table + migration, tiingo_budget ledger enforcing hourly/daily/31-day-symbols/31-day-bytes limits with nightly reserve under one asyncio lock, recorded per HTTP attempt in tiingo.fetch_historical_candles; status endpoint tiingo_usage. Plan section 4 / section 5 Stage A.",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [
@@ -6274,12 +6274,12 @@
       "tracking_issue": 413,
       "branch": "claude/history-incremental-a-42b11ff4",
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "backend/app/models/provider_usage.py",
         "pattern": "__tablename__ = \"provider_request_log\"",
         "note": "PRESENCE ONLY of the ledger table model."
       },
-      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4).",
+      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4). Built 2026-10-21: #477 A1 87db4f83, #478 A2 fb0fa49c (both closed after coordinator verification); origin/main merged at 0b5871ef. Code audit pending (#479).",
       "audit_history": []
     },
     {
