@@ -134,6 +134,10 @@ async def _notify_scan_schedule_success(
         logger.error("scan_schedule: success notification itself failed for %s", label, exc_info=True)
 
 
+class _LegacyCapUnitsError(ValueError):
+    """Stored cap amounts need explicit profile confirmation before replay."""
+
+
 async def _run_scheduled_entry(entry_id: str) -> None:
     """The single dispatch path both the 'fixed_time' and 'loop' patterns
     converge on. Never calls run_scan()/run_stock_scan() — always the
@@ -163,6 +167,14 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                     from app.schemas import ScanRequest, ScanResult
                     from app.routers.scan import _execute_scan_core
                     req = ScanRequest.model_validate(entry["resolved_request"])
+                    if req.cap_filter_units_version != 1 and any(
+                        cap is not None and cap != 0
+                        for cap in (req.min_cap_usd, req.max_cap_usd)
+                    ):
+                        raise _LegacyCapUnitsError(
+                            "Re-save the Search Profile and confirm market-cap filter units "
+                            "before running this schedule."
+                        )
                     # Step 3's min_stock_score is stocks-only, but entries saved
                     # before the options resolver stripped it (open question #57)
                     # still carry it, and contract_validator would apply it as
@@ -197,12 +209,13 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                 else:
                     raise ValueError(f"unknown schedule entry mode {mode!r}")
             except Exception as exc:
-                logger.error("scan_schedule: entry %s (%s) failed: scan_failed", entry_id, label)
+                error = str(exc) if isinstance(exc, _LegacyCapUnitsError) else "scan_failed"
+                logger.error("scan_schedule: entry %s (%s) failed: %s", entry_id, label, error)
                 await record_scheduled_scan_run(
                     db, schedule_entry_id=entry_id, mode=mode or "unknown",
-                    status="error", error="scan_failed",
+                    status="error", error=error,
                 )
-                await _notify_scan_schedule_error(label, "scan_failed")
+                await _notify_scan_schedule_error(label, error)
                 return
 
             await record_scheduled_scan_run(

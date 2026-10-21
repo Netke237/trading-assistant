@@ -846,6 +846,8 @@ class ScanRequest(BaseModel):
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
     max_cap_usd: Optional[float] = None
+    # Conversion provenance for scheduled replay; direct USD API calls remain compatible.
+    cap_filter_units_version: Literal[1] | None = None
     # Holding horizon (calendar days). The backend derives the contract DTE window
     # from these: dte = hold * dte_holding_multiplier. When absent, contract_rules.yaml
     # hard_reject.min_dte/max_dte apply as a fallback.
