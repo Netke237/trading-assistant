@@ -1,0 +1,38 @@
+{
+  "audit_phase": "APP-AUDIT-BROKER-PORTFOLIO",
+  "lane": "F",
+  "target_issue": 354,
+  "head_commit": "cbc3a714",
+  "python": "Python 3.11.9",
+  "node": "v20.x",
+  "frameworks": {
+    "next": "15.5.23",
+    "react": "19.2.5",
+    "zustand": "^5.0.2",
+    "fastapi": "0.110.0",
+    "sqlalchemy": "2.0.28",
+    "alembic": "1.19.1",
+    "pydantic": "2.6.4"
+  },
+  "artifacts": [
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/reconciliation.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/defects.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/README.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/report.md"
+  ],
+  "test_suites": [
+    {
+      "path": "backend/tests/test_audit_broker_portfolio_lane_f.py",
+      "runner": "pytest",
+      "tests_passed": 21,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/lib/__tests__/auditBrokerPortfolioLaneF.test.ts",
+      "runner": "jest",
+      "tests_passed": 12,
+      "tests_failed": 0
+    }
+  ],
+  "verification_status": "clean; 0 gate-blocking defects; 3 operational/informational findings cataloged"
+}

@@ -8,6 +8,11 @@ venv/
 .venv/
 *.env
 .env
+# Machine-local Next.js overrides (e.g. LAN API URL). frontend/.env.local is
+# tracked on purpose, so only the per-environment .local files are ignored.
+.env.development.local
+.env.production.local
+.env.test.local
 *.sqlite
 *.db
 

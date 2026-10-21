@@ -42,7 +42,7 @@ import {
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
-  rrOverridesForPlan, withCachedEstimate,
+  rrOverridesForPlan, entryOverridesForPlan, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
@@ -947,6 +947,7 @@ export default function Step7Page() {
           final_stop:  pickedCard.exit.finalStop ?? null,
           ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
           ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+          ...entryOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
           .then((plan) => {
@@ -1022,6 +1023,7 @@ export default function Step7Page() {
         final_stop: resolved.exit.finalStop ?? null,
           ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+        ...entryOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
         .then((plan) => {
