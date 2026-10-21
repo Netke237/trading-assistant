@@ -34,7 +34,7 @@ The audit establishes exact parity between authoritative backend responses and r
 ### A. Analysis (`frontend/app/(frame)/analysis/`, `analysisStore.ts`, `POST /api/analyze-stock`)
 - Endpoint: `POST /api/analyze-stock` in `backend/app/routers/stock_scan.py:1285`, invoked via `api.analyzeStock` by `frontend/lib/analysisStore.ts`.
 - Single-symbol deep dive: price header, quote freshness, change metrics, trend regime alignment.
-- Fundamental health scorecard: Growth (35%), Quality (35%), Risk (30%), overall score (0–100), health grade, D/E ratio, operating margin, debt-to-equity, Piotroski F-score, Altman Z-score (`backend/app/scoring/fundamentals_scorer.py`).
+- Fundamental health scorecard: Growth (35%), Quality (35%), Risk (30%), overall score (0–100), health grade, and underlying detail metrics in `backend/app/scoring/fundamentals_scorer.py`: revenue growth YoY, EPS growth YoY, gross margin, operating margin, debt-to-equity, current ratio, share growth YoY, and safety flags (`negative_equity`, `extreme_leverage`).
 - Sector Relative Strength: `(stock_ret - bench_ret)` computed in `stock_scan.py`.
 - Embedded candlestick chart: bar rendering, moving averages (EMA 20/50/200), volume oscillator.
 - State variants: Valid symbol, invalid symbol (404), empty fundamentals, unvalidated regime, loading shimmer, network failure.
@@ -43,7 +43,7 @@ The audit establishes exact parity between authoritative backend responses and r
 - Full-page TradingView lightweight-charts workspace (`frontend/components/organisms/ChartWorkspace/index.tsx`): symbol switcher, interval selector (1m, 5m, 15m, 1h, 1D, 1W), date navigation.
 - Candidate backtest evidence mode (`frontend/components/organisms/CandidateChartWorkspace/index.tsx`):
   - Auditing candidate query context parsing (`source`, `backtest_artifact_id`, `backtest_artifact_status` via `parseCandidateChartContext`).
-  - Historical backtest artifact retrieval (`GET /api/backtest/artifacts/{id}` via `useOriginalBacktest`).
+  - Historical backtest artifact retrieval (`GET /api/backtest-artifacts/{artifact_id}` via `api.getOriginalBacktest` / `useOriginalBacktest`).
   - Candidate backtest metrics presentation: win rate, return, trade markers, entry/exit fills, benchmark long comparison, and `FreshBacktestControls`.
 - Overlays & indicators: EMA lines (20, 50, 200), VWAP, volume histogram.
 - Interactive tools: Trendline, horizontal level, ray, rectangle, fibonacci retracement.
@@ -92,7 +92,7 @@ The audit establishes exact parity between authoritative backend responses and r
 - Export fidelity:
   - XLSX export generator (`exportValidationToXlsx` in `frontend/lib/export.ts`).
   - Table-to-export parity check: Rank, Symbol, Company, Direction, Score, Status, Trend, Pullback, Trigger, Event, Vol.
-  - Audit of export discrepancy: `Confidence` (`c.signalConfidence`) is displayed in the DOM table (`CONF` column) but is omitted from `exportValidationToXlsx` columns.
+  - Audit of export discrepancy: `Confidence` (`c.confidence`) is displayed in the DOM table (`CONF` column) but is omitted from `exportValidationToXlsx` columns.
 
 ### G. Context Rails (`frontend/app/(frame)/@contextRail/`)
 - Dedicated rail slots: `analysis`, `chart`, `dashboard`, `portfolio`, `screener`, `watchlist`.
@@ -125,13 +125,13 @@ The audit establishes exact parity between authoritative backend responses and r
 4. **Validation Export Parity:**
    - Execute `exportValidationToXlsx`.
    - Compare cell-by-cell numerical values against the underlying scan candidate store.
-   - Check number formatting and document any column omissions (e.g. `signalConfidence` displayed in DOM but omitted in XLSX).
+   - Check number formatting and document any column omissions (e.g. `c.confidence` displayed in DOM but omitted in XLSX).
 
 ### Task 3: Boundary, Error & State Handling
 - Test absent/zero/null data across each surface:
   - Symbol not found (404) on Analysis and Chart.
   - No positions on Dashboard.
-  - No upcoming earnings/events on Calendar for selected filters.
+  - No upcoming earnings/events on Calendar when watchlist is empty or symbols have no scheduled events.
   - Zero candidates in Validation table.
 - Test network/server failure handling:
   - 500 error / backend unavailable. Verify user-facing error message, no uncaught exceptions or infinite loading spinners.
@@ -150,10 +150,11 @@ The audit establishes exact parity between authoritative backend responses and r
 
 ## 4. Independent Audits & Self-Merge Protocol
 
-1. **Plan Audit (Round 1 & 2):**
+1. **Plan Audit (Rounds 1–3):**
    - Round 1 completed: 10 gate findings recorded in `docs/superpowers/audits/APP-AUDIT-ANALYTICS-DATA/plan-r1.md`.
-   - Round 2: Fresh independent auditor evaluates revised plan against `audit_rule`.
-   - Report recorded to `docs/superpowers/audits/APP-AUDIT-ANALYTICS-DATA/plan-r2.md`.
+   - Round 2 completed: 4 gate findings recorded in `docs/superpowers/audits/APP-AUDIT-ANALYTICS-DATA/plan-r2.md`.
+   - Round 3: Fresh independent auditor evaluates revised plan against `audit_rule`.
+   - Report recorded to `docs/superpowers/audits/APP-AUDIT-ANALYTICS-DATA/plan-r3.md`.
 2. **Execution & Evidence Assembly:**
    - Execute Tasks 1–4, generating runtime evidence, sample calculations, and export comparisons.
    - Record artifacts and findings in `docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/`.
