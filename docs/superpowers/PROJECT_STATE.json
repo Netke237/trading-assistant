@@ -6180,7 +6180,7 @@
       "id": "UNRESOLVED-SAVE-UX",
       "name": "Unresolved-save UX: dismiss after 404 (#171)",
       "status": "built",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-unresolved-save-ux-plan.md",
       "branch": "board/unresolved-save-ux-aed7bdd5",
@@ -6195,8 +6195,10 @@
         "closure_evidence": "Fresh independent subagent aff0d187-ee17-4057-b17b-ca49cb43c425 reviewed plan; 0 gate findings; report docs/superpowers/audits/UNRESOLVED-SAVE-UX/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 7d869b06-38e3-4706-8ab6-b00bd2873088 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/UNRESOLVED-SAVE-UX/code-r1.md"
       },
       "audit_history": [
         {
@@ -6211,6 +6213,19 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/audits/UNRESOLVED-SAVE-UX/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "7d869b06-38e3-4706-8ab6-b00bd2873088",
+          "reviewed": "origin/main..HEAD",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/UNRESOLVED-SAVE-UX/code-r1.md"
         }
       ],
       "tickets": [
@@ -6222,10 +6237,10 @@
         "pattern": "removeTrackedRow\\(note\\.recId, true\\)",
         "note": "Pins that 404 is treated as final when removing unconfirmed saves."
       },
-      "completion_pct": 80,
+      "completion_pct": 85,
       "size": "S",
       "complexity": 3,
-      "note": "Plan round 1 clean (0 gate findings). Ready for implementation."
+      "note": "Code round 1 clean (0 gate findings). 404 is treated as final on unconfirmed-save removal, deleting note cleanly and clearing ownership lock (#171)."
     }
   ],
   "already_shipped": [
