@@ -1,0 +1,42 @@
+[
+  {
+    "id": "DEFECT-PERSIST-1",
+    "title": "Storage key naming prefix inconsistency (colon vs hyphen)",
+    "category": "design-convention",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "Zustand persist keys use two divergent naming conventions: colon prefix (e.g. 'bamendjou:theme', 'bamendjou:chart') and hyphen prefix (e.g. 'bamendjou-settings', 'bamendjou-portfolio-v1'). Grandfathered in production to prevent data loss on existing user devices.",
+    "evidence": "docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/storage-matrix.json",
+    "remediation": "Do not rename legacy keys; enforce colon prefix for new stores."
+  },
+  {
+    "id": "DEFECT-PERSIST-2",
+    "title": "Absence of active cross-tab StorageEvent sync listener in Zustand stores",
+    "category": "browser-storage",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "While browser dispatches StorageEvent on storage change, frontend Zustand stores do not subscribe to window storage events to auto-rehydrate in background tabs. Multi-tab concurrent edits could cause last-write-wins overwrites.",
+    "evidence": "frontend/lib/__tests__/auditPersistence.test.ts:302-323",
+    "remediation": "Document single-operator tab workflow or implement broadcast-channel synchronization in a future enhancement."
+  },
+  {
+    "id": "DEFECT-PERSIST-3",
+    "title": "Plaintext local credentials storage on disk",
+    "category": "credential-security",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "CredentialStore persists broker credentials in plaintext YAML at backend/config/local_credentials.yaml relying on 0600 filesystem permissions rather than encrypted envelopes.",
+    "evidence": "backend/app/services/credential_store.py; backend/tests/test_audit_persistence_lane_i.py:50-80",
+    "remediation": "Architecturally verified as intended behavior for local single-user desktop deployment. In-memory masking via all_masked() prevents accidental frontend/API leak."
+  },
+  {
+    "id": "DEFECT-PERSIST-4",
+    "title": "Dual-engine schema management (Alembic PostgreSQL vs. SQLAlchemy SQLite Base.metadata.create_all)",
+    "category": "database-migration",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "SQLite dev/test databases cannot execute PostgreSQL-specific Alembic migrations and must bootstrap via declarative metadata create_all().",
+    "evidence": "backend/tests/test_audit_persistence_lane_i.py:119-176",
+    "remediation": "Architectural separation verified: single Alembic head verified statically; declarative models verified across MainBase, OhlcvBase, and ScanReportBase."
+  }
+]

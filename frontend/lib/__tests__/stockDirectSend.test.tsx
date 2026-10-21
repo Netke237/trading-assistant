@@ -242,6 +242,27 @@ describe('DirectSendNotesPanel', () => {
     expect(notes()).toHaveLength(1);
     confirmSpy.mockRestore();
   });
+
+  it('SAVE-UNCONFIRMED: a 404 on Remove is final, deletes note and clears ownership (#171)', async () => {
+    act(() => {
+      useDirectSendNotesStore.getState().addNote({
+        recId: 'R-UNCONFIRMED',
+        kind: 'save-unconfirmed',
+        label: 'NVDA 10 sh',
+        brokerLabel: 'IBKR Paper',
+        orderId: null,
+      });
+      useStockOrderOwnershipStore.setState({
+        bySymbol: { NVDA: { status: 'unknown', recId: 'R-UNCONFIRMED', identity: 'NVDA', message: 'unconfirmed' } },
+      });
+    });
+    (api.deletePortfolioPosition as jest.Mock).mockRejectedValueOnce(new Error("API /api/portfolio/R-UNCONFIRMED → 404: Position not found."));
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    await removeNoteRow(notes()[0]);
+    expect(notes()).toHaveLength(0);
+    expect(useStockOrderOwnershipStore.getState().bySymbol['NVDA']).toBeUndefined();
+    confirmSpy.mockRestore();
+  });
 });
 
 // Exercise the existing save-first/recovery machinery behind the boundary.

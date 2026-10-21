@@ -11,6 +11,8 @@ import { StrategyScanValidationError } from './strategyScanValidation';
 import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
 import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from './watchlistStore';
+import { resolveUniverseSymbols, universeEmptyReason } from '@/lib/universeResolution';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -336,8 +338,20 @@ export async function runStockScanWithContinuation(
     // ScanSizingError on a 0% max loss; the catch shows its message.
     const sizing = scanSizingFromRisk();
     const uStore = useUniverseStore.getState();
+    const watch = useWatchlistStore.getState();
+    const activePick = context?.universe ?? uStore.pick;
+    const universeSymbols = resolveUniverseSymbols(activePick, uStore.customRaw, watch.added);
+
+    if (universeSymbols.length === 0) {
+      building = false;
+      const reason = universeEmptyReason(activePick);
+      store.setStockScanError(reason);
+      store.setScanState('FAILED');
+      return { kind: 'failure', reason, token };
+    }
+
     const requestBody = buildStockScanRequestBody({
-      universe: context?.universe ? [context.universe] : ['SP500'],
+      universe: universeSymbols,
       direction: context?.direction ?? 'Bullish',
       horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
       strategy,

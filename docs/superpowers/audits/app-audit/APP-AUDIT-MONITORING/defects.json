@@ -1,0 +1,32 @@
+[
+  {
+    "id": "DEFECT-MONITORING-1",
+    "title": "Strategy Watch client store is in-memory only without local snapshot cache",
+    "category": "state-persistence",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "frontend/lib/strategyWatchStore.ts does not use zustand/persist; watch subscriptions and evaluation schedules are fetched from the backend on page load. If the backend is temporarily unreachable on page load, the table renders empty rather than showing a cached snapshot with an offline banner.",
+    "evidence": "frontend/lib/strategyWatchStore.ts:31-77; frontend/app/(frame)/strategy-watch/page.tsx:53",
+    "remediation": "Optionally apply localStorage persistence with an offline snapshot indicator, matching the offline banner pattern in Watchlist and Screener."
+  },
+  {
+    "id": "DEFECT-MONITORING-2",
+    "title": "Dual-evaluation of intraday chart alert rules across scheduler and WebSocket",
+    "category": "scheduler-concurrency",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "In backend/app/services/chart_alert_scheduler.py:220-225, 1D and 1W candle rules are deduplicated via a shared claim between the scheduler and chart WebSocket. However, intraday rules (e.g. 5min, 15min) are evaluated by both the background scheduler tick and the chart WebSocket close check, relying on the rule cooldown_minutes (default 60m) as the sole guard against duplicate notifications.",
+    "evidence": "backend/app/services/chart_alert_scheduler.py:220-225",
+    "remediation": "Extend the shared candle evaluation claim table to intraday candle timestamps to guarantee single-evaluator semantics across all intervals."
+  },
+  {
+    "id": "DEFECT-MONITORING-3",
+    "title": "Context rail fallback shims on Alerts and Strategy Watch pages",
+    "category": "ui-presentation",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "While the Watchlist route features a dedicated context rail (@contextRail/watchlist) with Status breakdown, Flags, and SymbolNotes, the Alerts and Strategy Watch context rail slots (@contextRail/alerts, @contextRail/strategy-watch) render a generic RailQuickLook shim.",
+    "evidence": "frontend/app/(frame)/@contextRail/alerts/default.tsx:1-5; frontend/app/(frame)/@contextRail/strategy-watch/default.tsx:1-5",
+    "remediation": "In a future UI enhancement, introduce dedicated rail components for active alert rules summary and strategy watch armed position stats."
+  }
+]

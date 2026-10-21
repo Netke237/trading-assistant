@@ -28,7 +28,15 @@ _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "scan_schedule.
 # resolved_request has had its strategy fields stripped and its params_horizon
 # set (horizon_profiles.migrate_saved_stock_request). A file without the key is
 # version 1.
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
+
+_SCORE_WEIGHT_KEYS = {
+    "weight_trend",
+    "weight_pullback",
+    "weight_trigger",
+    "weight_event",
+    "weight_vol",
+}
 
 
 class ScanScheduleStore:
@@ -94,12 +102,33 @@ class ScanScheduleStore:
     def _migrate_entry(entry: object) -> object:
         """v1 -> v2: a stocks entry's saved request loses its strategy fields
         (old clients always sent them at frozen defaults, which would override
-        the backend profile forever) and gains params_horizon from its hold."""
-        from app.services.horizon_profiles import migrate_saved_stock_request
-        if (isinstance(entry, dict) and entry.get("mode") == "stocks"
-                and isinstance(entry.get("resolved_request"), dict)):
-            return {**entry, "resolved_request": migrate_saved_stock_request(entry["resolved_request"])}
-        return entry
+        the backend profile forever) and gains params_horizon from its hold.
+        v2 -> v3: score weight overrides in resolved_request are normalized to canonical fractions."""
+        if not (isinstance(entry, dict) and isinstance(entry.get("resolved_request"), dict)):
+            return entry
+
+        e = dict(entry)
+        req = dict(e["resolved_request"])
+
+        if e.get("mode") == "stocks":
+            from app.services.horizon_profiles import migrate_saved_stock_request
+            req = migrate_saved_stock_request(req)
+
+        ov = req.get("overrides")
+        if isinstance(ov, dict):
+            updated_ov = dict(ov)
+            changed = False
+            for k in _SCORE_WEIGHT_KEYS:
+                v = updated_ov.get(k)
+                if isinstance(v, (int, float)) and v > 0:
+                    if v >= 1.0:
+                        updated_ov[k] = float(v) / 100.0
+                        changed = True
+            if changed:
+                req["overrides"] = updated_ov
+
+        e["resolved_request"] = req
+        return e
 
     def _backup_corrupt(self) -> Path | None:
         """Preserve unparseable or corrupt source YAML before overwriting it."""
