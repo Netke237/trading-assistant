@@ -1,18 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-21T13:58:49Z",
-      "expires_at": "2026-10-21T16:58:49Z",
-      "note": "Take over #381 to fix CI and complete merge",
-      "previous": [
-        {
-          "branch": "board/app-audit-b-profile-validation-0d83ab07",
-          "claimed_at": "2026-10-21T12:18:27Z"
-        }
-      ],
-      "task": "APP-AUDIT-B-PROFILE-VALIDATION"
-    }
-  ]
+  "claims": []
 }
