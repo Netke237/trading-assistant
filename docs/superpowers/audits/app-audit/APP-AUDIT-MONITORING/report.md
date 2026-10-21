@@ -29,7 +29,7 @@ All evaluated mechanisms adhere strictly to the project's numerical and persiste
 | Subsystem | UI Route / Component | Context Rail Slot | Zustand Store(s) | Persistence Key & Schema | Backend Routers / Services |
 |---|---|---|---|---|---|
 | **Watchlist** | `/watchlist`<br>`watchlist/page.tsx` | Dedicated rail:<br>`@contextRail/watchlist` | `useWatchlistStore`<br>`useWatchedContractsStore`<br>`useWatchlistUiStore` | `bamendjou-watchlist-v1` (v1)<br>`bamendjou-watched-contracts-v1` (v3)<br>Ephemeral rail sync | `backend/app/routers/watchlist.py`<br>`backend/app/routers/contract_rules.py` |
-| **Alerts** | `/alerts`<br>`alerts/page.tsx`<br>`AlertRuleBuilder` | Fallback shim:<br>`@contextRail/alerts` | `useAlertStore`<br>`useChartAlertStore` | `bamendjou-alerts-v2` (v3)<br>`bamendjou:alerts` (unversioned) | `backend/app/routers/alerts.py`<br>`backend/app/routers/chart_alerts.py`<br>`backend/app/routers/ws_alerts.py` |
+| **Alerts** | `/alerts`<br>`alerts/page.tsx`<br>`AlertRuleBuilder` | Fallback shim:<br>`@contextRail/alerts` | `useAlertStore`<br>`useChartAlertStore` | `bamendjou-alerts-v2` (v3)<br>`bamendjou:alerts` (v2) | `backend/app/routers/alerts.py`<br>`backend/app/routers/chart_alerts.py`<br>`backend/app/routers/ws_alerts.py` |
 | **Strategy Watch** | `/strategy-watch`<br>`strategy-watch/page.tsx` | Fallback shim:<br>`@contextRail/strategy-watch` | `useStrategyWatchStore` | In-memory only<br>(fetches from backend) | `backend/app/routers/strategy_watch.py`<br>`strategy_watch_evaluator.py`<br>`strategy_watch_scheduler.py` |
 | **Auto-Trade** | Screener Step 7 / TradeCard<br>`AutoTradeCard` | Inherits screener rail | `useAutoTradeStore` | `bamendjou-auto-trade` (v2)<br>*Excludes armed fields* | `backend/app/routers/auto_trade.py`<br>`backend/app/services/auto_trader.py` |
 | **Notifications** | `/settings` (Notifications)<br>`alerts/page.tsx` | N/A | Settings store | `bamendjou-settings` | `backend/app/services/notifications/`<br>`dispatch.py`, `gmail.py`, `telegram.py`, `sent_log.py` |
@@ -99,7 +99,8 @@ All evaluated mechanisms adhere strictly to the project's numerical and persiste
 - **Chart Alert Rules & History (`useChartAlertStore`)**:
   - Store: `frontend/lib/chartAlertStore.ts`.
   - Storage Key: `bamendjou:alerts` (modern colon format).
-  - Scope: Stores chart-drawn indicator alert rules (`rules: AlertRule[]`), trigger history (`history: AlertHistory[]`), and chart notification toasts (`toasts: ChartToast[]`).
+  - Schema Version: `version: 2`, with migration function `migrateChartAlerts(persistedState, version)`.
+  - Persistence Scope (`partialize`): `rules: AlertRule[]` and `history: AlertHistory[]`. Transient in-memory notifications (`toasts: ChartToast[]`) are deliberately excluded from localStorage persistence via `partialize: (state) => ({ rules: state.rules, history: state.history })` and re-initialize to `[]` on application load.
   - Evaluation: Evaluated client-side via `chartAlertEngine.ts:evaluateRule()` and server-side via `chart_alert_scheduler.py` on closed candle events.
 
 #### Condition Evaluation & Indicator Crossing Mathematics
@@ -144,10 +145,10 @@ All evaluated mechanisms adhere strictly to the project's numerical and persiste
   - `phase: "armed"` — In trade / setup live, tracking entry price, stop-loss price, and profit target price.
 - **Emitted Event Types (5 Types)**:
   1. `entry`: Emitted when an idle watch detects a qualifying strategy signal $\rightarrow$ transitions phase to `armed`, recording `entry_price`, `stop_price`, and `target_price`.
-  2. `exit_stop`: Emitted when an armed watch detects candle low breaching `stop_price` $\rightarrow$ transitions phase back to `idle`, clearing entry levels.
-  3. `exit_target`: Emitted when an armed watch detects candle high reaching `target_price` $\rightarrow$ transitions phase back to `idle`, clearing entry levels.
+  2. `exit_stop`: Emitted when an armed watch detects candle `close` breaching `stop_price` (`close <= stop` for Bullish, `close >= stop` for Bearish) $\rightarrow$ transitions phase back to `idle`, clearing entry levels.
+  3. `exit_target`: Emitted when an armed watch detects candle `close` reaching `target_price` (`close >= target` for Bullish, `close <= target` for Bearish) $\rightarrow$ transitions phase back to `idle`, clearing entry levels.
   4. `time_stop`: Emitted when an armed watch reaches the horizon maximum holding duration (`hold_max_days`) without hitting stop or target $\rightarrow$ transitions phase to `idle`.
-  5. `reversal`: Emitted when a contrary directional signal appears while armed $\rightarrow$ transitions phase to `idle`.
+  5. `reversal`: Emitted when an opposite directional signal fires while armed $\rightarrow$ flips direction to `opposite_dir` and remains in `phase: "armed"` with newly updated `entry_price`, `stop_price`, and `target_price`.
 
 #### Backend API Routes (`backend/app/routers/strategy_watch.py`)
 - `GET /api/strategy-watch/` — Lists active non-composite strategy watches.
@@ -252,10 +253,10 @@ Seven distinct background schedulers run within the backend application lifecycl
 
 | Suite / Test Target | Runner | Passed | Failed | Status |
 |---|---|---|---|---|
-| `backend/tests/test_audit_monitoring_lane_g.py` | pytest | 13 | 0 | **PASS** |
+| `backend/tests/test_audit_monitoring_lane_g.py` | pytest | 14 | 0 | **PASS** |
 | `frontend/app/(frame)/alerts/__tests__/auditMonitoringLaneG.test.ts` | jest | 10 | 0 | **PASS** |
-| `backend/tests/test_strategy_watch_evaluator.py` | pytest | 26 | 0 | **PASS** |
-| `backend/tests/test_auto_trader_event_veto.py` | pytest | 14 | 0 | **PASS** |
+| `backend/tests/test_strategy_watch_evaluator.py` | pytest | 23 | 0 | **PASS** |
+| `backend/tests/test_auto_trader_event_veto.py` | pytest | 30 | 0 | **PASS** |
 | `backend/tests/test_chart_alert_scheduler.py` | pytest | 3 | 0 | **PASS** |
 | `frontend/lib/__tests__/watchedContractsStore.test.ts` | jest | 12 | 0 | **PASS** |
 | `frontend/lib/__tests__/watchlistStore.test.ts` | jest | 6 | 0 | **PASS** |
@@ -263,7 +264,7 @@ Seven distinct background schedulers run within the backend application lifecycl
 | `frontend/lib/__tests__/alertIndicators.test.ts` | jest | 9 | 0 | **PASS** |
 | `frontend/` Typecheck (`npm run typecheck`) | tsc | Clean | 0 | **PASS** |
 
-**Summary:** 111 targeted tests executed across backend and frontend monitoring suites; **100% passed**, 0 failures, 0 TypeScript diagnostic errors.
+**Summary:** 125 targeted tests executed across backend and frontend monitoring suites; **100% passed**, 0 failures, 0 TypeScript diagnostic errors.
 
 ---
 

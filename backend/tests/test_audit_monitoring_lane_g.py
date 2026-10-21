@@ -164,6 +164,46 @@ async def test_strategy_watch_state_machine_exit_target():
     assert store.update_state.call_args[0][1]["phase"] == "idle"
 
 
+@pytest.mark.asyncio
+async def test_strategy_watch_state_machine_reversal_stays_armed():
+    """Verify armed watch encountering opposite signal emits reversal and remains armed with flipped direction."""
+    store = MagicMock()
+    store.list_watches.return_value = [_watch(
+        "armed",
+        direction="Bullish",
+        entry_price=100.0,
+        stop_price=95.0,
+        target_price=110.0,
+    )]
+
+    # Close is between stop and target (e.g. 102.0)
+    rev_sig = MagicMock()
+    rev_sig.direction = "Bearish"
+    rev_sig.entry_price = 102.0
+    rev_sig.stop_price = 107.0
+    rev_sig.target_price = 92.0
+    rev_sig.rr_ratio = 2.0
+
+    with patch("app.services.strategy_watch_evaluator.strategy_watch_store", store), \
+         patch("app.services.strategy_watch_evaluator.get_bars",
+               new_callable=AsyncMock, return_value=_bars(102.0)), \
+         patch.dict("app.services.strategy_watch_evaluator._SIGNAL_FNS",
+                    {"pullback_ema": lambda bars, direction="Bullish", **k: rev_sig if direction == "Bearish" else None}):
+        events = await evaluate_all()
+
+    assert len(events) == 1
+    assert events[0].event_type == "reversal"
+    assert events[0].direction == "Bearish"
+    store.update_state.assert_called_once()
+    new_state = store.update_state.call_args[0][1]
+    # Reversal stays in phase: "armed" and flips direction to "Bearish"
+    assert new_state["phase"] == "armed"
+    assert new_state["direction"] == "Bearish"
+    assert new_state["entry_price"] == 102.0
+    assert new_state["stop_price"] == 107.0
+    assert new_state["target_price"] == 92.0
+
+
 # ---------------------------------------------------------------------------
 # 2. Auto-Trade Safety Gates & Pre-Trade Checks
 # ---------------------------------------------------------------------------

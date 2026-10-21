@@ -119,10 +119,14 @@ describe('Lane G Frontend Audit: APP-AUDIT-MONITORING (#355)', () => {
   describe('4. Alert Subsystem Store Separation', () => {
     it('useAlertStore uses bamendjou-alerts-v2 with schema version 3', () => {
       expect(useAlertStore).toBeDefined();
+      expect(useAlertStore.persist.getOptions().name).toBe('bamendjou-alerts-v2');
+      expect(useAlertStore.persist.getOptions().version).toBe(3);
     });
 
-    it('useChartAlertStore uses separate bamendjou:alerts store for chart rules and history', () => {
+    it('useChartAlertStore uses separate bamendjou:alerts store (version 2) for chart rules and history', () => {
       expect(useChartAlertStore).toBeDefined();
+      expect(useChartAlertStore.persist.getOptions().name).toBe('bamendjou:alerts');
+      expect(useChartAlertStore.persist.getOptions().version).toBe(2);
       const state = useChartAlertStore.getState();
       expect(Array.isArray(state.rules)).toBe(true);
       expect(Array.isArray(state.history)).toBe(true);

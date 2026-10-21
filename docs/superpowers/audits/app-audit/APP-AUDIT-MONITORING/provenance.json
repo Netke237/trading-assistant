@@ -2,7 +2,7 @@
   "audit_phase": "APP-AUDIT-MONITORING",
   "lane": "G",
   "target_issue": 355,
-  "head_commit": "91548b82",
+  "head_commit": "30a33dac",
   "python": "Python 3.11.9",
   "node": "v20.x",
   "frameworks": {
@@ -26,7 +26,7 @@
     {
       "path": "backend/tests/test_audit_monitoring_lane_g.py",
       "runner": "pytest",
-      "tests_passed": 13,
+      "tests_passed": 14,
       "tests_failed": 0
     },
     {
@@ -38,13 +38,13 @@
     {
       "path": "backend/tests/test_strategy_watch_evaluator.py",
       "runner": "pytest",
-      "tests_passed": 26,
+      "tests_passed": 23,
       "tests_failed": 0
     },
     {
       "path": "backend/tests/test_auto_trader_event_veto.py",
       "runner": "pytest",
-      "tests_passed": 14,
+      "tests_passed": 30,
       "tests_failed": 0
     },
     {
