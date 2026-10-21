@@ -7,6 +7,14 @@
       "expires_at": "2026-10-21T07:05:35Z",
       "note": "Merge PR #442 and record state (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/stop-percent-units-55519e05",
+      "claimed_at": "2026-10-21T04:05:45Z",
+      "expires_at": "2026-10-21T07:05:45Z",
+      "note": "claim APP-AUDIT-B-STOP-PERCENT-UNITS (#385)",
+      "task": "APP-AUDIT-B-STOP-PERCENT-UNITS"
     }
   ]
 }
