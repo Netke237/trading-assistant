@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-save-feedback-e801c2d4",
-      "claimed_at": "2026-10-21T14:51:57Z",
-      "expires_at": "2026-10-21T18:11:10Z",
-      "note": "Resume #371 after interruption; preserve all prior review attempts; sizeL complexity5",
-      "task": "APP-AUDIT-B-SAVE-FEEDBACK"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-entry-overrides-384",
       "claimed_at": "2026-10-21T16:59:38Z",
       "expires_at": "2026-10-21T20:39:44Z",
@@ -37,6 +29,14 @@
       "expires_at": "2026-10-21T20:40:27Z",
       "note": "Take #178: Reconcile per-channel watch delivery and stuck-alert policy",
       "task": "DECISION-34-WATCH-DELIVERY-RESIDUALS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-broker-portfolio-1193800c",
+      "claimed_at": "2026-10-21T18:11:43Z",
+      "expires_at": "2026-10-21T21:11:43Z",
+      "note": "Take #354: Verify broker payloads, risk gates and Portfolio reconciliation",
+      "task": "APP-AUDIT-BROKER-PORTFOLIO"
     }
   ]
 }
