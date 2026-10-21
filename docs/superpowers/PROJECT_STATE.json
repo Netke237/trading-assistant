@@ -15,14 +15,14 @@
       "branch": "board/app-audit-b-profile-validation-0d83ab07",
       "tracking_issue": 381,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-profile-validation-plan.md",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
-      "plan_audit_clean": false,
+      "plan_audit_clean": true,
       "plan_stage": {
-        "rounds": 1,
-        "clean": false,
-        "closed_by": null,
-        "closure_evidence": null
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-PROFILE-VALIDATION/plan-r2.md"
       },
       "verify": {
         "kind": "present",
@@ -30,7 +30,7 @@
         "pattern": "isValidSearchProfile",
         "note": "Pins that search profiles are strictly validated against corrupt or malformed shapes."
       },
-      "completion_pct": 20,
+      "completion_pct": 30,
       "size": "L",
       "complexity": 5,
       "audit_history": [
@@ -50,6 +50,15 @@
             "F-7: stocks strategy and strategyParams must be co-present or co-absent -> enforce co-presence in isValidSearchProfile."
           ],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "fresh subagent (ca30fe55-d9c2-4e10-8480-1c541e6793fb)",
+          "scope": "Round 1 fixes (F-1 through F-7) and interactions in docs/superpowers/plans/2026-10-21-app-audit-b-profile-validation-plan.md",
+          "findings_count": 0,
+          "findings": [],
+          "clean": true
         }
       ]
     },
