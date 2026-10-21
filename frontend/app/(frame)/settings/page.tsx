@@ -631,17 +631,38 @@ function OperatorTimezoneSection() {
 // the plan called out and fixed for operator timezone above, recurring
 // here for a different setting. Mirrors OperatorTimezoneSection's pattern.
 
+// Keep draft reporting separate from request settlement: a late response must not
+// erase a later edit discarded when its section unmounted.
+function useSaveDraft(channel: string, label: string, value: string, baseline: string | null) {
+  const initial = useRef(value);
+  const edited = useRef(false);
+  if (value !== initial.current) edited.current = true;
+  const dirty = baseline === null ? edited.current : value !== baseline;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; discardDraft(channel); };
+  }, [channel]);
+  useEffect(() => { reportDraft(channel, label, dirty); }, [channel, label, dirty]);
+  return mounted;
+}
+
 function ScheduledScanRetentionSection() {
   const [days, setDays] = useState(90);
   const [saveResult, setSaveResult] = useState('');
 
+  const [baseline, setBaseline] = useState<number | null>(null);
+  const mounted = useSaveDraft('scan-run-retention', 'Scheduled scan history retention', String(days), baseline === null ? null : String(baseline));
   useEffect(() => {
+    let cancelled = false;
     api.getScheduledScanRunRetention()
-      .then((r) => setDays(r.scheduledScanRunRetentionDays))
+      .then((r) => { if (!cancelled) { setDays(r.scheduledScanRunRetentionDays); setBaseline(r.scheduledScanRunRetentionDays); } })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   async function handleSave() {
+    const submitted = days;
     setSaveResult('');
     try {
       // Re-sync from the response rather than assuming the posted value
@@ -649,8 +670,10 @@ function ScheduledScanRetentionSection() {
       // post-implementation adversarial review: without this, typing e.g.
       // 99999 and saving showed "Saved" while the input kept displaying
       // 99999, silently diverging from the 3650 actually persisted.
-      const r = await api.saveScheduledScanRunRetention(days);
-      setDays(r.scheduledScanRunRetentionDays);
+      const r = await trackSave('scan-run-retention', 'Scheduled scan history retention', () => api.saveScheduledScanRunRetention(submitted));
+      if (!mounted.current) return;
+      setBaseline(r.scheduledScanRunRetentionDays);
+      setDays(current => current === submitted ? r.scheduledScanRunRetentionDays : current);
       setSaveResult('Saved');
     } catch {
       setSaveResult('Save failed');
@@ -758,14 +781,27 @@ function ScheduledScansSection() {
   async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>): Promise<{ ok: boolean; error?: string }> {
     const next = { ...entry, ...patch };
     try {
-      await api.updateScanScheduleEntry(entry.id, {
+      let request: ReturnType<typeof api.updateScanScheduleEntry> | undefined;
+      const run = () => request ??= (async () => api.updateScanScheduleEntry(entry.id, {
         label: next.label, mode: next.mode, profile_id: next.profile_id,
         profile_name: next.profile_name, profile_synced_at: next.profile_synced_at,
         resolved_request: next.resolved_request, pattern: next.pattern, enabled: next.enabled,
         days_of_week: next.days_of_week, fire_time: next.fire_time,
         cadence_minutes: next.cadence_minutes, window_start_hour: next.window_start_hour,
         window_end_hour: next.window_end_hour,
-      });
+      }))();
+      await Promise.all(Object.keys(patch).map(field => trackSave(
+        `schedule-entry:${entry.id}:${field}`, `Scheduled scan "${entry.label}" ${field}`, run,
+      )));
+      // Refresh once the entry's concurrent full-payload writes have all settled.
+      // Intermediate readbacks must not overwrite the user's label/toggle intent.
+      for (;;) {
+        const pending = Object.entries(useSettingsSaveStatus.getState().channels)
+          .filter(([channel]) => channel.startsWith(`schedule-entry:${entry.id}:`))
+          .flatMap(([, status]) => Object.values(status.pending));
+        if (!pending.length) break;
+        await Promise.all(pending);
+      }
       void refresh();
       return { ok: true };
     } catch (err) {
@@ -849,6 +885,19 @@ function ScheduleEntryRow({
   onRunNow: () => void;
 }) {
   const [label, setLabel] = useState(entry.label);
+  const [displayedEnabled, setDisplayedEnabled] = useState(entry.enabled);
+  useEffect(() => { setDisplayedEnabled(entry.enabled); }, [entry.enabled]);
+  const channels = useSettingsSaveStatus(state => state.channels);
+  const entryPending = Object.entries(channels).some(([channel, status]) => channel.startsWith(`schedule-entry:${entry.id}:`) && Object.keys(status.pending).length > 0);
+  useEffect(() => {
+    if (entryPending) return;
+    reportDraft(`schedule-entry:${entry.id}:label`, `Scheduled scan "${entry.label}" label`, label !== entry.label);
+    reportDraft(`schedule-entry:${entry.id}:enabled`, `Scheduled scan "${entry.label}" enabled`, displayedEnabled !== entry.enabled);
+  }, [entry.id, entry.label, entry.enabled, label, displayedEnabled, entryPending]);
+  useEffect(() => () => {
+    discardDraft(`schedule-entry:${entry.id}:label`);
+    discardDraft(`schedule-entry:${entry.id}:enabled`);
+  }, [entry.id]);
   const [rowError, setRowError] = useState<string>('');
   useEffect(() => { setLabel(entry.label); }, [entry.label]);
 
@@ -934,7 +983,7 @@ function ScheduleEntryRow({
             <option value="fixed_time">Fixed time</option>
             <option value="loop">Loop (cadence + window)</option>
           </select>
-          <Toggle defaultOn={entry.enabled} onChange={(on) => void handleUpdate({ enabled: on })} />
+          <Toggle defaultOn={entry.enabled} onChange={(on) => { setDisplayedEnabled(on); void handleUpdate({ enabled: on }); }} />
           <button type="button" className={styles.btn} onClick={onRunNow}>Run now</button>
           <button type="button" className={styles.btn} onClick={async () => {
             const res = await onDelete();
@@ -1765,7 +1814,7 @@ function NotificationForm() {
 
   async function handleSaveRetention(years: number) {
     try {
-      await saveHistoryRetention({ historyRetentionYears: years });
+      await trackSave('history-retention', 'Trade history retention', () => saveHistoryRetention({ historyRetentionYears: years }));
       setRetentionResult('Saved');
     } catch {
       setRetentionResult('Save failed');
@@ -1788,12 +1837,19 @@ function NotificationForm() {
   const [saveResult, setSaveResult] = useState('');
   const [loaded, setLoaded] = useState(false);
 
+  const notificationValue = JSON.stringify([gmailEnabled, gmailTo, gmailUser, telegramEnabled, telegramChatId]);
+  const [notificationBaseline, setNotificationBaseline] = useState<string | null>(null);
+  const notificationMounted = useSaveDraft('notifications', 'Notifications', JSON.stringify([notificationValue, Boolean(gmailPassword), Boolean(telegramToken)]), notificationBaseline === null ? null : JSON.stringify([notificationBaseline, false, false]));
+
   // Load saved config on mount
   useEffect(() => {
+    let cancelled = false;
     fetch(`${BASE_URL}/settings/notifications`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (cancelled) return;
         if (data) {
+          setNotificationBaseline(JSON.stringify([data.gmail?.enabled ?? false, data.gmail?.to ?? '', data.gmail?.smtp_user ?? '', data.telegram?.enabled ?? false, data.telegram?.chat_id ?? '']));
           setGmailEnabled(data.gmail?.enabled ?? false);
           setGmailTo(data.gmail?.to ?? '');
           setGmailUser(data.gmail?.smtp_user ?? '');
@@ -1802,14 +1858,19 @@ function NotificationForm() {
         }
         setLoaded(true);
       })
-      .catch(() => setLoaded(true));
+      .catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
   }, [BASE_URL]);
 
   async function handleSave() {
+    const submitted = notificationValue;
+    const submittedPassword = gmailPassword;
+    const submittedToken = telegramToken;
     setSaving(true);
     setSaveResult('');
     try {
-      const res = await fetch(`${BASE_URL}/settings/notifications`, {
+      await trackSave('notifications', 'Notifications', async () => {
+        const res = await fetch(`${BASE_URL}/settings/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1826,15 +1887,16 @@ function NotificationForm() {
           },
         }),
       });
-      if (res.ok) {
+        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      });
+      if (notificationMounted.current) {
+        setNotificationBaseline(submitted);
         setSaveResult('Settings saved');
-        setGmailPassword('');   // clear password field after save
-        setTelegramToken('');
-      } else {
-        setSaveResult(`Save failed: ${res.status}`);
+        setGmailPassword(current => current === submittedPassword ? '' : current);   // clear password field after save
+        setTelegramToken(current => current === submittedToken ? '' : current);
       }
     } catch (e: unknown) {
-      setSaveResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
+      setSaveResult(e instanceof Error && e.message.startsWith('Save failed:') ? e.message : `Error: ${e instanceof Error ? e.message : 'unknown'}`);
     } finally {
       setSaving(false);
       setTimeout(() => setSaveResult(''), 3000);
@@ -1992,6 +2054,21 @@ function BrokersForm() {
   const [tastyAccountId,    setTastyAccountId]    = useState(tastytradePaper.accountId);
   const [saving, setSaving] = useState<string | null>(null);
 
+  const [saveFailures, setSaveFailures] = useState<Record<string, boolean>>({});
+  useSaveDraft('broker:ibkr_paper', 'IBKR Paper credentials', JSON.stringify([ibkrUrl, ibkrAcct]), JSON.stringify([ibkrPaper.baseUrl, ibkrPaper.accountId]));
+  useSaveDraft('broker:tradier_paper', 'Tradier Paper credentials', JSON.stringify([tradierTok, tradierAcct]), JSON.stringify([tradierPaper.token, tradierPaper.accountId]));
+  useSaveDraft('broker:tradier_live', 'Tradier Live credentials', JSON.stringify([tradierLiveTok, tradierLiveAcct]), JSON.stringify([tradierLive.token, tradierLive.accountId]));
+  useSaveDraft('broker:alpaca_paper', 'Alpaca Paper credentials', JSON.stringify([alpacaKeyId, alpacaSecret]), JSON.stringify([alpacaPaper.keyId, alpacaPaper.secretKey]));
+  useSaveDraft('broker:tastytrade_paper', 'Tastytrade Paper credentials', JSON.stringify([tastyClientSecret, tastyRefreshToken, tastyAccountId]), JSON.stringify([tastytradePaper.clientSecret, tastytradePaper.refreshToken, tastytradePaper.accountId]));
+
+  async function saveBroker(key: string, channel: string, label: string, run: () => Promise<unknown>) {
+    setSaving(key);
+    setSaveFailures(current => ({ ...current, [key]: false }));
+    try { await trackSave(channel, label, run); }
+    catch { setSaveFailures(current => ({ ...current, [key]: true })); }
+    finally { setSaving(null); }
+  }
+
   // Sync when store resets
   useEffect(() => { setIbkrUrl(ibkrPaper.baseUrl); },         [ibkrPaper.baseUrl]);
   useEffect(() => { setIbkrAcct(ibkrPaper.accountId); },      [ibkrPaper.accountId]);
@@ -2006,42 +2083,41 @@ function BrokersForm() {
   useEffect(() => { setTastyAccountId(tastytradePaper.accountId); },       [tastytradePaper.accountId]);
 
   async function saveIbkrPaper() {
-    setSaving('ibkr');
-    setIbkrPaper({ baseUrl: ibkrUrl, accountId: ibkrAcct });
-    await api.postCredentials('ibkr_paper', { base_url: ibkrUrl, account_id: ibkrAcct });
-    setSaving(null);
+    await saveBroker('ibkr', 'broker:ibkr_paper', 'IBKR Paper credentials', async () => {
+      setIbkrPaper({ baseUrl: ibkrUrl, accountId: ibkrAcct });
+      await api.postCredentials('ibkr_paper', { base_url: ibkrUrl, account_id: ibkrAcct });
+    });
   }
 
   async function saveTradierPaper() {
-    setSaving('tradier');
-    setTradierPaper({ token: tradierTok, accountId: tradierAcct });
-    await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
-    setSaving(null);
+    await saveBroker('tradier', 'broker:tradier_paper', 'Tradier Paper credentials', async () => {
+      setTradierPaper({ token: tradierTok, accountId: tradierAcct });
+      await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
+    });
   }
 
   async function saveTradierLive() {
-    setSaving('tradierLive');
-    setTradierLive({ token: tradierLiveTok, accountId: tradierLiveAcct });
-    await api.postCredentials('tradier_live', { token: tradierLiveTok, account_id: tradierLiveAcct });
-    setSaving(null);
+    await saveBroker('tradierLive', 'broker:tradier_live', 'Tradier Live credentials', async () => {
+      setTradierLive({ token: tradierLiveTok, accountId: tradierLiveAcct });
+      await api.postCredentials('tradier_live', { token: tradierLiveTok, account_id: tradierLiveAcct });
+    });
   }
 
   async function saveAlpacaPaper() {
-    setSaving('alpaca');
-    setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
-    await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
-    setSaving(null);
+    await saveBroker('alpaca', 'broker:alpaca_paper', 'Alpaca Paper credentials', async () => {
+      setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
+      await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
+    });
   }
 
   async function saveTastytradePaper() {
-    setSaving('tastytrade');
-    setTastytradePaper({ clientSecret: tastyClientSecret, refreshToken: tastyRefreshToken, accountId: tastyAccountId });
-    await api.postCredentials('tastytrade_paper', {
-      client_secret: tastyClientSecret, refresh_token: tastyRefreshToken, account_id: tastyAccountId,
+    await saveBroker('tastytrade', 'broker:tastytrade_paper', 'Tastytrade Paper credentials', async () => {
+      setTastytradePaper({ clientSecret: tastyClientSecret, refreshToken: tastyRefreshToken, accountId: tastyAccountId });
+      await api.postCredentials('tastytrade_paper', {
+        client_secret: tastyClientSecret, refresh_token: tastyRefreshToken, account_id: tastyAccountId,
     });
-    setSaving(null);
+    });
   }
-
   return (
     <>
       <SectionIntro
@@ -2072,6 +2148,7 @@ function BrokersForm() {
           >
             {saving === 'ibkr' ? 'Saving…' : 'Save IBKR Paper'}
           </button>
+          {saveFailures.ibkr && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2105,6 +2182,7 @@ function BrokersForm() {
           >
             {saving === 'tradierLive' ? 'Saving…' : 'Save Tradier Live'}
           </button>
+          {saveFailures.tradierLive && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2137,6 +2215,7 @@ function BrokersForm() {
           >
             {saving === 'tradier' ? 'Saving…' : 'Save Tradier Paper'}
           </button>
+          {saveFailures.tradier && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2170,6 +2249,7 @@ function BrokersForm() {
           >
             {saving === 'alpaca' ? 'Saving…' : 'Save Alpaca Paper'}
           </button>
+          {saveFailures.alpaca && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2212,6 +2292,7 @@ function BrokersForm() {
           >
             {saving === 'tastytrade' ? 'Saving…' : 'Save Tastytrade Paper'}
           </button>
+          {saveFailures.tastytrade && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2259,14 +2340,20 @@ function DataForm() {
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState('');
 
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const mounted = useSaveDraft('schedule:ingestion', 'Nightly OHLCV ingestion', JSON.stringify([enabled, time]), baseline);
   useEffect(() => {
+    let cancelled = false;
     getIngestionSchedule()
       .then((s) => {
+        if (cancelled) return;
+        setBaseline(JSON.stringify([s.enabled, s.time]));
         setEnabled(s.enabled);
         setTime(s.time);
         setNextRun(s.next_run);
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   function formatNextRun(iso: string | null): string {
@@ -2285,7 +2372,9 @@ function DataForm() {
     setSaving(true);
     setSaveResult('');
     try {
-      const result = await saveIngestionSchedule({ enabled, time });
+      const result = await trackSave('schedule:ingestion', 'Nightly OHLCV ingestion', () => saveIngestionSchedule({ enabled, time }));
+      if (!mounted.current) return;
+      setBaseline(JSON.stringify([result.enabled, result.time]));
       setNextRun(result.next_run);
       setSaveResult('Saved');
     } catch {
@@ -2377,6 +2466,8 @@ function DataForm() {
 /* ---------- Reusable schedule section ---------- */
 
 function ScheduleSection({
+  channel,
+  saveLabel,
   title,
   blurb,
   manualBlurb,
@@ -2387,6 +2478,8 @@ function ScheduleSection({
   triggerLabel = 'Run now',
   showDaysOfWeek = false,
 }: {
+  channel: string;
+  saveLabel: string;
   title: string;
   blurb: string;
   manualBlurb?: string;
@@ -2409,14 +2502,21 @@ function ScheduleSection({
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState('');
 
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const scheduleValue = JSON.stringify([enabled, time, ...(showDaysOfWeek ? [daysOfWeek] : [])]);
+  const mounted = useSaveDraft(channel, saveLabel, scheduleValue, baseline);
   useEffect(() => {
+    let cancelled = false;
     loadSchedule()
       .then((s) => {
+        if (cancelled) return;
+        setBaseline(JSON.stringify([s.enabled, s.time, ...(showDaysOfWeek ? [(s as IngestionSchedule & { days_of_week?: number[] }).days_of_week ?? [5]] : [])]));
         setEnabled(s.enabled); setTime(s.time); setNextRun(s.next_run);
         const dow = (s as IngestionSchedule & { days_of_week?: number[] }).days_of_week;
         if (Array.isArray(dow)) setDaysOfWeek(dow);
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function formatNextRun(iso: string | null) {
@@ -2432,7 +2532,9 @@ function ScheduleSection({
   async function handleSave() {
     setSaving(true); setSaveResult('');
     try {
-      const r = await saveSchedule(showDaysOfWeek ? { enabled, time, days_of_week: daysOfWeek } : { enabled, time });
+      const r = await trackSave(channel, saveLabel, () => saveSchedule(showDaysOfWeek ? { enabled, time, days_of_week: daysOfWeek } : { enabled, time }));
+      if (!mounted.current) return;
+      setBaseline(JSON.stringify([r.enabled, r.time, ...(showDaysOfWeek ? [(r as IngestionSchedule & { days_of_week?: number[] }).days_of_week ?? daysOfWeek] : [])]));
       setNextRun(r.next_run);
       setSaveResult('Saved');
     } catch { setSaveResult('Save failed'); }
@@ -2493,6 +2595,7 @@ function ScheduleSection({
 function EdgarScheduleSection() {
   return (
     <ScheduleSection
+      channel="schedule:edgar" saveLabel="EDGAR fundamentals"
       title="EDGAR fundamentals"
       blurb="Refreshes SEC fundamental data (revenue, margins, EPS, debt) for the full SP500 + NDX100 + DOW30 universe. Runs after OHLCV so the DB is warm before market open."
       manualBlurb="Fetch fundamentals immediately in the background. Takes several minutes for the full universe — check logs for progress."
@@ -2508,6 +2611,7 @@ function EdgarScheduleSection() {
 function Sp500ScheduleSection() {
   return (
     <ScheduleSection
+      channel="schedule:sp500" saveLabel="S&P 500 liquidity update"
       title="S&P 500 list update"
       blurb="Re-fetches 20-day average dollar volume for every symbol in sp500.csv and updates the liquidity column. Run after market close so the day's data is included."
       manualBlurb="Run the S&P 500 liquidity update immediately. Downloads ~500 symbols from Yahoo Finance — takes 1–3 minutes."
@@ -2855,6 +2959,7 @@ function StrategyTuningForm() {
   return (
     <div>
       <ScheduleSection
+        channel="schedule:tuning" saveLabel="Strategy tuning schedule"
         title="Automatic tuning schedule"
         blurb="Run walk-forward optimization automatically at a fixed time — Saturday-only by default, since this is compute-heavy and doesn't need daily freshness. The job is skipped if a run is already active."
         defaultTime="05:00"
