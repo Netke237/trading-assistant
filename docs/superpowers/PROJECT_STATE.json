@@ -6797,6 +6797,11 @@
       "id": "HISTORY-INCREMENTAL-DECISIONS-2026-10-19",
       "q": "HISTORY-INCREMENTAL-NIGHTLY plan section 8: Q0 Tiingo plan, D1 dividend/split handling, D2 the 72 Tiingo-only symbols, D3 revalidation, D4 nightly reserve, D5 UI.",
       "a": "Kenneth, 2026-10-19 (in chat): 'I accept your proposals for questions 2-5'. Q0: check the Tiingo account page before deploy, stay free if it fits, free-tier defaults as settings. D1: rescale on the event night, then one CONFIRM re-fetch PROVIDER_LAG_DAYS=5 trading days later. D2: one small recent-window Tiingo request per trading night now; a measured follow-up phase to move seam-passing Tiingo-only symbols back to the Alpaca-suffix basis; no provider mixing, no less-than-nightly updates. D3: REVALIDATE_DAYS=90, REVALIDATE_PER_NIGHT=10, budget-gated. D4: nightly reserve 100 requests/day, 25 symbols/month, 100 MB/month. D5: Settings -> Data line (Stage C) built in this phase."
+    },
+    {
+      "id": "HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21",
+      "q": "HISTORY-INCREMENTAL-NIGHTLY Q0: Tiingo is answering 429 (nightly 2026-10-20 took prefixes from yfinance, 76 Tiingo-only symbols incl. SPY not updated). Upgrade to Tiingo Power or stay on the free tier?",
+      "a": "Kenneth, 2026-10-21 (in chat): 'I will stay on the free tier.' The build keeps the free-tier limits (50/h, 1,000/day, 500 distinct symbols/month, 1 GB/month) as the ledger defaults; Stages A and B are needed for the nightly to fit them."
     }
   ],
   "pending_kenneth": [
