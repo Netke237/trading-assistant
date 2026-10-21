@@ -16,6 +16,7 @@ import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
 import { Row, SectionIntro } from './SettingsRow';
+import { useSettingsSaveStatus, trackSave, settleAll, outstanding, retryLocalWrites, isSaving, setDraft as reportDraft, discardDraft, clearDiscarded } from '@/lib/settingsSaveStatus';
 import { IvThresholdsSection } from './IvThresholdsSection';
 import { useRiskStore } from '@/lib/riskStore';
 import { useThemeStore, type Density } from '@/lib/theme';
@@ -198,23 +199,45 @@ function AtrPairRow({
 /* ---------- Save button ---------- */
 
 function SaveButton() {
+  const ledger = useSettingsSaveStatus();
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const items = outstanding();
 
-  function handleSave() {
-    // Already persisted via Zustand — just flash confirmation.
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+  useEffect(() => {
+    if (outstanding().length === 0) setShowWarning(false);
+    if (outstanding().length > 0 || isSaving()) setSaved(false);
+  }, [ledger]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  async function handleSave() {
+    if (timer.current) clearTimeout(timer.current);
+    setSaved(false);
+    setShowWarning(false);
+    setSaving(true);
+    await settleAll();
+    retryLocalWrites();
+    if (outstanding().length === 0) {
+      setSaved(true);
+      timer.current = setTimeout(() => setSaved(false), 1500);
+    } else setShowWarning(true);
+    setSaving(false);
   }
 
   return (
-    <button
-      type="button"
-      className={`${styles.btn} ${styles.btnPrimary}`}
-      onClick={handleSave}
-      disabled={saved}
-    >
-      {saved ? 'Saved' : 'Save changes'}
-    </button>
+    <>
+      {showWarning && items.length > 0 && (
+        <span role="alert"><Text size={11} tone="reject">
+          Not saved: {items.map((item) => `${item.label}: ${item.message}`).join('; ')}
+        </Text></span>
+      )}
+      <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
+        onClick={handleSave} disabled={saving || saved}>
+        {saving ? 'Saving…' : saved ? <span role="status">Saved</span> : 'Save changes'}
+      </button>
+    </>
   );
 }
 
@@ -479,6 +502,17 @@ function OperatorTimezoneSection() {
   const [loadError, setLoadError] = useState('');
   const [isEdited, setIsEdited] = useState(false);
   const isDirty = useRef(false);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const saveStarted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; discardDraft('timezone'); };
+  }, []);
+  useEffect(() => {
+    reportDraft('timezone', 'Operator timezone', baseline === null ? isEdited : tz !== baseline);
+  }, [tz, baseline, isEdited]);
 
   useEffect(() => {
     let cancelled = false;
@@ -488,6 +522,7 @@ function OperatorTimezoneSection() {
           if (!isDirty.current) {
             setTz(r.timezone);
           }
+          if (!saveStarted.current) setBaseline(r.timezone);
           setLoadError('');
         }
       })
@@ -506,6 +541,7 @@ function OperatorTimezoneSection() {
     setIsEdited(false);
     try {
       const r = await api.getSchedulingTimezone();
+      setBaseline(r.timezone);
       if (!isDirty.current) {
         setTz(r.timezone);
       }
@@ -519,10 +555,13 @@ function OperatorTimezoneSection() {
     if (saving || (Boolean(loadError) && !isEdited)) return;
     setSaving(true);
     isDirty.current = true;
+    saveStarted.current = true;
     const submittedTz = tz;
     setSaveResult('');
     try {
-      const res = await api.putSchedulingTimezone(submittedTz);
+      const res = await trackSave('timezone', 'Operator timezone', () => api.putSchedulingTimezone(submittedTz));
+      if (!mounted.current) return;
+      setBaseline(res.timezone);
       setTz((current) => (current === submittedTz ? res.timezone : current));
       setSaveResult('Saved');
       setLoadError('');
@@ -1356,7 +1395,7 @@ function RiskForm() {
     // 99% and the caution below clears after the save.
     const stopPct = Math.min(PREMIUM_STOP_MAX_PCT, localStopPct);
     try {
-      await saveRiskSettings({
+      await trackSave('risk', 'Risk limits', () => saveRiskSettings({
         premiumStopPct:          stopPct,
         portfolioValue:          localLimits.portfolioValue,
         maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
@@ -1369,7 +1408,7 @@ function RiskForm() {
         targetT1Pct: orderedTargetPct.t1,
         targetT2Pct: orderedTargetPct.t2,
         targetT3Pct: orderedTargetPct.t3,
-      });
+      }));
       setPremiumStopPct(stopPct);
       setLocalStopPct(stopPct);
       setTargetProfitPct(orderedTargetPct);
@@ -2509,6 +2548,16 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
   });
 
   const lastSyncedValue = useRef<number | null>(storeValue);
+  useEffect(() => {
+    const valid = draft.trim() === '' || (field === 'pullbackTolerancePct'
+      ? validatePullbackToleranceDraft(draft).valid
+      : field === 'maCrossoverLookback'
+      ? validateMaCrossoverLookbackDraft(draft).valid
+      : validateBreakoutVolumeMultDraft(draft).valid);
+    reportDraft(`strategy:${field}`, label, !valid, 'invalid value not applied');
+  }, [field, label, draft]);
+  useEffect(() => () => discardDraft(`strategy:${field}`), [field]);
+
 
   useEffect(() => {
     if (storeValue !== lastSyncedValue.current) {
@@ -2528,6 +2577,7 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
     if (raw.trim() === '') {
       setError(null);
       setParam(field, null);
+      clearDiscarded(`strategy:${field}`);
       lastSyncedValue.current = null;
       return;
     }
@@ -2545,9 +2595,10 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
       setError(null);
       try {
         setParam(field, res.value);
+        clearDiscarded(`strategy:${field}`);
         lastSyncedValue.current = res.value;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+      } catch {
+        setError('Could not store this value in this browser.');
       }
     }
   }
@@ -2556,6 +2607,7 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
     setDraft('');
     setError(null);
     setParam(field, null);
+    clearDiscarded(`strategy:${field}`);
     lastSyncedValue.current = null;
   }
 
