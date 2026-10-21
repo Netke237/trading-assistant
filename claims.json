@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-regime-race-8d580f0a",
       "claimed_at": "2026-10-21T04:05:35Z",
-      "expires_at": "2026-10-21T07:05:35Z",
+      "expires_at": "2026-10-21T07:08:44Z",
       "note": "Merge PR #442 and record state (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
     },
