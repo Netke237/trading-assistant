@@ -58,7 +58,11 @@
         "pattern": "key: .rr_bullish_invalidation_pct..*scale: 100",
         "note": "Pins scale: 100 on rr_bullish_invalidation_pct in page.tsx."
       },
-      "completion_pct": 100
+      "completion_pct": 85,
+      "size": "M",
+      "complexity": 3,
+      "note": "SELF-MERGE PENDING, PR #457, audited head 9b9033bd. Scale stop percentage units and bounds in Step 3 (#385, #456). Plan round 1 clean, code round 1 clean.",
+      "pull_request": 457
     },
     {
       "id": "APP-AUDIT-B-STOCK-FILTERS",
@@ -9684,4 +9688,4 @@
     },
     "scope": "Remove soft-component verdict badges, preserve composite status and hard blockers, show scores /100 and rule notes, distinguish rank/absolute/missing IV; scoring and persistence unchanged."
   }
-}
+}
