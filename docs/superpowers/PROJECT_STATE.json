@@ -7439,7 +7439,16 @@
           "clean": false,
           "opened_by": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21"
         }
-      ]
+      ],
+      "pending_audit": {
+        "stage": "plan",
+        "stage_number": 2,
+        "stage_round": 3,
+        "continuous_round": 6,
+        "reviewer": "/root/save371_plan_stage2_r3",
+        "reviewed_head": "35f3677b5fd169b6d62017d4862d6ec3d74a81de",
+        "status": "dispatched; no verdict yet; must not silently replay if interrupted"
+      }
     }
   ],
   "already_shipped": [
