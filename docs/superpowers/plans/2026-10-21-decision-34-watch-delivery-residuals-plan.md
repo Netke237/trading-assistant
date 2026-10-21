@@ -38,6 +38,7 @@ Fix to:
         ready.append('gmail')
 ```
 This mirrors `dispatch('gmail', to=gmail.get('to', '') or os.getenv('BAMENDJOU_GMAIL_TO', ''))` in `_send_channels`. When `to` is missing/empty, Gmail is excluded from `ready_channels`, preventing an unconfigured recipient from stalling watch alert queues.
+*(Note for tests: update existing parametrized case in `test_watch_resend_per_channel.py:436` to include recipient).*
 
 ### 2.2 Cross-Watch Delivery Proof (`backend/app/services/strategy_watch_evaluator.py`)
 
@@ -76,7 +77,7 @@ def _apply_cross_watch_proof(run: _Run, channel: str) -> None:
             continue
         w_id = item["watch_id"]
         c = item["channel"]
-        w = strategy_watch_store.get_watch(w_id)
+        w = next((w for w in strategy_watch_store.list_watches() if w.get("id") == w_id), None)
         if not w:
             continue
         committed, queue = _split_state(dict(w.get("last_state") or {}))
@@ -102,8 +103,11 @@ def _apply_cross_watch_proof(run: _Run, channel: str) -> None:
 When a probe entry `e` is sent on channel `c` for eligible head `h`:
 If `res[c]` is True:
 - `e["channel_done"] = {**_done(e), c: "delivered"}`
-- `h["channel_done"] = {**_done(h), c: "dropped"}`
-- `logger.error(_DROP_LOG, ...)`
+- `changed = True`
+- `if c in stuck:`
+  - `h, n = stuck.pop(c)`
+  - `h["channel_done"] = {**_done(h), c: "dropped"}`
+  - `logger.error(_DROP_LOG, w["id"], n, c, _reason(h))`
 - `run.delivered_channels.add(c)`
 - `_apply_cross_watch_proof(run, c)`
 
@@ -114,7 +118,10 @@ If `not res[c]` (the probe failed on `c`):
   - `h["channel_done"] = {**_done(h), c: "dropped"}`
   - `logger.error(_DROP_LOG, w["id"], n, c, _reason(h))`
   - `changed = True`
-  - Record counted failure on `e` for `c` (now the new head).
+  - Record counted failure on `e` for `c` (now the new head):
+    `if _failure_counts(e, c, now):`
+      `e["channel_failures"] = {**_failure_map(e), c: _failures(e, c) + 1}`
+      `e["channel_last_failure_at"] = {**_last_failure_map(e), c: now.isoformat()}`
   - `blocked.add(c)`
   - Log warning indicating head was dropped via cross-watch proof.
 - Else:
@@ -124,17 +131,28 @@ If `not res[c]` (the probe failed on `c`):
   - Log warning that probe was not delivered and queue kept.
 
 #### Inside `_deliver_or_queue`
-For fresh event probes (`c in probes`):
+To avoid overwriting state changes made by `_apply_cross_watch_proof` between `_collect` and `_deliver_or_queue`, `_deliver_or_queue` always re-reads the fresh watch state from `strategy_watch_store`:
+```python
+w = next((w for w in strategy_watch_store.list_watches() if w.get("id") == t.watch_id), None)
+committed, pend = _split_state(dict((w or {}).get("last_state") or {}))
+```
+Then for fresh event probes (`c in probes`):
 - If `res[c]` is True:
   - `h["channel_done"] = {**_done(h), c: "dropped"}`
+  - `logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))`
   - `run.delivered_channels.add(c)`
   - `_apply_cross_watch_proof(run, c)`
 - If `not res[c]`:
   - If `c in run.delivered_channels`:
     - `h["channel_done"] = {**_done(h), c: "dropped"}`
     - `logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))`
+    - Record counted failure on `entry` for channel `c`:
+      `if _failure_counts(entry, c, now):`
+        `entry["channel_failures"] = {**_failure_map(entry), c: _failures(entry, c) + 1}`
+        `entry["channel_last_failure_at"] = {**_last_failure_map(entry), c: now.isoformat()}`
+    - Log warning indicating head was dropped via cross-watch proof.
   - Else:
-    - Add to `run.stuck_probes` in case subsequent transitions deliver on `c`.
+    - Add to `run.stuck_probes` in case subsequent transitions in this run deliver on `c`.
 
 #### Order-Independence
 - If Watch B delivers on `c` before Watch A evaluates: `c in run.delivered_channels` is True when Watch A evaluates, so Watch A drops its stuck head immediately.
