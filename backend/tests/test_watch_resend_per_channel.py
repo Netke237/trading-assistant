@@ -434,16 +434,20 @@ async def test_15b_notify_enabled_channels_keeps_its_any_contract(gmail_ok, tg_o
 @pytest.mark.parametrize("cfg,env,expect", [
     (_CREDS, {}, ["gmail", "telegram"]),
     ({"gmail": {"enabled": True}, "telegram": {"enabled": True}},
-     {"BAMENDJOU_GMAIL_USER": "u", "BAMENDJOU_GMAIL_PASSWORD": "p",
+     {"BAMENDJOU_GMAIL_USER": "u", "BAMENDJOU_GMAIL_PASSWORD": "p", "BAMENDJOU_GMAIL_TO": "t",
       "BAMENDJOU_TELEGRAM_BOT_TOKEN": "t", "BAMENDJOU_TELEGRAM_CHAT_ID": "1"}, ["gmail", "telegram"]),
+    ({"gmail": {"enabled": True}, "telegram": {"enabled": True}},
+     {"BAMENDJOU_GMAIL_USER": "u", "BAMENDJOU_GMAIL_PASSWORD": "p",
+      "BAMENDJOU_TELEGRAM_BOT_TOKEN": "t", "BAMENDJOU_TELEGRAM_CHAT_ID": "1"}, ["telegram"]),  # no to
     ({"telegram": {"enabled": True, "chat_id": "1"}}, {}, []),                 # no token
     ({"telegram": {"enabled": True, "bot_token": "t"}}, {}, []),               # no chat id
-    ({"gmail": {"enabled": True, "smtp_user": "u"}}, {}, []),                  # no password
+    ({"gmail": {"enabled": True, "smtp_user": "u", "to": "t"}}, {}, []),       # no password
+    ({"gmail": {"enabled": True, "smtp_user": "u", "smtp_password": "p"}}, {}, []),  # no to in cfg/env
     ({**_CREDS, "gmail": {**_CREDS["gmail"], "enabled": False}}, {}, ["telegram"]),
     ({"gmail": None, "telegram": _CREDS["telegram"]}, {}, ["telegram"]),       # null block
 ])
 def test_15c_ready_channels(monkeypatch, cfg, env, expect):
-    for name in ("BAMENDJOU_GMAIL_USER", "BAMENDJOU_GMAIL_PASSWORD",
+    for name in ("BAMENDJOU_GMAIL_USER", "BAMENDJOU_GMAIL_PASSWORD", "BAMENDJOU_GMAIL_TO",
                  "BAMENDJOU_TELEGRAM_BOT_TOKEN", "BAMENDJOU_TELEGRAM_CHAT_ID"):
         monkeypatch.delenv(name, raising=False)
     for k, v in env.items():
@@ -464,3 +468,149 @@ async def test_16_the_cap_names_a_partly_delivered_dropped_entry(caplog):
     assert len(store.pending("a")) == cap and _reasons(store)[0] == "RZ-1"
     assert store.committed("a") == _st("0")
     assert "queue full" in caplog.text and "{'gmail': 'delivered'}" in caplog.text
+
+
+
+# ── 17-23: DECISION-34-WATCH-DELIVERY-RESIDUALS ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_17_cross_watch_proof_two_stuck_in_a_row_drops_head_when_other_watch_delivers(caplog):
+    # Watch A has stuck head (failures=2 + spaced -> 3) and probe RZ-P2 which also fails.
+    # Watch B has RZ-B which delivers on gmail.
+    # Order: A evaluated before B.
+    store = _Store([
+        _sw("a", pending=[_e("RZ-head", _st("H"), failures=2, last_failure_at=OLD),
+                          _e("RZ-P2", _st("P2")), _e("RZ-C", _st("C"))]),
+        _sw("b", pending=[_e("RZ-B", _st("B"))]),
+    ])
+    chan = _Chan(gmail={"RZ-head", "RZ-P2"})
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    # Watch B delivered RZ-B on gmail, triggering cross-watch proof for Watch A
+    assert "RZ-B" in chan.to("gmail")
+    assert f"{DROP} a after 3 failed runs on gmail" in caplog.text
+    # RZ-head dropped on gmail; RZ-P2 is new head and has 1 failure
+    assert _reasons(store, "a") == ["RZ-P2", "RZ-C"]
+    assert ev_mod._failures(store.pending("a")[0], "gmail") == 1
+    # Watch B popped its delivered event
+    assert len(store.pending("b")) == 0
+
+
+@pytest.mark.asyncio
+async def test_18_cross_watch_proof_order_independence_watch_b_delivers_before_watch_a(caplog):
+    # Order: B evaluated before A. Watch B delivers first, populating delivered_channels.
+    # When Watch A evaluates, it sees gmail already delivered.
+    store = _Store([
+        _sw("b", pending=[_e("RZ-B", _st("B"))]),
+        _sw("a", pending=[_e("RZ-head", _st("H"), failures=2, last_failure_at=OLD),
+                          _e("RZ-P2", _st("P2")), _e("RZ-C", _st("C"))]),
+    ])
+    chan = _Chan(gmail={"RZ-head", "RZ-P2"})
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    assert "RZ-B" in chan.to("gmail")
+    assert f"{DROP} a after 3 failed runs on gmail" in caplog.text
+    assert _reasons(store, "a") == ["RZ-P2", "RZ-C"]
+    assert ev_mod._failures(store.pending("a")[0], "gmail") == 1
+    assert len(store.pending("b")) == 0
+
+
+@pytest.mark.asyncio
+async def test_19_cross_watch_proof_fresh_event_probe_failure(caplog):
+    # Watch A has lone stuck head (failures=2 + spaced -> 3). Fresh exit_stop fires as probe and fails.
+    # Watch B delivers RZ-B on gmail.
+    store = _Store([
+        _sw("a", pending=[_e("RZ-head", ARMED_101, event_type="entry",
+                             failures=2, last_failure_at=OLD)]),
+        _sw("b", pending=[_e("RZ-B", _st("B"))]),
+    ])
+    chan = _Chan(gmail={"RZ-head", FRESH})
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    assert f"{DROP} a after 3 failed runs on gmail" in caplog.text
+    # RZ-head dropped; fresh exit_stop queued with 1 failure on gmail
+    assert len(store.pending("a")) == 1
+    assert store.pending("a")[0]["event"]["event_type"] == "exit_stop"
+    assert ev_mod._failures(store.pending("a")[0], "gmail") == 1
+
+
+@pytest.mark.asyncio
+async def test_20_outage_no_watch_delivers_drops_nothing(caplog):
+    # Complete outage on gmail (ALL fail). No watch delivers.
+    store = _Store([
+        _sw("a", pending=[_e("RZ-head", _st("H"), failures=2, last_failure_at=OLD),
+                          _e("RZ-P2", _st("P2"))]),
+        _sw("b", pending=[_e("RZ-B", _st("B"))]),
+    ])
+    chan = _Chan(gmail=ALL)
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    # Nothing dropped
+    assert "undeliverable alert dropped" not in caplog.text
+    assert _reasons(store, "a") == ["RZ-head", "RZ-P2"]
+    assert _reasons(store, "b") == ["RZ-B"]
+
+
+@pytest.mark.asyncio
+async def test_21_lone_eligible_head_without_probe_not_dropped(caplog):
+    # Watch A has lone eligible head (no second entry, no fresh event).
+    # Watch B delivers on gmail.
+    store = _Store([
+        _sw("a", pending=[_e("RZ-head", _st("H"), failures=5)]),
+        _sw("b", pending=[_e("RZ-B", _st("B"))]),
+    ])
+    chan = _Chan(gmail={"RZ-head"})
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    # Lone head without a probe attempt is not dropped
+    assert "undeliverable alert dropped" not in caplog.text
+    assert _reasons(store, "a") == ["RZ-head"]
+
+
+@pytest.mark.asyncio
+async def test_22_m25_delivered_probe_clears_stuck_before_subsequent_entry(caplog):
+    # M25 survivor test: queue has head, probe, and third entry.
+    # Probe delivers -> stuck.pop(c) must clear stuck so RZ-P3 is not treated as a probe.
+    store = _Store([
+        _sw("a", pending=[_e("RZ-head", _st("H"), failures=2, last_failure_at=OLD),
+                          _e("RZ-P2", _st("P2")),
+                          _e("RZ-P3", _st("P3"))]),
+    ])
+    chan = _Chan(gmail={"RZ-head"})  # RZ-head fails; RZ-P2 and RZ-P3 deliver
+    env = _PCEnv(store, chan, cfg=GMAIL_ONLY)
+    with caplog.at_level(logging.ERROR, logger=_EV):
+        await env.run()
+    assert f"{DROP} a after 3 failed runs on gmail" in caplog.text
+    assert "RZ-P2" in chan.to("gmail")
+    assert "RZ-P3" in chan.to("gmail")
+    # All entries popped, queue is clean
+    assert len(store.pending("a")) == 0
+    assert store.committed("a") == _st("P3")
+
+
+@pytest.mark.asyncio
+async def test_23_m33_commit_mode_queues_fresh_event_behind_non_empty_queue():
+    # M33 survivor test: commit mode (no channels enabled) with non-empty pending_events.
+    # Fresh transition must be queued behind pending, NOT committed directly.
+    pend = [_e("RZ-head", _st("H"))]
+    store = _Store([_sw("a", pending=pend)])
+    t = ev_mod._Transition(
+        event=ev_mod.WatchEvent(
+            watch_id="a", symbol="AAPL", strategy_key="pullback_ema", event_type="exit_stop",
+            direction="Bullish", entry=100.0, stop=101.0, target=110.0, rr_ratio=None, close=100.0,
+            reason="RZ-fresh",
+        ),
+        watch_id="a", new_state=_st("F"), committed={"phase": "armed"},
+        pending=pend,
+    )
+    with patch(f"{_EV}.strategy_watch_store", store):
+        await ev_mod._deliver_or_queue(t, ev_mod._Run("commit"))
+    # Fresh event queued behind existing entry, not committed
+    assert len(store.pending("a")) == 2
+    assert _reasons(store, "a") == ["RZ-head", "RZ-fresh"]
+    assert store.committed("a") == {"phase": "armed"}

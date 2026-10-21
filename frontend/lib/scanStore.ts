@@ -136,6 +136,11 @@ export interface ScanResult {
    *  2026-10-02. Step 7's recompute-plan sends these, not live scanOverrides
    *  (STEP3-PARAM-REACH) -- see rrOverridesForPlan. */
   rr_overrides?: Record<string, number> | null;
+  /** The Entry Quality overrides (entry_* keys) the scan priced its plans with;
+   *  `{}` when it overrode none. Absent, or null, on results from before
+   *  2026-10-21. Step 7's recompute-plan sends these (APP-AUDIT-B-ENTRY-OVERRIDES)
+   *  -- see entryOverridesForPlan. */
+  entry_overrides?: Record<string, number> | null;
   /** The request fields the result was produced from. Absent, or null, on
    *  results from before 2026-10-02. A result restored into an empty browser
    *  rebuilds its ScanContext from this (contextFromScanRequest). */

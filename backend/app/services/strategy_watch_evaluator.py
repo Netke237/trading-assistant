@@ -897,7 +897,7 @@ def _channel_status() -> tuple[bool, bool]:
     return (True, False) if rc is None else (bool(rc[1]), True)
 
 
-@dataclass(frozen=True)
+@dataclass
 class _Run:
     """One run's delivery context (WATCH-RESEND-PER-CHANNEL), from one config read.
 
@@ -908,6 +908,44 @@ class _Run:
     mode: str
     cfg: dict = field(default_factory=dict)
     channels: tuple[str, ...] = ()
+    delivered_channels: set[str] = field(default_factory=set)
+    stuck_probes: list[dict] = field(default_factory=list)
+    proven_watches: set[str] = field(default_factory=set)
+
+
+def _apply_cross_watch_proof(run: _Run, channel: str) -> None:
+    """When channel `channel` is proven up in this run, resolve any pending stuck
+    probes on that channel across all watches that ran earlier."""
+    if not run.stuck_probes:
+        return
+    remaining = []
+    for item in run.stuck_probes:
+        if item["channel"] != channel:
+            remaining.append(item)
+            continue
+        w_id = item["watch_id"]
+        c = item["channel"]
+        w = next((w for w in strategy_watch_store.list_watches() if w.get("id") == w_id), None)
+        if not w:
+            continue
+        committed, queue = _split_state(dict(w.get("last_state") or {}))
+        h = item["head_entry"]
+        target_h = next((e for e in queue if isinstance(e, dict) and e.get("fired_at") == h.get("fired_at") and _reason(e) == _reason(h)), None)
+        if target_h is not None and c not in _done(target_h):
+            target_h["channel_done"] = {**_done(target_h), c: "dropped"}
+            logger.error(_DROP_LOG, w_id, item["head_failures"], c, _reason(target_h))
+            probe_e = item.get("probe_entry")
+            if probe_e is not None:
+                target_p = next((e for e in queue if isinstance(e, dict) and e.get("fired_at") == probe_e.get("fired_at") and _reason(e) == _reason(probe_e)), None)
+                if target_p is not None:
+                    now = item.get("now") or _utcnow()
+                    if _failure_counts(target_p, c, now):
+                        target_p["channel_failures"] = {**_failure_map(target_p), c: _failures(target_p, c) + 1}
+                        target_p["channel_last_failure_at"] = {**_last_failure_map(target_p), c: now.isoformat()}
+            committed, queue = _pop_complete(committed, queue, run.channels)
+            _write(w_id, {**committed, "pending_events": queue} if queue else committed)
+            run.proven_watches.add(w_id)
+    run.stuck_probes = remaining
 
 
 def _run_context() -> _Run:
@@ -1034,12 +1072,33 @@ async def _resend_watch(w: dict, run: _Run) -> dict[str, int] | None:
                     h, n = stuck.pop(c)
                     h["channel_done"] = {**_done(h), c: "dropped"}
                     logger.error(_DROP_LOG, w["id"], n, c, _reason(h))
+                run.delivered_channels.add(c)
+                _apply_cross_watch_proof(run, c)
             elif c in stuck:
-                # The probe on c failed: an outage (or a second stuck alert); nothing dropped.
-                stuck.pop(c)
-                blocked.add(c)
-                logger.warning("strategy-watch: probe %s for %s not delivered on %s either; queue kept",
-                               ev.event_type, ev.symbol, c)
+                h, n = stuck.pop(c)
+                if c in run.delivered_channels:
+                    # Channel c is already proven up in this run by an earlier watch!
+                    h["channel_done"] = {**_done(h), c: "dropped"}
+                    logger.error(_DROP_LOG, w["id"], n, c, _reason(h))
+                    changed = True
+                    if _failure_counts(e, c, now):
+                        e["channel_failures"] = {**_failure_map(e), c: _failures(e, c) + 1}
+                        e["channel_last_failure_at"] = {**_last_failure_map(e), c: now.isoformat()}
+                    blocked.add(c)
+                    logger.warning("strategy-watch: probe %s for %s not delivered on %s; head dropped via cross-watch proof",
+                                   ev.event_type, ev.symbol, c)
+                else:
+                    run.stuck_probes.append({
+                        "watch_id": w["id"],
+                        "channel": c,
+                        "head_entry": h,
+                        "head_failures": n,
+                        "probe_entry": e,
+                        "now": now,
+                    })
+                    blocked.add(c)
+                    logger.warning("strategy-watch: probe %s for %s not delivered on %s either; queue kept",
+                                   ev.event_type, ev.symbol, c)
             else:
                 # e is the head on c: every earlier entry is delivered or dropped there.
                 if _failure_counts(e, c, now):
@@ -1103,8 +1162,11 @@ async def _deliver_or_queue(t: _Transition, run: _Run,
         return
 
     channels = run.channels
-    # Openness comes from the STORED queue (_collect re-read it after the pass),
-    # never from the pass's return value.
+    # Re-read fresh state from store if _apply_cross_watch_proof updated it this run
+    if t.watch_id in run.proven_watches:
+        w = next((w for w in strategy_watch_store.list_watches() if w.get("id") == t.watch_id), None)
+        if w:
+            t.committed, t.pending = _split_state(dict(w.get("last_state") or {}))
     pend = [dict(e) if isinstance(e, dict) else e for e in t.pending]
     ready = (probe_ready or {}).get(t.watch_id) or {}
     targets: list[str] = []
@@ -1124,11 +1186,33 @@ async def _deliver_or_queue(t: _Transition, run: _Run,
                        ev.strategy_key, ev.event_type, ev.symbol, len(t.pending))
         return
     res = await _send(ev, run, targets)
+    now = _utcnow()
+    entry = _pending_entry(t)
+    for c in targets:
+        if res[c]:
+            run.delivered_channels.add(c)
+            _apply_cross_watch_proof(run, c)
     for c, h in probes.items():
         if res[c]:
             h["channel_done"] = {**_done(h), c: "dropped"}
             logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))
-    entry = _pending_entry(t)
+        elif c in run.delivered_channels:
+            h["channel_done"] = {**_done(h), c: "dropped"}
+            logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))
+            if _failure_counts(entry, c, now):
+                entry["channel_failures"] = {**_failure_map(entry), c: _failures(entry, c) + 1}
+                entry["channel_last_failure_at"] = {**_last_failure_map(entry), c: now.isoformat()}
+            logger.warning("strategy-watch: probe %s for %s not delivered on %s; head dropped via cross-watch proof",
+                           ev.event_type, ev.symbol, c)
+        else:
+            run.stuck_probes.append({
+                "watch_id": t.watch_id,
+                "channel": c,
+                "head_entry": h,
+                "head_failures": ready[c],
+                "probe_entry": entry,
+                "now": now,
+            })
     done = {c: "delivered" for c in targets if res[c]}
     if done:
         entry["channel_done"] = done
