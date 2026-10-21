@@ -65,3 +65,7 @@ def inherited_endpoint_provider_isolation(request, monkeypatch):
 ```
 
 The complete unmodified CI suite remains a required shipping gate. The local qualified result cannot substitute for green CI.
+
+## 2026-10-21 resumed integration
+
+Merged current main `55519e05` at `d86e80d1`; only PROJECT_STATE.json conflicted. The new schedule-store corrupt-file recovery and Stock resolver filter/confidence changes are retained. Typecheck passed; five focused frontend suites passed **84 tests** in 9.762 seconds; cap/schedule/schema/recovery backend suites passed **81 tests** in 7.05 seconds under Python 3.11.16. No new product code was introduced by the reconciliation. Full prior-suite qualification remains unchanged; native exact-head CI is required before merge.
