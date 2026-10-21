@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-MONITORING",
       "name": "Lane G \u2014 verify Watchlist, alerts, Strategy Watch and scheduled automation (#355)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/app-audit-monitoring-7fb31a2c",
       "tracking_issue": 355,
@@ -29,7 +29,7 @@
         "pattern": "APP-AUDIT-MONITORING",
         "note": "Pins the final Monitoring audit report for Lane G (#355)."
       },
-      "completion_pct": 30,
+      "completion_pct": 80,
       "size": "L",
       "complexity": 5,
       "audit_history": [
@@ -112,7 +112,7 @@
           "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/plan-r3.md"
         }
       ],
-      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Plan clean in round 3. Authoring test suites and reconciliation report."
+      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Report and test suites authored. Ready for Code Audit Round 1."
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT",
