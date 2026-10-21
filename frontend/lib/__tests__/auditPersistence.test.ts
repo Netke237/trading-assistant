@@ -26,6 +26,9 @@ import { migrateDrawings } from '@/lib/drawingStore';
 import { migrateRisk } from '@/lib/riskStore';
 import { migrateSettings } from '@/lib/settingsStore';
 import { useScanStore, type ScanContext, type ScanRequestContext } from '@/lib/scanStore';
+import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { useSettingsStore } from '@/lib/settingsStore';
 import { logAudit } from '@/lib/audit';
 import { resultMatchesContext } from '@/lib/scanContextFromResult';
 import type { PortfolioPosition } from '@/types/domain';
@@ -319,5 +322,58 @@ describe('Lane I: Multi-Tab Concurrency and Storage Isolation', () => {
 
     expect(observedStorageChange).toBe(true);
     window.removeEventListener('storage', listener);
+  });
+});
+
+describe('Lane I: Cross-Mode Journey State Preservation', () => {
+  it('preserves store states across Options -> Stocks -> Pre-Breakout mode transitions', () => {
+    const baseContext: ScanContext = {
+      universe: 'SP500',
+      direction: 'Bullish',
+      horizon: 'Swing',
+      horizonPreset: 'Swing',
+      holdMin: 21,
+      holdMax: 45,
+    };
+
+    // 1. Initial mode: Options
+    useScanStore.getState().setScreenerMode('options');
+    useScanStore.getState().setContext(baseContext);
+    expect(useScanStore.getState().screenerMode).toBe('options');
+    expect(useScanStore.getState().context?.direction).toBe('Bullish');
+
+    // Mutate watchlist and settings while in Options
+    useWatchlistStore.getState().addSymbol('AAPL');
+    useSettingsStore.getState().setPremiumStopPct(0.45);
+    expect(useWatchlistStore.getState().isWatched('AAPL')).toBe(true);
+    expect(useSettingsStore.getState().premiumStopPct).toBe(0.45);
+
+    // 2. Switch mode to Stocks
+    useScanStore.getState().setScreenerMode('stocks');
+    expect(useScanStore.getState().screenerMode).toBe('stocks');
+    // Context and cross-store data retained
+    expect(useScanStore.getState().context?.direction).toBe('Bullish');
+    expect(useWatchlistStore.getState().isWatched('AAPL')).toBe(true);
+    expect(useSettingsStore.getState().premiumStopPct).toBe(0.45);
+
+    // Set stock scan params
+    useScanParamsStore.getState().setParam('pullbackTrendEma', 50);
+    expect(useScanParamsStore.getState().pullbackTrendEma).toBe(50);
+
+    // 3. Switch mode to Pre-Breakout
+    useScanStore.getState().setScreenerMode('prebreakout');
+    expect(useScanStore.getState().screenerMode).toBe('prebreakout');
+
+    // Verify all prior cross-store states intact
+    expect(useWatchlistStore.getState().isWatched('AAPL')).toBe(true);
+    expect(useSettingsStore.getState().premiumStopPct).toBe(0.45);
+    expect(useScanParamsStore.getState().pullbackTrendEma).toBe(50);
+    expect(useScanStore.getState().context?.direction).toBe('Bullish');
+
+    // 4. Return to Options mode
+    useScanStore.getState().setScreenerMode('options');
+    expect(useScanStore.getState().screenerMode).toBe('options');
+    expect(useWatchlistStore.getState().isWatched('AAPL')).toBe(true);
+    expect(useSettingsStore.getState().premiumStopPct).toBe(0.45);
   });
 });
