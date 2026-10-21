@@ -7428,7 +7428,7 @@
       "completion_pct": 20,
       "size": "L",
       "complexity": 5,
-      "note": "Plan clean in authorized second stage at continuous6; original3capped/nonclean and interrupted5 preserved. Build T1-T3 next; code-stage0 remains unaudited.",
+      "note": "Plan clean at continuous6 in authorized stage2; T1 built and locally verified (1/3 build units); phase20% until all T1-T3 built. T2 next; code-stage0 unaudited.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -7438,7 +7438,7 @@
           5,
           6
         ],
-        "status": "authorized; first new-stage review pending; original cap/history preserved"
+        "status": "authorized stage2 completed clean at continuous plan round6; original cap/history preserved"
       },
       "plan_stages": [
         {
@@ -7465,14 +7465,17 @@
         {
           "ticket": 480,
           "task": "T1",
-          "status": "in_progress",
+          "status": "built",
           "size": "M",
-          "complexity": 4
+          "complexity": 4,
+          "completion_pct": 70,
+          "commit": "cb27d2ed6fd10e9a3db276d3a29d83ec64a5a325",
+          "evidence": "Behavioral RED27/28; targeted33 tests; TypeScript and full frontend307 suites/5841 tests pass; see build-t1.md"
         },
         {
           "ticket": 481,
           "task": "T2",
-          "status": "blocked_by_480",
+          "status": "ready_after_480_closure",
           "size": "M",
           "complexity": 5
         },
