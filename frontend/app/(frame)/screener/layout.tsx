@@ -16,7 +16,10 @@
  *   └───────────────────────────────────┘
  */
 
+import { useEffect } from 'react';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
+import { isValidUniverse } from '@/lib/universeResolution';
 import { StepNavBar } from '@/components/organisms/StepNavBar';
 import { ScreenerStepGate } from '@/components/organisms/ScreenerStepGate';
 import styles from './screenerLayout.module.css';
@@ -24,6 +27,13 @@ import styles from './screenerLayout.module.css';
 export default function ScreenerLayout({ children }: { children: React.ReactNode }) {
   const mode    = useScanStore((s) => s.screenerMode);
   const setMode = useScanStore((s) => s.setScreenerMode);
+
+  useEffect(() => {
+    const ctxUniverse = useScanStore.getState().context?.universe;
+    if (ctxUniverse && isValidUniverse(ctxUniverse)) {
+      useUniverseStore.getState().setPick(ctxUniverse);
+    }
+  }, []);
   return (
     <div className={styles.wrap}>
       <div className={styles.modeToggle}>

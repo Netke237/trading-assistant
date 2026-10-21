@@ -18,6 +18,8 @@ import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { contextFromScanRequest, resultMatchesContext } from '@/lib/scanContextFromResult';
 import { api } from '@/lib/api';
+import { useUniverseStore } from '@/lib/universeStore';
+import { isValidUniverse } from '@/lib/universeResolution';
 
 // Backend timestamps are real UTC-offset ISO strings (e.g. "...T18:32:10+00:00",
 // from Python's `datetime.now(timezone.utc).isoformat()`). Every scanAt/stockScanAt
@@ -47,6 +49,10 @@ export function StoreHydration() {
 
     (async () => {
       await useScanStore.persist.rehydrate();
+      const ctxUniverse = useScanStore.getState().context?.universe;
+      if (ctxUniverse && isValidUniverse(ctxUniverse)) {
+        useUniverseStore.getState().setPick(ctxUniverse);
+      }
       const { scanResult, stockScanResult, setScanResult, setStockScanResult, setScanState } = useScanStore.getState();
 
       // Both recoveries are fetched FIRST and applied together below: whether

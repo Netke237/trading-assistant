@@ -23,6 +23,7 @@ import { api } from '@/lib/api';
 import { runStockScanWithContinuation, isStockManualScanCurrent, stockScanFailureReason } from '@/lib/stockScan';
 import { presetByKey, resolveParamsHorizon } from '@/lib/horizonPresets';
 import { buildOptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
+import { parseSymbols, resolveUniverseSymbols, isUniverseEmpty, universeEmptyReason } from '@/lib/universeResolution';
 import styles from './index.module.css';
 
 function nowLocalISO(): string {
@@ -31,17 +32,6 @@ function nowLocalISO(): string {
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
     `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
-
-function parseSymbols(raw: string): string[] {
-  return Array.from(
-    new Set(
-      raw
-        .split(/[\s,;\n]+/)
-        .map((s) => s.trim().toUpperCase())
-        .filter((s) => /^[A-Z][A-Z0-9.\-]{0,5}$/.test(s)),
-    ),
   );
 }
 
@@ -63,7 +53,9 @@ export function RunScanButton() {
   const fundamentalsGate = useSettingsStore((s) => s.fundamentalsGate);
   const scanning    = scanState === 'SCANNING';
   const router = useRouter();
-  const customEmpty = pick === 'Custom' && parseSymbols(customRaw).length === 0;
+  const watchlistCount = useWatchlistStore((s) => s.added.length);
+  const activePick = context?.universe ?? pick;
+  const isEmpty = isUniverseEmpty(activePick, customRaw, watchlistCount);
 
   const [showRegimeConfirm, setShowRegimeConfirm] = useState(false);
   const regimeConfirmedRef = useRef(false);
@@ -79,6 +71,17 @@ export function RunScanButton() {
 
     if (screenerMode === 'prebreakout') {
       router.push('/screener/step-4-prebreakout');
+      return;
+    }
+
+    if (isEmpty) {
+      useAlertStore.getState().addToast({
+        kind: 'Critical',
+        symbol: 'SYSTEM',
+        reason: universeEmptyReason(activePick),
+        recId: activePick === 'Watchlist' ? 'WATCHLIST-EMPTY' : 'CUSTOM-UNIVERSE-EMPTY',
+        alertType: 'SCAN_FAILED',
+      });
       return;
     }
 
@@ -135,23 +138,7 @@ export function RunScanButton() {
       return;
     }
 
-    const universe =
-      pick === 'Custom'
-        ? parseSymbols(customRaw)
-        : pick === 'Watchlist'
-        ? useWatchlistStore.getState().added
-        : [pick];
-
-    if (universe.length === 0) {
-      useAlertStore.getState().addToast({
-        kind: 'Critical',
-        symbol: 'SYSTEM',
-        reason: 'Watchlist is empty — add symbols before scanning.',
-        recId: 'WATCHLIST-EMPTY',
-        alertType: 'SCAN_FAILED',
-      });
-      return;
-    }
+    const universe = resolveUniverseSymbols(activePick, customRaw, useWatchlistStore.getState().added);
 
     const direction = context?.direction ?? 'Bullish';
     const presetKey = context?.horizonPreset ?? 'Swing';
@@ -257,8 +244,8 @@ export function RunScanButton() {
         type="button"
         className={styles.fab}
         onClick={onClick}
-        disabled={scanning || (screenerMode !== 'prebreakout' && customEmpty)}
-        title={customEmpty ? 'Enter at least one valid symbol' : undefined}
+        disabled={scanning || (screenerMode !== 'prebreakout' && isEmpty)}
+        title={isEmpty ? universeEmptyReason(activePick) : undefined}
         aria-label={scanning ? 'Scan in progress' : screenerMode === 'stocks' ? 'Run stock scan' : screenerMode === 'prebreakout' ? 'Go to Setup Scanner' : 'Run scan'}
         aria-live="polite"
       >
