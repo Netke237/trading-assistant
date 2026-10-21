@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "board/stocks-custom-universe-80f135ec",
+      "claimed_at": "2026-10-21T10:02:00Z",
+      "expires_at": "2026-10-21T13:02:00Z",
+      "note": "Fix stocks scan resolving stale universe context instead of universeStore (#343)",
+      "task": "STOCKS-CUSTOM-UNIVERSE"
+    }
+  ]
 }
