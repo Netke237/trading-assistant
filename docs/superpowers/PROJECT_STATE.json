@@ -6265,8 +6265,8 @@
       "name": "Incremental nightly, Stage A: persisted Tiingo usage ledger",
       "summary": "provider_request_log table + migration, tiingo_budget ledger enforcing hourly/daily/31-day-symbols/31-day-bytes limits with nightly reserve under one asyncio lock, recorded per HTTP attempt in tiingo.fetch_historical_candles; status endpoint tiingo_usage. Plan section 4 / section 5 Stage A.",
       "status": "built",
-      "audit_rounds": 0,
-      "audit_clean": false,
+      "audit_rounds": 1,
+      "audit_clean": true,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY"
       ],
@@ -6279,8 +6279,29 @@
         "pattern": "__tablename__ = \"provider_request_log\"",
         "note": "PRESENCE ONLY of the ledger table model."
       },
-      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4). Built 2026-10-21: #477 A1 87db4f83, #478 A2 fb0fa49c (both closed after coordinator verification); origin/main merged at 0b5871ef. Code audit pending (#479).",
-      "audit_history": []
+      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4). Built 2026-10-21: #477 A1 87db4f83, #478 A2 fb0fa49c (both closed after coordinator verification); origin/main merged at 0b5871ef. Code audit pending (#479). Code round 1 CLEAN. Coordinator full suite on 3bce685a: 9487 passed, 11 skipped; failures only the Windows baseline (atomic_yaml x3, credential-permission x3, tzset error, Tradier saturation timing tests -- also failing on origin/main) and the live-quote-flaky test_p6_request_validation (also failing on origin/main).",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent a209854f3a4389b0a (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 3cd38f00 3bce685a -- backend (14 files: tiingo_budget, provider_usage model, migration e5c1a7d3b902, env.py, tiingo.py, data_sources, ingestion router/scheduler/job, settings example, tests) against plan sections 4-5 and tickets #477/#478",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "zero verified: BudgetRefused traced through every frame (send_recorded -> lock -> request -> Governor.call -> conversion in fetch_historical_candles; probe catch); every fetch_historical_candles caller's fallback; lock/session/history_lock interplay; migration single head and up/down; probe thread model; status query reuse; 123 focused tests run in a separate checkout",
+          "below_gate_logged": [
+            "ledger lock held across the HTTP send (latency only)",
+            "_get_lock loop swap not thread-atomic (latent, no cross-loop Tiingo caller)",
+            "symbol String(16) overflow fails open (accounting)",
+            "SQLite dev mode/conftest lack the ledger table (fail-open + error log)",
+            "cancelled send after dispatch not recorded (under-count)",
+            "ensure_room vs send_recorded TOCTOU (refusal counts only)",
+            "nightly context inherited by tasks created inside the ingestion task (refusals only)"
+          ]
+        }
+      ]
     },
     {
       "id": "APP-AUDIT-INVENTORY",
