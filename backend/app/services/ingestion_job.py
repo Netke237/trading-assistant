@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
+from app.data import universe_exclusions
 from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
 from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
@@ -141,17 +142,34 @@ def _record_rebuild_refused(sym: str, exc: SingleProviderRefused) -> None:
     _state["rebuild_errors"][sym] = str(exc)
 
 
+def _without_scan_exclusions(symbols: list[str]) -> list[str]:
+    """Drop `scope: scan` exclusions; fail open (unfiltered) if the list cannot be loaded."""
+    try:
+        kept, excluded = universe_exclusions.filter_symbols(symbols, purpose="scan")
+    except Exception as exc:
+        logger.warning("ingestion: exclusion list unavailable, ingesting the full universe — %s", exc)
+        return symbols
+    logger.info(
+        "ingestion: skipping %d excluded symbols (scope: scan): %s",
+        len(excluded), ", ".join(e.symbol for e in excluded),
+    )
+    return kept
+
+
 def ingestion_universe() -> list[str]:
     """Nightly and startup universe: the staleness reference, then SP500+NDX100+DOW30.
 
     The reference goes first so the Tiingo symbol budget is not spent before it.
+    `scope: scan` exclusions (ended price feeds) are skipped; the reference never is.
+    A manual ingest request does not go through here and is never filtered.
     """
     try:
         from app.data.universe_presets import expand_universe
         presets = expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
     except Exception:
         presets = []
-    return list(dict.fromkeys([STALENESS_REFERENCE, *presets]))
+    rest = [s for s in dict.fromkeys(presets) if s != STALENESS_REFERENCE]
+    return [STALENESS_REFERENCE, *_without_scan_exclusions(rest)]
 
 
 async def startup_catch_up() -> bool:
