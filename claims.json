@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-b-profile-validation-4d1ce7e6",
-      "claimed_at": "2026-10-21T07:37:48Z",
-      "expires_at": "2026-10-21T10:37:48Z",
-      "note": "Malformed current-version profile crashes Search Profile controls (#381)",
-      "task": "APP-AUDIT-B-PROFILE-VALIDATION"
-    }
-  ]
+  "claims": []
 }
