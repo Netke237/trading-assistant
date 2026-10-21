@@ -7299,7 +7299,7 @@
     {
       "id": "APP-AUDIT-B-SAVE-FEEDBACK",
       "name": "Settings footer confirms Saved after a failed or unsubmitted save (#371)",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 6,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-save-feedback-plan.md",
@@ -7422,13 +7422,13 @@
       "verify": {
         "kind": "present",
         "path": "frontend/app/(frame)/settings/page.tsx",
-        "pattern": "__UNBUILT_APP_AUDIT_B_SAVE_FEEDBACK__",
-        "note": "Placeholder until the whole T1-T3 phase is built, not merely the T1 helper. Coordinator replaces with actual final production presence probe after all build units close."
+        "pattern": "function useSaveDraft\\(",
+        "note": "Presence of final T3 draft integration helper; existence only, not a behavioral/audit/merge claim."
       },
-      "completion_pct": 20,
+      "completion_pct": 70,
       "size": "L",
       "complexity": 5,
-      "note": "Plan independently clean in authorized stage2 at continuous6; T1/T2 built and locally verified (2/3 build units). T3 in progress with fresh /root/save371_t3. Phase20% until all built. Code-stage0 unaudited.",
+      "note": "All3 build units implemented and required local checks pass. Plan clean in authorized stage2 at continuous6, original history retained. Integrate latest main and validate, then fresh independent code-stage round1. Code audit not yet started; not ready to merge.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -7485,10 +7485,13 @@
         {
           "ticket": 482,
           "task": "T3",
-          "status": "in_progress",
+          "status": "built",
           "size": "M",
           "complexity": 5,
-          "implementer": "/root/save371_t3"
+          "implementer": "/root/save371_t3",
+          "completion_pct": 70,
+          "commit": "c6863ddd7e8d6a7a9d2c4f625bc9f4c7000f9189",
+          "evidence": "Genuine channel/broker/schedule/unknown-baseline RED;64 focused tests; TypeScript and full frontend309 suites/5905 tests pass with4GB Node heap; build-t3.md"
         }
       ]
     }
