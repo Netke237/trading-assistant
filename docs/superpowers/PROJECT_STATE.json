@@ -11,7 +11,7 @@
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
       "name": "Options score-weight percent overrides are applied as raw multipliers (#382)",
       "status": "planned",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-weight-units-plan.md",
       "branch": "board/app-audit-b-weight-units-03d94520",
@@ -20,10 +20,10 @@
         "remediation from #350 (finding C4)"
       ],
       "plan_stage": {
-        "rounds": 2,
-        "clean": false,
-        "closed_by": "",
-        "closure_evidence": ""
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan Round 3 audited clean with 0 gate findings by subagent ae3ebafc-3ea4-4a06-a080-e10dd5ed2478"
       },
       "code_stage": {
         "rounds": 0,
@@ -47,6 +47,14 @@
           "clean": false,
           "findings_count": 3,
           "notes": "Plan Round 2: 3 gate findings (F2-1 frontend 1% normalization yielding 1.0, F2-2 legacy schedule store migration omitting v=1, F2-3 test plan conflating frontend UI percentage and backend fraction compatibility). Addressed in revised plan."
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewer": "subagent ae3ebafc-3ea4-4a06-a080-e10dd5ed2478",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Plan Round 3: 0 gate findings. Frontend resolver normalization, legacy schedule migration with backup, and test plan disentanglement verified clean."
         }
       ],
       "tickets": [],
@@ -56,10 +64,10 @@
         "pattern": "_normalize_weight",
         "note": "Pins weight_trend handling in backend/app/scoring/stock_scorer.py."
       },
-      "completion_pct": 25,
+      "completion_pct": 30,
       "size": "L",
       "complexity": 4,
-      "note": "Plan Round 2 audited (3 findings addressed in revised plan). Ready for Plan Audit Round 3."
+      "note": "Plan Round 3 clean (0 gate findings). Plan stage closed clean. Ready for build ticket and implementation."
     },
     {
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
