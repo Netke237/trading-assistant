@@ -161,3 +161,25 @@ describe('resolveProfileToScanRequest — hold (stocks mode, STOCKS-HORIZON-P0B 
     expect(req.hold_max_days).toBe(185);
   });
 });
+
+// #368: literal USD expectations, independent of the conversion implementation.
+describe('Options cap units in saved profiles', () => {
+  it.each([
+    ['M', '25', 25_000_000], ['B', '2', 2_000_000_000],
+    ['M', '0.5', 500_000], ['B', '0.25', 250_000_000],
+    ['M', '0', 0], ['B', '0', 0],
+    ['M', '', undefined], ['B', '', undefined],
+    ['M', 'NaN', undefined], ['B', 'Infinity', undefined],
+  ] as const)('%s %s resolves both bounds to %s USD', (capUnit, raw, usd) => {
+    const profile = baseProfile();
+    profile.universe = { ...profile.universe, capUnit, minCapRaw: raw, maxCapRaw: raw };
+    const req = resolveProfileToScanRequest(profile);
+    expect((req as import('@/lib/resolveOptionsScanRequest').OptionsScanRequestBody).min_cap_usd).toBe(usd);
+    expect((req as import('@/lib/resolveOptionsScanRequest').OptionsScanRequestBody).max_cap_usd).toBe(usd);
+    expect(req).toMatchObject({ cap_filter_units_version: 1 });
+    if (usd === undefined) {
+      expect(req).not.toHaveProperty('min_cap_usd');
+      expect(req).not.toHaveProperty('max_cap_usd');
+    }
+  });
+});
