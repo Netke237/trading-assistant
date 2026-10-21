@@ -387,19 +387,23 @@ async def test_ingest_status_includes_single_provider_symbols(app):
     singles = {"SPY": {"provider": "tiingo", "rebuilt_at": "2026-10-13T12:00:00+00:00",
                        "floor_date": "2025-10-13"}}
     with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
-         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value=singles)):
+         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value=singles)), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(return_value={})):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/api/data/ingest/status")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "idle", "single_provider_symbols": singles}
+    assert resp.json() == {"status": "idle", "single_provider_symbols": singles,
+                           "tiingo_usage": {}, "tiingo_usage_error": None}
 
 
 @pytest.mark.asyncio
 async def test_ingest_status_survives_single_provider_query_error(app):
     with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
          patch("app.routers.ingestion.single_provider_symbols",
-               AsyncMock(side_effect=RuntimeError("db down"))):
+               AsyncMock(side_effect=RuntimeError("db down"))), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(return_value={})):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/api/data/ingest/status")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "idle", "single_provider_symbols": {}}
+    assert resp.json() == {"status": "idle", "single_provider_symbols": {},
+                           "tiingo_usage": {}, "tiingo_usage_error": None}

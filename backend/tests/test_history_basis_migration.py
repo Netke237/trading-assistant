@@ -11,6 +11,23 @@ MAIN_HEAD = "c29a451f911c"
 MERGE_HEAD = "35c19d72ef80"
 
 
+def _single_head_above_merge():
+    """The one alembic head, asserted to descend from MERGE_HEAD.
+
+    Later migrations stack on top of the merge, so the head itself is not pinned."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    backend = Path(__file__).resolve().parents[1]
+    config = Config(str(backend / "migrations" / "alembic.ini"))
+    config.set_main_option("script_location", str(backend / "migrations"))
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1, heads
+    ancestors = {rev.revision for rev in script.iterate_revisions(heads[0], "base")}
+    assert MERGE_HEAD in ancestors
+    return heads[0]
+
+
 def _alembic_runner(path):
     env = {**os.environ, "DATABASE_URL": f"sqlite+aiosqlite:///{path.as_posix()}"}
     cwd = Path(__file__).resolve().parents[1]
@@ -71,11 +88,12 @@ def test_basis_columns_upgrade_and_downgrade_preserve_state_row(tmp_path):
 
 
 def test_alembic_has_single_head_above_the_basis_revision(tmp_path):
-    """Main's head and the basis revision forked. One empty merge joins them."""
+    """Main's head and the basis revision forked. One empty merge joins them,
+    and every later revision stacks on that merge (one head, above it)."""
     alembic = _alembic_runner(tmp_path / "heads.db")
     out = alembic("heads").stdout
     heads = [line.split()[0] for line in out.splitlines() if line.strip()]
-    assert heads == [MERGE_HEAD]
+    assert heads == [_single_head_above_merge()]
     shown = alembic("show", MERGE_HEAD).stdout
     assert NEW_REVISION in shown
     assert MAIN_HEAD in shown
@@ -90,7 +108,8 @@ def test_upgrade_from_main_head_adds_basis_columns(tmp_path):
     alembic("stamp", MAIN_HEAD)
     alembic("upgrade", "head")
     with sqlite3.connect(path) as db:
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == MERGE_HEAD
+        assert (db.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+                == _single_head_above_merge())
         columns = [row[1] for row in db.execute("PRAGMA table_info(ohlcv_history_state)")]
         assert {"basis_provider", "basis_rebuilt_at"} <= set(columns)
         row = db.execute(

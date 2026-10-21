@@ -23,9 +23,13 @@ def _get() -> AsyncIOScheduler:
 
 async def _run_nightly() -> None:
     logger.info("ingestion_scheduler: nightly run starting")
+    from app.data.tiingo_budget import caller
     from app.services.ingestion_job import ingestion_universe, start_ingestion_task
     from app.services.history_retention import history_years
-    start_ingestion_task(ingestion_universe(), years=history_years())
+    # The task copies this context: its Tiingo requests count as "nightly"
+    # and stop at the nightly share of the budget.
+    with caller("nightly"):
+        start_ingestion_task(ingestion_universe(), years=history_years())
     # Piggyback the audit.log rotation/pruning and the scheduled-scan-run
     # retention sweep onto this same nightly tick — neither needs its own
     # cron slot (Part 0/Part 3's resolved decision: a few hundred audit
@@ -39,7 +43,8 @@ async def _run_nightly() -> None:
 
 async def _run_nightly_maintenance() -> None:
     """Audit-log rotation/pruning (Part 2) + scheduled-scan-run retention
-    (Part 3), both driven by the same settings.yaml-backed retention knobs."""
+    (Part 3), both driven by the same settings.yaml-backed retention knobs,
+    + the 40-day Tiingo usage-ledger prune."""
     import asyncio
     from app.services.audit import rotate_audit_log, prune_audit_log_archives
     from app.services.scheduling_tz import _load_settings as _load_scheduling_settings
@@ -57,6 +62,12 @@ async def _run_nightly_maintenance() -> None:
             await prune_scheduled_scan_runs(db, scheduled_scan_run_retention_days)
     except Exception as exc:
         logger.error("ingestion_scheduler: scheduled-scan-run pruning failed — %s", exc)
+
+    try:
+        from app.data import tiingo_budget
+        await tiingo_budget.prune_usage()
+    except Exception as exc:
+        logger.error("ingestion_scheduler: provider usage pruning failed — %s", exc)
 
 
 def configure(enabled: bool, time_str: str) -> None:

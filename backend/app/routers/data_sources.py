@@ -3,11 +3,13 @@ call and return reliable availability. Results cached briefly; the Governor's
 live circuit state can override a probe to 'degraded'."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from typing import Literal
 
+import anyio
 import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -110,20 +112,33 @@ def _probe_alpaca(slot: str) -> tuple[str, str | None]:
 
 
 def _probe_tiingo() -> tuple[str, str | None]:
+    """Runs in the route's worker thread; the usage ledger (caller "probe")
+    runs on the event loop. An exhausted Tiingo limit reports degraded with
+    that limit in the detail; a refused probe sends nothing."""
+    from app.data import tiingo_budget
     token = os.environ.get("TIINGO_API_TOKEN", "").strip()
     if not token:
         return "unconfigured", "TIINGO_API_TOKEN not set in .env"
-    try:
-        resp = httpx.get(
+
+    async def send():
+        return await asyncio.to_thread(
+            httpx.get,
             "https://api.tiingo.com/api/test/",
             headers={"Authorization": f"Token {token}", "Content-Type": "application/json"},
             timeout=_PROBE_TIMEOUT,
         )
-        if resp.status_code == 200:
-            return "connected", None
-        return "down", f"Tiingo returned HTTP {resp.status_code}"
+
+    try:
+        resp, exhausted = anyio.from_thread.run(tiingo_budget.probe, send)
     except Exception as exc:
         return "down", str(exc)
+    if resp is None:
+        return "degraded", exhausted
+    if resp.status_code != 200:
+        return "down", f"Tiingo returned HTTP {resp.status_code}"
+    if exhausted:
+        return "degraded", exhausted
+    return "connected", None
 
 
 def _probe_ibkr_gateway(port: int) -> tuple[str, str | None]:
