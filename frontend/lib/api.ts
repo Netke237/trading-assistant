@@ -509,6 +509,9 @@ export const api = {
     target_source?: TradeCardData['exit']['targetSource'];
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
+    entry_spread_tolerance_pct?: number;
+    entry_max_slippage_pct?: number;
+    entry_min_premium?: number;
     /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
      *  same meaning and the same "omitted means Swing" default as
      *  getFirstPassageEstimate's — a Step-6 contract override must not reprice

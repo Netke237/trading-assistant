@@ -30,6 +30,8 @@ from app.services.config_loader import load_reward_risk_cfg as _rr_cfg
 from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
 from app.services.config_loader import effective_rr_overrides
+from app.services.config_loader import effective_entry_overrides, resolve_entry_config
+from app.scoring.entry_quality import EntryConfig
 from app.services.config_loader import load_scoring_cfg as _load_scoring_cfg
 from app.services.config_loader import load_direction_conviction_min_trend
 
@@ -607,6 +609,7 @@ async def _process_symbol(
     # read; set_cached drops a confidence computed from bars read before this
     # symbol's last invalidation (audit R2-F1). None = unconditional write.
     bars_generation: int | None = None,
+    entry_cfg: EntryConfig | None = None,
 ) -> TradeCardData | RejectedCandidate:
     """Process one symbol: fetch data, score stock, validate contracts, build trade card.
 
@@ -1191,6 +1194,10 @@ async def _process_symbol(
         _t1_price = price + (1 if direction == "Bullish" else -1) * _r_multiple * abs(price - _stock_stop_price)
         _t1_source = "flat_fallback"
 
+    _entry_cfg = entry_cfg if entry_cfg is not None else (
+        resolve_entry_config(overrides) if overrides else None
+    )
+
     _plan = build_trade_plan(
         direction=direction,
         stock_price=price,
@@ -1209,6 +1216,7 @@ async def _process_symbol(
         target_price=_t1_price,
         target_source=_t1_source,
         stop_cost_fraction=_stop_cost_fraction,
+        entry_cfg=_entry_cfg,
     )
     entry = _plan.entry
     target_price = _plan.target_price
@@ -1731,6 +1739,7 @@ async def _execute_scan_core(
     try:
         _merge_rr_cfg(req.overrides)
         resolve_target_r_multiple(req.overrides)
+        _entry_config = resolve_entry_config(req.overrides)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -1933,6 +1942,12 @@ async def _execute_scan_core(
     except Exception as exc:
         _log.warning("SCAN %s rr_overrides unavailable: %s", scan_id, exc)
 
+    _entry_overrides = None
+    try:
+        _entry_overrides = effective_entry_overrides(req.overrides)
+    except Exception as exc:
+        _log.warning("SCAN %s entry_overrides unavailable: %s", scan_id, exc)
+
     # The request fields Steps 5-7 read back as their scan context, echoed so a
     # result restored into an empty browser does not default to Bullish/Swing.
     _request_context = None
@@ -1993,6 +2008,7 @@ async def _execute_scan_core(
                 rs_benchmark=_rs_bench,
                 rs_misaligned=_rs_misaligned,
                 bars_generation=_bars_generation,
+                entry_cfg=_entry_config,
             )
             for symbol in symbols
         ]
@@ -2247,6 +2263,7 @@ async def _execute_scan_core(
         event_window=_event_win,
         contract_rules=_contract_rules,
         rr_overrides=_rr_overrides,
+        entry_overrides=_entry_overrides,
         request_context=_request_context,
         noLiveQuoteNames=_no_live_quote_names,
     )

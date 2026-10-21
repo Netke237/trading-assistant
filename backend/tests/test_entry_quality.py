@@ -193,3 +193,102 @@ def test_recompute_plan_forwards_quote_live_to_assess_entry():
         (False, "CAUTION", [_NLQ_REASON]),
         (True, "PASS", []),
     ]
+
+# ── APP-AUDIT-B-ENTRY-OVERRIDES: resolve_entry_config & overrides ────────────
+
+def test_resolve_entry_config_defaults():
+    from app.services.config_loader import resolve_entry_config
+    cfg_empty = resolve_entry_config({})
+    cfg_none = resolve_entry_config(None)
+    assert cfg_empty.spread_tolerance_pct == 0.10
+    assert cfg_empty.max_slippage_pct == 0.03
+    assert cfg_empty.min_premium == 0.10
+    assert cfg_none == cfg_empty
+
+
+def test_resolve_entry_config_custom_values():
+    from app.services.config_loader import resolve_entry_config
+    overrides = {
+        "entry_spread_tolerance_pct": 0.20,
+        "entry_max_slippage_pct": 0.05,
+        "entry_min_premium": 2.50,
+    }
+    cfg = resolve_entry_config(overrides)
+    assert cfg.spread_tolerance_pct == 0.20
+    assert cfg.max_slippage_pct == 0.05
+    assert cfg.min_premium == 2.50
+
+    # Also supports direct config keys for direct callers
+    direct = {
+        "spread_tolerance_pct": 0.15,
+        "max_slippage_pct": 0.02,
+        "min_premium": 1.0,
+    }
+    cfg_direct = resolve_entry_config(direct)
+    assert cfg_direct.spread_tolerance_pct == 0.15
+    assert cfg_direct.max_slippage_pct == 0.02
+    assert cfg_direct.min_premium == 1.0
+
+
+def test_resolve_entry_config_zero_values_preserved():
+    from app.services.config_loader import resolve_entry_config
+    # Explicit zero overrides (0% slippage, 0 spread tolerance, 0 min premium)
+    overrides = {
+        "entry_spread_tolerance_pct": 0,
+        "entry_max_slippage_pct": 0.0,
+        "entry_min_premium": 0,
+    }
+    cfg = resolve_entry_config(overrides)
+    assert cfg.spread_tolerance_pct == 0.0
+    assert cfg.max_slippage_pct == 0.0
+    assert cfg.min_premium == 0.0
+
+
+def test_resolve_entry_config_validation_errors():
+    import pytest
+    from app.services.config_loader import resolve_entry_config
+
+    with pytest.raises(ValueError, match=r"finite number in \[0, 1.0\]"):
+        resolve_entry_config({"entry_spread_tolerance_pct": -0.05})
+
+    with pytest.raises(ValueError, match=r"finite number in \[0, 1.0\]"):
+        resolve_entry_config({"entry_spread_tolerance_pct": 1.05})
+
+    with pytest.raises(ValueError, match=r"finite number in \[0, 1.0\]"):
+        resolve_entry_config({"entry_max_slippage_pct": -0.01})
+
+    with pytest.raises(ValueError, match=r"finite number in \[0, 100.0\]"):
+        resolve_entry_config({"entry_min_premium": -1.0})
+
+    with pytest.raises(ValueError, match=r"finite number in \[0, 100.0\]"):
+        resolve_entry_config({"entry_min_premium": 105.0})
+
+    with pytest.raises(ValueError, match="finite number"):
+        resolve_entry_config({"entry_spread_tolerance_pct": float("nan")})
+
+    with pytest.raises(ValueError, match="finite number"):
+        resolve_entry_config({"entry_max_slippage_pct": float("inf")})
+
+    with pytest.raises(ValueError, match="finite number"):
+        resolve_entry_config({"entry_min_premium": "not_a_number"})
+
+
+def test_effective_entry_overrides():
+    from app.services.config_loader import effective_entry_overrides
+    assert effective_entry_overrides(None) == {}
+    assert effective_entry_overrides({}) == {}
+    assert effective_entry_overrides({"unrelated": 123}) == {}
+
+    overrides = {
+        "entry_spread_tolerance_pct": 0.15,
+        "entry_max_slippage_pct": 0,
+        "entry_min_premium": 5.0,
+        "rr_target_r_multiple": 2.0,
+    }
+    effective = effective_entry_overrides(overrides)
+    assert effective == {
+        "entry_spread_tolerance_pct": 0.15,
+        "entry_max_slippage_pct": 0.0,
+        "entry_min_premium": 5.0,
+    }
+
