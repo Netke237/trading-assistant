@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-RAIL-DESTINATION-PARITY",
       "name": "Calendar and Settings retain the previous context rail (#395)",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-rail-destination-parity-plan.md",
@@ -39,17 +39,19 @@
           "notes": "Plan Round 1: 0 gate findings. Verified route slot coverage across all fallback destinations, Next.js parallel route resolution semantics, and presence probe alignment."
         }
       ],
-      "tickets": [],
+      "tickets": [
+        "#464"
+      ],
       "verify": {
         "kind": "present",
         "path": "frontend/app/(frame)/@contextRail/calendar/default.tsx",
         "pattern": "CalendarDefaultRail",
         "note": "Pins CalendarDefaultRail in frontend/app/(frame)/@contextRail/calendar/default.tsx."
       },
-      "completion_pct": 20,
+      "completion_pct": 60,
       "size": "M",
       "complexity": 3,
-      "note": "Plan round 1 clean (0 gate findings by independent subagent 1d2ca41c-1ab0-4c5d-8e87-238aa1cd6a09). Implementation ready."
+      "note": "Code built and verified with 18 regression tests. Ready for code audit."
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
