@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-BROKER-PORTFOLIO",
       "name": "Lane F \u2014 Broker payloads, risk gates and Portfolio reconciliation (#354)",
-      "status": "in_progress",
+      "status": "built",
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
       "branch": "board/app-audit-broker-portfolio-c4b17ff3",
       "tracking_issue": 354,
@@ -108,23 +108,23 @@
       "tickets": {
         "T1": {
           "issue": 487,
-          "status": "ready"
+          "status": "closed"
         },
         "T2": {
           "issue": 488,
-          "status": "blocked"
+          "status": "closed"
         },
         "T3": {
           "issue": 489,
-          "status": "blocked"
+          "status": "closed"
         },
         "T4": {
           "issue": 490,
-          "status": "blocked"
+          "status": "closed"
         },
         "T5": {
           "issue": 491,
-          "status": "blocked"
+          "status": "closed"
         }
       },
       "verify": {
@@ -133,10 +133,10 @@
         "pattern": "APP-AUDIT-BROKER-PORTFOLIO reconciliation report",
         "note": "Pins the reconciliation report for Broker & Portfolio audit (#354)."
       },
-      "completion_pct": 30,
+      "completion_pct": 80,
       "size": "L",
       "complexity": 5,
-      "note": "Lane F audit plan stage clean after 3 rounds. Building verification harnesses and tickets."
+      "note": "Lane F broker & portfolio reconciliation report and verification suites published (20 backend, 12 frontend passed). Sub-issues #487-#491 closed. Ready for code stage adversarial audit."
     },
     {
       "id": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
