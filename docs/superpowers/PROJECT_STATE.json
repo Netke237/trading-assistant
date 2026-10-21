@@ -11,8 +11,8 @@
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
       "name": "Stop percentages display fractions and clamp typed 3 percent to 100 percent (#385)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-stop-percent-units-plan.md",
       "branch": "board/stop-percent-units-55519e05",
       "covers": [
@@ -26,8 +26,10 @@
         "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/plan-r1.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/code-r1.md"
       },
       "audit_history": [
         {
@@ -35,6 +37,14 @@
           "round": 1,
           "auditor": "subagent:0d2f7c8c-06d3-4cf7-87da-cf8f3fcbdc0e",
           "report": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/plan-r1.md",
+          "findings": 0,
+          "clean": true
+        },
+        {
+          "stage": "code",
+          "round": 1,
+          "auditor": "subagent:e1fa7f94-2583-44e3-a01a-392152991d04",
+          "report": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/code-r1.md",
           "findings": 0,
           "clean": true
         }
