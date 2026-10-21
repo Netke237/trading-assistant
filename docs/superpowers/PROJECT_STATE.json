@@ -6104,8 +6104,9 @@
       "plan_stage": {
         "rounds": 3,
         "clean": false,
-        "closed_by": "cap",
-        "closure_evidence": "Plan round 3 (ada9d0942d4ddfcaa) reported 1 gate finding (R3-F1); cap of three plan rounds reached without a clean round. Fix written into the plan, unaudited. Needs Kenneth to open a new plan stage."
+        "closed_by": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
+        "closure_evidence": "Plan round 3 (ada9d0942d4ddfcaa) reported 1 gate finding (R3-F1); cap of three plan rounds reached without a clean round. Fix written into the plan, unaudited. Needs Kenneth to open a new plan stage. Owner subsequently approved a second stage in issuecomment6307656780; this closes only the original interval at3 and does not certify a clean plan or authorize code.",
+        "original_closure": "cap, three nonclean rounds"
       },
       "code_stage": {
         "rounds": 0,
