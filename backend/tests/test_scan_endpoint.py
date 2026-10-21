@@ -404,6 +404,57 @@ def test_scan_rr_override_leaves_default_scan_unchanged(client):
     assert round(candidates[0]["exit"]["target"], 2) == round(185 + 2 * abs(185 - candidates[0]["exit"]["invalidation"]), 2)
 
 
+def test_scan_entry_negative_spread_override_fails_fast_422(client):
+    """APP-AUDIT-B-ENTRY-OVERRIDES: A malformed entry override must fail fast with 422
+    upfront before worker tasks dispatch."""
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."), _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"entry_spread_tolerance_pct": -0.05},
+        })
+    assert r.status_code == 422, r.text
+    assert "entry_spread_tolerance_pct" in r.json()["detail"]
+
+
+def test_scan_entry_overrides_recorded_and_applied(client):
+    """APP-AUDIT-B-ENTRY-OVERRIDES: Entry Quality overrides are recorded on ScanResult.entry_overrides
+    and reach build_trade_plan to set max_fill and entry quality status."""
+    fetch_quotes_patch, get_bars_patch = _no_db_leak()
+
+    # 1. Zero slippage override: max_fill == premium (2.50) instead of 2.50 * 1.03 = 2.58
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."),          fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"entry_max_slippage_pct": 0},
+        })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["entry_overrides"] == {"entry_max_slippage_pct": 0.0}
+    candidates = data["candidates"]
+    assert len(candidates) == 1
+    assert candidates[0]["entry"]["maxFill"] == 2.50
+    # In mock patches without earnings fixture, earnings unknown caps at CAUTION,
+    # but entry quality PASS does not reject the candidate.
+    assert candidates[0]["finalStatus"] in ("PASS", "CAUTION")
+    assert candidates[0]["finalStatus"] != "REJECT"
+
+    # 2. Min premium 5.0 override: 2.50 < 5.0 -> entry quality rejects, so finalStatus is REJECT
+    with _enter_mock_patches(price=185.0, candles=_MOCK_CANDLES, chain=_rr_test_chain(),
+                             company="Apple Inc."),          fetch_quotes_patch, get_bars_patch, _force_passing_stock_score():
+        r2 = client.post("/api/scan", json={
+            "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+            "overrides": {"entry_min_premium": 5.0},
+        })
+    assert r2.status_code == 200, r2.text
+    data2 = r2.json()
+    assert data2["entry_overrides"] == {"entry_min_premium": 5.0}
+    candidates2 = data2["candidates"]
+    assert len(candidates2) == 1
+    assert candidates2[0]["finalStatus"] == "REJECT"
+
+
 def test_scan_horizon_preset_reaches_build_trade_plan(client):
     """Round 9 audit finding: ScanRequest.horizon_preset is forwarded through
     _execute_scan_core -> _process_symbol -> build_trade_plan (scan.py:780),
