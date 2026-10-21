@@ -303,3 +303,101 @@ async def test_rebuild_holds_the_history_lock(factory, providers):
     result = await update
     assert len(calls) == 2
     assert result.provider == "tiingo"
+
+
+# ── HISTORY-INCREMENTAL-NIGHTLY B0: the nightly-only window anchor ────────────
+
+ANCHOR_THROUGH = date(2015, 12, 31)
+ANCHOR_AT = datetime(2026, 9, 1, 23, tzinfo=timezone.utc)
+
+
+async def seed_single_provider(factory, provider, end=date(2016, 1, 8), *, anchored=True):
+    async with factory() as db:
+        await hs._store_bars("TEST", bars(START, end, source=provider), db)
+        db.add(State(symbol="TEST", basis_provider=provider,
+                     window_verified_through=ANCHOR_THROUGH if anchored else None,
+                     window_verified_at=ANCHOR_AT if anchored else None))
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_rebuild_sets_window_anchor_to_newest_stored_date(factory, providers):
+    from app.services import history_backfill as history
+    tiingo_fetch, _ = providers
+    last = date(2016, 1, 8)
+    await seed_alpaca(factory, end=last)
+    tiingo_fetch.return_value = bars(end=last, factor=0.9)
+    result = await history.rebuild_single_provider("TEST", START, END)
+    st = await state(factory)
+    assert result.last_date_after == last
+    assert st.window_verified_through == last  # the newest stored date, not `end`
+    assert hs._as_utc(st.window_verified_at) == NOW
+    assert hs._as_utc(st.window_verified_at) == hs._as_utc(st.basis_rebuilt_at)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["tiingo", "yfinance"])
+@pytest.mark.parametrize("anchored", [False, True])
+async def test_nightly_single_provider_path_sets_window_anchor(factory, providers, monkeypatch,
+                                                               provider, anchored):
+    from app.services import history_backfill as history
+    tiingo_fetch, yf_fetch = providers
+    await seed_single_provider(factory, provider, anchored=anchored)
+    later = NOW + timedelta(days=1)
+    monkeypatch.setattr(hs, "_utcnow", lambda: later)
+    (tiingo_fetch if provider == "tiingo" else yf_fetch).return_value = bars(source=provider)
+    result = await history.update_history("TEST", START, END)
+    assert result.provider == provider
+    st = await state(factory)
+    assert st.window_verified_through == END
+    assert hs._as_utc(st.window_verified_at) == later
+    assert hs._as_utc(st.basis_rebuilt_at) == later
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["rebuild", "nightly"])
+async def test_refused_single_provider_write_leaves_window_anchor_unchanged(factory, providers, path):
+    from app.services import history_backfill as history
+    tiingo_fetch, yf_fetch = providers
+    await seed_single_provider(factory, "tiingo")
+    tiingo_fetch.return_value = bars(skip={date(2016, 1, 6)})
+    yf_fetch.return_value = bars(source="yfinance", skip={date(2016, 1, 6)})
+    before = await snapshot(factory)
+    with pytest.raises(history.SingleProviderRefused):
+        if path == "rebuild":
+            await history.rebuild_single_provider("TEST", START, END)
+        else:
+            await history.update_history("TEST", START, END)
+    assert await snapshot(factory) == before
+    st = await state(factory)
+    assert st.window_verified_through == ANCHOR_THROUGH
+    assert hs._as_utc(st.window_verified_at) == ANCHOR_AT
+
+
+@pytest.mark.asyncio
+async def test_refresh_adjustments_injected_fetch_clears_window_anchor(factory, monkeypatch):
+    """The test-only ``fetch=`` branch clears the anchor with the other state fields."""
+    first = [{**b, "adj_factor": 0.98} for b in bars(START, date(2015, 12, 31), source="alpaca")]
+    second = bars(date(2016, 1, 1), END, source="alpaca")
+    monkeypatch.setattr(hs, "_utcnow", lambda: NOW - timedelta(days=30))
+    async with factory() as db:
+        await hs._store_bars("TEST", first, db)
+        await db.commit()
+    monkeypatch.setattr(hs, "_utcnow", lambda: NOW)
+    async with factory() as db:
+        await hs._store_bars("TEST", second, db)
+        db.add(State(symbol="TEST", seam_date=SEAM, old_source="tiingo", seam_signature="abc",
+                     window_verified_through=ANCHOR_THROUGH, window_verified_at=ANCHOR_AT))
+        await db.commit()
+    async with factory() as db:
+        assert await hs.find_stale_adjustment("TEST", db) is not None
+
+    async def fake(symbol, start, end):
+        return bars(start, end, source="alpaca")
+
+    result = await hs.refresh_adjustments(["TEST"], fetch=fake)
+    assert result["refreshed"] == ["TEST"]
+    st = await state(factory)
+    assert st.seam_date is None and st.seam_signature is None
+    assert st.window_verified_through is None
+    assert st.window_verified_at is None

@@ -578,6 +578,7 @@ async def refresh_adjustments(
                             state.seam_date = state.old_source = state.seam_signature = None
                             state.floor_requested_start = state.floor_date = None
                             state.floor_provider = state.floor_checked_at = None
+                            state.window_verified_through = state.window_verified_at = None
                         await db.commit()
                         notify_bars_changed(symbol)
             except Exception as exc:

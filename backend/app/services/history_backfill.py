@@ -148,6 +148,7 @@ async def _single_provider_locked(db, symbol, start, end, providers) -> RebuildR
                 db.add(state)
             now = hs._utcnow()
             state.basis_provider, state.basis_rebuilt_at = provider, now
+            state.window_verified_through, state.window_verified_at = dates[-1], now
             state.seam_date = state.old_source = state.seam_signature = None
             state.floor_requested_start = start
             state.floor_date, state.floor_provider = dates[0], provider
