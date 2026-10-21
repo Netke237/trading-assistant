@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { Title, Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
+import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from '@/lib/watchlistStore';
+import { parseSymbols, universeCaption, isUniverseEmpty, universeEmptyReason } from '@/lib/universeResolution';
 import { useStrategyProfilesStore, profileView } from '@/lib/strategyProfilesStore';
 import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useShallow } from 'zustand/shallow';
@@ -113,6 +116,17 @@ export default function Step4StocksPage() {
   const savedParams = useScanParamsStore(useShallow(panelParamsOf));
   const scanOverrides   = useScanStore((s) => s.scanOverrides);
   const requireReversal = (scanOverrides.pullback_require_reversal as boolean | undefined) ?? false;
+
+  const customRaw = useUniverseStore((s) => s.customRaw);
+  const customSymbols = useMemo(() => parseSymbols(customRaw), [customRaw]);
+  const watchlistCount = useWatchlistStore((s) => s.added.length);
+  const universePick = useUniverseStore((s) => s.pick);
+  const activePick = context?.universe ?? universePick;
+  const isEmpty = isUniverseEmpty(activePick, customRaw, watchlistCount);
+  const caption = useMemo(
+    () => universeCaption(activePick, customRaw, watchlistCount, customSymbols),
+    [activePick, customRaw, watchlistCount, customSymbols],
+  );
 
   const meanReversionVariants      = useScanParamsStore((s) => s.meanReversionVariants);
   const meanReversionMinConfirm    = useScanParamsStore((s) => s.meanReversionMinConfirm);
@@ -225,6 +239,11 @@ export default function Step4StocksPage() {
 
   async function onRun() {
     if (!activeStrategy) return;
+    if (isEmpty) {
+      const reason = universeEmptyReason(activePick);
+      useScanStore.getState().setStockScanError(reason);
+      return;
+    }
     const pending = runStockScanWithContinuation(activeStrategy, params);
     const token = useScanStore.getState().stockManualRunToken;
     try {
@@ -255,8 +274,8 @@ export default function Step4StocksPage() {
         <Text size={13} tone="secondary">
           Pick a strategy and run a scan. Review the results on Backtest.
         </Text>
-        <Text size={12} tone="secondary">
-          Scanning full {context?.universe ?? 'SP500'} universe for stock setups
+        <Text size={12} tone={isEmpty ? 'caution' : 'secondary'}>
+          {caption}
         </Text>
       </div>
 
@@ -367,10 +386,12 @@ export default function Step4StocksPage() {
                 type="button"
                 className={styles.runBtn}
                 onClick={onRun}
-                disabled={!activeStrategy || scanning || (activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0)}
+                disabled={!activeStrategy || scanning || isEmpty || (activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0)}
                 title={
                   !activeStrategy
                     ? 'Select a strategy first'
+                    : isEmpty
+                    ? universeEmptyReason(activePick)
                     : activeStrategy === 'mean_reversion_multi' && multiVariants !== null && multiVariants.length === 0
                     ? 'Select at least one confirmation signal'
                     : undefined
