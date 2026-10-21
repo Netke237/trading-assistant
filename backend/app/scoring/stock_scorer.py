@@ -1079,6 +1079,21 @@ def _regime_cap(conviction_pct: int, stability: str, gate: dict) -> Status:
     return "PASS"
 
 
+def _normalize_weight(val: float | int | None) -> float:
+    """Normalize a score weight override to a canonical decimal fraction [0.0, 1.0].
+
+    If a percentage value > 1.0 is passed (e.g. 40 or 100), converts it to a fraction
+    (40 -> 0.40, 100 -> 1.0). Fractional values <= 1.0 (e.g. 0.01 for 1%, 0.40, 1.0)
+    are returned directly.
+    """
+    if val is None:
+        return 0.0
+    f = float(val)
+    if f > 1.0:
+        return f / 100.0
+    return max(0.0, f)
+
+
 def score_stock(
     symbol: str,
     direction: Direction,
@@ -1128,11 +1143,11 @@ def score_stock(
         ac = cfg["trend"]["additive"]
         rc = cfg["trend"]["relative_strength"]
         for key, val in ov.items():
-            if   key == "weight_trend":            w["trend"]      = float(val)
-            elif key == "weight_pullback":          w["pullback"]   = float(val)
-            elif key == "weight_trigger":           w["trigger"]    = float(val)
-            elif key == "weight_event":             w["event"]      = float(val)
-            elif key == "weight_vol":               w["vol"]        = float(val)
+            if   key == "weight_trend":            w["trend"]      = _normalize_weight(val)
+            elif key == "weight_pullback":          w["pullback"]   = _normalize_weight(val)
+            elif key == "weight_trigger":           w["trigger"]    = _normalize_weight(val)
+            elif key == "weight_event":             w["event"]      = _normalize_weight(val)
+            elif key == "weight_vol":               w["vol"]        = _normalize_weight(val)
             # crossover params
             elif key == "fast_ema":                cc["fast_ema"]   = int(val)
             elif key == "slow_ema":                cc["slow_ema"]   = int(val)

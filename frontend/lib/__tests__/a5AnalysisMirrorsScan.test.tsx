@@ -43,7 +43,7 @@ const m = (f: unknown) => f as jest.Mock;
 const RESULT = (id: string) => ({ scan_id: id, timestamp: '2026-09-24T10:00:00+00:00', rejected: [], candidates: [] });
 
 const STEP3 = {
-  weight_trend: 0.5,
+  weight_trend: 50,
   fast_ema: 12,
   regime_headwind_caution_pct: -10,
   regime_headwind_reject_pct: -11,

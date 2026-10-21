@@ -27,7 +27,7 @@ jest.mock('@/lib/api', () => ({
 const m = (f: unknown) => f as jest.Mock;
 
 const STEP3 = {
-  weight_trend: 0.5,
+  weight_trend: 50,
   max_delta: 0.4,                        // options-only: must be filtered out
   regime_headwind_caution_pct: -7,
   regime_headwind_reject_pct: -13,
