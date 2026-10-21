@@ -47,7 +47,7 @@ The audit establishes:
     - Versioned schema migration (`version: 3`). Migration rule: `version < 3 ? { ...state, grading: {} } : state`.
     - Methods: `add(id, grading)`, `remove(id)`, `clearGrading(id)`, `isWatched(id)`.
     - Canonical contract identity: `contractId(symbol, strike, expiry, right)` $\rightarrow$ `"AAPL|185|2025-05-16|C"`.
-    - Persisted state: `contracts: string[]`, `grading: Record<string, ContractGrading>`.
+    - Persisted state: `ids: string[]`, `grading: Record<string, ContractGrading>`.
   - `useWatchlistUiStore` (`frontend/lib/watchlistUiStore.ts`):
     - Ephemeral UI store managing active `selectedSymbol: string | null` for cross-component rail synchronization.
 - **Context Rail Integration (`@contextRail/watchlist/page.tsx`)**:
@@ -92,8 +92,8 @@ The audit establishes:
     - `POST /api/strategy-watch/bulk` (bulk subscription).
     - `PATCH /api/strategy-watch/{watch_id}` with body `{"enabled": bool}` (toggles enabled state).
     - `DELETE /api/strategy-watch/{id}` (removes watch).
-    - `GET /api/strategy-watch/schedule` & `POST /api/strategy-watch/schedule` (polling vs EOD schedule).
-    - `POST /api/strategy-watch/evaluate-now` (triggers immediate evaluation).
+    - `GET /api/strategy-watch/schedule` & `PUT /api/strategy-watch/schedule` (polling vs EOD schedule).
+    - `POST /api/strategy-watch/evaluate` (triggers immediate evaluation).
 - **Backend State Machine Evaluator (`backend/app/services/strategy_watch_evaluator.py`)**:
   - Evaluates the 5 valid daily stock strategies (`VALID_STRATEGIES` in `strategy_watch_store.py`):
     1. `pullback_ema`
