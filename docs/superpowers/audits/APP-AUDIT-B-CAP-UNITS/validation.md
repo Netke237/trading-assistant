@@ -69,3 +69,9 @@ The complete unmodified CI suite remains a required shipping gate. The local qua
 ## 2026-10-21 resumed integration
 
 Merged current main `55519e05` at `d86e80d1`; only PROJECT_STATE.json conflicted. The new schedule-store corrupt-file recovery and Stock resolver filter/confidence changes are retained. Typecheck passed; five focused frontend suites passed **84 tests** in 9.762 seconds; cap/schedule/schema/recovery backend suites passed **81 tests** in 7.05 seconds under Python 3.11.16. No new product code was introduced by the reconciliation. Full prior-suite qualification remains unchanged; native exact-head CI is required before merge.
+
+## Verified merge and post-merge checks
+
+PR #454 verified MERGED at `a1811c0ee40c324fbd87291a0cad8e1d3a6fb202` on 2026-10-21. All three native CI checks passed on exact final head `c97955f07fd7873890f8760d92b4f466bd966e35`: backend/frontend [CI run](https://github.com/Netke237/trading-assistant/actions/runs/39542548072), browser [run](https://github.com/Netke237/trading-assistant/actions/runs/39542548030). This native full-suite result satisfies the shipping gate beyond the earlier qualified local run.
+
+Actual merged source retested: typecheck passed; five frontend integration suites **84 passed** in 5.34 seconds; four backend cap/schedule/schema/recovery modules **81 passed** in 7.00 seconds (Python 3.11.16). The merge changed no application/test bytes from the checked head. Completion100%; Size M; Complexity4/5.
