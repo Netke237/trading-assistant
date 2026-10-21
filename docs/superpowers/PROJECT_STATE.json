@@ -11,8 +11,8 @@
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
       "name": "Failed schedule writes change API state while disk and scheduler retain old values (#374)",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-schedule-rollback-plan.md",
       "branch": "board/app-audit-b-schedule-rollback-7eefd461",
       "covers": [
@@ -26,8 +26,10 @@
         "closure_evidence": "Plan Round 1 audited clean with 0 gate findings by subagent 7a41b7c1-9a80-46ed-8c5f-c5356bd470e8"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code Round 1 audited clean with 0 gate findings by subagent 304999da-11c1-4458-ba1a-d386ff974f7c"
       },
       "audit_history": [
         {
@@ -37,6 +39,14 @@
           "clean": true,
           "findings_count": 0,
           "notes": "Plan Round 1: 0 gate findings. Atomicity under lock, in-memory rollback, sidecar cleanup in finally block, and scheduler configure isolation verified clean."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "subagent 304999da-11c1-4458-ba1a-d386ff974f7c",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Code Round 1: 0 gate findings. Verified atomic persistence under lock, in-memory rollback, sidecar cleanup, and scheduler isolation across all 4 schedule stores."
         }
       ],
       "tickets": [
@@ -48,10 +58,10 @@
         "pattern": "_save_locked",
         "note": "Pins get method in backend/app/services/ingestion_schedule_store.py."
       },
-      "completion_pct": 80,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "Built: atomic schedule store rollback across all 4 stores with tests. Ready for Code Audit Round 1."
+      "note": "Atomic schedule store rollback across all 4 stores (#374, #462). Plan round 1 clean, code round 1 clean."
     },
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
