@@ -7,6 +7,14 @@
       "expires_at": "2026-10-21T07:27:07Z",
       "note": "Resume #371 authorized second plan stage; preserve prior3rounds; sizeL complexity5",
       "task": "APP-AUDIT-B-SAVE-FEEDBACK"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-schedule-rollback-7eefd461",
+      "claimed_at": "2026-10-21T06:56:49Z",
+      "expires_at": "2026-10-21T09:56:49Z",
+      "note": "Resume #374: atomic schedule store rollback on failed write",
+      "task": "APP-AUDIT-B-SCHEDULE-ROLLBACK"
     }
   ]
 }
