@@ -45,5 +45,5 @@ it('is never posted by an options scan, so the contract floor stays contract_rul
   expect(b.overrides).not.toHaveProperty('min_stock_score');
   expect(b).not.toHaveProperty('min_stock_score');
   // Everything else still goes through.
-  expect(b.overrides.weight_trend).toBe(30);
+  expect(b.overrides.weight_trend).toBe(0.3);
 });

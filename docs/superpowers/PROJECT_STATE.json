@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
       "name": "Options score-weight percent overrides are applied as raw multipliers (#382)",
-      "status": "planned",
+      "status": "built",
       "audit_rounds": 3,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-weight-units-plan.md",
@@ -57,17 +57,19 @@
           "notes": "Plan Round 3: 0 gate findings. Frontend resolver normalization, legacy schedule migration with backup, and test plan disentanglement verified clean."
         }
       ],
-      "tickets": [],
+      "tickets": [
+        "#460"
+      ],
       "verify": {
         "kind": "present",
         "path": "backend/app/scoring/stock_scorer.py",
         "pattern": "_normalize_weight",
         "note": "Pins weight_trend handling in backend/app/scoring/stock_scorer.py."
       },
-      "completion_pct": 30,
+      "completion_pct": 70,
       "size": "L",
       "complexity": 4,
-      "note": "Plan Round 3 clean (0 gate findings). Plan stage closed clean. Ready for build ticket and implementation."
+      "note": "Implemented score-weight percent overrides unit normalization. Ready for independent code audit."
     },
     {
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
