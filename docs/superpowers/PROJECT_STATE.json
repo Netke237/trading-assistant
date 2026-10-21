@@ -6721,8 +6721,8 @@
       "id": "STOCKS-CUSTOM-UNIVERSE",
       "name": "Stocks scan ignores current Custom universe and reuses stale scan context (#343)",
       "status": "built",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-stocks-custom-universe-plan.md",
       "branch": "board/stocks-custom-universe-80f135ec",
       "covers": [
@@ -6736,10 +6736,10 @@
         "closure_evidence": "Fresh independent subagent 76c511da-74b7-48bf-8714-fec2d5c6c02d reviewed plan; 0 gate findings; report docs/superpowers/audits/STOCKS-CUSTOM-UNIVERSE/plan-r3.md"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false,
-        "closed_by": null,
-        "closure_evidence": null
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 6001a214-deaa-4c18-8e91-30ae34afba7b reviewed code diff; 0 gate findings; report docs/superpowers/audits/STOCKS-CUSTOM-UNIVERSE/code-r1.md"
       },
       "audit_history": [
         {
@@ -6792,6 +6792,19 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/audits/STOCKS-CUSTOM-UNIVERSE/plan-r3.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "6001a214-deaa-4c18-8e91-30ae34afba7b",
+          "reviewed": "origin/main (b9a4e087ff26013cace4d97bbab769bb9b890c52) to HEAD (a2b84539)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/STOCKS-CUSTOM-UNIVERSE/code-r1.md"
         }
       ],
       "tickets": [
@@ -6803,10 +6816,10 @@
         "pattern": "resolveUniverseSymbols",
         "note": "Pins that runStockScan resolves universe symbols from universeStore selection via canonical universe resolution."
       },
-      "completion_pct": 70,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "Implementation built and unit/integration tests passing. Ready for code audit.",
+      "note": "Plan 3 rounds clean, code 1 round clean (0 gate findings). PR ready.",
       "pull_request": null
     }
   ],
