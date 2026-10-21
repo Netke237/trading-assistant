@@ -10,7 +10,7 @@
     {
       "id": "APP-AUDIT-ANALYTICS-DATA",
       "name": "Lane H \u2014 Analysis, Chart, Dashboard, Calendar, Journal, and Validation data (#356)",
-      "status": "ready",
+      "status": "built",
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-analytics-data-plan.md",
       "branch": "board/app-audit-analytics-data-3acabd5c",
       "tracking_issue": 356,
@@ -108,10 +108,10 @@
         "pattern": "APP-AUDIT-ANALYTICS-DATA reconciliation report",
         "note": "Pins the reconciliation report for Analytics & Data audit (#356)."
       },
-      "completion_pct": 30,
+      "completion_pct": 75,
       "size": "M",
       "complexity": 4,
-      "note": "Plan round 3 clean (0 gate findings). Plan stage closed. Ready to execute Lane H audit (#356)."
+      "note": "Lane H audit executed; reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md produced. Ready for Code/Report Audit Round 1 (#356)."
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
