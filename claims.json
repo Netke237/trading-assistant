@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-analytics-data-3acabd5c",
-      "claimed_at": "2026-10-21T07:54:15Z",
-      "expires_at": "2026-10-21T10:54:15Z",
-      "note": "Verify Analysis, Chart, Dashboard, Calendar, Journal and Validation data (#356)",
-      "task": "APP-AUDIT-ANALYTICS-DATA"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-persistence-93803ca0",
       "claimed_at": "2026-10-21T08:27:48Z",
       "expires_at": "2026-10-21T11:43:42Z",
