@@ -172,6 +172,8 @@ async def test_evaluate_now_with_enabled_composite_watch_is_200(app):
                sws.strategy_watch_store), \
          patch("app.services.strategy_watch_evaluator.get_bars",
                new_callable=AsyncMock, return_value=bars), \
+         patch("app.services.strategy_watch_evaluator.read_notification_config",
+               return_value=({"telegram": {"enabled": True, "bot_token": "tok", "chat_id": "123"}}, ["telegram"])), \
          patch("app.services.composite_trigger_evaluator.evaluate_scheduled",
                return_value=False), \
          patch("app.services.strategy_watch_evaluator.notify_channels",

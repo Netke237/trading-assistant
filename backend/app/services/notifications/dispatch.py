@@ -111,7 +111,8 @@ def ready_channels(cfg: dict) -> list[str]:
     gmail = _channel_block(cfg, 'gmail')
     if gmail.get('enabled') \
             and (gmail.get('smtp_user') or os.getenv('BAMENDJOU_GMAIL_USER', '')) \
-            and (gmail.get('smtp_password') or os.getenv('BAMENDJOU_GMAIL_PASSWORD', '')):
+            and (gmail.get('smtp_password') or os.getenv('BAMENDJOU_GMAIL_PASSWORD', '')) \
+            and (gmail.get('to') or os.getenv('BAMENDJOU_GMAIL_TO', '')):
         ready.append('gmail')
     tg = _channel_block(cfg, 'telegram')
     if tg.get('enabled') \

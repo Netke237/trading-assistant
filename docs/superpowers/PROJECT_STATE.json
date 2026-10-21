@@ -7358,7 +7358,7 @@
     {
       "id": "DECISION-34-WATCH-DELIVERY-RESIDUALS",
       "name": "Per-channel watch delivery residuals & repeated stuck-alert policy",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 3,
       "audit_clean": false,
       "plan": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md",
