@@ -434,6 +434,8 @@ interface ScanStoreState {
   addToStockBasket:      (card: PositionCardData) => void;
   removeFromStockBasket: (symbol: string) => void;
   clearStockBasket:      () => void;
+  /** Explicitly wipe obsolete scan results and candidate artifacts when scan scope changes (e.g. custom tickers edited). */
+  clearScanResults:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
   /** Last-run status for the options-mode scan session, as reported by the
@@ -697,6 +699,17 @@ export const useScanStore = create<ScanStoreState>()(
         stockBasketSources: Object.fromEntries(Object.entries(s.stockBasketSources).filter(([key]) => key !== symbol)),
       })),
       clearStockBasket:      () => set({ stockBasket: [], stockBasketSources: {} }),
+      clearScanResults:      () => set({
+        previousRun:             null,
+        previousStockScanResult: null,
+        scanResult:              null,
+        stockScanResult:         null,
+        stockScanRequest:        null,
+        stockScanAt:             null,
+        optionsScanAt:           null,
+        rejectedLog:             [],
+        conflictedSymbols:       [],
+      }),
       setStockScanError:   (message) => set({ stockScanError: message }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
       setLastOptionsScanMeta: (status, updatedAt) => set({
