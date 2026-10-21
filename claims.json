@@ -2,27 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-cap-units-69190371",
-      "claimed_at": "2026-10-20T19:34:57Z",
-      "expires_at": "2026-10-20T22:56:21Z",
-      "note": "Continue approved plan and implement #368",
-      "task": "APP-AUDIT-B-CAP-UNITS"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-regime-race-8d580f0a",
-      "claimed_at": "2026-10-20T19:38:02Z",
-      "expires_at": "2026-10-20T23:56:33Z",
-      "note": "Fix stale Step 1 regime responses overwriting the gate (#386)",
+      "claimed_at": "2026-10-21T04:05:35Z",
+      "expires_at": "2026-10-21T07:05:35Z",
+      "note": "Merge PR #442 and record state (#386)",
       "task": "APP-AUDIT-B-REGIME-RACE"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/stock-filters-542fceb9",
-      "claimed_at": "2026-10-20T21:53:44Z",
-      "expires_at": "2026-10-21T00:53:44Z",
-      "note": "take #380 Stocks manual and scheduled requests drop universe price/cap filters",
-      "task": "APP-AUDIT-B-STOCK-FILTERS"
     }
   ]
 }
