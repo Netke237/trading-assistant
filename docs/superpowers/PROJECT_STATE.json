@@ -114,6 +114,62 @@
       "note": "Lane H audit executed; reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md produced. Ready for Code/Report Audit Round 1 (#356)."
     },
     {
+      "id": "APP-AUDIT-RAIL-DESTINATION-PARITY",
+      "name": "Calendar and Settings retain the previous context rail (#395)",
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan": "docs/superpowers/plans/2026-10-21-app-audit-rail-destination-parity-plan.md",
+      "branch": "board/app-audit-rail-destination-parity-630d7589",
+      "covers": [
+        "board item #395",
+        "remediation from #349 (findings A-UI-RAIL-CALENDAR and A-UI-RAIL-SETTINGS)"
+      ],
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan Round 1 audited clean with 0 gate findings by subagent 1d2ca41c-1ab0-4c5d-8e87-238aa1cd6a09"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code Round 1 audited clean with 0 gate findings by subagent f1cbc4be-6d9e-4242-b9c6-e412cb05bf40"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent 1d2ca41c-1ab0-4c5d-8e87-238aa1cd6a09",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Plan Round 1: 0 gate findings. Verified route slot coverage across all fallback destinations, Next.js parallel route resolution semantics, and presence probe alignment."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "subagent f1cbc4be-6d9e-4242-b9c6-e412cb05bf40",
+          "clean": true,
+          "findings_count": 0,
+          "notes": "Code Round 1: 0 gate findings. Verified parallel route slot matching across all 12 persistent frame destinations, fallback QuickLook mounting, dedicated rail preservation, 0 persistence writes, and test/typecheck green."
+        }
+      ],
+      "tickets": [
+        "#464"
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "frontend/app/(frame)/@contextRail/calendar/default.tsx",
+        "pattern": "CalendarDefaultRail",
+        "note": "Pins CalendarDefaultRail in frontend/app/(frame)/@contextRail/calendar/default.tsx."
+      },
+      "completion_pct": 80,
+      "size": "M",
+      "complexity": 3,
+      "note": "SELF-MERGE PENDING, PR #466, audited head 79408111. Context rail destination parity on soft and hard navigation (#395, #464). Plan round 1 clean, code round 1 clean."
+    },
+    {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
       "name": "Failed schedule writes change API state while disk and scheduler retain old values (#374)",
       "status": "built",
