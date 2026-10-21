@@ -56,8 +56,8 @@ class _Run:
 ```
 
 #### Tracking Deliveries
-Whenever `_send` returns:
-For each channel `c` where `res[c]` is True:
+Whenever `_send` returns in either `_resend_watch` or `_deliver_or_queue`:
+For each channel `c` in `targets` where `res[c]` is True:
 ```python
 run.delivered_channels.add(c)
 _apply_cross_watch_proof(run, c)
@@ -131,28 +131,44 @@ If `not res[c]` (the probe failed on `c`):
   - Log warning that probe was not delivered and queue kept.
 
 #### Inside `_deliver_or_queue`
-To avoid overwriting state changes made by `_apply_cross_watch_proof` between `_collect` and `_deliver_or_queue`, `_deliver_or_queue` always re-reads the fresh watch state from `strategy_watch_store`:
+To avoid overwriting state changes made by `_apply_cross_watch_proof` between `_collect` and `_deliver_or_queue`, `_deliver_or_queue` always re-reads the fresh watch state from `strategy_watch_store` and updates both `t.committed` and `t.pending`:
 ```python
 w = next((w for w in strategy_watch_store.list_watches() if w.get("id") == t.watch_id), None)
-committed, pend = _split_state(dict((w or {}).get("last_state") or {}))
+t.committed, t.pending = _split_state(dict((w or {}).get("last_state") or {}))
+pend = [dict(e) if isinstance(e, dict) else e for e in t.pending]
 ```
-Then for fresh event probes (`c in probes`):
-- If `res[c]` is True:
-  - `h["channel_done"] = {**_done(h), c: "dropped"}`
-  - `logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))`
-  - `run.delivered_channels.add(c)`
-  - `_apply_cross_watch_proof(run, c)`
-- If `not res[c]`:
-  - If `c in run.delivered_channels`:
+Then for target channels:
+- If `not targets`: `_queue(t)` correctly stores using the fresh `t.committed` and `t.pending + [_pending_entry(t)]`.
+- When `_send` executes:
+  ```python
+  res = await _send(ev, run, targets)
+  for c in targets:
+      if res[c]:
+          run.delivered_channels.add(c)
+          _apply_cross_watch_proof(run, c)
+  ```
+- For fresh event probes (`c in probes`):
+  - If `res[c]`:
     - `h["channel_done"] = {**_done(h), c: "dropped"}`
     - `logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))`
-    - Record counted failure on `entry` for channel `c`:
-      `if _failure_counts(entry, c, now):`
-        `entry["channel_failures"] = {**_failure_map(entry), c: _failures(entry, c) + 1}`
-        `entry["channel_last_failure_at"] = {**_last_failure_map(entry), c: now.isoformat()}`
-    - Log warning indicating head was dropped via cross-watch proof.
-  - Else:
-    - Add to `run.stuck_probes` in case subsequent transitions in this run deliver on `c`.
+  - If `not res[c]`:
+    - If `c in run.delivered_channels`:
+      - `h["channel_done"] = {**_done(h), c: "dropped"}`
+      - `logger.error(_DROP_LOG, t.watch_id, ready[c], c, _reason(h))`
+      - Record counted failure on `entry` for channel `c`:
+        `now = _utcnow()`
+        `if _failure_counts(entry, c, now):`
+          `entry["channel_failures"] = {**_failure_map(entry), c: _failures(entry, c) + 1}`
+          `entry["channel_last_failure_at"] = {**_last_failure_map(entry), c: now.isoformat()}`
+      - Log warning indicating head was dropped via cross-watch proof.
+    - Else:
+      - Add to `run.stuck_probes` in case subsequent transitions in this run deliver on `c`.
+- Settlement:
+  - `entry = _pending_entry(t)`
+  - `done = {c: "delivered" for c in targets if res[c]}`
+  - `if done: entry["channel_done"] = done`
+  - `committed, rest = _pop_complete(dict(t.committed), pend + [entry], channels)`
+  - If `rest`: `_store_queue(t.watch_id, committed, rest)` else `_write(t.watch_id, committed)`
 
 #### Order-Independence
 - If Watch B delivers on `c` before Watch A evaluates: `c in run.delivered_channels` is True when Watch A evaluates, so Watch A drops its stuck head immediately.
