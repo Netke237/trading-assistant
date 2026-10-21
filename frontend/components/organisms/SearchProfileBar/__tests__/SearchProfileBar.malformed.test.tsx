@@ -195,7 +195,12 @@ describe('SearchProfileBar — Malformed profile handling & future-version write
 
       // Attempt to save a new profile
       const snapshot = captureCurrentSnapshot('stocks');
-      useSearchProfilesStore.getState().saveProfile('Brand New Profile', snapshot);
+      expect(() => {
+        useSearchProfilesStore.getState().saveProfile('Brand New Profile', snapshot);
+      }).toThrow(/Write barrier: refusing write to newer schema version 9999/);
+
+      // In-memory profiles must not have mutated
+      expect(useSearchProfilesStore.getState().profiles).toHaveLength(1);
 
       // Disk bytes must NOT be downgraded to version 5, and futureAuditSentinel must survive
       const afterRaw = localStorage.getItem(STORAGE_KEY);
