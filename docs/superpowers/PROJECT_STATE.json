@@ -6090,9 +6090,96 @@
       "pull_request": "https://github.com/Netke237/trading-assistant/pull/454"
     },
     {
+      "id": "APP-AUDIT-B-REGIME-RACE",
+      "name": "Old regime response overwrites the newer direction-aligned scan gate (#386)",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-regime-race-plan.md",
+      "branch": "board/app-audit-b-regime-race-8d580f0a",
+      "covers": [
+        "board item #386",
+        "remediation from #350 (regime/findings.md B3-1)"
+      ],
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent a2e4121472cca7fd1 reviewed the plan fixes 674ff931..e49a4473; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/plan-r2.md"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent a9e150f6389457db6 reviewed diff origin/main..3b573df6; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/code-r1.md"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "a27d688949ff06349",
+          "reviewed": "docs/superpowers/plans/2026-10-20-app-audit-b-regime-race-plan.md@674ff931",
+          "gate_findings": 2,
+          "findings": [
+            "F1: Steps 2/3 writing all gate fields spreads default-Markov readings (Step 1 sends Settings values)",
+            "F2: newest-started ordering discards a valid older response while the newer is pending or after it fails (gate stays PENDING/older)"
+          ],
+          "fixes": [
+            "Parameter parity: Steps 1-3 share fetchGateRegime() with Settings Markov values",
+            "Newest-applied ordering (ticket > lastAppliedTicket) for the gate and Step 1's own reading"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/plan-r1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "a2e4121472cca7fd1",
+          "reviewed": "git diff 674ff931..e49a4473 -- docs/superpowers/plans/2026-10-20-app-audit-b-regime-race-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "a9e150f6389457db6",
+          "reviewed": "origin/main..3b573df6",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/code-r1.md"
+        }
+      ],
+      "tickets": [
+        386,
+        440
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "frontend/lib/regimeFetchOrder.ts",
+        "pattern": "applyRegimeResponse",
+        "note": "Pins the shared latest-regime-fetch guard used by Steps 1-3."
+      },
+      "completion_pct": 85,
+      "size": "M",
+      "complexity": 4,
+      "note": "SELF-MERGE PENDING, PR #442, audited head 3b573df6. Newest applied /api/regime response owns the shared gate; Steps 1-3 send one request shape (#386, #440). Plan round 2 clean, code round 1 clean. Browser retest PASS in all three modes.",
+      "pull_request": 442
+    },
+    {
       "id": "UNRESOLVED-SAVE-UX",
       "name": "Unresolved-save UX: dismiss after 404 (#171)",
-      "status": "planned",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-unresolved-save-ux-plan.md",
@@ -6135,7 +6222,7 @@
         "pattern": "removeTrackedRow\\(note\\.recId, true\\)",
         "note": "Pins that 404 is treated as final when removing unconfirmed saves."
       },
-      "completion_pct": 20,
+      "completion_pct": 80,
       "size": "S",
       "complexity": 3,
       "note": "Plan round 1 clean (0 gate findings). Ready for implementation."

@@ -12,7 +12,7 @@ import { useUniverseStore } from '@/lib/universeStore';
 import type { Universe } from '@/lib/universeStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { api, getLastDataRefresh } from '@/lib/api';
-import { useScanStore } from '@/lib/scanStore';
+import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import type { SectorTile, IndexChangeTile } from '@/types/domain';
 import styles from '../screener.module.css';
 import formStyles from './page.module.css';
@@ -126,9 +126,11 @@ export default function Step2Page() {
     setRefreshing(true);
     setRefreshError(false);
     try {
-      const regime = await api.getRegime();
-      useScanStore.getState().setRegime(regime.overall);
-      setLastRefreshed(new Date().toLocaleTimeString());
+      // Same request and the same ordering as Steps 1 and 3: an older answer
+      // never replaces a newer one that already landed on the shared gate.
+      const ticket = beginRegimeFetch();
+      const regime = await fetchGateRegime();
+      if (applyRegimeResponse(ticket, regime)) setLastRefreshed(new Date().toLocaleTimeString());
     } catch {
       setRefreshError(true);
     } finally {

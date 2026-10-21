@@ -14,8 +14,8 @@ import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
-import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
+import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { scanLogTotals } from './scanLogTotals';
@@ -622,13 +622,15 @@ export default function Step3Page() {
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
   const regimeLoadedRef = useRef(false);
 
+  // Same request and the same ordering as Steps 1 and 2: an older answer
+  // never replaces a newer one that already landed on the shared gate, and
+  // this page keeps the descriptor only of a response that was applied.
   useEffect(() => {
-    api.getRegime().then((r) => {
-      useScanStore.getState().setRegime(r.overall);
+    const ticket = beginRegimeFetch();
+    fetchGateRegime().then((r) => {
+      if (!applyRegimeResponse(ticket, r)) return;
       descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
       regimeLoadedRef.current = true;
-      const dir = useScanStore.getState().context?.direction ?? 'Bullish';
-      useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});
   }, []);
 
