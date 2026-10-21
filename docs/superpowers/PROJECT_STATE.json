@@ -202,7 +202,7 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 5,
-      "note": "SELF-MERGE PENDING, PR pending, Lane F Broker & Portfolio reconciliation report, artifacts, and verification suites published (#354). Plan round 3 clean, code round 3 clean."
+      "note": "SELF-MERGE PENDING, PR #493, audited head 900a1e0e. Lane F Broker & Portfolio reconciliation report, artifacts, and verification suites published (#354). Plan round 3 clean, code round 3 clean."
     },
     {
       "id": "APP-AUDIT-B-ENTRY-OVERRIDES",
