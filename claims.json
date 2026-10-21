@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-cap-units-69190371",
       "claimed_at": "2026-10-21T04:06:46Z",
-      "expires_at": "2026-10-21T07:20:55Z",
+      "expires_at": "2026-10-21T07:20:59Z",
       "note": "Continue #368 independent code review and merge checks",
       "task": "APP-AUDIT-B-CAP-UNITS"
     }
