@@ -7,6 +7,8 @@
 # 2026-10-16 update (decision D3-EXCLUSIONS-2026-10-16: proposal on #114, approved by Kenneth in chat 2026-10-16): evidence
 # docs/superpowers/measurements/2026-10-15-d3-history-recovery/ (single-provider rebuild + full-span
 # bar-basis check, data end 2026-10-15). CTVA and DOC removed; 7 ended feeds, BCB, MAA and MU added.
+# 2026-10-21 (decision DHR-EVIDENCE-EXCLUSION-2026-10-21, Kenneth in chat): DHR added as evidence after the yfinance
+# stop-gap rebuild of the Tiingo-only symbols; live scans (2-5 year lookback) are unaffected.
 # Quote any ticker YAML would read as a boolean (ON, NO, Y, ...).
 version: 1
 symbols:
@@ -58,3 +60,4 @@ symbols:
   SIRI: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   MAA:  {scope: evidence, reason: "full-span bar-basis check (2026-10-15) flags batch_step (provider basis step); excluded from evidence, still scanned", added: 2026-10-16}
   MU:   {scope: evidence, reason: "full-span bar-basis check (2026-10-15) flags batch_step (provider basis step); excluded from evidence, still scanned", added: 2026-10-16}
+  DHR:  {scope: evidence, reason: "bar-basis jump > 40%: yfinance single-provider rebuild (2026-10-21, Tiingo refusing on the free tier) has a +61% adjusted-close jump on 2016-07-05 (Fortive spin-off not adjusted); remove after a Tiingo rebuild of DHR", added: 2026-10-21}
