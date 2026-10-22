@@ -1,0 +1,5896 @@
+{
+ "basis_note": "Committed scans are schema_version 2 (no exit.rrRiskBasis). Their stored rrRatio / rrContribution use the pre-D5 premium-stop basis (exit - premium) / (0.60 x premium). Neither today's frontend nor backend loads them. No stored rrRatio is compared with a shipped R/R; both R/Rs below are on the current full-premium basis.",
+ "totals": {
+  "scans": 22,
+  "cards": 94,
+  "cards_heston": 10,
+  "cards_other_by_label": {
+   "BS repriced (IV-derived)": 84
+  },
+  "alternatives": 114,
+  "alternatives_heston": 7,
+  "alternatives_other_by_label": {
+   "BS repriced (IV-derived)": 107
+  }
+ },
+ "by_horizon_direction": {
+  "Position/Bearish": {
+   "cards": 32,
+   "cards_heston": 4,
+   "alternatives": 31,
+   "alternatives_heston": 3
+  },
+  "Position/Bullish": {
+   "cards": 56,
+   "cards_heston": 6,
+   "alternatives": 74,
+   "alternatives_heston": 4
+  },
+  "Swing/Bearish": {
+   "cards": 0,
+   "cards_heston": 0,
+   "alternatives": 0,
+   "alternatives_heston": 0
+  },
+  "Swing/Bullish": {
+   "cards": 6,
+   "cards_heston": 0,
+   "alternatives": 9,
+   "alternatives_heston": 0
+  }
+ },
+ "by_date": {
+  "2026-09-18": {
+   "cards": 15,
+   "cards_heston": 1,
+   "alternatives": 14,
+   "alternatives_heston": 0
+  },
+  "2026-10-01": {
+   "cards": 39,
+   "cards_heston": 3,
+   "alternatives": 47,
+   "alternatives_heston": 2
+  },
+  "2026-10-09": {
+   "cards": 40,
+   "cards_heston": 6,
+   "alternatives": 53,
+   "alternatives_heston": 5
+  }
+ },
+ "scans": [
+  {
+   "file": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.request.json",
+   "scan_id": "REC-20260918-74674A41",
+   "schema_version": 2,
+   "date_dir": "2026-09-18",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 5,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 5
+   },
+   "alternatives": 2,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.request.json",
+   "scan_id": "REC-20260918-CE21024B",
+   "schema_version": 2,
+   "date_dir": "2026-09-18",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 10,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 9,
+    "Heston repriced": 1
+   },
+   "alternatives": 12,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 12
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.request.json",
+   "scan_id": "REC-20261001-4C502628",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 2,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 2
+   },
+   "alternatives": 2,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/A2-options-swing-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/A2-options-swing-bearish.request.json",
+   "scan_id": "REC-20261001-CD94971F",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Swing",
+   "direction": "Bearish",
+   "cards": 0,
+   "cards_by_label": {},
+   "alternatives": 0,
+   "alternatives_by_label": {},
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/C1-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/C1-options-position-bearish.request.json",
+   "scan_id": "REC-20261001-33DF428A",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 1,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 1
+   },
+   "alternatives": 2,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.request.json",
+   "scan_id": "REC-20261001-94C149E1",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 5,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 5
+   },
+   "alternatives": 6,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 6
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.request.json",
+   "scan_id": "REC-20261001-AFA0C794",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 5,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 4,
+    "Heston repriced": 1
+   },
+   "alternatives": 4,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 4
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.request.json",
+   "scan_id": "REC-20261001-8FC17076",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 13,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 11,
+    "Heston repriced": 2
+   },
+   "alternatives": 15,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 13,
+    "Heston repriced": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.request.json",
+   "scan_id": "REC-20261001-87EF9F0C",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 5,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 5
+   },
+   "alternatives": 6,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 6
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/O1-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/O1-options-position-bearish.request.json",
+   "scan_id": "REC-20261001-03C1DDBC",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 1,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 1
+   },
+   "alternatives": 2,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.request.json",
+   "scan_id": "REC-20261001-833BAC31",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 4,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 4
+   },
+   "alternatives": 5,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 5
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/O3-options-swing-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/O3-options-swing-bearish.request.json",
+   "scan_id": "REC-20261001-13F1BAB1",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Swing",
+   "direction": "Bearish",
+   "cards": 0,
+   "cards_by_label": {},
+   "alternatives": 0,
+   "alternatives_by_label": {},
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.request.json",
+   "scan_id": "REC-20261001-94DA79DA",
+   "schema_version": 2,
+   "date_dir": "2026-10-01",
+   "horizon": "Swing",
+   "direction": "Bullish",
+   "cards": 3,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 3
+   },
+   "alternatives": 5,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 5
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.request.json",
+   "scan_id": "REC-20261009-D5778E63",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 3,
+   "cards_by_label": {
+    "Heston repriced": 1,
+    "BS repriced (IV-derived)": 2
+   },
+   "alternatives": 2,
+   "alternatives_by_label": {
+    "Heston repriced": 1,
+    "BS repriced (IV-derived)": 1
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.request.json",
+   "scan_id": "REC-20261009-F0E056E6",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 4,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 3,
+    "Heston repriced": 1
+   },
+   "alternatives": 4,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 4
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.request.json",
+   "scan_id": "REC-20261009-A0B6D9B3",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 6,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 6
+   },
+   "alternatives": 7,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 7
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.request.json",
+   "scan_id": "REC-20261009-57EF7986",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 16,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 15,
+    "Heston repriced": 1
+   },
+   "alternatives": 28,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 26,
+    "Heston repriced": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.request.json",
+   "scan_id": "REC-20261009-B75B6C91",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 3,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 1,
+    "Heston repriced": 2
+   },
+   "alternatives": 4,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 2,
+    "Heston repriced": 2
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/O1-options-position-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/O1-options-position-bearish.request.json",
+   "scan_id": "REC-20261009-77E6CAA4",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "cards": 1,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 1
+   },
+   "alternatives": 0,
+   "alternatives_by_label": {},
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.request.json",
+   "scan_id": "REC-20261009-A88C95F7",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "cards": 4,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 3,
+    "Heston repriced": 1
+   },
+   "alternatives": 4,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 4
+   },
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/O3-options-swing-bearish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/O3-options-swing-bearish.request.json",
+   "scan_id": "REC-20261009-46F6FF78",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Swing",
+   "direction": "Bearish",
+   "cards": 0,
+   "cards_by_label": {},
+   "alternatives": 0,
+   "alternatives_by_label": {},
+   "stored_exit_rrRiskBasis_present": false
+  },
+  {
+   "file": "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.result.json",
+   "request": "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.request.json",
+   "scan_id": "REC-20261009-B050A355",
+   "schema_version": 2,
+   "date_dir": "2026-10-09",
+   "horizon": "Swing",
+   "direction": "Bullish",
+   "cards": 3,
+   "cards_by_label": {
+    "BS repriced (IV-derived)": 3
+   },
+   "alternatives": 4,
+   "alternatives_by_label": {
+    "BS repriced (IV-derived)": 4
+   },
+   "stored_exit_rrRiskBasis_present": false
+  }
+ ],
+ "input_recovery": {
+  "non_heston_cards": 84,
+  "reproducible": 84,
+  "not_reproducible": 0,
+  "fail_share": 0.0,
+  "m1_counterfactuals_reliable": true,
+  "not_reproducible_list": [],
+  "pre_d5_basis_confirmed_cards": 94,
+  "cards": [
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "AMAT",
+    "contract": "AMAT|430|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 400.51,
+      "recovered_target": 400.51,
+      "stored_est": 48.23,
+      "recovered_est": 48.23,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.64,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T2",
+      "stored_target": 383.09,
+      "recovered_target": 383.1,
+      "stored_est": 59.16,
+      "recovered_est": 59.16,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.16,
+      "recovered_rr_contribution_full_premium": 0.7
+     },
+     {
+      "level": "T3",
+      "stored_target": 365.68,
+      "recovered_target": 365.69,
+      "stored_est": 71.52,
+      "recovered_est": 71.51,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.75,
+      "recovered_rr_contribution_full_premium": 1.05
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|95|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 91.82,
+      "recovered_target": 91.82,
+      "stored_est": 7.0,
+      "recovered_est": 7.0,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.1,
+      "recovered_rr_contribution_full_premium": 0.66
+     },
+     {
+      "level": "T2",
+      "stored_target": 87.82,
+      "recovered_target": 87.83,
+      "stored_est": 9.39,
+      "recovered_est": 9.39,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.04,
+      "recovered_rr_contribution_full_premium": 1.23
+     },
+     {
+      "level": "T3",
+      "stored_target": 83.83,
+      "recovered_target": 83.84,
+      "stored_est": 12.21,
+      "recovered_est": 12.21,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.16,
+      "recovered_rr_contribution_full_premium": 1.89
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "ROST",
+    "contract": "ROST|240|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 210.51,
+      "recovered_target": 210.51,
+      "stored_est": 29.77,
+      "recovered_est": 29.77,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.19,
+      "recovered_rr_contribution_full_premium": 0.72
+     },
+     {
+      "level": "T2",
+      "stored_target": 201.36,
+      "recovered_target": 201.36,
+      "stored_est": 37.86,
+      "recovered_est": 37.86,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.97,
+      "recovered_rr_contribution_full_premium": 1.18
+     },
+     {
+      "level": "T3",
+      "stored_target": 192.2,
+      "recovered_target": 192.2,
+      "stored_est": 46.5,
+      "recovered_est": 46.5,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.8,
+      "recovered_rr_contribution_full_premium": 1.68
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|110|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 98.68,
+      "recovered_target": 98.68,
+      "stored_est": 11.5,
+      "recovered_est": 11.5,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.53,
+      "recovered_rr_contribution_full_premium": 0.92
+     },
+     {
+      "level": "T2",
+      "stored_target": 94.39,
+      "recovered_target": 94.39,
+      "stored_est": 15.25,
+      "recovered_est": 15.24,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.57,
+      "recovered_rr_contribution_full_premium": 1.54
+     },
+     {
+      "level": "T3",
+      "stored_target": 90.1,
+      "recovered_target": 90.1,
+      "stored_est": 19.29,
+      "recovered_est": 19.29,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.69,
+      "recovered_rr_contribution_full_premium": 2.22
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WDC",
+    "contract": "WDC|450|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 402.91,
+      "recovered_target": 402.91,
+      "stored_est": 68.83,
+      "recovered_est": 68.83,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.41,
+      "recovered_rr_contribution_full_premium": 0.25
+     },
+     {
+      "level": "T2",
+      "stored_target": 385.4,
+      "recovered_target": 385.39,
+      "stored_est": 80.07,
+      "recovered_est": 80.07,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.75,
+      "recovered_rr_contribution_full_premium": 0.45
+     },
+     {
+      "level": "T3",
+      "stored_target": 367.88,
+      "recovered_target": 367.87,
+      "stored_est": 92.43,
+      "recovered_est": 92.43,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.12,
+      "recovered_rr_contribution_full_premium": 0.67
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AME",
+    "contract": "AME|250|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 255.19,
+      "recovered_target": 255.19,
+      "stored_est": 13.49,
+      "recovered_est": 13.48,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.24,
+      "recovered_rr_contribution_full_premium": 1.34
+     },
+     {
+      "level": "T2",
+      "stored_target": 264.64,
+      "recovered_target": 264.64,
+      "stored_est": 20.08,
+      "recovered_est": 20.08,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.15,
+      "recovered_rr_contribution_full_premium": 2.49
+     },
+     {
+      "level": "T3",
+      "stored_target": 274.1,
+      "recovered_target": 274.09,
+      "stored_est": 27.76,
+      "recovered_est": 27.76,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 6.38,
+      "recovered_rr_contribution_full_premium": 3.83
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AAPL",
+    "contract": "AAPL|340|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 361.95,
+      "recovered_target": 361.95,
+      "stored_est": 28.42,
+      "recovered_est": 28.42,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.97,
+      "recovered_rr_contribution_full_premium": 1.18
+     },
+     {
+      "level": "T2",
+      "stored_target": 375.36,
+      "recovered_target": 375.36,
+      "stored_est": 39.67,
+      "recovered_est": 39.67,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.41,
+      "recovered_rr_contribution_full_premium": 2.04
+     },
+     {
+      "level": "T3",
+      "stored_target": 388.76,
+      "recovered_target": 388.76,
+      "stored_est": 51.95,
+      "recovered_est": 51.95,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.98,
+      "recovered_rr_contribution_full_premium": 2.99
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "KO",
+    "contract": "KO|90|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 94.9,
+      "recovered_target": 94.9,
+      "stored_est": 6.25,
+      "recovered_est": 6.25,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.97,
+      "recovered_rr_contribution_full_premium": 1.78
+     },
+     {
+      "level": "T2",
+      "stored_target": 98.41,
+      "recovered_target": 98.42,
+      "stored_est": 9.3,
+      "recovered_est": 9.3,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.22,
+      "recovered_rr_contribution_full_premium": 3.13
+     },
+     {
+      "level": "T3",
+      "stored_target": 101.93,
+      "recovered_target": 101.93,
+      "stored_est": 12.62,
+      "recovered_est": 12.62,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 7.68,
+      "recovered_rr_contribution_full_premium": 4.61
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "DVN",
+    "contract": "DVN|50|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 52.49,
+      "recovered_target": 52.49,
+      "stored_est": 4.32,
+      "recovered_est": 4.31,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.27,
+      "recovered_rr_contribution_full_premium": 0.76
+     },
+     {
+      "level": "T2",
+      "stored_target": 54.44,
+      "recovered_target": 54.43,
+      "stored_est": 5.74,
+      "recovered_est": 5.74,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.24,
+      "recovered_rr_contribution_full_premium": 1.34
+     },
+     {
+      "level": "T3",
+      "stored_target": 56.38,
+      "recovered_target": 56.38,
+      "stored_est": 7.33,
+      "recovered_est": 7.32,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.32,
+      "recovered_rr_contribution_full_premium": 1.99
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "XOM",
+    "contract": "XOM|165|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 175.49,
+      "recovered_target": 175.49,
+      "stored_est": 14.26,
+      "recovered_est": 14.26,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.69,
+      "recovered_rr_contribution_full_premium": 1.01
+     },
+     {
+      "level": "T2",
+      "stored_target": 181.99,
+      "recovered_target": 181.99,
+      "stored_est": 19.54,
+      "recovered_est": 19.54,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.93,
+      "recovered_rr_contribution_full_premium": 1.76
+     },
+     {
+      "level": "T3",
+      "stored_target": 188.49,
+      "recovered_target": 188.49,
+      "stored_est": 25.33,
+      "recovered_est": 25.33,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.3,
+      "recovered_rr_contribution_full_premium": 2.58
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "FCX",
+    "contract": "FCX|70|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 77.22,
+      "recovered_target": 77.22,
+      "stored_est": 9.73,
+      "recovered_est": 9.73,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.82,
+      "recovered_rr_contribution_full_premium": 0.49
+     },
+     {
+      "level": "T2",
+      "stored_target": 80.08,
+      "recovered_target": 80.08,
+      "stored_est": 11.99,
+      "recovered_est": 11.99,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.39,
+      "recovered_rr_contribution_full_premium": 0.84
+     },
+     {
+      "level": "T3",
+      "stored_target": 82.94,
+      "recovered_target": 82.94,
+      "stored_est": 14.41,
+      "recovered_est": 14.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.01,
+      "recovered_rr_contribution_full_premium": 1.21
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|60|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 65.51,
+      "recovered_target": 65.51,
+      "stored_est": 9.02,
+      "recovered_est": 9.02,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.59,
+      "recovered_rr_contribution_full_premium": 0.35
+     },
+     {
+      "level": "T2",
+      "stored_target": 67.94,
+      "recovered_target": 67.94,
+      "stored_est": 10.79,
+      "recovered_est": 10.79,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.03,
+      "recovered_rr_contribution_full_premium": 0.62
+     },
+     {
+      "level": "T3",
+      "stored_target": 70.37,
+      "recovered_target": 70.36,
+      "stored_est": 12.69,
+      "recovered_est": 12.68,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.5,
+      "recovered_rr_contribution_full_premium": 0.9
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "INTC",
+    "contract": "INTC|110|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 115.57,
+      "recovered_target": 115.57,
+      "stored_est": 14.41,
+      "recovered_est": 14.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.53,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 119.85,
+      "recovered_target": 119.85,
+      "stored_est": 17.25,
+      "recovered_est": 17.26,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.96,
+      "recovered_rr_contribution_full_premium": 0.58
+     },
+     {
+      "level": "T3",
+      "stored_target": 124.13,
+      "recovered_target": 124.13,
+      "stored_est": 20.32,
+      "recovered_est": 20.32,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.43,
+      "recovered_rr_contribution_full_premium": 0.86
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+    "date_dir": "2026-09-18",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MRK",
+    "contract": "MRK|150|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 157.73,
+      "recovered_target": 157.73,
+      "stored_est": 12.14,
+      "recovered_est": 12.14,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.56,
+      "recovered_rr_contribution_full_premium": 0.93
+     },
+     {
+      "level": "T2",
+      "stored_target": 163.58,
+      "recovered_target": 163.57,
+      "stored_est": 16.61,
+      "recovered_est": 16.6,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.74,
+      "recovered_rr_contribution_full_premium": 1.64
+     },
+     {
+      "level": "T3",
+      "stored_target": 169.42,
+      "recovered_target": 169.41,
+      "stored_est": 21.57,
+      "recovered_est": 21.56,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.06,
+      "recovered_rr_contribution_full_premium": 2.43
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "ROST",
+    "contract": "ROST|240|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 215.91,
+      "recovered_target": 215.91,
+      "stored_est": 24.95,
+      "recovered_est": 24.94,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.44,
+      "recovered_rr_contribution_full_premium": 0.86
+     },
+     {
+      "level": "T2",
+      "stored_target": 206.52,
+      "recovered_target": 206.52,
+      "stored_est": 33.12,
+      "recovered_est": 33.12,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.45,
+      "recovered_rr_contribution_full_premium": 1.47
+     },
+     {
+      "level": "T3",
+      "stored_target": 197.13,
+      "recovered_target": 197.14,
+      "stored_est": 41.96,
+      "recovered_est": 41.95,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.55,
+      "recovered_rr_contribution_full_premium": 2.13
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.49,
+      "recovered_target": 96.49,
+      "stored_est": 9.04,
+      "recovered_est": 9.04,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.81,
+      "recovered_rr_contribution_full_premium": 1.09
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.3,
+      "recovered_target": 92.29,
+      "stored_est": 12.59,
+      "recovered_est": 12.59,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.18,
+      "recovered_rr_contribution_full_premium": 1.91
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.1,
+      "recovered_target": 88.1,
+      "stored_est": 16.51,
+      "recovered_est": 16.51,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.69,
+      "recovered_rr_contribution_full_premium": 2.81
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.5,
+      "recovered_target": 96.5,
+      "stored_est": 9.06,
+      "recovered_est": 9.06,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.78,
+      "recovered_rr_contribution_full_premium": 1.07
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.3,
+      "recovered_target": 92.31,
+      "stored_est": 12.6,
+      "recovered_est": 12.6,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.13,
+      "recovered_rr_contribution_full_premium": 1.88
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.11,
+      "recovered_target": 88.11,
+      "stored_est": 16.51,
+      "recovered_est": 16.51,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.62,
+      "recovered_rr_contribution_full_premium": 2.77
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MU",
+    "contract": "MU|1100|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 1163.05,
+      "recovered_target": 1163.05,
+      "stored_est": 113.51,
+      "recovered_est": 113.51,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.8,
+      "recovered_rr_contribution_full_premium": 0.48
+     },
+     {
+      "level": "T2",
+      "stored_target": 1206.12,
+      "recovered_target": 1206.13,
+      "stored_est": 144.18,
+      "recovered_est": 144.18,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.47,
+      "recovered_rr_contribution_full_premium": 0.88
+     },
+     {
+      "level": "T3",
+      "stored_target": 1249.2,
+      "recovered_target": 1249.2,
+      "stored_est": 177.82,
+      "recovered_est": 177.82,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.2,
+      "recovered_rr_contribution_full_premium": 1.32
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AMD",
+    "contract": "AMD|600|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 667.72,
+      "recovered_target": 667.72,
+      "stored_est": 87.03,
+      "recovered_est": 87.04,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.74,
+      "recovered_rr_contribution_full_premium": 0.44
+     },
+     {
+      "level": "T2",
+      "stored_target": 692.45,
+      "recovered_target": 692.45,
+      "stored_est": 106.88,
+      "recovered_est": 106.88,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.28,
+      "recovered_rr_contribution_full_premium": 0.77
+     },
+     {
+      "level": "T3",
+      "stored_target": 717.18,
+      "recovered_target": 717.19,
+      "stored_est": 128.03,
+      "recovered_est": 128.04,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.87,
+      "recovered_rr_contribution_full_premium": 1.12
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "PFE",
+    "contract": "PFE|28|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 30.5,
+      "recovered_target": 30.5,
+      "stored_est": 2.73,
+      "recovered_est": 2.73,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.32,
+      "recovered_rr_contribution_full_premium": 1.39
+     },
+     {
+      "level": "T2",
+      "stored_target": 31.63,
+      "recovered_target": 31.63,
+      "stored_est": 3.8,
+      "recovered_est": 3.79,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.89,
+      "recovered_rr_contribution_full_premium": 2.32
+     },
+     {
+      "level": "T3",
+      "stored_target": 32.76,
+      "recovered_target": 32.75,
+      "stored_est": 4.91,
+      "recovered_est": 4.9,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.51,
+      "recovered_rr_contribution_full_premium": 3.3
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|65|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 70.32,
+      "recovered_target": 70.32,
+      "stored_est": 8.5,
+      "recovered_est": 8.5,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.63,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T2",
+      "stored_target": 72.92,
+      "recovered_target": 72.92,
+      "stored_est": 10.41,
+      "recovered_est": 10.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.15,
+      "recovered_rr_contribution_full_premium": 0.69
+     },
+     {
+      "level": "T3",
+      "stored_target": 75.53,
+      "recovered_target": 75.53,
+      "stored_est": 12.47,
+      "recovered_est": 12.47,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.7,
+      "recovered_rr_contribution_full_premium": 1.02
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MRNA",
+    "contract": "MRNA|200|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 208.56,
+      "recovered_target": 208.56,
+      "stored_est": 29.36,
+      "recovered_est": 29.35,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.31,
+      "recovered_rr_contribution_full_premium": 0.18
+     },
+     {
+      "level": "T2",
+      "stored_target": 216.29,
+      "recovered_target": 216.28,
+      "stored_est": 34.33,
+      "recovered_est": 34.32,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.64,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T3",
+      "stored_target": 224.01,
+      "recovered_target": 224.0,
+      "stored_est": 39.63,
+      "recovered_est": 39.62,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.0,
+      "recovered_rr_contribution_full_premium": 0.6
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.42,
+      "recovered_target": 96.42,
+      "stored_est": 9.09,
+      "recovered_est": 9.08,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.82,
+      "recovered_rr_contribution_full_premium": 1.09
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.22,
+      "recovered_target": 92.23,
+      "stored_est": 12.65,
+      "recovered_est": 12.65,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.18,
+      "recovered_rr_contribution_full_premium": 1.91
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.03,
+      "recovered_target": 88.04,
+      "stored_est": 16.57,
+      "recovered_est": 16.56,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.68,
+      "recovered_rr_contribution_full_premium": 2.81
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "CEG",
+    "contract": "CEG|260|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 238.57,
+      "recovered_target": 238.57,
+      "stored_est": 27.49,
+      "recovered_est": 27.49,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.84,
+      "recovered_rr_contribution_full_premium": 0.5
+     },
+     {
+      "level": "T2",
+      "stored_target": 228.2,
+      "recovered_target": 228.2,
+      "stored_est": 34.97,
+      "recovered_est": 34.97,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.52,
+      "recovered_rr_contribution_full_premium": 0.91
+     },
+     {
+      "level": "T3",
+      "stored_target": 217.82,
+      "recovered_target": 217.82,
+      "stored_est": 43.37,
+      "recovered_est": 43.37,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.28,
+      "recovered_rr_contribution_full_premium": 1.37
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "CPRT",
+    "contract": "CPRT|27|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 24.88,
+      "recovered_target": 24.88,
+      "stored_est": 2.57,
+      "recovered_est": 2.57,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.1,
+      "recovered_rr_contribution_full_premium": 0.66
+     },
+     {
+      "level": "T2",
+      "stored_target": 23.8,
+      "recovered_target": 23.8,
+      "stored_est": 3.39,
+      "recovered_est": 3.39,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.98,
+      "recovered_rr_contribution_full_premium": 1.19
+     },
+     {
+      "level": "T3",
+      "stored_target": 22.72,
+      "recovered_target": 22.71,
+      "stored_est": 4.3,
+      "recovered_est": 4.31,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.96,
+      "recovered_rr_contribution_full_premium": 1.78
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "NFLX",
+    "contract": "NFLX|70|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 62.59,
+      "recovered_target": 62.59,
+      "stored_est": 8.04,
+      "recovered_est": 8.03,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.04,
+      "recovered_rr_contribution_full_premium": 0.62
+     },
+     {
+      "level": "T2",
+      "stored_target": 59.87,
+      "recovered_target": 59.87,
+      "stored_est": 10.28,
+      "recovered_est": 10.28,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.79,
+      "recovered_rr_contribution_full_premium": 1.08
+     },
+     {
+      "level": "T3",
+      "stored_target": 57.15,
+      "recovered_target": 57.15,
+      "stored_est": 12.73,
+      "recovered_est": 12.72,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.62,
+      "recovered_rr_contribution_full_premium": 1.57
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MU",
+    "contract": "MU|1050|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 1162.24,
+      "recovered_target": 1162.24,
+      "stored_est": 146.05,
+      "recovered_est": 146.05,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.77,
+      "recovered_rr_contribution_full_premium": 0.46
+     },
+     {
+      "level": "T2",
+      "stored_target": 1205.29,
+      "recovered_target": 1205.28,
+      "stored_est": 180.4,
+      "recovered_est": 180.39,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.34,
+      "recovered_rr_contribution_full_premium": 0.8
+     },
+     {
+      "level": "T3",
+      "stored_target": 1248.34,
+      "recovered_target": 1248.33,
+      "stored_est": 217.12,
+      "recovered_est": 217.12,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.95,
+      "recovered_rr_contribution_full_premium": 1.17
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "PFE",
+    "contract": "PFE|28|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 30.49,
+      "recovered_target": 30.49,
+      "stored_est": 2.72,
+      "recovered_est": 2.72,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.31,
+      "recovered_rr_contribution_full_premium": 1.39
+     },
+     {
+      "level": "T2",
+      "stored_target": 31.62,
+      "recovered_target": 31.62,
+      "stored_est": 3.79,
+      "recovered_est": 3.78,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.87,
+      "recovered_rr_contribution_full_premium": 2.32
+     },
+     {
+      "level": "T3",
+      "stored_target": 32.75,
+      "recovered_target": 32.74,
+      "stored_est": 4.9,
+      "recovered_est": 4.89,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.49,
+      "recovered_rr_contribution_full_premium": 3.29
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|65|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 70.29,
+      "recovered_target": 70.29,
+      "stored_est": 8.49,
+      "recovered_est": 8.49,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.63,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T2",
+      "stored_target": 72.89,
+      "recovered_target": 72.89,
+      "stored_est": 10.4,
+      "recovered_est": 10.4,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.14,
+      "recovered_rr_contribution_full_premium": 0.69
+     },
+     {
+      "level": "T3",
+      "stored_target": 75.49,
+      "recovered_target": 75.5,
+      "stored_est": 12.45,
+      "recovered_est": 12.46,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.7,
+      "recovered_rr_contribution_full_premium": 1.02
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MRNA",
+    "contract": "MRNA|200|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 208.73,
+      "recovered_target": 208.73,
+      "stored_est": 29.39,
+      "recovered_est": 29.39,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.31,
+      "recovered_rr_contribution_full_premium": 0.19
+     },
+     {
+      "level": "T2",
+      "stored_target": 216.46,
+      "recovered_target": 216.46,
+      "stored_est": 34.37,
+      "recovered_est": 34.37,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.64,
+      "recovered_rr_contribution_full_premium": 0.39
+     },
+     {
+      "level": "T3",
+      "stored_target": 224.19,
+      "recovered_target": 224.19,
+      "stored_est": 39.68,
+      "recovered_est": 39.68,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.0,
+      "recovered_rr_contribution_full_premium": 0.6
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "NOW",
+    "contract": "NOW|140|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 148.58,
+      "recovered_target": 148.58,
+      "stored_est": 15.27,
+      "recovered_est": 15.27,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.75,
+      "recovered_rr_contribution_full_premium": 0.45
+     },
+     {
+      "level": "T2",
+      "stored_target": 154.09,
+      "recovered_target": 154.08,
+      "stored_est": 19.19,
+      "recovered_est": 19.19,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.37,
+      "recovered_rr_contribution_full_premium": 0.82
+     },
+     {
+      "level": "T3",
+      "stored_target": 159.59,
+      "recovered_target": 159.58,
+      "stored_est": 23.48,
+      "recovered_est": 23.47,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.04,
+      "recovered_rr_contribution_full_premium": 1.22
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "PANW",
+    "contract": "PANW|400|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 423.34,
+      "recovered_target": 423.34,
+      "stored_est": 43.43,
+      "recovered_est": 43.43,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.72,
+      "recovered_rr_contribution_full_premium": 0.43
+     },
+     {
+      "level": "T2",
+      "stored_target": 439.02,
+      "recovered_target": 439.02,
+      "stored_est": 54.48,
+      "recovered_est": 54.48,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.33,
+      "recovered_rr_contribution_full_premium": 0.8
+     },
+     {
+      "level": "T3",
+      "stored_target": 454.7,
+      "recovered_target": 454.69,
+      "stored_est": 66.56,
+      "recovered_est": 66.55,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.99,
+      "recovered_rr_contribution_full_premium": 1.2
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "APH",
+    "contract": "APH|90|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 93.85,
+      "recovered_target": 93.85,
+      "stored_est": 7.77,
+      "recovered_est": 7.77,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.98,
+      "recovered_rr_contribution_full_premium": 0.59
+     },
+     {
+      "level": "T2",
+      "stored_target": 97.33,
+      "recovered_target": 97.32,
+      "stored_est": 10.2,
+      "recovered_est": 10.19,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.8,
+      "recovered_rr_contribution_full_premium": 1.08
+     },
+     {
+      "level": "T3",
+      "stored_target": 100.8,
+      "recovered_target": 100.8,
+      "stored_est": 12.89,
+      "recovered_est": 12.89,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.72,
+      "recovered_rr_contribution_full_premium": 1.63
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "INTC",
+    "contract": "INTC|125|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 130.94,
+      "recovered_target": 130.94,
+      "stored_est": 14.6,
+      "recovered_est": 14.6,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.53,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 135.79,
+      "recovered_target": 135.79,
+      "stored_est": 17.83,
+      "recovered_est": 17.83,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.02,
+      "recovered_rr_contribution_full_premium": 0.61
+     },
+     {
+      "level": "T3",
+      "stored_target": 140.64,
+      "recovered_target": 140.64,
+      "stored_est": 21.34,
+      "recovered_est": 21.34,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.55,
+      "recovered_rr_contribution_full_premium": 0.93
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AAPL",
+    "contract": "AAPL|330|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 355.69,
+      "recovered_target": 355.69,
+      "stored_est": 29.6,
+      "recovered_est": 29.6,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.08,
+      "recovered_rr_contribution_full_premium": 1.25
+     },
+     {
+      "level": "T2",
+      "stored_target": 368.86,
+      "recovered_target": 368.86,
+      "stored_est": 41.4,
+      "recovered_est": 41.4,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.57,
+      "recovered_rr_contribution_full_premium": 2.14
+     },
+     {
+      "level": "T3",
+      "stored_target": 382.03,
+      "recovered_target": 382.04,
+      "stored_est": 53.98,
+      "recovered_est": 53.98,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.16,
+      "recovered_rr_contribution_full_premium": 3.1
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "LRCX",
+    "contract": "LRCX|330|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 366.76,
+      "recovered_target": 366.76,
+      "stored_est": 49.8,
+      "recovered_est": 49.8,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.64,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T2",
+      "stored_target": 380.34,
+      "recovered_target": 380.35,
+      "stored_est": 60.4,
+      "recovered_est": 60.4,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.13,
+      "recovered_rr_contribution_full_premium": 0.68
+     },
+     {
+      "level": "T3",
+      "stored_target": 393.92,
+      "recovered_target": 393.93,
+      "stored_est": 71.69,
+      "recovered_est": 71.7,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.65,
+      "recovered_rr_contribution_full_premium": 0.99
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "GOOGL",
+    "contract": "GOOGL|340|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 366.4,
+      "recovered_target": 366.4,
+      "stored_est": 33.52,
+      "recovered_est": 33.51,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.35,
+      "recovered_rr_contribution_full_premium": 0.81
+     },
+     {
+      "level": "T2",
+      "stored_target": 379.97,
+      "recovered_target": 379.97,
+      "stored_est": 44.7,
+      "recovered_est": 44.7,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.36,
+      "recovered_rr_contribution_full_premium": 1.42
+     },
+     {
+      "level": "T3",
+      "stored_target": 393.54,
+      "recovered_target": 393.54,
+      "stored_est": 56.84,
+      "recovered_est": 56.84,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.45,
+      "recovered_rr_contribution_full_premium": 2.07
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|100|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 90.56,
+      "recovered_target": 90.56,
+      "stored_est": 10.84,
+      "recovered_est": 10.83,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.99,
+      "recovered_rr_contribution_full_premium": 0.59
+     },
+     {
+      "level": "T2",
+      "stored_target": 86.62,
+      "recovered_target": 86.62,
+      "stored_est": 13.92,
+      "recovered_est": 13.91,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.74,
+      "recovered_rr_contribution_full_premium": 1.05
+     },
+     {
+      "level": "T3",
+      "stored_target": 82.68,
+      "recovered_target": 82.69,
+      "stored_est": 17.33,
+      "recovered_est": 17.32,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.58,
+      "recovered_rr_contribution_full_premium": 1.55
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "ALB",
+    "contract": "ALB|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.89,
+      "recovered_target": 96.89,
+      "stored_est": 11.38,
+      "recovered_est": 11.38,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.7,
+      "recovered_rr_contribution_full_premium": 0.42
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.67,
+      "recovered_target": 92.68,
+      "stored_est": 14.26,
+      "recovered_est": 14.26,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.3,
+      "recovered_rr_contribution_full_premium": 0.78
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.46,
+      "recovered_target": 88.47,
+      "stored_est": 17.5,
+      "recovered_est": 17.5,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.98,
+      "recovered_rr_contribution_full_premium": 1.19
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "ROST",
+    "contract": "ROST|240|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 216.31,
+      "recovered_target": 216.31,
+      "stored_est": 24.68,
+      "recovered_est": 24.68,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.43,
+      "recovered_rr_contribution_full_premium": 0.86
+     },
+     {
+      "level": "T2",
+      "stored_target": 206.91,
+      "recovered_target": 206.91,
+      "stored_est": 32.81,
+      "recovered_est": 32.81,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.45,
+      "recovered_rr_contribution_full_premium": 1.47
+     },
+     {
+      "level": "T3",
+      "stored_target": 197.5,
+      "recovered_target": 197.5,
+      "stored_est": 41.63,
+      "recovered_est": 41.63,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.55,
+      "recovered_rr_contribution_full_premium": 2.13
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "MDT",
+    "contract": "MDT|87|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 79.04,
+      "recovered_target": 79.04,
+      "stored_est": 8.34,
+      "recovered_est": 8.34,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.58,
+      "recovered_rr_contribution_full_premium": 0.95
+     },
+     {
+      "level": "T2",
+      "stored_target": 75.61,
+      "recovered_target": 75.6,
+      "stored_est": 11.29,
+      "recovered_est": 11.29,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.73,
+      "recovered_rr_contribution_full_premium": 1.64
+     },
+     {
+      "level": "T3",
+      "stored_target": 72.17,
+      "recovered_target": 72.17,
+      "stored_est": 14.51,
+      "recovered_est": 14.51,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.98,
+      "recovered_rr_contribution_full_premium": 2.39
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.54,
+      "recovered_target": 96.54,
+      "stored_est": 9.02,
+      "recovered_est": 9.01,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.8,
+      "recovered_rr_contribution_full_premium": 1.08
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.34,
+      "recovered_target": 92.34,
+      "stored_est": 12.56,
+      "recovered_est": 12.55,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.17,
+      "recovered_rr_contribution_full_premium": 1.9
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.14,
+      "recovered_target": 88.15,
+      "stored_est": 16.47,
+      "recovered_est": 16.46,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.67,
+      "recovered_rr_contribution_full_premium": 2.8
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O1-options-position-bearish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WMT",
+    "contract": "WMT|105|2026-11-20|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 96.39,
+      "recovered_target": 96.39,
+      "stored_est": 9.12,
+      "recovered_est": 9.12,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.8,
+      "recovered_rr_contribution_full_premium": 1.08
+     },
+     {
+      "level": "T2",
+      "stored_target": 92.2,
+      "recovered_target": 92.2,
+      "stored_est": 12.68,
+      "recovered_est": 12.68,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.16,
+      "recovered_rr_contribution_full_premium": 1.89
+     },
+     {
+      "level": "T3",
+      "stored_target": 88.01,
+      "recovered_target": 88.01,
+      "stored_est": 16.6,
+      "recovered_est": 16.59,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.65,
+      "recovered_rr_contribution_full_premium": 2.79
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MU",
+    "contract": "MU|1050|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 1158.48,
+      "recovered_target": 1158.48,
+      "stored_est": 145.15,
+      "recovered_est": 145.15,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.74,
+      "recovered_rr_contribution_full_premium": 0.44
+     },
+     {
+      "level": "T2",
+      "stored_target": 1201.38,
+      "recovered_target": 1201.39,
+      "stored_est": 178.9,
+      "recovered_est": 178.9,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.29,
+      "recovered_rr_contribution_full_premium": 0.78
+     },
+     {
+      "level": "T3",
+      "stored_target": 1244.29,
+      "recovered_target": 1244.3,
+      "stored_est": 215.03,
+      "recovered_est": 215.03,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.89,
+      "recovered_rr_contribution_full_premium": 1.14
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "PFE",
+    "contract": "PFE|28|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 30.5,
+      "recovered_target": 30.5,
+      "stored_est": 2.73,
+      "recovered_est": 2.73,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.29,
+      "recovered_rr_contribution_full_premium": 1.37
+     },
+     {
+      "level": "T2",
+      "stored_target": 31.63,
+      "recovered_target": 31.63,
+      "stored_est": 3.79,
+      "recovered_est": 3.8,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.83,
+      "recovered_rr_contribution_full_premium": 2.3
+     },
+     {
+      "level": "T3",
+      "stored_target": 32.76,
+      "recovered_target": 32.76,
+      "stored_est": 4.9,
+      "recovered_est": 4.9,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.44,
+      "recovered_rr_contribution_full_premium": 3.26
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|65|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 70.35,
+      "recovered_target": 70.35,
+      "stored_est": 8.51,
+      "recovered_est": 8.51,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.63,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T2",
+      "stored_target": 72.96,
+      "recovered_target": 72.95,
+      "stored_est": 10.42,
+      "recovered_est": 10.42,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.15,
+      "recovered_rr_contribution_full_premium": 0.69
+     },
+     {
+      "level": "T3",
+      "stored_target": 75.56,
+      "recovered_target": 75.56,
+      "stored_est": 12.48,
+      "recovered_est": 12.48,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.71,
+      "recovered_rr_contribution_full_premium": 1.02
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MRNA",
+    "contract": "MRNA|200|2026-11-20|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 208.27,
+      "recovered_target": 208.27,
+      "stored_est": 29.24,
+      "recovered_est": 29.24,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.3,
+      "recovered_rr_contribution_full_premium": 0.18
+     },
+     {
+      "level": "T2",
+      "stored_target": 215.98,
+      "recovered_target": 215.99,
+      "stored_est": 34.19,
+      "recovered_est": 34.19,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.64,
+      "recovered_rr_contribution_full_premium": 0.38
+     },
+     {
+      "level": "T3",
+      "stored_target": 223.69,
+      "recovered_target": 223.7,
+      "stored_est": 39.47,
+      "recovered_est": 39.47,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.99,
+      "recovered_rr_contribution_full_premium": 0.6
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "AMD",
+    "contract": "AMD|620|2026-10-23|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 665.93,
+      "recovered_target": 665.93,
+      "stored_est": 55.49,
+      "recovered_est": 55.49,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.58,
+      "recovered_rr_contribution_full_premium": 0.95
+     },
+     {
+      "level": "T2",
+      "stored_target": 690.59,
+      "recovered_target": 690.59,
+      "stored_est": 76.11,
+      "recovered_est": 76.11,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.78,
+      "recovered_rr_contribution_full_premium": 1.67
+     },
+     {
+      "level": "T3",
+      "stored_target": 715.26,
+      "recovered_target": 715.26,
+      "stored_est": 98.55,
+      "recovered_est": 98.55,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.09,
+      "recovered_rr_contribution_full_premium": 2.46
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "SMCI",
+    "contract": "SMCI|42|2026-10-23|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 45.19,
+      "recovered_target": 45.19,
+      "stored_est": 4.46,
+      "recovered_est": 4.46,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.91,
+      "recovered_rr_contribution_full_premium": 0.55
+     },
+     {
+      "level": "T2",
+      "stored_target": 46.86,
+      "recovered_target": 46.86,
+      "stored_est": 5.74,
+      "recovered_est": 5.74,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.66,
+      "recovered_rr_contribution_full_premium": 0.99
+     },
+     {
+      "level": "T3",
+      "stored_target": 48.54,
+      "recovered_target": 48.54,
+      "stored_est": 7.14,
+      "recovered_est": 7.14,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.46,
+      "recovered_rr_contribution_full_premium": 1.48
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-01",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "MU",
+    "contract": "MU|1050|2026-10-23|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 1168.25,
+      "recovered_target": 1168.25,
+      "stored_est": 130.61,
+      "recovered_est": 130.6,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.22,
+      "recovered_rr_contribution_full_premium": 0.73
+     },
+     {
+      "level": "T2",
+      "stored_target": 1211.52,
+      "recovered_target": 1211.52,
+      "stored_est": 168.98,
+      "recovered_est": 168.98,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.07,
+      "recovered_rr_contribution_full_premium": 1.24
+     },
+     {
+      "level": "T3",
+      "stored_target": 1254.79,
+      "recovered_target": 1254.79,
+      "stored_est": 209.55,
+      "recovered_est": 209.55,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.97,
+      "recovered_rr_contribution_full_premium": 1.78
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|105|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 86.67,
+      "recovered_target": 86.67,
+      "stored_est": 19.43,
+      "recovered_est": 19.43,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.54,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 82.9,
+      "recovered_target": 82.9,
+      "stored_est": 22.52,
+      "recovered_est": 22.52,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.89,
+      "recovered_rr_contribution_full_premium": 0.53
+     },
+     {
+      "level": "T3",
+      "stored_target": 79.13,
+      "recovered_target": 79.14,
+      "stored_est": 25.81,
+      "recovered_est": 25.8,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.26,
+      "recovered_rr_contribution_full_premium": 0.76
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LEN",
+    "contract": "LEN|80|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 69.86,
+      "recovered_target": 69.86,
+      "stored_est": 11.23,
+      "recovered_est": 11.23,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.75,
+      "recovered_rr_contribution_full_premium": 0.45
+     },
+     {
+      "level": "T2",
+      "stored_target": 66.83,
+      "recovered_target": 66.82,
+      "stored_est": 13.61,
+      "recovered_est": 13.61,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.26,
+      "recovered_rr_contribution_full_premium": 0.76
+     },
+     {
+      "level": "T3",
+      "stored_target": 63.79,
+      "recovered_target": 63.78,
+      "stored_est": 16.19,
+      "recovered_est": 16.2,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.82,
+      "recovered_rr_contribution_full_premium": 1.09
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|75|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 78.81,
+      "recovered_target": 78.81,
+      "stored_est": 10.13,
+      "recovered_est": 10.13,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.53,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 81.73,
+      "recovered_target": 81.73,
+      "stored_est": 12.06,
+      "recovered_est": 12.07,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.95,
+      "recovered_rr_contribution_full_premium": 0.57
+     },
+     {
+      "level": "T3",
+      "stored_target": 84.65,
+      "recovered_target": 84.65,
+      "stored_est": 14.15,
+      "recovered_est": 14.15,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.41,
+      "recovered_rr_contribution_full_premium": 0.84
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "ADI",
+    "contract": "ADI|410|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 434.06,
+      "recovered_target": 434.06,
+      "stored_est": 40.56,
+      "recovered_est": 40.56,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.1,
+      "recovered_rr_contribution_full_premium": 0.66
+     },
+     {
+      "level": "T2",
+      "stored_target": 450.14,
+      "recovered_target": 450.13,
+      "stored_est": 52.42,
+      "recovered_est": 52.42,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.91,
+      "recovered_rr_contribution_full_premium": 1.15
+     },
+     {
+      "level": "T3",
+      "stored_target": 466.22,
+      "recovered_target": 466.21,
+      "stored_est": 65.45,
+      "recovered_est": 65.45,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.8,
+      "recovered_rr_contribution_full_premium": 1.68
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "INTC",
+    "contract": "INTC|110|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 113.99,
+      "recovered_target": 113.99,
+      "stored_est": 12.9,
+      "recovered_est": 12.9,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.61,
+      "recovered_rr_contribution_full_premium": 0.37
+     },
+     {
+      "level": "T2",
+      "stored_target": 118.22,
+      "recovered_target": 118.21,
+      "stored_est": 15.64,
+      "recovered_est": 15.63,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.09,
+      "recovered_rr_contribution_full_premium": 0.65
+     },
+     {
+      "level": "T3",
+      "stored_target": 122.44,
+      "recovered_target": 122.43,
+      "stored_est": 18.61,
+      "recovered_est": 18.6,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.62,
+      "recovered_rr_contribution_full_premium": 0.97
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|105|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 86.54,
+      "recovered_target": 86.54,
+      "stored_est": 19.53,
+      "recovered_est": 19.52,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.54,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 82.77,
+      "recovered_target": 82.78,
+      "stored_est": 22.62,
+      "recovered_est": 22.61,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.89,
+      "recovered_rr_contribution_full_premium": 0.53
+     },
+     {
+      "level": "T3",
+      "stored_target": 79.01,
+      "recovered_target": 79.02,
+      "stored_est": 25.91,
+      "recovered_est": 25.9,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.26,
+      "recovered_rr_contribution_full_premium": 0.76
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "NFLX",
+    "contract": "NFLX|72|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 64.9,
+      "recovered_target": 64.9,
+      "stored_est": 8.2,
+      "recovered_est": 8.2,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.96,
+      "recovered_rr_contribution_full_premium": 0.58
+     },
+     {
+      "level": "T2",
+      "stored_target": 62.08,
+      "recovered_target": 62.08,
+      "stored_est": 10.34,
+      "recovered_est": 10.34,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.65,
+      "recovered_rr_contribution_full_premium": 0.99
+     },
+     {
+      "level": "T3",
+      "stored_target": 59.26,
+      "recovered_target": 59.26,
+      "stored_est": 12.71,
+      "recovered_est": 12.72,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.41,
+      "recovered_rr_contribution_full_premium": 1.45
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "GLW",
+    "contract": "GLW|200|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 144.31,
+      "recovered_target": 144.31,
+      "stored_est": 56.03,
+      "recovered_est": 56.03,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.34,
+      "recovered_rr_contribution_full_premium": 0.21
+     },
+     {
+      "level": "T2",
+      "stored_target": 138.04,
+      "recovered_target": 138.03,
+      "stored_est": 61.66,
+      "recovered_est": 61.66,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.54,
+      "recovered_rr_contribution_full_premium": 0.33
+     },
+     {
+      "level": "T3",
+      "stored_target": 131.76,
+      "recovered_target": 131.76,
+      "stored_est": 67.48,
+      "recovered_est": 67.48,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.75,
+      "recovered_rr_contribution_full_premium": 0.45
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "TSLA",
+    "contract": "TSLA|390|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 352.13,
+      "recovered_target": 352.13,
+      "stored_est": 45.17,
+      "recovered_est": 45.17,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.89,
+      "recovered_rr_contribution_full_premium": 0.53
+     },
+     {
+      "level": "T2",
+      "stored_target": 336.82,
+      "recovered_target": 336.82,
+      "stored_est": 56.47,
+      "recovered_est": 56.48,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.53,
+      "recovered_rr_contribution_full_premium": 0.92
+     },
+     {
+      "level": "T3",
+      "stored_target": 321.51,
+      "recovered_target": 321.5,
+      "stored_est": 69.05,
+      "recovered_est": 69.05,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.24,
+      "recovered_rr_contribution_full_premium": 1.34
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "WDC",
+    "contract": "WDC|390|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 362.69,
+      "recovered_target": 362.69,
+      "stored_est": 48.36,
+      "recovered_est": 48.36,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.53,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 346.92,
+      "recovered_target": 346.92,
+      "stored_est": 57.83,
+      "recovered_est": 57.83,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.96,
+      "recovered_rr_contribution_full_premium": 0.58
+     },
+     {
+      "level": "T3",
+      "stored_target": 331.15,
+      "recovered_target": 331.15,
+      "stored_est": 68.45,
+      "recovered_est": 68.45,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.44,
+      "recovered_rr_contribution_full_premium": 0.87
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "FIS",
+    "contract": "FIS|35|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 31.35,
+      "recovered_target": 31.35,
+      "stored_est": 4.41,
+      "recovered_est": 4.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.76,
+      "recovered_rr_contribution_full_premium": 0.46
+     },
+     {
+      "level": "T2",
+      "stored_target": 29.99,
+      "recovered_target": 29.99,
+      "stored_est": 5.4,
+      "recovered_est": 5.41,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.31,
+      "recovered_rr_contribution_full_premium": 0.79
+     },
+     {
+      "level": "T3",
+      "stored_target": 28.63,
+      "recovered_target": 28.62,
+      "stored_est": 6.5,
+      "recovered_est": 6.51,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.91,
+      "recovered_rr_contribution_full_premium": 1.15
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|75|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 78.66,
+      "recovered_target": 78.66,
+      "stored_est": 10.12,
+      "recovered_est": 10.13,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.52,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 81.57,
+      "recovered_target": 81.57,
+      "stored_est": 12.05,
+      "recovered_est": 12.05,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.94,
+      "recovered_rr_contribution_full_premium": 0.56
+     },
+     {
+      "level": "T3",
+      "stored_target": 84.48,
+      "recovered_target": 84.49,
+      "stored_est": 14.12,
+      "recovered_est": 14.12,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.39,
+      "recovered_rr_contribution_full_premium": 0.83
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "INTC",
+    "contract": "INTC|110|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 114.07,
+      "recovered_target": 114.07,
+      "stored_est": 12.87,
+      "recovered_est": 12.87,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.62,
+      "recovered_rr_contribution_full_premium": 0.37
+     },
+     {
+      "level": "T2",
+      "stored_target": 118.29,
+      "recovered_target": 118.29,
+      "stored_est": 15.61,
+      "recovered_est": 15.62,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.1,
+      "recovered_rr_contribution_full_premium": 0.66
+     },
+     {
+      "level": "T3",
+      "stored_target": 122.52,
+      "recovered_target": 122.52,
+      "stored_est": 18.6,
+      "recovered_est": 18.6,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.63,
+      "recovered_rr_contribution_full_premium": 0.98
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "WMT",
+    "contract": "WMT|115|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 120.0,
+      "recovered_target": 120.0,
+      "stored_est": 8.23,
+      "recovered_est": 8.23,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.94,
+      "recovered_rr_contribution_full_premium": 1.17
+     },
+     {
+      "level": "T2",
+      "stored_target": 124.45,
+      "recovered_target": 124.44,
+      "stored_est": 11.64,
+      "recovered_est": 11.63,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.44,
+      "recovered_rr_contribution_full_premium": 2.06
+     },
+     {
+      "level": "T3",
+      "stored_target": 128.89,
+      "recovered_target": 128.89,
+      "stored_est": 15.45,
+      "recovered_est": 15.45,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 5.11,
+      "recovered_rr_contribution_full_premium": 3.07
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "CSCO",
+    "contract": "CSCO|120|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 127.3,
+      "recovered_target": 127.3,
+      "stored_est": 11.93,
+      "recovered_est": 11.93,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.13,
+      "recovered_rr_contribution_full_premium": 0.68
+     },
+     {
+      "level": "T2",
+      "stored_target": 132.01,
+      "recovered_target": 132.01,
+      "stored_est": 15.44,
+      "recovered_est": 15.45,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.95,
+      "recovered_rr_contribution_full_premium": 1.17
+     },
+     {
+      "level": "T3",
+      "stored_target": 136.73,
+      "recovered_target": 136.73,
+      "stored_est": 19.3,
+      "recovered_est": 19.3,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.85,
+      "recovered_rr_contribution_full_premium": 1.71
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MSFT",
+    "contract": "MSFT|545|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 576.7,
+      "recovered_target": 576.7,
+      "stored_est": 46.27,
+      "recovered_est": 46.27,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.65,
+      "recovered_rr_contribution_full_premium": 0.99
+     },
+     {
+      "level": "T2",
+      "stored_target": 598.06,
+      "recovered_target": 598.06,
+      "stored_est": 63.16,
+      "recovered_est": 63.16,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.86,
+      "recovered_rr_contribution_full_premium": 1.72
+     },
+     {
+      "level": "T3",
+      "stored_target": 619.42,
+      "recovered_target": 619.42,
+      "stored_est": 81.78,
+      "recovered_est": 81.79,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.2,
+      "recovered_rr_contribution_full_premium": 2.52
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "WBD",
+    "contract": "WBD|30|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 33.43,
+      "recovered_target": 33.43,
+      "stored_est": 3.83,
+      "recovered_est": 3.84,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.6,
+      "recovered_rr_contribution_full_premium": 2.76
+     },
+     {
+      "level": "T2",
+      "stored_target": 34.66,
+      "recovered_target": 34.67,
+      "stored_est": 4.97,
+      "recovered_est": 4.98,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 6.46,
+      "recovered_rr_contribution_full_premium": 3.88
+     },
+     {
+      "level": "T3",
+      "stored_target": 35.9,
+      "recovered_target": 35.91,
+      "stored_est": 6.17,
+      "recovered_est": 6.17,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 8.41,
+      "recovered_rr_contribution_full_premium": 5.05
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "NOW",
+    "contract": "NOW|142|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 151.45,
+      "recovered_target": 151.45,
+      "stored_est": 18.12,
+      "recovered_est": 18.12,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.69,
+      "recovered_rr_contribution_full_premium": 0.41
+     },
+     {
+      "level": "T2",
+      "stored_target": 157.06,
+      "recovered_target": 157.06,
+      "stored_est": 22.07,
+      "recovered_est": 22.07,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.2,
+      "recovered_rr_contribution_full_premium": 0.72
+     },
+     {
+      "level": "T3",
+      "stored_target": 162.67,
+      "recovered_target": 162.67,
+      "stored_est": 26.33,
+      "recovered_est": 26.34,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.76,
+      "recovered_rr_contribution_full_premium": 1.05
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AAPL",
+    "contract": "AAPL|340|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 361.95,
+      "recovered_target": 361.95,
+      "stored_est": 28.83,
+      "recovered_est": 28.83,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.97,
+      "recovered_rr_contribution_full_premium": 1.18
+     },
+     {
+      "level": "T2",
+      "stored_target": 375.35,
+      "recovered_target": 375.36,
+      "stored_est": 40.06,
+      "recovered_est": 40.07,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.38,
+      "recovered_rr_contribution_full_premium": 2.03
+     },
+     {
+      "level": "T3",
+      "stored_target": 388.76,
+      "recovered_target": 388.76,
+      "stored_est": 52.32,
+      "recovered_est": 52.32,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.93,
+      "recovered_rr_contribution_full_premium": 2.96
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "GOOG",
+    "contract": "GOOG|360|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 375.87,
+      "recovered_target": 375.87,
+      "stored_est": 29.34,
+      "recovered_est": 29.34,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.4,
+      "recovered_rr_contribution_full_premium": 0.84
+     },
+     {
+      "level": "T2",
+      "stored_target": 389.79,
+      "recovered_target": 389.79,
+      "stored_est": 39.47,
+      "recovered_est": 39.47,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.45,
+      "recovered_rr_contribution_full_premium": 1.47
+     },
+     {
+      "level": "T3",
+      "stored_target": 403.71,
+      "recovered_target": 403.71,
+      "stored_est": 50.78,
+      "recovered_est": 50.77,
+      "diff": -0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.63,
+      "recovered_rr_contribution_full_premium": 2.18
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "GOOGL",
+    "contract": "GOOGL|360|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 379.6,
+      "recovered_target": 379.6,
+      "stored_est": 32.04,
+      "recovered_est": 32.04,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.34,
+      "recovered_rr_contribution_full_premium": 0.81
+     },
+     {
+      "level": "T2",
+      "stored_target": 393.66,
+      "recovered_target": 393.66,
+      "stored_est": 42.61,
+      "recovered_est": 42.61,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.33,
+      "recovered_rr_contribution_full_premium": 1.4
+     },
+     {
+      "level": "T3",
+      "stored_target": 407.72,
+      "recovered_target": 407.72,
+      "stored_est": 54.29,
+      "recovered_est": 54.29,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.43,
+      "recovered_rr_contribution_full_premium": 2.06
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "MU",
+    "contract": "MU|1050|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 1113.83,
+      "recovered_target": 1113.83,
+      "stored_est": 120.15,
+      "recovered_est": 120.16,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.81,
+      "recovered_rr_contribution_full_premium": 0.49
+     },
+     {
+      "level": "T2",
+      "stored_target": 1155.08,
+      "recovered_target": 1155.08,
+      "stored_est": 149.43,
+      "recovered_est": 149.43,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.42,
+      "recovered_rr_contribution_full_premium": 0.85
+     },
+     {
+      "level": "T3",
+      "stored_target": 1196.33,
+      "recovered_target": 1196.34,
+      "stored_est": 181.28,
+      "recovered_est": 181.29,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.08,
+      "recovered_rr_contribution_full_premium": 1.25
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "CVX",
+    "contract": "CVX|210|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 229.54,
+      "recovered_target": 229.54,
+      "stored_est": 22.8,
+      "recovered_est": 22.8,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.69,
+      "recovered_rr_contribution_full_premium": 1.01
+     },
+     {
+      "level": "T2",
+      "stored_target": 238.04,
+      "recovered_target": 238.04,
+      "stored_est": 30.41,
+      "recovered_est": 30.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.81,
+      "recovered_rr_contribution_full_premium": 1.69
+     },
+     {
+      "level": "T3",
+      "stored_target": 246.55,
+      "recovered_target": 246.54,
+      "stored_est": 38.47,
+      "recovered_est": 38.47,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.0,
+      "recovered_rr_contribution_full_premium": 2.4
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "AMAT",
+    "contract": "AMAT|560|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 549.22,
+      "recovered_target": 549.22,
+      "stored_est": 42.21,
+      "recovered_est": 42.22,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.75,
+      "recovered_rr_contribution_full_premium": 0.45
+     },
+     {
+      "level": "T2",
+      "stored_target": 569.56,
+      "recovered_target": 569.56,
+      "stored_est": 53.47,
+      "recovered_est": 53.48,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.39,
+      "recovered_rr_contribution_full_premium": 0.83
+     },
+     {
+      "level": "T3",
+      "stored_target": 589.9,
+      "recovered_target": 589.9,
+      "stored_est": 66.1,
+      "recovered_est": 66.11,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.11,
+      "recovered_rr_contribution_full_premium": 1.27
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "XOM",
+    "contract": "XOM|170|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 182.68,
+      "recovered_target": 182.68,
+      "stored_est": 16.13,
+      "recovered_est": 16.13,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.71,
+      "recovered_rr_contribution_full_premium": 1.03
+     },
+     {
+      "level": "T2",
+      "stored_target": 189.45,
+      "recovered_target": 189.44,
+      "stored_est": 21.85,
+      "recovered_est": 21.85,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.91,
+      "recovered_rr_contribution_full_premium": 1.75
+     },
+     {
+      "level": "T3",
+      "stored_target": 196.21,
+      "recovered_target": 196.21,
+      "stored_est": 28.04,
+      "recovered_est": 28.04,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.21,
+      "recovered_rr_contribution_full_premium": 2.53
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "DVN",
+    "contract": "DVN|50|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 52.38,
+      "recovered_target": 52.38,
+      "stored_est": 4.33,
+      "recovered_est": 4.33,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.28,
+      "recovered_rr_contribution_full_premium": 0.77
+     },
+     {
+      "level": "T2",
+      "stored_target": 54.32,
+      "recovered_target": 54.32,
+      "stored_est": 5.74,
+      "recovered_est": 5.74,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.24,
+      "recovered_rr_contribution_full_premium": 1.34
+     },
+     {
+      "level": "T3",
+      "stored_target": 56.26,
+      "recovered_target": 56.26,
+      "stored_est": 7.31,
+      "recovered_est": 7.31,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.31,
+      "recovered_rr_contribution_full_premium": 1.98
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|100|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 86.55,
+      "recovered_target": 86.55,
+      "stored_est": 15.41,
+      "recovered_est": 15.41,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.6,
+      "recovered_rr_contribution_full_premium": 0.36
+     },
+     {
+      "level": "T2",
+      "stored_target": 82.79,
+      "recovered_target": 82.78,
+      "stored_est": 18.25,
+      "recovered_est": 18.25,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.02,
+      "recovered_rr_contribution_full_premium": 0.61
+     },
+     {
+      "level": "T3",
+      "stored_target": 79.03,
+      "recovered_target": 79.02,
+      "stored_est": 21.34,
+      "recovered_est": 21.34,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.47,
+      "recovered_rr_contribution_full_premium": 0.89
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O1-options-position-bearish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bearish",
+    "symbol": "LULU",
+    "contract": "LULU|105|2026-12-18|P",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 86.65,
+      "recovered_target": 86.65,
+      "stored_est": 19.44,
+      "recovered_est": 19.44,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.54,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 82.89,
+      "recovered_target": 82.88,
+      "stored_est": 22.53,
+      "recovered_est": 22.53,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.89,
+      "recovered_rr_contribution_full_premium": 0.53
+     },
+     {
+      "level": "T3",
+      "stored_target": 79.12,
+      "recovered_target": 79.11,
+      "stored_est": 25.81,
+      "recovered_est": 25.82,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.26,
+      "recovered_rr_contribution_full_premium": 0.76
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "HPE",
+    "contract": "HPE|75|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 78.81,
+      "recovered_target": 78.81,
+      "stored_est": 10.15,
+      "recovered_est": 10.15,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.53,
+      "recovered_rr_contribution_full_premium": 0.32
+     },
+     {
+      "level": "T2",
+      "stored_target": 81.73,
+      "recovered_target": 81.73,
+      "stored_est": 12.09,
+      "recovered_est": 12.09,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.95,
+      "recovered_rr_contribution_full_premium": 0.57
+     },
+     {
+      "level": "T3",
+      "stored_target": 84.65,
+      "recovered_target": 84.65,
+      "stored_est": 14.17,
+      "recovered_est": 14.18,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.4,
+      "recovered_rr_contribution_full_premium": 0.84
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "ADI",
+    "contract": "ADI|410|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 433.73,
+      "recovered_target": 433.73,
+      "stored_est": 40.16,
+      "recovered_est": 40.16,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.12,
+      "recovered_rr_contribution_full_premium": 0.67
+     },
+     {
+      "level": "T2",
+      "stored_target": 449.79,
+      "recovered_target": 449.8,
+      "stored_est": 52.01,
+      "recovered_est": 52.01,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.94,
+      "recovered_rr_contribution_full_premium": 1.16
+     },
+     {
+      "level": "T3",
+      "stored_target": 465.86,
+      "recovered_target": 465.86,
+      "stored_est": 65.03,
+      "recovered_est": 65.03,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.84,
+      "recovered_rr_contribution_full_premium": 1.7
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Position",
+    "direction": "Bullish",
+    "symbol": "INTC",
+    "contract": "INTC|110|2026-12-18|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 113.97,
+      "recovered_target": 113.97,
+      "stored_est": 12.9,
+      "recovered_est": 12.9,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 0.61,
+      "recovered_rr_contribution_full_premium": 0.37
+     },
+     {
+      "level": "T2",
+      "stored_target": 118.19,
+      "recovered_target": 118.19,
+      "stored_est": 15.63,
+      "recovered_est": 15.63,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.09,
+      "recovered_rr_contribution_full_premium": 0.65
+     },
+     {
+      "level": "T3",
+      "stored_target": 122.41,
+      "recovered_target": 122.41,
+      "stored_est": 18.6,
+      "recovered_est": 18.6,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.61,
+      "recovered_rr_contribution_full_premium": 0.97
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "AMD",
+    "contract": "AMD|620|2026-10-30|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.01,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 659.7,
+      "recovered_target": 659.7,
+      "stored_est": 48.55,
+      "recovered_est": 48.56,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.87,
+      "recovered_rr_contribution_full_premium": 1.12
+     },
+     {
+      "level": "T2",
+      "stored_target": 684.13,
+      "recovered_target": 684.13,
+      "stored_est": 68.94,
+      "recovered_est": 68.95,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.36,
+      "recovered_rr_contribution_full_premium": 2.01
+     },
+     {
+      "level": "T3",
+      "stored_target": 708.56,
+      "recovered_target": 708.57,
+      "stored_est": 91.31,
+      "recovered_est": 91.32,
+      "diff": 0.01,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 4.98,
+      "recovered_rr_contribution_full_premium": 2.99
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "CSCO",
+    "contract": "CSCO|120|2026-10-30|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 127.19,
+      "recovered_target": 127.19,
+      "stored_est": 7.94,
+      "recovered_est": 7.94,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.76,
+      "recovered_rr_contribution_full_premium": 2.25
+     },
+     {
+      "level": "T2",
+      "stored_target": 131.9,
+      "recovered_target": 131.9,
+      "stored_est": 12.26,
+      "recovered_est": 12.26,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 6.71,
+      "recovered_rr_contribution_full_premium": 4.02
+     },
+     {
+      "level": "T3",
+      "stored_target": 136.61,
+      "recovered_target": 136.61,
+      "stored_est": 16.87,
+      "recovered_est": 16.87,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 9.86,
+      "recovered_rr_contribution_full_premium": 5.91
+     }
+    ]
+   },
+   {
+    "scan": "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.result.json",
+    "date_dir": "2026-10-09",
+    "horizon": "Swing",
+    "direction": "Bullish",
+    "symbol": "SMCI",
+    "contract": "SMCI|43|2026-10-30|C",
+    "label": "BS repriced (IV-derived)",
+    "pre_d5_basis_confirmed_by_ladder": true,
+    "reproducible": true,
+    "differing_fields": [],
+    "max_abs_diff": 0.0,
+    "levels": [
+     {
+      "level": "T1",
+      "stored_target": 44.63,
+      "recovered_target": 44.63,
+      "stored_est": 3.2,
+      "recovered_est": 3.2,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 1.09,
+      "recovered_rr_contribution_full_premium": 0.65
+     },
+     {
+      "level": "T2",
+      "stored_target": 46.28,
+      "recovered_target": 46.28,
+      "stored_est": 4.35,
+      "recovered_est": 4.35,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 2.07,
+      "recovered_rr_contribution_full_premium": 1.24
+     },
+     {
+      "level": "T3",
+      "stored_target": 47.94,
+      "recovered_target": 47.94,
+      "stored_est": 5.65,
+      "recovered_est": 5.65,
+      "diff": 0.0,
+      "stored_label": "BS repriced (IV-derived)",
+      "recovered_label": "BS repriced (IV-derived)",
+      "stored_rr_contribution_pre_d5": 3.19,
+      "recovered_rr_contribution_full_premium": 1.91
+     }
+    ]
+   }
+  ]
+ },
+ "alternatives_exit_recovery_supplementary": {
+  "note": "Non-Heston alternatives: the stored exit premium back-solved from the stored pre-D5 rrRatio (interval from its 2 dp rounding, +-$0.01) against the shipped estimate_rr BS exit premium. Exit premiums are compared, never R/Rs.",
+  "checked": 107,
+  "match": 107,
+  "mismatch": 0,
+  "mismatch_list": []
+ },
+ "heston_cards": [
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json",
+   "date_dir": "2026-09-18",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "CVX",
+   "contract": "CVX|220|2026-11-20|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 6.08,
+   "dte": 63,
+   "reprice_years": 0.13424657534246576,
+   "stored_rrRatio_pre_d5_not_compared": 2.19,
+   "headline": {
+    "heston_rr_full_premium": 1.31,
+    "bs_rr_full_premium": 1.26,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 227.34,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 14.06,
+     "bs_exit": 13.74,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0232896652110626,
+     "heston_rr_full_premium": 1.31,
+     "bs_rr_full_premium": 1.26,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 235.76,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 20.39,
+     "bs_exit": 19.96,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0215430861723447,
+     "heston_rr_full_premium": 2.35,
+     "bs_rr_full_premium": 2.28,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    },
+    {
+     "level": "T3",
+     "target": 244.18,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 27.5,
+     "bs_exit": 27.06,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.016260162601626,
+     "heston_rr_full_premium": 3.52,
+     "bs_rr_full_premium": 3.45,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json",
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "symbol": "CSCO",
+   "contract": "CSCO|110|2026-11-20|P",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 7.33,
+   "dte": 50,
+   "reprice_years": 0.09863013698630137,
+   "stored_rrRatio_pre_d5_not_compared": 1.04,
+   "headline": {
+    "heston_rr_full_premium": 0.62,
+    "bs_rr_full_premium": 0.62,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 99.47,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 11.9,
+     "bs_exit": 11.88,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0016835016835017,
+     "heston_rr_full_premium": 0.62,
+     "bs_rr_full_premium": 0.62,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 95.15,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 15.32,
+     "bs_exit": 15.31,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.000653167864141,
+     "heston_rr_full_premium": 1.09,
+     "bs_rr_full_premium": 1.09,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 90.82,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 19.11,
+     "bs_exit": 19.11,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0,
+     "heston_rr_full_premium": 1.61,
+     "bs_rr_full_premium": 1.61,
+     "heston_band": "CAUTION",
+     "bs_band": "CAUTION"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "MSFT",
+   "contract": "MSFT|520|2026-11-20|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 23.7,
+   "dte": 50,
+   "reprice_years": 0.09863013698630137,
+   "stored_rrRatio_pre_d5_not_compared": 1.64,
+   "headline": {
+    "heston_rr_full_premium": 0.98,
+    "bs_rr_full_premium": 0.98,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 557.64,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 47.02,
+     "bs_exit": 46.92,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0021312872975277,
+     "heston_rr_full_premium": 0.98,
+     "bs_rr_full_premium": 0.98,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 578.3,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 64.39,
+     "bs_exit": 64.27,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0018671230745293,
+     "heston_rr_full_premium": 1.72,
+     "bs_rr_full_premium": 1.71,
+     "heston_band": "CAUTION",
+     "bs_band": "CAUTION"
+    },
+    {
+     "level": "T3",
+     "target": 598.95,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 83.24,
+     "bs_exit": 83.12,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.001443695861405,
+     "heston_rr_full_premium": 2.51,
+     "bs_rr_full_premium": 2.51,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "XOM",
+   "contract": "XOM|160|2026-11-20|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 8.78,
+   "dte": 50,
+   "reprice_years": 0.09863013698630137,
+   "stored_rrRatio_pre_d5_not_compared": 1.73,
+   "headline": {
+    "heston_rr_full_premium": 1.04,
+    "bs_rr_full_premium": 1.0,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 175.76,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 17.87,
+     "bs_exit": 17.53,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0193953223046206,
+     "heston_rr_full_premium": 1.04,
+     "bs_rr_full_premium": 1.0,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 182.27,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 23.74,
+     "bs_exit": 23.47,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0115040477204942,
+     "heston_rr_full_premium": 1.7,
+     "bs_rr_full_premium": 1.67,
+     "heston_band": "CAUTION",
+     "bs_band": "CAUTION"
+    },
+    {
+     "level": "T3",
+     "target": 188.78,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 29.91,
+     "bs_exit": 29.73,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0060544904137234,
+     "heston_rr_full_premium": 2.41,
+     "bs_rr_full_premium": 2.39,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "symbol": "NKE",
+   "contract": "NKE|35|2026-12-18|P",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 2.49,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 0.92,
+   "headline": {
+    "heston_rr_full_premium": 0.55,
+    "bs_rr_full_premium": 0.51,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 32.17,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 3.87,
+     "bs_exit": 3.77,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.026525198938992,
+     "heston_rr_full_premium": 0.55,
+     "bs_rr_full_premium": 0.51,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 30.77,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 4.77,
+     "bs_exit": 4.74,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0063291139240504,
+     "heston_rr_full_premium": 0.92,
+     "bs_rr_full_premium": 0.9,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 29.37,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 5.82,
+     "bs_exit": 5.82,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0,
+     "heston_rr_full_premium": 1.34,
+     "bs_rr_full_premium": 1.34,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "KEYS",
+   "contract": "KEYS|400|2026-12-18|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 23.45,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 0.92,
+   "headline": {
+    "heston_rr_full_premium": 0.55,
+    "bs_rr_full_premium": 0.56,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 412.8,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 36.45,
+     "bs_exit": 36.49,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9989038092628117,
+     "heston_rr_full_premium": 0.55,
+     "bs_rr_full_premium": 0.56,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 428.09,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 46.77,
+     "bs_exit": 46.61,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0034327397554175,
+     "heston_rr_full_premium": 0.99,
+     "bs_rr_full_premium": 0.99,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 443.38,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 58.14,
+     "bs_exit": 57.83,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.005360539512364,
+     "heston_rr_full_premium": 1.48,
+     "bs_rr_full_premium": 1.47,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "PFE",
+   "contract": "PFE|28|2026-12-18|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 1.21,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 2.34,
+   "headline": {
+    "heston_rr_full_premium": 1.4,
+    "bs_rr_full_premium": 1.32,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 30.48,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 2.91,
+     "bs_exit": 2.81,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0355871886120998,
+     "heston_rr_full_premium": 1.4,
+     "bs_rr_full_premium": 1.32,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 31.61,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 3.94,
+     "bs_exit": 3.87,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0180878552971575,
+     "heston_rr_full_premium": 2.26,
+     "bs_rr_full_premium": 2.2,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    },
+    {
+     "level": "T3",
+     "target": 32.74,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 5.01,
+     "bs_exit": 4.97,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0080482897384306,
+     "heston_rr_full_premium": 3.14,
+     "bs_rr_full_premium": 3.11,
+     "heston_band": "PASS",
+     "bs_band": "PASS"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "symbol": "COO",
+   "contract": "COO|55|2026-12-18|P",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 3.8,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 0.99,
+   "headline": {
+    "heston_rr_full_premium": 0.6,
+    "bs_rr_full_premium": 0.61,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 49.68,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 6.07,
+     "bs_exit": 6.11,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9934533551554828,
+     "heston_rr_full_premium": 0.6,
+     "bs_rr_full_premium": 0.61,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 47.52,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 7.72,
+     "bs_exit": 7.76,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9948453608247423,
+     "heston_rr_full_premium": 1.03,
+     "bs_rr_full_premium": 1.04,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 45.36,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 9.56,
+     "bs_exit": 9.58,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9979123173277662,
+     "heston_rr_full_premium": 1.52,
+     "bs_rr_full_premium": 1.52,
+     "heston_band": "CAUTION",
+     "bs_band": "CAUTION"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "symbol": "JKHY",
+   "contract": "JKHY|160|2026-12-18|P",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 13.65,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 1.02,
+   "headline": {
+    "heston_rr_full_premium": 0.61,
+    "bs_rr_full_premium": 0.62,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 138.01,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 22.03,
+     "bs_exit": 22.07,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9981875849569551,
+     "heston_rr_full_premium": 0.61,
+     "bs_rr_full_premium": 0.62,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 132.01,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 27.37,
+     "bs_exit": 27.38,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9996347699050403,
+     "heston_rr_full_premium": 1.01,
+     "bs_rr_full_premium": 1.01,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 126.01,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 33.02,
+     "bs_exit": 33.02,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 1.0,
+     "heston_rr_full_premium": 1.42,
+     "bs_rr_full_premium": 1.42,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    }
+   ],
+   "inputs_reproduced": true
+  },
+  {
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "symbol": "KEYS",
+   "contract": "KEYS|400|2026-12-18|C",
+   "label": "Heston repriced",
+   "pre_d5_basis_confirmed_by_ladder": true,
+   "premium": 23.4,
+   "dte": 70,
+   "reprice_years": 0.15342465753424658,
+   "stored_rrRatio_pre_d5_not_compared": 0.91,
+   "headline": {
+    "heston_rr_full_premium": 0.55,
+    "bs_rr_full_premium": 0.56,
+    "bs_model": "BS repriced (IV-derived)",
+    "heston_band": "REJECT",
+    "bs_band": "REJECT",
+    "band_changes": false
+   },
+   "levels": [
+    {
+     "level": "T1",
+     "target": 413.02,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 36.17,
+     "bs_exit": 36.49,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9912304741024939,
+     "heston_rr_full_premium": 0.55,
+     "bs_rr_full_premium": 0.56,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T2",
+     "target": 428.32,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 46.39,
+     "bs_exit": 46.64,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.994639794168096,
+     "heston_rr_full_premium": 0.98,
+     "bs_rr_full_premium": 0.99,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    },
+    {
+     "level": "T3",
+     "target": 443.62,
+     "target_reproduced": true,
+     "stored_label": "Heston repriced",
+     "stored_heston_exit": 57.72,
+     "bs_exit": 57.89,
+     "bs_label": "BS repriced (IV-derived)",
+     "heston_over_bs": 0.9970633960960442,
+     "heston_rr_full_premium": 1.47,
+     "bs_rr_full_premium": 1.47,
+     "heston_band": "REJECT",
+     "bs_band": "REJECT"
+    }
+   ],
+   "inputs_reproduced": true
+  }
+ ],
+ "heston_alternatives": [
+  {
+   "symbol": "MSFT",
+   "strike": 525.0,
+   "dte": 50,
+   "mid": 21.4,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 1.45,
+   "stored_exit_backsolved": 40.018,
+   "stored_exit_interval": [
+    39.953799999999994,
+    40.08219999999999
+   ],
+   "bs_exit": 39.9,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 0.86,
+   "reprice_years": 0.0684931506849315,
+   "alt_stop_fraction": 1.0,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "card_symbol": "MSFT",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 1.0029573934837093,
+   "heston_over_bs_interval": [
+    1.001348370927318,
+    1.0045664160401002
+   ],
+   "heston_rr_full_premium": 0.87,
+   "heston_rr_full_premium_interval": [
+    0.867,
+    0.873
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "MSFT",
+   "strike": 515.0,
+   "dte": 50,
+   "mid": 26.1,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 1.4,
+   "stored_exit_backsolved": 48.024,
+   "stored_exit_interval": [
+    47.9457,
+    48.1023
+   ],
+   "bs_exit": 47.9,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 0.84,
+   "reprice_years": 0.0684931506849315,
+   "alt_stop_fraction": 0.99,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-01",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "card_symbol": "MSFT",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 1.00258872651357,
+   "heston_over_bs_interval": [
+    1.000954070981211,
+    1.004223382045929
+   ],
+   "heston_rr_full_premium": 0.84,
+   "heston_rr_full_premium_interval": [
+    0.837,
+    0.843
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "NKE",
+   "strike": 32.0,
+   "dte": 70,
+   "mid": 1.38,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 0.48,
+   "stored_exit_backsolved": 1.77744,
+   "stored_exit_interval": [
+    1.7732999999999997,
+    1.7815799999999997
+   ],
+   "bs_exit": 1.68,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 0.22,
+   "reprice_years": 0.0958904109589041,
+   "alt_stop_fraction": 0.38,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "card_symbol": "NKE",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 1.058,
+   "heston_over_bs_interval": [
+    1.055535714285714,
+    1.0604642857142856
+   ],
+   "heston_rr_full_premium": 0.29,
+   "heston_rr_full_premium_interval": [
+    0.285,
+    0.291
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "PFE",
+   "strike": 27.0,
+   "dte": 70,
+   "mid": 1.81,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 1.69,
+   "stored_exit_backsolved": 3.6453400000000005,
+   "stored_exit_interval": [
+    3.6399100000000004,
+    3.65077
+   ],
+   "bs_exit": 3.62,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 1.0,
+   "reprice_years": 0.0958904109589041,
+   "alt_stop_fraction": 0.4,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "card_symbol": "PFE",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 1.0070000000000001,
+   "heston_over_bs_interval": [
+    1.0055,
+    1.0085
+   ],
+   "heston_rr_full_premium": 1.01,
+   "heston_rr_full_premium_interval": [
+    1.011,
+    1.017
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "PFE",
+   "strike": 29.0,
+   "dte": 70,
+   "mid": 0.77,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 2.4,
+   "stored_exit_backsolved": 1.8788,
+   "stored_exit_interval": [
+    1.8764900000000002,
+    1.8811099999999998
+   ],
+   "bs_exit": 1.81,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 1.35,
+   "reprice_years": 0.0958904109589041,
+   "alt_stop_fraction": 0.49,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bullish",
+   "card_symbol": "PFE",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 1.038011049723757,
+   "heston_over_bs_interval": [
+    1.0367348066298343,
+    1.0392872928176795
+   ],
+   "heston_rr_full_premium": 1.44,
+   "heston_rr_full_premium_interval": [
+    1.437,
+    1.443
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "COO",
+   "strike": 65.0,
+   "dte": 70,
+   "mid": 11.5,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 0.51,
+   "stored_exit_backsolved": 15.019,
+   "stored_exit_interval": [
+    14.984499999999999,
+    15.0535
+   ],
+   "bs_exit": 15.09,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 0.31,
+   "reprice_years": 0.0958904109589041,
+   "alt_stop_fraction": 0.77,
+   "stored_exit_matches_bs": "False",
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "card_symbol": "COO",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 0.9952948972829688,
+   "heston_over_bs_interval": [
+    0.9930086149768058,
+    0.9975811795891318
+   ],
+   "heston_rr_full_premium": 0.31,
+   "heston_rr_full_premium_interval": [
+    0.303,
+    0.309
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  },
+  {
+   "symbol": "COO",
+   "strike": 50.0,
+   "dte": 70,
+   "mid": 1.65,
+   "stored_label": "Heston repriced",
+   "stored_rr_pre_d5": 0.73,
+   "stored_exit_backsolved": 2.3726999999999996,
+   "stored_exit_interval": [
+    2.36775,
+    2.37765
+   ],
+   "bs_exit": 2.38,
+   "bs_model": "BS repriced (IV-derived)",
+   "bs_rr_full_premium": 0.44,
+   "reprice_years": 0.0958904109589041,
+   "alt_stop_fraction": 0.96,
+   "stored_exit_matches_bs": "True",
+   "scan": "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json",
+   "date_dir": "2026-10-09",
+   "horizon": "Position",
+   "direction": "Bearish",
+   "card_symbol": "COO",
+   "card_label": "Heston repriced",
+   "heston_over_bs": 0.9969327731092436,
+   "heston_over_bs_interval": [
+    0.9948529411764706,
+    0.9990126050420168
+   ],
+   "heston_rr_full_premium": 0.44,
+   "heston_rr_full_premium_interval": [
+    0.435,
+    0.441
+   ],
+   "heston_band": "REJECT",
+   "bs_band": "REJECT",
+   "band_changes": false
+  }
+ ],
+ "limits": [
+  "Cards store no Heston parameters, fit error or calibration chain: M1 cannot reproduce a Heston number and cannot evaluate any option. It reports reach and the exit gap only.",
+  "Three days of real scans (2026-09-18, 2026-10-01, 2026-10-09)."
+ ],
+ "rr_consumer_grep": {
+  "all_consumers": {
+   "command": "git grep -n -E rrRatio|rr_ratio -- backend/app frontend :!*test* :!*__tests__* :!*__mocks__* :!frontend/e2e",
+   "hits": 126,
+   "files": [
+    "backend/app/fixtures/tradecards.py",
+    "backend/app/routers/contracts.py",
+    "backend/app/routers/scan.py",
+    "backend/app/routers/stock_scan.py",
+    "backend/app/schemas/__init__.py",
+    "backend/app/schemas/stock_scan.py",
+    "backend/app/scoring/exit_plan.py",
+    "backend/app/scoring/reward_risk.py",
+    "backend/app/scoring/trade_plan.py",
+    "backend/app/services/config_health.py",
+    "backend/app/services/config_loader.py",
+    "backend/app/services/picked_method.py",
+    "backend/app/services/position_writer.py",
+    "backend/app/services/strategy_engine.py",
+    "backend/app/services/strategy_watch_evaluator.py",
+    "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+    "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "frontend/components/molecules/AlternativeContractRow/index.tsx",
+    "frontend/components/molecules/MethodPickSelector/index.tsx",
+    "frontend/components/organisms/StockPositionCard/index.tsx",
+    "frontend/components/organisms/TradeCard/index.tsx",
+    "frontend/lib/api.ts",
+    "frontend/lib/scanStore.ts",
+    "frontend/lib/tradeCardOverride.ts",
+    "frontend/lib/tradeCardSnapshot.ts",
+    "frontend/lib/tradeCardUiStore.ts",
+    "frontend/types/domain.ts",
+    "frontend/types/stockDomain.ts"
+   ],
+   "lines": [
+    "backend/app/fixtures/tradecards.py:106:        rrRatio=rr,",
+    "backend/app/routers/contracts.py:487:    rrRatio: float",
+    "backend/app/routers/contracts.py:628:        rrRatio=plan.rr_ratio,",
+    "backend/app/routers/contracts.py:1112:    rrRatio:         float",
+    "backend/app/routers/contracts.py:1226:    ratios = ep_cfg[\"target\"][\"rr_ratios\"]",
+    "backend/app/routers/contracts.py:1230:    for rr_ratio in ratios:",
+    "backend/app/routers/contracts.py:1233:            rr_ratio, ep_cfg[\"target\"][\"structural_snap\"][\"atr_multiplier\"],",
+    "backend/app/routers/contracts.py:1264:                f\"|{rr_ratio}|{round(row.price, 2)}\"",
+    "backend/app/routers/contracts.py:1286:            rrRatio=row.rr_ratio,",
+    "backend/app/routers/scan.py:1251:    rr = SimpleNamespace(rr_ratio=_plan.rr_ratio, model_used=_plan.rr_model)",
+    "backend/app/routers/scan.py:1360:        rrRatio=rr.rr_ratio,",
+    "backend/app/routers/scan.py:1493:            rrRatio=alt_rr.rr_ratio,",
+    "backend/app/routers/scan.py:1535:            rrRatio=rr.rr_ratio,",
+    "backend/app/routers/stock_scan.py:1348:            rr_ratio=round(core.signal.rr_ratio, 2), atr=core.signal.atr, detail=core.signal.detail)",
+    "backend/app/routers/stock_scan.py:1777:                    rr_ratio=round(signal.rr_ratio, 2), atr=signal.atr, detail=signal.detail,",
+    "backend/app/routers/stock_scan.py:2698:    #: None -> risk_rules.yaml's exit_plan.target.rr_ratios.",
+    "backend/app/routers/stock_scan.py:2699:    rr_ratios:   Optional[list[float]] = Field(default=None, min_length=1, max_length=5)",
+    "backend/app/routers/stock_scan.py:2701:    @field_validator(\"rr_ratios\")",
+    "backend/app/routers/stock_scan.py:2711:                raise ValueError(\"rr_ratios must all be finite and greater than 0\")",
+    "backend/app/routers/stock_scan.py:2731:    rrRatio:         float",
+    "backend/app/routers/stock_scan.py:2891:    rr_ratios = req.rr_ratios if req.rr_ratios is not None else ep_cfg[\"target\"][\"rr_ratios\"]",
+    "backend/app/routers/stock_scan.py:2898:        for rr in rr_ratios",
+    "backend/app/routers/stock_scan.py:2961:            rrRatio=row.rr_ratio,",
+    "backend/app/schemas/__init__.py:727:    rrRatio:            float",
+    "backend/app/schemas/__init__.py:773:    rrRatio: float",
+    "backend/app/schemas/__init__.py:1072:#      PHASE-C-RR). Before it, `rrRatio` / `targets[].rrContribution` divided",
+    "backend/app/schemas/stock_scan.py:137:    rr_ratio:     float",
+    "backend/app/scoring/exit_plan.py:181:    rr_ratio: float",
+    "backend/app/scoring/exit_plan.py:198:    rr_ratio: float,",
+    "backend/app/scoring/exit_plan.py:203:    arithmetic_tp = entry +/- rr_ratio * final_stop_distance. If a real",
+    "backend/app/scoring/exit_plan.py:216:        entry_price + rr_ratio * final_stop_distance if is_bullish",
+    "backend/app/scoring/exit_plan.py:217:        else entry_price - rr_ratio * final_stop_distance",
+    "backend/app/scoring/exit_plan.py:255:        rr_ratio=rr_ratio,",
+    "backend/app/scoring/reward_risk.py:18:    rr_ratio: float",
+    "backend/app/scoring/reward_risk.py:181:        return RrResult(rr_ratio=0.0, model_used=model_used, estimated_exit_premium=round(exit_premium, 2), risk_basis=basis)",
+    "backend/app/scoring/reward_risk.py:183:    rr_ratio = round(reward / risk, 2)",
+    "backend/app/scoring/reward_risk.py:185:        rr_ratio=rr_ratio,",
+    "backend/app/scoring/trade_plan.py:30:    rr_ratio: float",
+    "backend/app/scoring/trade_plan.py:198:        rr_ratio=rr.rr_ratio,",
+    "backend/app/services/config_health.py:169:        \"target\": {\"rr_ratios\": None, \"structural_snap\": {\"atr_multiplier\": None}},",
+    "backend/app/services/config_loader.py:56:    target.rr_ratios, target.structural_snap.atr_multiplier).\"\"\"",
+    "backend/app/services/config_loader.py:504:        value = load_exit_plan_cfg()[\"target\"][\"rr_ratios\"][0]",
+    "backend/app/services/picked_method.py:55:# `rr_ratios[i]` -> the TpMethod value for that row. POSITIONAL, because the",
+    "backend/app/services/picked_method.py:57:# rr_ratios) while these two enum values hardcode \"2R\" and \"3R\" in their names.",
+    "backend/app/services/picked_method.py:75:    rr_ratios: Optional[list[float]],",
+    "backend/app/services/picked_method.py:81:    `targets` rows each carry their own `rrRatio`, which is how an arithmetic",
+    "backend/app/services/picked_method.py:83:    `rr_ratios` is `risk_rules.yaml -> exit_plan.target.rr_ratios`, READ FROM",
+    "backend/app/services/picked_method.py:122:        rr = _rr_ratio_for_row(exit_plan, picked_row_stock_price)",
+    "backend/app/services/picked_method.py:125:        return _seed_for_rr(rr, rr_ratios, picked_row_stock_price)",
+    "backend/app/services/picked_method.py:133:def _rr_ratio_for_row(",
+    "backend/app/services/picked_method.py:140:    `rr_ratios` change and an index does not. The persisted exit plan's rows",
+    "backend/app/services/picked_method.py:141:    carry both (`ExitPlanTargetRowOut.rrRatio` / `.price`), so the price is",
+    "backend/app/services/picked_method.py:166:        ratio = row.get('rrRatio')",
+    "backend/app/services/picked_method.py:182:    rr_ratios: Optional[list[float]],",
+    "backend/app/services/picked_method.py:186:    configured `rr_ratios`.",
+    "backend/app/services/picked_method.py:188:    Never hardcodes 2.0 / 3.0. With `rr_ratios: [1.5, 4.0]` a 1.5R pick is the",
+    "backend/app/services/picked_method.py:198:    # malformed-but-loadable `rr_ratios` \u2014 a scalar or a mapping where a list",
+    "backend/app/services/picked_method.py:202:    if not isinstance(rr_ratios, (list, tuple)) or not rr_ratios:",
+    "backend/app/services/picked_method.py:204:    for index, configured in enumerate(rr_ratios[:len(_RR_ROW_METHODS)]):",
+    "backend/app/services/position_writer.py:716:            _rr_ratios = exit_plan_cfg_loader().get(\"target\", {}).get(\"rr_ratios\")",
+    "backend/app/services/position_writer.py:719:                isinstance(row, dict) and isinstance(row.get(\"rrRatio\"), (int, float))",
+    "backend/app/services/position_writer.py:720:                and not isinstance(row[\"rrRatio\"], bool) and math.isfinite(row[\"rrRatio\"])",
+    "backend/app/services/position_writer.py:723:                _rr_ratios = [row[\"rrRatio\"] for row in _shown]",
+    "backend/app/services/position_writer.py:725:            _rr_ratios = None",
+    "backend/app/services/position_writer.py:727:                \"create_position: could not load exit_plan.target.rr_ratios for %s; \"",
+    "backend/app/services/position_writer.py:736:            rr_ratios=_rr_ratios,",
+    "backend/app/services/strategy_engine.py:312:    strategy's declared objective is real information; ``rr_ratio`` and the",
+    "backend/app/services/strategy_engine.py:439:    def rr_ratio(self) -> float:",
+    "backend/app/services/strategy_watch_evaluator.py:78:    rr_ratio:     float | None",
+    "backend/app/services/strategy_watch_evaluator.py:134:_EVENT_FLOATS = (\"entry\", \"stop\", \"target\", \"rr_ratio\", \"close\")",
+    "backend/app/services/strategy_watch_evaluator.py:448:                target=signal.target_price, rr_ratio=round(signal.rr_ratio, 2),",
+    "backend/app/services/strategy_watch_evaluator.py:454:                        f\"(reward-to-risk {round(signal.rr_ratio, 2)})\"),",
+    "backend/app/services/strategy_watch_evaluator.py:484:                target=target_price, rr_ratio=None, close=close,",
+    "backend/app/services/strategy_watch_evaluator.py:493:                target=target_price, rr_ratio=None, close=close,",
+    "backend/app/services/strategy_watch_evaluator.py:502:                target=target_price, rr_ratio=None, close=close,",
+    "backend/app/services/strategy_watch_evaluator.py:528:                    target=opp_signal.target_price, rr_ratio=round(opp_signal.rr_ratio, 2),",
+    "backend/app/services/strategy_watch_evaluator.py:714:        entry=None, stop=None, target=None, rr_ratio=None,",
+    "backend/app/services/strategy_watch_evaluator.py:837:    if ev.rr_ratio is not None:",
+    "backend/app/services/strategy_watch_evaluator.py:838:        lines.append(f\"Reward-to-risk ratio: {ev.rr_ratio}\")",
+    "backend/app/services/strategy_watch_evaluator.py:857:        + (f\"Reward-to-risk ratio: {ev.rr_ratio}\\n\" if ev.rr_ratio is not None else \"\")",
+    "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx:197:  // card's rrRatio is still the auto-pick's -- CAUTION, never that figure.",
+    "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx:219:    status: candidate.rrRatio >= 2.0 ? 'PASS' : candidate.rrRatio >= 1.5 ? 'CAUTION' : 'REJECT',",
+    "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx:220:    detail: `Projected reward:risk is ${candidate.rrRatio.toFixed(1)}\u00d7 to the target, risking the full premium (no protective stop order) \u2014 pass \u22652.0\u00d7, caution 1.5-2.0\u00d7.`,",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:734:        ...(Number.isFinite(position.exitPlan?.targets[0]?.rrRatio) && position.exitPlan!.targets[0].rrRatio > 0 && position.exitPlan!.targets[0].rrRatio <= 10",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:735:          ? { target_r_multiple: position.exitPlan!.targets[0].rrRatio } : {}),",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:745:      // `find((t) => t.rrRatio === rr)` with rr hardcoded to 2 / 3: under",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:746:      // `rr_ratios: [1.5, 4.0]` with `exit_plan_2r` active it matched nothing,",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:800:            <div key={t.rrRatio} className={styles.targetItem}>",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:802:                <Text size={12} weight={600}>{t.rrRatio}R {t.qualityGood ? '\u2713' : '\u26a0'}</Text>",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1556:  // predate `rr_ratios` being configurable; they are NOT the numbers 2 and 3.",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1557:  // This used to be `targets.find((t) => t.rrRatio === rr)` with `rr` hardcoded",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1558:  // to 2 and 3, and under `rr_ratios: [1.5, 4.0]` that found nothing: the",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1566:  // `rr_ratios` in order and appends EVERY row (a row it cannot score still",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1567:  // appends, with probability 0), so index i of `targets` is `rr_ratios[i]`.",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1572:  // under whatever `rr_ratios` were configured at the time, and the label must",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1581:    const rr = row(i)?.rrRatio;",
+    "frontend/app/(frame)/portfolio/EditDrawer.tsx:1646: *  arithmetic pick on a row the configured `rr_ratios` cannot map. Until this",
+    "frontend/app/(frame)/screener/step-7-trade-card/page.tsx:742:  // the Step-6 pick. `rrPending` while `effectiveCard.rrRatio` is still the",
+    "frontend/components/molecules/AlternativeContractRow/index.tsx:45:        <Metric label=\"R/R\" value={`${alt.rrRatio.toFixed(1)}\u00d7`} tone={rrTone} />",
+    "frontend/components/molecules/MethodPickSelector/index.tsx:119: *  over a row index on purpose (\"a price survives an `rr_ratios` change and",
+    "frontend/components/organisms/StockPositionCard/index.tsx:439:        key: `arith-${t.rrRatio}`,",
+    "frontend/components/organisms/StockPositionCard/index.tsx:440:        label: `${t.rrRatio}R`,",
+    "frontend/components/organisms/StockPositionCard/index.tsx:487:    ? (plan?.targets ?? []).filter(row => `arith-${row.rrRatio}` === selectedRow.key && row.price === selectedTarget) : [];",
+    "frontend/components/organisms/StockPositionCard/index.tsx:1323:                  <Text size={11} tone=\"dim\">{t.rrRatio}R</Text>",
+    "frontend/components/organisms/StockPositionCard/index.tsx:1348:                    {`${overlay.entry.toFixed(2)} ${card.direction === 'Bullish' ? '+' : '\u2212'} ${t.rrRatio} \u00d7 ${plan.stop.riskPerShare.toFixed(2)} = ${t.arithmeticPrice.toFixed(2)}`}",
+    "frontend/components/organisms/TradeCard/index.tsx:2039:        key: `arith-${t.rrRatio}`,",
+    "frontend/components/organisms/TradeCard/index.tsx:2040:        label: `${t.rrRatio}:1`,",
+    "frontend/components/organisms/TradeCard/index.tsx:2940:                    return <tr key={`${t.rrRatio}-${i}`}>",
+    "frontend/components/organisms/TradeCard/index.tsx:2942:                        <Text size={12} weight={500}>{t.rrRatio}:1 target {compareState === 'beyond' ? '\u26a0' : ''}</Text>",
+    "frontend/components/organisms/TradeCard/index.tsx:3202:                  <div className={styles.scoreRow} key={t.rrRatio}>",
+    "frontend/components/organisms/TradeCard/index.tsx:3203:                    <Text size={12} tone=\"secondary\">{t.rrRatio}:1 target</Text>",
+    "frontend/lib/api.ts:261:  rr_ratio: number;",
+    "frontend/lib/api.ts:532:      rrRatio: number;",
+    "frontend/lib/api.ts:647:    rr_ratios?: number[];",
+    "frontend/lib/scanStore.ts:879:          // `rrRatio` / `rrContribution` stored before that divided reward by",
+    "frontend/lib/tradeCardOverride.ts:19:  rrRatio: number;",
+    "frontend/lib/tradeCardOverride.ts:125:  return { ...card, entry: plan.entry, exit, rrRatio: plan.rrRatio, rrModel: plan.rrModel };",
+    "frontend/lib/tradeCardSnapshot.ts:17:    rrRatio: card.rrRatio,",
+    "frontend/lib/tradeCardUiStore.ts:15: * `rrPending` is true while the card's `rrRatio` still belongs to the auto-pick:",
+    "frontend/types/domain.ts:346:  rrRatio:         number;",
+    "frontend/types/domain.ts:716:  rrRatio:  number;",
+    "frontend/types/domain.ts:965:  rrRatio:      number;",
+    "frontend/types/domain.ts:1155:   *  index, because a price survives an `rr_ratios` change and `exit_plan_2r`",
+    "frontend/types/stockDomain.ts:8:  target_price: number; rr_ratio: number; atr: number; detail: Record<string, unknown>;",
+    "frontend/types/stockDomain.ts:160:  rrRatio:         number;",
+    "frontend/types/stockDomain.ts:161:  /** entry \u00b1 rrRatio \u00d7 riskPerShare, exactly \u2014 the backend quantizes the stop"
+   ]
+  },
+  "gate_files": {
+   "command": "git grep -n -E rrRatio|rr_ratio -- backend/app/scoring/contract_validator.py backend/app/scoring/conviction_sizing.py backend/app/routers/auto_trade.py backend/app/services/auto_trader.py backend/app/services/auto_trade_booking.py backend/app/models/daily_risk.py backend/app/services/daily_risk.py backend/app/services/daily_risk_hooks.py backend/app/services/portfolio_risk.py backend/app/routers/risk_settings.py frontend/app/(frame)/screener/step-4-ranking/cardToRow.ts frontend/app/(frame)/screener/step-4-ranking/page.tsx frontend/lib/autoTradeStore.ts frontend/lib/risk.ts frontend/lib/riskStore.ts",
+   "files": [
+    "backend/app/scoring/contract_validator.py",
+    "backend/app/scoring/conviction_sizing.py",
+    "backend/app/routers/auto_trade.py",
+    "backend/app/services/auto_trader.py",
+    "backend/app/services/auto_trade_booking.py",
+    "backend/app/models/daily_risk.py",
+    "backend/app/services/daily_risk.py",
+    "backend/app/services/daily_risk_hooks.py",
+    "backend/app/services/portfolio_risk.py",
+    "backend/app/routers/risk_settings.py",
+    "frontend/app/(frame)/screener/step-4-ranking/cardToRow.ts",
+    "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "frontend/lib/autoTradeStore.ts",
+    "frontend/lib/risk.ts",
+    "frontend/lib/riskStore.ts"
+   ],
+   "missing_files": [],
+   "hits": []
+  },
+  "sort_or_rank_expressions": {
+   "command": "git grep -n -E (sort|sorted|sortBy|key=lambda|rank).*(rrRatio|rr_ratio)|(rrRatio|rr_ratio).*(sort|rank) -- backend/app frontend :!*test* :!*__tests__* :!*__mocks__* :!frontend/e2e",
+   "hits": []
+  },
+  "verdict_no_gate_reads_rrRatio": true
+ }
+}

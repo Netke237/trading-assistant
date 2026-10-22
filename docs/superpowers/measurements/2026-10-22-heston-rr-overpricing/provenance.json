@@ -1,0 +1,148 @@
+{
+ "git_head": "96b319716e087a8e7990c479ebdab8fa5c18b559",
+ "app_config_frontend_worktree_changes": [],
+ "python": "3.11.17",
+ "implementation": "CPython",
+ "scipy": "1.17.1",
+ "numpy": "2.4.6",
+ "httpx": "0.28.1",
+ "cpu_count": 4,
+ "rate_r": 0.05,
+ "shipped_grids": {
+  "full": {
+   "kappa": [
+    0.5,
+    1.5,
+    3.0
+   ],
+   "theta": [
+    0.02,
+    0.04,
+    0.08
+   ],
+   "sigma_v": [
+    0.2,
+    0.4,
+    0.6
+   ],
+   "rho": [
+    -0.8,
+    -0.5,
+    -0.2
+   ]
+  },
+  "default": {
+   "kappa": [
+    0.5,
+    3.0
+   ],
+   "theta": [
+    0.02,
+    0.08
+   ],
+   "sigma_v": [
+    0.2,
+    0.6
+   ],
+   "rho": [
+    -0.8,
+    -0.2
+   ]
+  }
+ },
+ "heston_full_grid_env_active": false,
+ "heston_delta_safety_margin": 0.05,
+ "hard_reject_delta_band": [
+  0.2,
+  0.85
+ ],
+ "protocol_holds": {
+  "Position": {
+   "preset": "Position",
+   "hold_min": 15,
+   "hold_max": 45,
+   "files": [
+    "docs/superpowers/measurements/protocol-requests/options-position-bearish.request.json",
+    "docs/superpowers/measurements/protocol-requests/options-position-bullish.request.json"
+   ]
+  },
+  "Swing": {
+   "preset": "Swing",
+   "hold_min": 5,
+   "hold_max": 15,
+   "files": [
+    "docs/superpowers/measurements/protocol-requests/options-swing-bearish.request.json",
+    "docs/superpowers/measurements/protocol-requests/options-swing-bullish.request.json"
+   ]
+  }
+ },
+ "input_sha256": {
+  "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.result.json": "70aee3cb92a1b4e683f85974cb2152c150634335e5a51785f4796e12d94b8e2d",
+  "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bearish.request.json": "9d30acb30385a402fa50838486d07174982205c5cf59394fc4025ce79d33da16",
+  "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.result.json": "9d2668f1131c226da929f85a0b73338bce85ecde8c2b51b189d40deafd09849a",
+  "docs/superpowers/measurements/scans/2026-09-18/sp500-position-bullish.request.json": "e23927c2a35511c8280f78b9176bfbef1bf3b442d3bbf3fca1ee7e3ff0a7ac60",
+  "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.result.json": "f341e510b971239f8e354e3e1ad891ac417fcc122a3b0de539ccd4868f5e0f5c",
+  "docs/superpowers/measurements/scans/2026-10-01/A1-options-position-bearish.request.json": "c482f5d78185f5f988e6f19e19276a7fa6b2df095c219bb7f08a49843eb29718",
+  "docs/superpowers/measurements/scans/2026-10-01/A2-options-swing-bearish.result.json": "89daddbec2c2b53385acef930468beeed20fd969cf8d82ef6fd8fe31ab0d3097",
+  "docs/superpowers/measurements/scans/2026-10-01/A2-options-swing-bearish.request.json": "35439298843cc41c18d143230579f18582602b67e355b95c876316d689422446",
+  "docs/superpowers/measurements/scans/2026-10-01/C1-options-position-bearish.result.json": "cc9bc6e913380f4324cd7f05fa86c21f8a8dc8fddbade993f230ed532a365d43",
+  "docs/superpowers/measurements/scans/2026-10-01/C1-options-position-bearish.request.json": "83da0fbbcd6aa020cfdb6089206061de95da7e9d92aa5e9a0b49dcfdd695058c",
+  "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.result.json": "1d098fa92254af05a0ca5b22abb2b3ae999f13bc9e3f740a29b1cd2f51c61862",
+  "docs/superpowers/measurements/scans/2026-10-01/C1b-options-position-bullish.request.json": "d4a516e6f96d05ec649ecfa49f52dfb58aaaf5fe5be886b13c233b9cbd75f524",
+  "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.result.json": "8fe0389042461876d392b91a2c3dbee98316575d6b18fdf9efaccfff6bbd45c1",
+  "docs/superpowers/measurements/scans/2026-10-01/C5-options-position-bearish.request.json": "7e0499cd8861776ec94cd1fd52a93ce180dd85b522fb120e263803f76be86f1c",
+  "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.result.json": "472a189afeeef04e051d1820589350aeca1d383e002b5a796da008dbbfb04f6f",
+  "docs/superpowers/measurements/scans/2026-10-01/C5b-options-position-bullish.request.json": "8a7d6b7b6af3eb8535bc71aa73bcdccafe2c3fae382b04c7521f4b218e0e70cd",
+  "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.result.json": "2240db9b9046568e83df2de0509d955f6279fe466ca24fbe019ef8750e178c1c",
+  "docs/superpowers/measurements/scans/2026-10-01/C6-options-position-bearish.request.json": "8e8a31fad84921d86ca50895baaeb4eb26540951446db9404254b42b081a5a7c",
+  "docs/superpowers/measurements/scans/2026-10-01/O1-options-position-bearish.result.json": "f3681993762fc083416789206b794b60bb6bcba456b61b12d0d26a8d1afc0a35",
+  "docs/superpowers/measurements/scans/2026-10-01/O1-options-position-bearish.request.json": "c482f5d78185f5f988e6f19e19276a7fa6b2df095c219bb7f08a49843eb29718",
+  "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.result.json": "15d0e8bd787d405e61a4ae98bcc09453d956f9cb4c2c9c2daf6f1e9793c4a68c",
+  "docs/superpowers/measurements/scans/2026-10-01/O2-options-position-bullish.request.json": "0b6236f00555bedefc27393b39d318efe9c3f8546e55d858d5f49655acaddb99",
+  "docs/superpowers/measurements/scans/2026-10-01/O3-options-swing-bearish.result.json": "1534476e719fdeb0b9d6948bb2ffa6894f5d3745b20c6934723746f86b7bca02",
+  "docs/superpowers/measurements/scans/2026-10-01/O3-options-swing-bearish.request.json": "35439298843cc41c18d143230579f18582602b67e355b95c876316d689422446",
+  "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.result.json": "6a5a74fde51a874102a427b81694a27699368986cb8df531dba0bd91f7b11c7a",
+  "docs/superpowers/measurements/scans/2026-10-01/O4-options-swing-bullish.request.json": "15a165fde857606bd895d5e1c3da650ac873f799c7a11e074db491b1f337f06f",
+  "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.result.json": "f883cfe2752cd526558bcff1a211fc3ff33032bc952351a504dfadc39a7fcd31",
+  "docs/superpowers/measurements/scans/2026-10-09/C1-options-position-bearish.request.json": "83da0fbbcd6aa020cfdb6089206061de95da7e9d92aa5e9a0b49dcfdd695058c",
+  "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.result.json": "d0dad599a66dab71e5d93440c5ed59789c023553948cf6c4938d1bbc7644ff41",
+  "docs/superpowers/measurements/scans/2026-10-09/C1b-options-position-bullish.request.json": "d4a516e6f96d05ec649ecfa49f52dfb58aaaf5fe5be886b13c233b9cbd75f524",
+  "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.result.json": "b5c01775c9b6ca863a0f8a910278e61e74f490b713e862add17270f5c8a662bb",
+  "docs/superpowers/measurements/scans/2026-10-09/C5-options-position-bearish.request.json": "7e0499cd8861776ec94cd1fd52a93ce180dd85b522fb120e263803f76be86f1c",
+  "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.result.json": "222a94090a1526cb16dab10e254a5f2a874f340f70975a16c81535b64771fe30",
+  "docs/superpowers/measurements/scans/2026-10-09/C5b-options-position-bullish.request.json": "8a7d6b7b6af3eb8535bc71aa73bcdccafe2c3fae382b04c7521f4b218e0e70cd",
+  "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.result.json": "413dc070f3794971c2d576b6eb390cf22ff0079f78548ab853bdcd686e157f08",
+  "docs/superpowers/measurements/scans/2026-10-09/C6-options-position-bearish.request.json": "8e8a31fad84921d86ca50895baaeb4eb26540951446db9404254b42b081a5a7c",
+  "docs/superpowers/measurements/scans/2026-10-09/O1-options-position-bearish.result.json": "d15e8a856b78305d9af1b542bd9a85bfefbbf75ab69e235b94e6edecde31124d",
+  "docs/superpowers/measurements/scans/2026-10-09/O1-options-position-bearish.request.json": "c482f5d78185f5f988e6f19e19276a7fa6b2df095c219bb7f08a49843eb29718",
+  "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.result.json": "623d1cce59abbb608a586e049bc532bfe95d92e87ea4123f16f75b00bbe4f0ad",
+  "docs/superpowers/measurements/scans/2026-10-09/O2-options-position-bullish.request.json": "0b6236f00555bedefc27393b39d318efe9c3f8546e55d858d5f49655acaddb99",
+  "docs/superpowers/measurements/scans/2026-10-09/O3-options-swing-bearish.result.json": "3784a696df702991fe21708a9b858378a0f6c24b84f2e1fd7cf99a4524af0b76",
+  "docs/superpowers/measurements/scans/2026-10-09/O3-options-swing-bearish.request.json": "35439298843cc41c18d143230579f18582602b67e355b95c876316d689422446",
+  "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.result.json": "41de99caa7feae2d3053b43e367d6709fb65f09641f8219d8dd43aa07fe0d132",
+  "docs/superpowers/measurements/scans/2026-10-09/O4-options-swing-bullish.request.json": "15a165fde857606bd895d5e1c3da650ac873f799c7a11e074db491b1f337f06f",
+  "docs/superpowers/measurements/protocol-requests/options-position-bearish.request.json": "c482f5d78185f5f988e6f19e19276a7fa6b2df095c219bb7f08a49843eb29718",
+  "docs/superpowers/measurements/protocol-requests/options-position-bullish.request.json": "0b6236f00555bedefc27393b39d318efe9c3f8546e55d858d5f49655acaddb99",
+  "docs/superpowers/measurements/protocol-requests/options-swing-bearish.request.json": "35439298843cc41c18d143230579f18582602b67e355b95c876316d689422446",
+  "docs/superpowers/measurements/protocol-requests/options-swing-bullish.request.json": "15a165fde857606bd895d5e1c3da650ac873f799c7a11e074db491b1f337f06f",
+  "backend/scripts/out/tradier_chain_raw/20261003T210145Z_weekend/rows.json": "dd7b9fc97e528d465b8d69296bcd355525de961cbf968420b99dcf6ff0498b13",
+  "backend/scripts/out/tradier_chain_raw/20261005T060215Z_overnight-check/rows.json": "2766cf7b457ac675efde8155421cdefa5da9f97e199e097dd4fff6bedda0f751",
+  "backend/scripts/out/tradier_chain_raw/20261005T123001Z_pre-market/rows.json": "5099ae57e016344a8c064f7db72ccf14c2e958679dc8b0d30fe7b9c52853ca18",
+  "backend/scripts/out/tradier_chain_raw/20261005T160001Z_in-session/rows.json": "af07553ca91205720e45d8d2fb8bcaf1a013b064b6b0b21b39e8dc9117cfab5f",
+  "backend/scripts/out/tradier_chain_raw/20261005T204500Z_after-close/rows.json": "b9aef952f49f704667ef87f5fc1e988418740aa4bb5efadc68e40f63746390f8"
+ },
+ "shipped_source_sha256": {
+  "backend/app/routers/scan.py": "4d5b6ee072ed4fe76515fb07106dd05fe2322c7b2b2263ca7e1f6d5d037ddbb7",
+  "backend/app/models/heston.py": "2316457a9c6ea33b92b453a1f359e315e7beb5a95cdb4373295782b1aa5af53b",
+  "backend/app/models/heston_cache.py": "02593977e48f120a0de6808ee16118db6cebbd927e338df911d1e5f001e2696f",
+  "backend/app/scoring/reward_risk.py": "c3d2a550ddab7542816fb9322bd2ee14097eada7d4449c8292d0f6492096a316",
+  "backend/app/scoring/trade_plan.py": "e1837a5710199cfe1c693c796918783bda0f1b3a95ba3648620f3d15eca555bc",
+  "backend/app/scoring/reprice_horizon.py": "9161b12db789664aa55fee5571ed51697af5a893a447865c8510c15ad04cd48b",
+  "backend/app/scoring/stop_cost.py": "b81bed51bbc7986c3cf5ad453527506939725ce18d408531b11138daa11db6a3",
+  "backend/app/data/market.py": "8df9badfed8fc65570e27dbda131fffd39bbbef114ccbc2cbaa7f3e16dd31fe3",
+  "backend/app/scoring/contract_validator.py": "948953d52390e4c083ff006e8f6edbf9622dbed99d16e803bbba7fefe22efac5",
+  "backend/config/contract_rules.yaml": "79e2ecb99848022ec9d912ee0e5812637a578bc5d8893161ae7b94e1822a4346",
+  "backend/config/risk_rules.yaml": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968"
+ },
+ "timing_note": "calibration_seconds_single_thread_relative is measured on this cloud box, one thread, cache cleared; compare relatively only. It is not a scan abandonment rate."
+}
