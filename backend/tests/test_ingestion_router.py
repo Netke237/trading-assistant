@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient, ASGITransport
 
+from app.data.tiingo_budget import TiingoBudgetConfigError
 from app.main import create_app
 
 
@@ -38,3 +39,39 @@ async def test_ingest_status_returns_state(app):
     assert resp.status_code == 200
     assert resp.json()["status"] == "completed"
     assert resp.json()["alpaca_count"] == 4
+
+
+# ── HISTORY-INCREMENTAL-NIGHTLY A2 (#478): tiingo_usage never breaks the status ──
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    RuntimeError("db down"),
+    TiingoBudgetConfigError("data_providers.tiingo.requests_per_hour is missing"),
+])
+async def test_ingest_status_survives_tiingo_usage_error(app, error, caplog):
+    with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
+         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value={})), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(side_effect=error)):
+        with caplog.at_level("WARNING", logger="app.routers.ingestion"):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get("/api/data/ingest/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "idle"
+    assert body["tiingo_usage"] is None
+    assert str(error) in body["tiingo_usage_error"]
+    assert any("tiingo usage unavailable" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_ingest_status_passes_tiingo_usage_through(app):
+    usage = {"requests_per_hour": {"used": 1, "limit": 50, "nightly_stop_at": 50,
+                                   "window": "rolling 1 h"}}
+    with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
+         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value={})), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(return_value=usage)):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get("/api/data/ingest/status")
+    assert resp.status_code == 200
+    assert resp.json()["tiingo_usage"] == usage
+    assert resp.json()["tiingo_usage_error"] is None

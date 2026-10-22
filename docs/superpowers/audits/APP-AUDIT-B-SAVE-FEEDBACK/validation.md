@@ -7,3 +7,7 @@ Integrated TypeScript clean; full frontend Jest312 suites/5930 tests pass,224.96
 Acceptance uses actual rendered Settings, nonpersisted ledger and real store writes under jsdom, mocked API/server commits, captured payloads and readbacks. No live backend, brokers, notifications, provider or jobs called. No manual live-browser failure injection run; that check is not claimed. Backend application changes belong to merged main, not this frontend phase; native CI remains required on exact PR head.
 
 Code audit still pending at this record. No independent clean or merge readiness claimed.
+
+## Post-audit main integration
+
+Independent code round1 clean (code-r1.md). Later main5c41d96a adds backend/history and state changes, no frontend changes. Merged with sole PROJECT_STATE conflict; all main phase/decision records preserved. `git diff --exit-code21c09e98 -- frontend` confirms identical audited bytes. TypeScript and all4 phase regression suites/97 tests pass (11.376s). Full integrated frontend5930-test evidence remains for the identical frontend source; exact-head native CI still required. No audit reset or additional round.

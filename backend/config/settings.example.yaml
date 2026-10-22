@@ -27,6 +27,25 @@ scheduling:
 # table is operational scan-run history, not the trade-rationale record.
 scheduled_scan_run_retention_days: 90
 
+# Tiingo usage budget, enforced from the persisted provider_request_log ledger
+# (app/data/tiingo_budget.py). Values are Tiingo's free-tier limits; a plan
+# change is an edit here. Windows: requests_per_hour = last 60 min,
+# requests_per_day = rolling 24 h, symbols/bytes_per_month = rolling 31 days.
+# The nightly ingestion stops at limit - nightly_reserve, leaving the reserve
+# for daytime scans. If the whole block is absent these defaults apply; if it
+# is present every key is required (an invalid value refuses Tiingo requests
+# and names the key in the log and the Data sources panel).
+data_providers:
+  tiingo:
+    requests_per_hour: 50
+    requests_per_day: 1000
+    symbols_per_month: 500
+    bytes_per_month: 1000000000
+    nightly_reserve:
+      requests_per_day: 100
+      symbols_per_month: 25
+      bytes_per_month: 100000000
+
 alert_delivery:
   masterEnabled: true
   enabledTypes:

@@ -179,7 +179,9 @@ async def startup_catch_up() -> bool:
     if not _should_ingest(last):
         return False
     universe = ingestion_universe()
-    start_ingestion_task(universe, years=6)
+    from app.data.tiingo_budget import caller
+    with caller("nightly"):   # automatic run: Tiingo stops at the nightly share
+        start_ingestion_task(universe, years=6)
     logger.info(
         "startup: DB stale (last %s date=%s), started ingestion for %d symbols",
         STALENESS_REFERENCE, last, len(universe),
