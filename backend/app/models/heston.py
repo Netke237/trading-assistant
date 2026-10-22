@@ -79,16 +79,29 @@ def _heston_char_fn(
     return cmath.exp(C + D * v0 + i * phi * x)
 
 
-def heston_price(
+@dataclass(frozen=True)
+class HestonPrice:
+    """What heston_price_detail returns.
+
+    fell_back is True when the Fourier integration failed arithmetically and
+    `price` is therefore Black-Scholes at sigma = sqrt(v0), NOT a Heston
+    price. A caller that labels its number "Heston repriced" must treat that
+    exactly like a failed Heston price (DECISION-23 H-1).
+    """
+    price: float
+    fell_back: bool
+
+
+def heston_price_detail(
     S: float,
     K: float,
     T: float,
     r: float,
     params: HestonParams,
     is_call: bool = True,
-) -> float:
+) -> HestonPrice:
     """
-    Heston closed-form option price.
+    Heston closed-form option price, with whether it is really a Heston price.
 
     Args:
         S:       current underlying price
@@ -99,11 +112,18 @@ def heston_price(
         is_call: True for call, False for put
 
     Returns:
-        Option fair value. Returns BS fallback if integration fails.
-        Returns 0.0 on degenerate inputs.
+        HestonPrice(price, fell_back). The price is floored at the
+        no-arbitrage forward intrinsic value (S - K*e^{-rT} for a call,
+        K*e^{-rT} - S for a put; the model has no dividend term) and at 0;
+        a NaN from the integration stays NaN. If the integration raises an
+        ArithmeticError or ValueError (what the integrand can raise:
+        cmath.exp overflow, a zero denominator, cmath.log(0)), the price is
+        Black-Scholes at sigma = sqrt(v0), unfloored, with fell_back=True.
+        Any other exception propagates. Degenerate inputs (T, S, K or v0
+        not positive) return HestonPrice(0.0, fell_back=False).
     """
     if T <= 0 or S <= 0 or K <= 0 or params.v0 <= 0:
-        return 0.0
+        return HestonPrice(price=0.0, fell_back=False)
 
     def _integrand(phi: float, j: int) -> float:
         if phi == 0.0:
@@ -201,14 +221,43 @@ def heston_price(
         P1 = 0.5 + p1 / math.pi
         P2 = 0.5 + p2 / math.pi
         call_price = S * P1 - K * math.exp(-r * T) * P2
-    except Exception:
-        # Integration failed - fall back to Black-Scholes with sqrt(v0) as sigma
-        return bs_price(S, K, T, r, math.sqrt(params.v0), is_call)
+    except (ArithmeticError, ValueError):
+        # The integration failed arithmetically -- fall back to Black-Scholes
+        # with sqrt(v0) as sigma, and SAY so: this is not a Heston price.
+        # Anything else (a TypeError from a bug, an IntegrationWarning raised
+        # as an error) propagates.
+        return HestonPrice(price=bs_price(S, K, T, r, math.sqrt(params.v0), is_call),
+                           fell_back=True)
 
+    # No-arbitrage floor: a European option without dividends is worth at
+    # least its discounted forward intrinsic. Quadrature truncation can leave
+    # a deep-in-the-money price just below it. max() keeps a NaN first
+    # argument as NaN, as the old 0-clamp did.
     if is_call:
-        return max(call_price, 0.0)
+        return HestonPrice(price=max(call_price, S - K * math.exp(-r * T), 0.0),
+                           fell_back=False)
     # Put via put-call parity
-    return max(call_price - S + K * math.exp(-r * T), 0.0)
+    return HestonPrice(price=max(call_price - S + K * math.exp(-r * T),
+                                 K * math.exp(-r * T) - S, 0.0),
+                       fell_back=False)
+
+
+def heston_price(
+    S: float,
+    K: float,
+    T: float,
+    r: float,
+    params: HestonParams,
+    is_call: bool = True,
+) -> float:
+    """
+    Heston closed-form option price: heston_price_detail(...).price.
+
+    The price only -- it does not say whether the integration fell back to
+    Black-Scholes at sqrt(v0). Callers that label a price "Heston repriced"
+    must use heston_price_detail and honour its fell_back flag.
+    """
+    return heston_price_detail(S, K, T, r, params, is_call).price
 
 
 def heston_iv(
