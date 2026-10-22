@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-settings-lost-update-0a62fb27",
-      "claimed_at": "2026-10-22T09:33:14Z",
-      "expires_at": "2026-10-22T13:36:25Z",
-      "note": "Take #400: stale-tab Settings lost update",
-      "task": "APP-AUDIT-B-SETTINGS-LOST-UPDATE"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-settings-profiles-885e1566",
       "claimed_at": "2026-10-22T12:44:11Z",
       "expires_at": "2026-10-22T15:51:28Z",
@@ -20,7 +12,7 @@
       "agent": "claude",
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "claimed_at": "2026-10-22T13:34:19Z",
-      "expires_at": "2026-10-22T16:34:19Z",
+      "expires_at": "2026-10-22T16:36:32Z",
       "note": "Take #335: measure Heston R/R overpricing on current main, then options for Kenneth",
       "task": "HESTON-RR-OVERPRICING"
     }
