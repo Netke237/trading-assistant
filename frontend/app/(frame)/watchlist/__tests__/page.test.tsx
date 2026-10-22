@@ -444,6 +444,37 @@ describe('WatchlistPage — Contracts tab grades each star with its own grading'
     expect(screen.getByText(/Backend not running/)).toBeInTheDocument();
   });
 
+  it('stocks offline banner shows only on the Stocks tab', async () => {
+    (api.getWatchlist as jest.Mock).mockRejectedValue(new Error('down'));
+    render(<WatchlistPage />);
+    await waitFor(() => expect(screen.getByText(/Backend not running/)).toBeInTheDocument());
+
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Contracts/ })); });
+    expect(screen.queryByText(/Backend not running/)).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Composite/ })); });
+    expect(screen.queryByText(/Backend not running/)).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Stocks/ })); });
+    expect(screen.getByText(/Backend not running/)).toBeInTheDocument();
+  });
+
+  it('aborts in-flight contracts fetch on unmount', async () => {
+    seed([A]);
+    let signal: AbortSignal | undefined;
+    getContracts.mockImplementation((_sym: string, _right: string, _ctx: any, sig?: AbortSignal) => {
+      signal = sig;
+      return new Promise(() => {});
+    });
+    const { unmount } = render(<WatchlistPage />);
+    await waitFor(() => expect(getContracts).toHaveBeenCalled());
+    expect(signal).toBeDefined();
+    expect(signal?.aborted).toBe(false);
+
+    unmount();
+    expect(signal?.aborted).toBe(true);
+  });
+
   it('counts every star, missing rows included', async () => {
     seed([A, `AAPL|200|${PAST}|C`, 'junk']);
     await openContracts();

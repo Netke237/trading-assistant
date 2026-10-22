@@ -125,7 +125,7 @@ export interface ParsedContractId {
 }
 
 const SYMBOL_RE = /^[A-Z][A-Z0-9.\-]*$/;
-const STRIKE_RE = /^\d+(\.\d+)?$/;
+const STRIKE_RE = /^[0-9]{1,5}(\.[0-9]{1,3})?$/;
 const EXPIRY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** `"AAPL|187|2026-12-18|C"` -> its parts, or null for an unreadable id. The
@@ -140,6 +140,7 @@ export function parseContractId(id: string): ParsedContractId | null {
   if (!EXPIRY_RE.test(expiry)) return null;
   if (right !== 'C' && right !== 'P') return null;
   const strike = parseFloat(strikeText);
+  if (!Number.isFinite(strike) || strike <= 0) return null;
   return { id, symbol, strike, expiry, right };
 }
 
