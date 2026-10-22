@@ -1,0 +1,22 @@
+[
+  {
+    "id": "DEFECT-STOCKS-1",
+    "title": "Step 5 strategy route retained as compatibility pass-through redirect",
+    "category": "routing-architecture",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "frontend/app/(frame)/screener/step-5-strategy/page.tsx unconditionally redirects to /screener/step-4-stocks following the consolidation of strategy selection and execution parameters into Step 4. StepNavBar and direct route transitions pass through without error, but the segment remains a legacy architectural redirect.",
+    "evidence": "frontend/app/(frame)/screener/step-5-strategy/page.tsx:1-15; docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Section 2",
+    "remediation": "Retained for backward URL compatibility across bookmarks and external references."
+  },
+  {
+    "id": "DEFECT-STOCKS-2",
+    "title": "mean_reversion_vwap intraday bar requirement inside multi-strategy engine",
+    "category": "strategy-guard",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "backend/app/services/strategy_engine.py:1420-1421 explicitly raises ValueError if mean_reversion_vwap is included in mean_reversion_multi variants on daily bars. Mean reversion multi uses mean_reversion_vwap_daily_signal for rolling daily VWAP instead. Frontend UI disables mean_reversion_vwap in multi variant selection to prevent runtime ValueError.",
+    "evidence": "backend/app/services/strategy_engine.py:1420-1421; backend/tests/test_audit_stocks_lane_d.py:TestStrategyEngineLaneD",
+    "remediation": "Documented engine constraint and variant validation contract."
+  }
+]
