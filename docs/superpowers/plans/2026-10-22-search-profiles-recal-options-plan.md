@@ -46,14 +46,14 @@ The 18 profiles are organized into a 3 × 3 × 2 grid:
 | Parameter | Baseline | Restrictive | Loose | Evidence / Rationale |
 |---|---|---|---|---|
 | `min_stock_score` | 45 (inherited) | 45 (inherited) | 45 (inherited) | MEAS Day 2 (#121, decision `MEAS-DAY2-ANSWERS-2026-10-11`): lowered from 55 to 45 in `contract_rules.yaml`. |
-| `max_bid_ask_spread_pct` | 0.20 (inherited) | 0.08 (explicit) | 0.30 (explicit) | MEAS Day 1 & 2 C6 liquidity observations: 0.08 enforces tight institutional quotes; 0.30 accommodates wider retail spreads. |
+| `max_bid_ask_spread_pct` | 0.20 (inherited) | 0.08 (explicit) | 0.30 (explicit) | Design judgement (commit `ab705ea7` / 2026-09-29): 0.08 enforces tight institutional quotes; 0.30 accommodates wider retail spreads. |
 | `preferred_spread_pct_max` | 0.08 (inherited) | 0.08 (inherited) | 0.30 (explicit) | Soft rank floor alignment (PR #213 / commit `ab705ea7`). Loose tier widens soft penalty ceiling to prevent `too_many_soft_failures`. |
 | `min_volume` | 0 (inherited) | 200 (Intraday/Swing), 50 (SemiAnnual) | 0 (explicit) | PR #213: volume is optional floor (0 = off). SemiAnnual 50 is a measured judgement from 200-DTE strike trading volumes. |
 | `preferred_volume_min` | 200 (inherited) | 200 (inherited) | 20 (explicit) | Loose tier lowers soft volume floor to 20 contracts. |
 | `min_open_interest` | 200 (inherited) | 1000 (explicit) | 75 (explicit) | Restrictive enforces 1000 OI; Loose relaxes to 75 OI to permit trading early-cycle contracts. |
 | `preferred_oi_min` | 1000 (inherited) | 1000 (inherited) | 75 (explicit) | Soft OI threshold matched to hard floor for Loose tier. |
-| `event_reject_days` | 21 Swing / 45 SemiAnnual (inherited) | Same (Intraday/Swing) / 7 (SemiAnnual) | Same (Intraday/Swing) / 7 (SemiAnnual) | SemiAnnual hold of 90-105d crosses earnings; 7/30 window blocks entering immediately before earnings while allowing long-cycle holds. |
-| `event_caution_days` | 45 Swing / 60 SemiAnnual (inherited) | Same (Intraday/Swing) / 30 (SemiAnnual) | Same (Intraday/Swing) / 30 (SemiAnnual) | 30d caution window for SemiAnnual. |
+| `event_reject_days` | 21 Swing (inherited) / 7 SemiAnnual (explicit) | Same (Intraday/Swing) / 7 (SemiAnnual) | Same (Intraday/Swing) / 7 (SemiAnnual) | SemiAnnual hold of 90-105d crosses earnings; all 6 SemiAnnual profiles (Baseline included) explicitly override 7/30 to avoid scoring_rules.yaml Position default (30/60) which blocks viable long holds. |
+| `event_caution_days` | 45 Swing (inherited) / 30 SemiAnnual (explicit) | Same (Intraday/Swing) / 30 (SemiAnnual) | Same (Intraday/Swing) / 30 (SemiAnnual) | 30d caution window for SemiAnnual across all 6 profiles (Baseline, Restrictive, Loose). |
 | `shortlistMaxCandidates` | 10 | 10 | 20 | Loose tier raises candidate cap to 20 so wider filters do not artificially truncate candidate visibility. |
 | `deReject` (Bullish) | 3 | 3 | 3 | Standard safety gate protecting bullish equity exposure against excessive leverage. |
 | `deReject` (Bearish) | 10 | 10 | 10 | Bearish put strategies cap risk at premium; high debt is integral to the short thesis. |
