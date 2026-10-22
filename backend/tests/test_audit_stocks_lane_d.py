@@ -1,4 +1,4 @@
-"""Lane D Audit: Verification of Stocks scan, strategies, backtests and position sizing (#352).
+"""Lane D Audit: Verification of Stocks scan, strategies, backtests and position sizing (#352, PR #506).
 
 Exhaustive automated test suite for Lane D:
 1. Composite 5-rule stock scorer, event exclusion, non-event renormalization, 4 demotion caps.
