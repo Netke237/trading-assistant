@@ -1,0 +1,277 @@
+{
+  "probe_metadata": {
+    "timestamp": "2026-10-22T08:50:00.000Z",
+    "node_version": "v22.23.2",
+    "jest_version": "29.7.0",
+    "platform": "win32",
+    "baseline_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+    "config_hashes": {
+      "scoring_rules.yaml": "5d556a1aaf2b5fc188815a81ca3884c2a58e55920652ed8428c310cd19209b76",
+      "contract_rules.yaml": "1b658c4e78a4a4f44fe2f58a7d8878fd53cb8c6dc9a835fd3ef8dc3d166e6784",
+      "risk_rules.yaml": "c961cdec2db7a776cfd45f2cddae8d229d9c4089e05d82a20ec92f0c2726434d"
+    }
+  },
+  "suites": {
+    "step4_ranking_arithmetic_sorting": [
+      {
+        "name": "card_to_row_delta_tracking",
+        "passed": true,
+        "details": {
+          "observed": { "AAPL_rankDelta": 1, "AAPL_scoreDelta": 6, "MSFT_rankDelta": -1, "MSFT_scoreDelta": 4, "NVDA_rankDelta": 0, "NVDA_scoreDelta": 0 },
+          "expected": { "AAPL_rankDelta": 1, "AAPL_scoreDelta": 6, "MSFT_rankDelta": -1, "MSFT_scoreDelta": 4, "NVDA_rankDelta": 0, "NVDA_scoreDelta": 0 }
+        }
+      },
+      {
+        "name": "horizon_weights_sum_and_points",
+        "passed": true,
+        "details": {
+          "observed": { "Intraday_sum": 100, "Swing_sum": 100, "Position_sum": 100, "weighted_points_trend_90": 27.0 },
+          "expected": { "Intraday_sum": 100, "Swing_sum": 100, "Position_sum": 100, "weighted_points_trend_90": 27.0 }
+        }
+      },
+      {
+        "name": "signal_classification_thresholds",
+        "passed": true,
+        "details": {
+          "observed": { "score_90": "pos", "score_65": "pos", "score_64": "neu", "score_45": "neu", "score_44": "neg", "score_0": "neg" },
+          "expected": { "score_90": "pos", "score_65": "pos", "score_64": "neu", "score_45": "neu", "score_44": "neg", "score_0": "neg" }
+        }
+      },
+      {
+        "name": "stop_cost_sorting_boundary",
+        "passed": true,
+        "details": {
+          "observed": ["AAPL", "MSFT", "NVDA"],
+          "expected": ["AAPL", "MSFT", "NVDA"],
+          "comment": "Cheapest stop cost sorts first; uncomputed nulls sort last via fallback 101"
+        }
+      },
+      {
+        "name": "pipeline_exclusion_count",
+        "passed": true,
+        "details": {
+          "observed": { "scanned_50_cand_3": 47, "degenerate_scanned_2_cand_3": 0 },
+          "expected": { "scanned_50_cand_3": 47, "degenerate_scanned_2_cand_3": 0 }
+        }
+      }
+    ],
+    "step5_vol_events_gate": [
+      {
+        "name": "iv_basis_resolution",
+        "passed": true,
+        "details": {
+          "observed": { "rank_basis": "rank", "zero_rank_basis": "rank", "abs_basis": "absolute", "missing_basis": "none" },
+          "expected": { "rank_basis": "rank", "zero_rank_basis": "rank", "abs_basis": "absolute", "missing_basis": "none" }
+        }
+      },
+      {
+        "name": "event_proximity_strict_inequality",
+        "passed": true,
+        "details": {
+          "observed": { "days_20": "REJECT", "days_21": "CAUTION", "days_44": "CAUTION", "days_45": "PASS", "days_60": "PASS", "days_null": "PASS" },
+          "expected": { "days_20": "REJECT", "days_21": "CAUTION", "days_44": "CAUTION", "days_45": "PASS", "days_60": "PASS", "days_null": "PASS" }
+        }
+      },
+      {
+        "name": "iv_status_gating_horizons",
+        "passed": true,
+        "details": {
+          "observed": { "swing_35": "PASS", "swing_50": "PASS", "swing_51": "CAUTION", "swing_70": "CAUTION", "swing_71": "REJECT", "swing_null": "CAUTION", "intraday_null": "PASS" },
+          "expected": { "swing_35": "PASS", "swing_50": "PASS", "swing_51": "CAUTION", "swing_70": "CAUTION", "swing_71": "REJECT", "swing_null": "CAUTION", "intraday_null": "PASS" }
+        }
+      },
+      {
+        "name": "combined_gate_worst_status",
+        "passed": true,
+        "details": {
+          "observed": { "pass_pass": "PASS", "pass_caution": "CAUTION", "caution_reject": "REJECT" },
+          "expected": { "pass_pass": "PASS", "pass_caution": "CAUTION", "caution_reject": "REJECT" }
+        }
+      }
+    ],
+    "step6_contracts_table_decimal_strikes": [
+      {
+        "name": "decimal_strike_formatting",
+        "passed": true,
+        "details": {
+          "observed": { "contractId": "NVDA|137.5|2025-05-16|C", "contractLabel": "NVDA 137.5C 05/16/25" },
+          "expected": { "contractId": "NVDA|137.5|2025-05-16|C", "contractLabel": "NVDA 137.5C 05/16/25" }
+        }
+      },
+      {
+        "name": "bid_ask_mid_spread_arithmetic",
+        "passed": true,
+        "details": {
+          "observed": { "mid": 5.00, "spread": 0.20, "spreadPct": 0.04 },
+          "expected": { "mid": 5.00, "spread": 0.20, "spreadPct": 0.04 }
+        }
+      },
+      {
+        "name": "contracts_sorting_nulls_last",
+        "passed": true,
+        "details": {
+          "observed": { "asc_first": "AAPL", "asc_last_null": true, "desc_first": "AAPL", "desc_last_null": true },
+          "expected": { "asc_first": "AAPL", "asc_last_null": true, "desc_first": "AAPL", "desc_last_null": true }
+        }
+      },
+      {
+        "name": "card_contract_rescue_past_limits",
+        "passed": true,
+        "details": {
+          "observed": { "missing_detected": 1, "rescued_strike": 235.0, "merged_count": 2 },
+          "expected": { "missing_detected": 1, "rescued_strike": 235.0, "merged_count": 2 }
+        }
+      }
+    ],
+    "step7_trade_card_sizing_risk_basket": [
+      {
+        "name": "capital_at_risk_exposure",
+        "passed": true,
+        "details": {
+          "observed": { "car_normal": 2070.0, "exposure_normal": 0.0207, "car_zero_mid": 0.0, "exposure_zero_portfolio": 0.0 },
+          "expected": { "car_normal": 2070.0, "exposure_normal": 0.0207, "car_zero_mid": 0.0, "exposure_zero_portfolio": 0.0 }
+        }
+      },
+      {
+        "name": "stop_premium_risk_formatting",
+        "passed": true,
+        "details": {
+          "observed": {
+            "badge_caution": "CAUTION · 71% of premium · $1.49/share left",
+            "headline_caution": "$371 per contract — of the $520 premium, $149 left",
+            "is_total_loss_caution": false,
+            "badge_reject": "REJECT · 100% of premium · $0.00/share left",
+            "headline_reject": "$210 per contract — of the $210 premium, $0 left",
+            "is_total_loss_reject": true
+          },
+          "expected": {
+            "badge_caution": "CAUTION · 71% of premium · $1.49/share left",
+            "headline_caution": "$371 per contract — of the $520 premium, $149 left",
+            "is_total_loss_caution": false,
+            "badge_reject": "REJECT · 100% of premium · $0.00/share left",
+            "headline_reject": "$210 per contract — of the $210 premium, $0 left",
+            "is_total_loss_reject": true
+          }
+        }
+      },
+      {
+        "name": "ranking_stop_cost_tooltip_badge",
+        "passed": true,
+        "details": {
+          "observed": { "pass_label": "29%", "pass_status": "PASS", "null_label": "—", "null_status": null },
+          "expected": { "pass_label": "29%", "pass_status": "PASS", "null_label": "—", "null_status": null }
+        }
+      },
+      {
+        "name": "recommended_contract_size_epsilon_absorption",
+        "passed": true,
+        "details": {
+          "observed": { "standard_rec": 4, "standard_fmt": "4.00", "fractional_rec": 3, "fractional_fmt": "3.57", "ieee754_rec": 1, "ieee754_fmt": "1.00", "zero_budget": null },
+          "expected": { "standard_rec": 4, "standard_fmt": "4.00", "fractional_rec": 3, "fractional_fmt": "3.57", "ieee754_rec": 1, "ieee754_fmt": "1.00", "zero_budget": null }
+        }
+      },
+      {
+        "name": "check_trade_risk_gates",
+        "passed": true,
+        "details": {
+          "observed": {
+            "all_clean_approved": true,
+            "missing_invalidation_blocked": true,
+            "missing_method_pick_blocked": true,
+            "single_exposure_blocked": true,
+            "duplicate_symbol_blocked": true
+          },
+          "expected": {
+            "all_clean_approved": true,
+            "missing_invalidation_blocked": true,
+            "missing_method_pick_blocked": true,
+            "single_exposure_blocked": true,
+            "duplicate_symbol_blocked": true
+          }
+        }
+      },
+      {
+        "name": "direct_order_outcome_classification",
+        "passed": true,
+        "details": {
+          "observed": {
+            "422_verdict": "delete",
+            "503_verdict": "delete",
+            "502_verdict": "delete",
+            "500_verdict": "keep",
+            "200_rejected_verdict": "delete",
+            "200_submitted_verdict": "placed",
+            "tastytrade_mkt_block": "Tastytrade paper accepts limit orders only — use Place Limit."
+          },
+          "expected": {
+            "422_verdict": "delete",
+            "503_verdict": "delete",
+            "502_verdict": "delete",
+            "500_verdict": "keep",
+            "200_rejected_verdict": "delete",
+            "200_submitted_verdict": "placed",
+            "tastytrade_mkt_block": "Tastytrade paper accepts limit orders only — use Place Limit."
+          }
+        }
+      }
+    ],
+    "component_rendering_payloads": [
+      {
+        "name": "status_badge_rank_delta_event_flag_rendering",
+        "passed": true,
+        "details": {
+          "status_badge_label": "Pass · 88/100",
+          "rank_delta_tooltip": "Up 2 ranks since last scan",
+          "event_flag_text": "18d"
+        }
+      },
+      {
+        "name": "alternative_contract_row_rendering",
+        "passed": true,
+        "details": {
+          "contract_header": "AAPL 235C 2025-05-16",
+          "alt_rank": "Alt 1",
+          "mid_price": "$4.60",
+          "reason_displayed": "Lower capital requirement ($460 vs $690) with slightly lower delta (0.42 vs 0.52)"
+        }
+      },
+      {
+        "name": "send_to_broker_dialog_payload_capture",
+        "passed": true,
+        "details": {
+          "dialog_title": "Track basket in Portfolio",
+          "captured_symbol": "AAPL",
+          "captured_contracts": 2,
+          "risk_overridden": false,
+          "live_network_called": false
+        }
+      }
+    ],
+    "store_state_rehydration_mutations": [
+      {
+        "name": "scan_store_transactional_updates",
+        "passed": true,
+        "details": {
+          "selectedSymbol": "NVDA",
+          "pickedContract": "NVDA|137.5|2025-05-16|C"
+        }
+      },
+      {
+        "name": "watched_contracts_symmetric_add_remove",
+        "passed": true,
+        "details": {
+          "is_watched_after_add": true,
+          "is_watched_after_remove": false
+        }
+      }
+    ]
+  },
+  "summary": {
+    "total_probes": 23,
+    "passed": 23,
+    "failed": 0,
+    "corroborating_test_suites": 29,
+    "corroborating_tests_passed": 595,
+    "corroborating_tests_failed": 0
+  }
+}

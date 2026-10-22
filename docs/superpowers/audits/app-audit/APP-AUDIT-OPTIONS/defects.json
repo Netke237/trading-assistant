@@ -1,0 +1,52 @@
+[
+  {
+    "id": "DEFECT-OPTIONS-1",
+    "title": "Fractional strike integer truncation in scan router, alternative contracts, and contracts endpoint",
+    "category": "numeric-truncation",
+    "severity": "high",
+    "gate_blocking": true,
+    "description": "In backend/app/routers/scan.py:1280 (contract=f\"{symbol}|{int(strike)}|...\"), line 1297 (strike=int(strike)), line 1434 (strike=int(alt_strike)), and backend/app/routers/contracts.py:127 (_parse_strikes digit check), fractional strikes such as 182.5 or 552.5 are truncated to integers or rejected with HTTP 422. This causes broker payloads and trade cards to reference incorrect whole-number strike contracts, altering cost, delta, and breakeven.",
+    "evidence": "backend/app/routers/scan.py:1280, 1297, 1434; backend/app/routers/contracts.py:127; issue #162",
+    "remediation": "Replace int(strike) casts with normalized float string formatting (e.g. f'{strike:g}') and update _parse_strikes regex to permit decimal values."
+  },
+  {
+    "id": "DEFECT-OPTIONS-2",
+    "title": "Non-monotonic +19 point discontinuity in option contract IV scoring",
+    "category": "scoring-discontinuity",
+    "severity": "medium",
+    "gate_blocking": false,
+    "description": "In backend/app/scoring/contract_validator.py:361-372, the formula branches at preferred_iv_max (default 55). At IV 55, the score evaluates to 0. At IV 56, it switches to 20 * (1 - (iv - 55)/(100 - 55)), evaluating to 19. This causes IV 60 to score 17 while IV 50 scores 9, violating monotonicity and inflating composite contract scores by up to 2.85 points.",
+    "evidence": "backend/app/scoring/contract_validator.py:361-372; docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend_probe.py:test_iv_rank_curve_discontinuity; issue #179",
+    "remediation": "Smooth the penalty curve so that score at preferred_iv_max connects continuously to the elevated penalty tier (or drops to 0 smoothly without jumping)."
+  },
+  {
+    "id": "DEFECT-OPTIONS-3",
+    "title": "Heston parameter grid search boundary pinning and Feller condition violation",
+    "category": "pricing-overestimation",
+    "severity": "medium",
+    "gate_blocking": false,
+    "description": "In backend/app/models/heston_cache.py:306-314, a coarse 2x2x2x2 parameter grid pins calibrations to extreme box boundaries (kappa=0.5, theta=0.08, sigma_v=0.6, rho=-0.8). This violates the Feller condition by 4.5x (2*kappa*theta = 0.08 < 0.36 = sigma_v^2), producing artificial tail heaviness that overprices out-of-the-money options at target barriers and inflates R/R ratios.",
+    "evidence": "backend/app/models/heston_cache.py:306-314; docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend_probe.py:test_heston_overpricing_investigation; issue #335",
+    "remediation": "Enforce Feller condition regularization or fine-tune parameter bounds during calibration."
+  },
+  {
+    "id": "DEFECT-OPTIONS-4",
+    "title": "IEEE-754 precision noise in frontend capitalAtRisk calculation",
+    "category": "floating-point-representation",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "In frontend/lib/risk.ts:20, capitalAtRisk(mid, contracts) performs raw JavaScript double-precision multiplication (mid * contracts * 100). On values like 6.90 * 3 * 100, floating-point representation produces 2070.0000000000005, requiring rounding in consumers.",
+    "evidence": "frontend/lib/risk.ts:20; docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-probes.test.tsx:4.1",
+    "remediation": "Apply Math.round(mid * 100) * contracts / 100 or Math.round to integer cents."
+  },
+  {
+    "id": "DEFECT-OPTIONS-5",
+    "title": "Strict regex pattern matching in parseApiError defaults non-standard errors to keep",
+    "category": "error-handling",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "In frontend/lib/apiError.ts, parseApiError expects error messages to match the strict regex /→ (\\d{3})(?:: ([\\s\\S]*))?$/. Unstructured errors or exceptions not adhering to this format return status null and default to verdict 'keep', preventing automated eviction of invalid drafts.",
+    "evidence": "frontend/lib/apiError.ts:15-32; docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-probes.test.tsx:4.6",
+    "remediation": "Support fallback extraction of HTTP status codes from Axios/Fetch error objects or response bodies."
+  }
+]
