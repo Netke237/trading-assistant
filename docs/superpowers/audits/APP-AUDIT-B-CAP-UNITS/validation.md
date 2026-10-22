@@ -69,3 +69,7 @@ The complete unmodified CI suite remains a required shipping gate. The local qua
 ## 2026-10-21 resumed integration
 
 Merged current main `55519e05` at `d86e80d1`; only PROJECT_STATE.json conflicted. The new schedule-store corrupt-file recovery and Stock resolver filter/confidence changes are retained. Typecheck passed; five focused frontend suites passed **84 tests** in 9.762 seconds; cap/schedule/schema/recovery backend suites passed **81 tests** in 7.05 seconds under Python 3.11.16. No new product code was introduced by the reconciliation. Full prior-suite qualification remains unchanged; native exact-head CI is required before merge.
+
+## Verified merge reconciliation
+
+PR #454 merged at a1811c0ee40c324fbd87291a0cad8e1d3a6fb202. Documentation record7fac7965 (PR #455) captured actual merged-source TypeScript,84 frontend and81 backend post-merge checks, plus all native exact-head CI success. Its phase100%, M/4 shipped record is incorporated into the combined verified-merge reconciliation; earlier local backend harness limitations remain above. This section preserves historical evidence and does not claim a new market-cap test run.
