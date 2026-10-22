@@ -15,6 +15,14 @@
       "expires_at": "2026-10-22T16:53:57Z",
       "note": "Take #335: measure Heston R/R overpricing on current main, then options for Kenneth",
       "task": "HESTON-RR-OVERPRICING"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-b-settings-lost-update-44082238",
+      "claimed_at": "2026-10-22T15:31:18Z",
+      "expires_at": "2026-10-22T18:31:18Z",
+      "note": "Resume #400: stale-tab Settings lost update",
+      "task": "APP-AUDIT-B-SETTINGS-LOST-UPDATE"
     }
   ]
 }
