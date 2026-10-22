@@ -91,7 +91,7 @@
       "completion_pct": 100,
       "size": "XL",
       "complexity": 5,
-      "note": "Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled. Code stage round 3 clean."
+      "note": "SELF-MERGE PENDING, PR #526, audited head e8867532. Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled. Code stage round 3 clean."
     },
     {
       "id": "APP-AUDIT-BROKER-PORTFOLIO",
