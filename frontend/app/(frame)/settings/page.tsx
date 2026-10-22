@@ -11,13 +11,15 @@
  * value is and can tell at a glance if they've drifted.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Title, Text } from '@/components/primitives';
 import { ModeToggle } from '@/components/atoms/ModeToggle';
 import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPreset, type MarkovConfig, type FundamentalsGate, type AtrMultPair } from '@/lib/settingsStore';
 import { Row, SectionIntro } from './SettingsRow';
+import { useSettingsSaveStatus, trackSave, settleAll, outstanding, retryLocalWrites, isSaving, setDraft as reportDraft, discardDraft, clearDiscarded } from '@/lib/settingsSaveStatus';
 import { IvThresholdsSection } from './IvThresholdsSection';
 import { useRiskStore } from '@/lib/riskStore';
+import { useThemeStore, type Density } from '@/lib/theme';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
@@ -27,6 +29,13 @@ import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
 import styles from './page.module.css';
+import { DAY_LABELS, formatScheduleCadence } from './scheduleCadence';
+import {
+  isSchemaValidStrategyOverride,
+  validatePullbackToleranceDraft,
+  validateMaCrossoverLookbackDraft,
+  validateBreakoutVolumeMultDraft,
+} from '@/lib/strategyScanValidation';
 
 type Section = 'theme' | 'scan' | 'brokers' | 'risk' | 'regime' | 'notifications' | 'strategy' | 'data' | 'tuning';
 
@@ -190,30 +199,53 @@ function AtrPairRow({
 /* ---------- Save button ---------- */
 
 function SaveButton() {
+  const ledger = useSettingsSaveStatus();
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const items = outstanding();
 
-  function handleSave() {
-    // Already persisted via Zustand — just flash confirmation.
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+  useEffect(() => {
+    if (outstanding().length === 0) setShowWarning(false);
+    if (outstanding().length > 0 || isSaving()) setSaved(false);
+  }, [ledger]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  async function handleSave() {
+    if (timer.current) clearTimeout(timer.current);
+    setSaved(false);
+    setShowWarning(false);
+    setSaving(true);
+    await settleAll();
+    retryLocalWrites();
+    if (outstanding().length === 0) {
+      setSaved(true);
+      timer.current = setTimeout(() => setSaved(false), 1500);
+    } else setShowWarning(true);
+    setSaving(false);
   }
 
   return (
-    <button
-      type="button"
-      className={`${styles.btn} ${styles.btnPrimary}`}
-      onClick={handleSave}
-      disabled={saved}
-    >
-      {saved ? 'Saved' : 'Save changes'}
-    </button>
+    <>
+      {showWarning && items.length > 0 && (
+        <span role="alert"><Text size={11} tone="reject">
+          Not saved: {items.map((item) => `${item.label}: ${item.message}`).join('; ')}
+        </Text></span>
+      )}
+      <button type="button" className={`${styles.btn} ${styles.btnPrimary}`}
+        onClick={handleSave} disabled={saving || saved}>
+        {saving ? 'Saving…' : saved ? <span role="status">Saved</span> : 'Save changes'}
+      </button>
+    </>
   );
 }
 
 /* ---------- Theme ---------- */
 
 function ThemeForm() {
-  const [density, setDensity] = useState<'Comfortable' | 'Compact'>('Comfortable');
+  const density = useThemeStore((s) => s.density);
+  const setDensity = useThemeStore((s) => s.setDensity);
   return (
     <>
       <SectionIntro
@@ -227,10 +259,10 @@ function ThemeForm() {
         <select
           className={styles.input}
           value={density}
-          onChange={(e) => setDensity(e.target.value as 'Comfortable' | 'Compact')}
+          onChange={(e) => setDensity(e.target.value as Density)}
         >
-          <option>Comfortable</option>
-          <option>Compact</option>
+          <option value="Comfortable">Comfortable</option>
+          <option value="Compact">Compact</option>
         </select>
       </Row>
     </>
@@ -466,24 +498,82 @@ function ScanForm() {
 function OperatorTimezoneSection() {
   const [tz, setTz] = useState('Europe/Berlin');
   const [saveResult, setSaveResult] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [isEdited, setIsEdited] = useState(false);
+  const isDirty = useRef(false);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const mounted = useRef(true);
+  const saveStarted = useRef(false);
 
   useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; discardDraft('timezone'); };
+  }, []);
+  useEffect(() => {
+    reportDraft('timezone', 'Operator timezone', baseline === null ? isEdited : tz !== baseline);
+  }, [tz, baseline, isEdited]);
+
+  useEffect(() => {
+    let cancelled = false;
     api.getSchedulingTimezone()
-      .then((r) => setTz(r.timezone))
-      .catch(() => {});
+      .then((r) => {
+        if (!cancelled) {
+          if (!isDirty.current) {
+            setTz(r.timezone);
+          }
+          if (!saveStarted.current) setBaseline(r.timezone);
+          setLoadError('');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('Failed to load timezone from server');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  async function handleRetry() {
+    isDirty.current = false;
+    setIsEdited(false);
+    try {
+      const r = await api.getSchedulingTimezone();
+      setBaseline(r.timezone);
+      if (!isDirty.current) {
+        setTz(r.timezone);
+      }
+      setLoadError('');
+    } catch {
+      setLoadError('Failed to load timezone from server');
+    }
+  }
+
   async function handleSave() {
+    if (saving || (Boolean(loadError) && !isEdited)) return;
+    setSaving(true);
+    isDirty.current = true;
+    saveStarted.current = true;
+    const submittedTz = tz;
     setSaveResult('');
     try {
-      await api.putSchedulingTimezone(tz);
+      const res = await trackSave('timezone', 'Operator timezone', () => api.putSchedulingTimezone(submittedTz));
+      if (!mounted.current) return;
+      setBaseline(res.timezone);
+      setTz((current) => (current === submittedTz ? res.timezone : current));
       setSaveResult('Saved');
+      setLoadError('');
     } catch {
       setSaveResult('Save failed — check the timezone name');
     } finally {
+      setSaving(false);
       setTimeout(() => setSaveResult(''), 2500);
     }
   }
+
+  const isSaveDisabled = saving || (Boolean(loadError) && !isEdited);
 
   return (
     <>
@@ -497,12 +587,37 @@ function OperatorTimezoneSection() {
             type="text"
             className={styles.input}
             value={tz}
-            onChange={(e) => setTz(e.target.value)}
+            onChange={(e) => {
+              isDirty.current = true;
+              setIsEdited(true);
+              setTz(e.target.value);
+            }}
           />
-          <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave}
+            disabled={isSaveDisabled}
+          >
             Save
           </button>
+          {loadError && (
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+          )}
           {saveResult && <Text size={11} tone="secondary">{saveResult}</Text>}
+          {loadError && (
+            <span data-testid="timezone-load-error" className="timezone-load-error">
+              <Text size={11} tone="reject">
+                {loadError}
+              </Text>
+            </span>
+          )}
         </div>
       </Row>
     </>
@@ -516,17 +631,38 @@ function OperatorTimezoneSection() {
 // the plan called out and fixed for operator timezone above, recurring
 // here for a different setting. Mirrors OperatorTimezoneSection's pattern.
 
+// Keep draft reporting separate from request settlement: a late response must not
+// erase a later edit discarded when its section unmounted.
+function useSaveDraft(channel: string, label: string, value: string, baseline: string | null) {
+  const initial = useRef(value);
+  const edited = useRef(false);
+  if (value !== initial.current) edited.current = true;
+  const dirty = baseline === null ? edited.current : value !== baseline;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; discardDraft(channel); };
+  }, [channel]);
+  useEffect(() => { reportDraft(channel, label, dirty); }, [channel, label, dirty]);
+  return mounted;
+}
+
 function ScheduledScanRetentionSection() {
   const [days, setDays] = useState(90);
   const [saveResult, setSaveResult] = useState('');
 
+  const [baseline, setBaseline] = useState<number | null>(null);
+  const mounted = useSaveDraft('scan-run-retention', 'Scheduled scan history retention', String(days), baseline === null ? null : String(baseline));
   useEffect(() => {
+    let cancelled = false;
     api.getScheduledScanRunRetention()
-      .then((r) => setDays(r.scheduledScanRunRetentionDays))
+      .then((r) => { if (!cancelled) { setDays(r.scheduledScanRunRetentionDays); setBaseline(r.scheduledScanRunRetentionDays); } })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   async function handleSave() {
+    const submitted = days;
     setSaveResult('');
     try {
       // Re-sync from the response rather than assuming the posted value
@@ -534,8 +670,10 @@ function ScheduledScanRetentionSection() {
       // post-implementation adversarial review: without this, typing e.g.
       // 99999 and saving showed "Saved" while the input kept displaying
       // 99999, silently diverging from the 3650 actually persisted.
-      const r = await api.saveScheduledScanRunRetention(days);
-      setDays(r.scheduledScanRunRetentionDays);
+      const r = await trackSave('scan-run-retention', 'Scheduled scan history retention', () => api.saveScheduledScanRunRetention(submitted));
+      if (!mounted.current) return;
+      setBaseline(r.scheduledScanRunRetentionDays);
+      setDays(current => current === submitted ? r.scheduledScanRunRetentionDays : current);
       setSaveResult('Saved');
     } catch {
       setSaveResult('Save failed');
@@ -571,8 +709,6 @@ function ScheduledScanRetentionSection() {
 }
 
 /* ---------- Part 3: profile-based scan scheduling ---------- */
-
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 function formatRunTime(iso: string): string {
   try {
@@ -642,28 +778,52 @@ function ScheduledScansSection() {
     }
   }
 
-  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>) {
+  async function updateEntry(entry: ScanScheduleEntry, patch: Partial<ScanScheduleEntry>): Promise<{ ok: boolean; error?: string }> {
     const next = { ...entry, ...patch };
     try {
-      await api.updateScanScheduleEntry(entry.id, {
+      let request: ReturnType<typeof api.updateScanScheduleEntry> | undefined;
+      const run = () => request ??= (async () => api.updateScanScheduleEntry(entry.id, {
         label: next.label, mode: next.mode, profile_id: next.profile_id,
         profile_name: next.profile_name, profile_synced_at: next.profile_synced_at,
         resolved_request: next.resolved_request, pattern: next.pattern, enabled: next.enabled,
         days_of_week: next.days_of_week, fire_time: next.fire_time,
         cadence_minutes: next.cadence_minutes, window_start_hour: next.window_start_hour,
         window_end_hour: next.window_end_hour,
-      });
+      }))();
+      await Promise.all(Object.keys(patch).map(field => trackSave(
+        `schedule-entry:${entry.id}:${field}`, `Scheduled scan "${entry.label}" ${field}`, run,
+      )));
+      // Refresh once the entry's concurrent full-payload writes have all settled.
+      // Intermediate readbacks must not overwrite the user's label/toggle intent.
+      for (;;) {
+        const pending = Object.entries(useSettingsSaveStatus.getState().channels)
+          .filter(([channel]) => channel.startsWith(`schedule-entry:${entry.id}:`))
+          .flatMap(([, status]) => Object.values(status.pending));
+        if (!pending.length) break;
+        await Promise.all(pending);
+      }
       void refresh();
-    } catch {
+      return { ok: true };
+    } catch (err) {
       // Leave the list stale rather than silently reverting the UI's optimistic value.
+      const error = err instanceof Error
+        ? `Could not update schedule entry: ${err.message}`
+        : 'Could not update schedule entry — check backend is reachable.';
+      return { ok: false, error };
     }
   }
 
-  async function deleteEntry(id: string) {
+  async function deleteEntry(id: string): Promise<{ ok: boolean; error?: string }> {
     try {
       await api.deleteScanScheduleEntry(id);
       void refresh();
-    } catch { /* best-effort */ }
+      return { ok: true };
+    } catch (err) {
+      const error = err instanceof Error
+        ? `Could not delete schedule entry: ${err.message}`
+        : 'Could not delete schedule entry — check backend is reachable.';
+      return { ok: false, error };
+    }
   }
 
   async function runNow(id: string) {
@@ -692,8 +852,8 @@ function ScheduledScansSection() {
           lastRun={lastRuns[entry.id] ?? null}
           stale={staleIds.includes(entry.id)}
           profiles={profiles.filter((p) => p.mode === entry.mode)}
-          onUpdate={(patch) => void updateEntry(entry, patch)}
-          onDelete={() => void deleteEntry(entry.id)}
+          onUpdate={(patch) => updateEntry(entry, patch)}
+          onDelete={() => deleteEntry(entry.id)}
           onRunNow={() => void runNow(entry.id)}
         />
       ))}
@@ -720,18 +880,49 @@ function ScheduleEntryRow({
   lastRun: ScanScheduleRun | null;
   stale: boolean;
   profiles: SearchProfile[];
-  onUpdate: (patch: Partial<ScanScheduleEntry>) => void;
-  onDelete: () => void;
+  onUpdate: (patch: Partial<ScanScheduleEntry>) => Promise<{ ok: boolean; error?: string }>;
+  onDelete: () => Promise<{ ok: boolean; error?: string }>;
   onRunNow: () => void;
 }) {
   const [label, setLabel] = useState(entry.label);
+  const [displayedEnabled, setDisplayedEnabled] = useState(entry.enabled);
+  useEffect(() => { setDisplayedEnabled(entry.enabled); }, [entry.enabled]);
+  const channels = useSettingsSaveStatus(state => state.channels);
+  const entryPending = Object.entries(channels).some(([channel, status]) => channel.startsWith(`schedule-entry:${entry.id}:`) && Object.keys(status.pending).length > 0);
+  useEffect(() => {
+    if (entryPending) return;
+    reportDraft(`schedule-entry:${entry.id}:label`, `Scheduled scan "${entry.label}" label`, label !== entry.label);
+    reportDraft(`schedule-entry:${entry.id}:enabled`, `Scheduled scan "${entry.label}" enabled`, displayedEnabled !== entry.enabled);
+  }, [entry.id, entry.label, entry.enabled, label, displayedEnabled, entryPending]);
+  useEffect(() => () => {
+    discardDraft(`schedule-entry:${entry.id}:label`);
+    discardDraft(`schedule-entry:${entry.id}:enabled`);
+  }, [entry.id]);
+  const [rowError, setRowError] = useState<string>('');
   useEffect(() => { setLabel(entry.label); }, [entry.label]);
+
+  const isProfileMissing = Boolean(entry.profile_id) && !profiles.some((p) => p.id === entry.profile_id);
+
+  const handleUpdate = async (patch: Partial<ScanScheduleEntry>) => {
+    const res = await onUpdate(patch);
+    if (!res.ok) {
+      setRowError(res.error || 'Could not update schedule entry — check backend is reachable.');
+    } else {
+      setRowError('');
+    }
+    return res;
+  };
 
   return (
     <div className={styles.row} style={{ alignItems: 'flex-start', borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
       <div className={styles.rowLabel}>
         <span className={styles.defaultTag}>{entry.mode === 'options' ? 'Options' : 'Stocks'}</span>
         {stale && <Text size={11} tone="caution">May be out of date — last re-sync push failed</Text>}
+        {isProfileMissing && (
+          <Text size={11} tone="caution" className="schedule-missing-profile-warning">
+            Profile missing or deleted — select an available profile to reassign.
+          </Text>
+        )}
         {scheduleRiskIgnored(entry) && (
           <Text size={11} tone="caution">Saved with 0% max loss per trade — ignored; this schedule runs at the 1% default (conviction-adjusted). Set it in Settings → Risk, then re-save the profile.</Text>
         )}
@@ -742,44 +933,71 @@ function ScheduleEntryRow({
             type="text"
             className={styles.input}
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={() => { if (label !== entry.label) onUpdate({ label }); }}
+            onChange={(e) => {
+              setLabel(e.target.value);
+              if (rowError) setRowError('');
+            }}
+            onBlur={async () => {
+              if (label !== entry.label) {
+                await handleUpdate({ label });
+              }
+            }}
           />
           <select
             className={styles.input}
             value={entry.profile_id}
-            onChange={(e) => {
+            onChange={async (e) => {
               const p = profiles.find((pr) => pr.id === e.target.value);
               if (!p) return;
               try {
                 const resolved = resolveProfileToScanRequest(p);
-                onUpdate({
+                await handleUpdate({
                   profile_id: p.id, profile_name: p.name,
                   profile_synced_at: new Date().toISOString(), resolved_request: resolved,
                 });
-              } catch { /* leave entry pointed at old profile if this one can't resolve yet */ }
+              } catch (err) {
+                setRowError(err instanceof Error ? err.message : 'Could not resolve selected profile into a scan request.');
+              }
             }}
           >
+            {isProfileMissing && (
+              <option value={entry.profile_id} disabled>
+                {entry.profile_name || entry.profile_id} (missing)
+              </option>
+            )}
             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <select
             className={styles.input}
             value={entry.pattern}
-            onChange={(e) => onUpdate({
-              pattern: e.target.value as 'fixed_time' | 'loop',
-              fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
-              cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
-              window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
-              window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
-            })}
+            onChange={(e) => {
+              void handleUpdate({
+                pattern: e.target.value as 'fixed_time' | 'loop',
+                fire_time: e.target.value === 'fixed_time' ? (entry.fire_time ?? '09:00') : null,
+                cadence_minutes: e.target.value === 'loop' ? (entry.cadence_minutes ?? 60) : null,
+                window_start_hour: e.target.value === 'loop' ? (entry.window_start_hour ?? 9) : null,
+                window_end_hour: e.target.value === 'loop' ? (entry.window_end_hour ?? 17) : null,
+              });
+            }}
           >
             <option value="fixed_time">Fixed time</option>
             <option value="loop">Loop (cadence + window)</option>
           </select>
-          <Toggle defaultOn={entry.enabled} onChange={(on) => onUpdate({ enabled: on })} />
+          <Toggle defaultOn={entry.enabled} onChange={(on) => { setDisplayedEnabled(on); void handleUpdate({ enabled: on }); }} />
           <button type="button" className={styles.btn} onClick={onRunNow}>Run now</button>
-          <button type="button" className={styles.btn} onClick={onDelete}>Delete</button>
+          <button type="button" className={styles.btn} onClick={async () => {
+            const res = await onDelete();
+            if (!res.ok) {
+              setRowError(res.error || 'Could not delete schedule entry — check backend is reachable.');
+            }
+          }}>Delete</button>
         </div>
+
+        {rowError && (
+          <div data-testid={`schedule-entry-error-${entry.id}`} className="schedule-entry-error" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Text size={11} tone="reject">{rowError}</Text>
+          </div>
+        )}
 
         {entry.pattern === 'fixed_time' ? (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -788,9 +1006,9 @@ function ScheduleEntryRow({
               type="time"
               className={styles.input}
               value={entry.fire_time ?? '09:00'}
-              onChange={(e) => onUpdate({ fire_time: e.target.value })}
+              onChange={(e) => void handleUpdate({ fire_time: e.target.value })}
             />
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -798,22 +1016,29 @@ function ScheduleEntryRow({
             <input
               type="number" min={5} max={1440} className={styles.input} style={{ width: 70 }}
               value={entry.cadence_minutes ?? 60}
-              onChange={(e) => onUpdate({ cadence_minutes: Number(e.target.value) })}
+              onChange={async (e) => {
+                const val = Number(e.target.value);
+                if (val < 5 || val > 1440) {
+                  setRowError('Cadence must be between 5 and 1440 minutes.');
+                  return;
+                }
+                await handleUpdate({ cadence_minutes: val });
+              }}
             />
             <Text size={11} tone="secondary">min, between</Text>
             <input
               type="number" min={0} max={23} className={styles.input} style={{ width: 60 }}
               value={entry.window_start_hour ?? 9}
-              onChange={(e) => onUpdate({ window_start_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_start_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">and</Text>
             <input
               type="number" min={1} max={24} className={styles.input} style={{ width: 60 }}
               value={entry.window_end_hour ?? 17}
-              onChange={(e) => onUpdate({ window_end_hour: Number(e.target.value) })}
+              onChange={(e) => void handleUpdate({ window_end_hour: Number(e.target.value) })}
             />
             <Text size={11} tone="secondary">(operator timezone)</Text>
-            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => onUpdate({ days_of_week: d })} />
+            <DaysOfWeekPicker days={entry.days_of_week} onChange={(d) => void handleUpdate({ days_of_week: d })} />
           </div>
         )}
 
@@ -1219,7 +1444,7 @@ function RiskForm() {
     // 99% and the caution below clears after the save.
     const stopPct = Math.min(PREMIUM_STOP_MAX_PCT, localStopPct);
     try {
-      await saveRiskSettings({
+      await trackSave('risk', 'Risk limits', () => saveRiskSettings({
         premiumStopPct:          stopPct,
         portfolioValue:          localLimits.portfolioValue,
         maxSinglePositionPct:    localLimits.maxSingleTradeExposurePct,
@@ -1232,7 +1457,7 @@ function RiskForm() {
         targetT1Pct: orderedTargetPct.t1,
         targetT2Pct: orderedTargetPct.t2,
         targetT3Pct: orderedTargetPct.t3,
-      });
+      }));
       setPremiumStopPct(stopPct);
       setLocalStopPct(stopPct);
       setTargetProfitPct(orderedTargetPct);
@@ -1589,7 +1814,7 @@ function NotificationForm() {
 
   async function handleSaveRetention(years: number) {
     try {
-      await saveHistoryRetention({ historyRetentionYears: years });
+      await trackSave('history-retention', 'Trade history retention', () => saveHistoryRetention({ historyRetentionYears: years }));
       setRetentionResult('Saved');
     } catch {
       setRetentionResult('Save failed');
@@ -1612,12 +1837,19 @@ function NotificationForm() {
   const [saveResult, setSaveResult] = useState('');
   const [loaded, setLoaded] = useState(false);
 
+  const notificationValue = JSON.stringify([gmailEnabled, gmailTo, gmailUser, telegramEnabled, telegramChatId]);
+  const [notificationBaseline, setNotificationBaseline] = useState<string | null>(null);
+  const notificationMounted = useSaveDraft('notifications', 'Notifications', JSON.stringify([notificationValue, Boolean(gmailPassword), Boolean(telegramToken)]), notificationBaseline === null ? null : JSON.stringify([notificationBaseline, false, false]));
+
   // Load saved config on mount
   useEffect(() => {
+    let cancelled = false;
     fetch(`${BASE_URL}/settings/notifications`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
+        if (cancelled) return;
         if (data) {
+          setNotificationBaseline(JSON.stringify([data.gmail?.enabled ?? false, data.gmail?.to ?? '', data.gmail?.smtp_user ?? '', data.telegram?.enabled ?? false, data.telegram?.chat_id ?? '']));
           setGmailEnabled(data.gmail?.enabled ?? false);
           setGmailTo(data.gmail?.to ?? '');
           setGmailUser(data.gmail?.smtp_user ?? '');
@@ -1626,14 +1858,19 @@ function NotificationForm() {
         }
         setLoaded(true);
       })
-      .catch(() => setLoaded(true));
+      .catch(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
   }, [BASE_URL]);
 
   async function handleSave() {
+    const submitted = notificationValue;
+    const submittedPassword = gmailPassword;
+    const submittedToken = telegramToken;
     setSaving(true);
     setSaveResult('');
     try {
-      const res = await fetch(`${BASE_URL}/settings/notifications`, {
+      await trackSave('notifications', 'Notifications', async () => {
+        const res = await fetch(`${BASE_URL}/settings/notifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1650,15 +1887,16 @@ function NotificationForm() {
           },
         }),
       });
-      if (res.ok) {
+        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+      });
+      if (notificationMounted.current) {
+        setNotificationBaseline(submitted);
         setSaveResult('Settings saved');
-        setGmailPassword('');   // clear password field after save
-        setTelegramToken('');
-      } else {
-        setSaveResult(`Save failed: ${res.status}`);
+        setGmailPassword(current => current === submittedPassword ? '' : current);   // clear password field after save
+        setTelegramToken(current => current === submittedToken ? '' : current);
       }
     } catch (e: unknown) {
-      setSaveResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
+      setSaveResult(e instanceof Error && e.message.startsWith('Save failed:') ? e.message : `Error: ${e instanceof Error ? e.message : 'unknown'}`);
     } finally {
       setSaving(false);
       setTimeout(() => setSaveResult(''), 3000);
@@ -1693,7 +1931,7 @@ function NotificationForm() {
 
   return (
     <>
-      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only \u2014 leave blank to keep the existing saved value." />
+      <SectionIntro title="Notifications" blurb="Configure alert delivery. Gmail uses SMTP (App Password), Telegram uses Bot API. Settings are persisted to the backend config file. Passwords are write-only — leave blank to keep the existing saved value." />
 
       <Row
         label="Trade history retention (years)"
@@ -1816,6 +2054,21 @@ function BrokersForm() {
   const [tastyAccountId,    setTastyAccountId]    = useState(tastytradePaper.accountId);
   const [saving, setSaving] = useState<string | null>(null);
 
+  const [saveFailures, setSaveFailures] = useState<Record<string, boolean>>({});
+  useSaveDraft('broker:ibkr_paper', 'IBKR Paper credentials', JSON.stringify([ibkrUrl, ibkrAcct]), JSON.stringify([ibkrPaper.baseUrl, ibkrPaper.accountId]));
+  useSaveDraft('broker:tradier_paper', 'Tradier Paper credentials', JSON.stringify([tradierTok, tradierAcct]), JSON.stringify([tradierPaper.token, tradierPaper.accountId]));
+  useSaveDraft('broker:tradier_live', 'Tradier Live credentials', JSON.stringify([tradierLiveTok, tradierLiveAcct]), JSON.stringify([tradierLive.token, tradierLive.accountId]));
+  useSaveDraft('broker:alpaca_paper', 'Alpaca Paper credentials', JSON.stringify([alpacaKeyId, alpacaSecret]), JSON.stringify([alpacaPaper.keyId, alpacaPaper.secretKey]));
+  useSaveDraft('broker:tastytrade_paper', 'Tastytrade Paper credentials', JSON.stringify([tastyClientSecret, tastyRefreshToken, tastyAccountId]), JSON.stringify([tastytradePaper.clientSecret, tastytradePaper.refreshToken, tastytradePaper.accountId]));
+
+  async function saveBroker(key: string, channel: string, label: string, run: () => Promise<unknown>) {
+    setSaving(key);
+    setSaveFailures(current => ({ ...current, [key]: false }));
+    try { await trackSave(channel, label, run); }
+    catch { setSaveFailures(current => ({ ...current, [key]: true })); }
+    finally { setSaving(null); }
+  }
+
   // Sync when store resets
   useEffect(() => { setIbkrUrl(ibkrPaper.baseUrl); },         [ibkrPaper.baseUrl]);
   useEffect(() => { setIbkrAcct(ibkrPaper.accountId); },      [ibkrPaper.accountId]);
@@ -1830,42 +2083,41 @@ function BrokersForm() {
   useEffect(() => { setTastyAccountId(tastytradePaper.accountId); },       [tastytradePaper.accountId]);
 
   async function saveIbkrPaper() {
-    setSaving('ibkr');
-    setIbkrPaper({ baseUrl: ibkrUrl, accountId: ibkrAcct });
-    await api.postCredentials('ibkr_paper', { base_url: ibkrUrl, account_id: ibkrAcct });
-    setSaving(null);
+    await saveBroker('ibkr', 'broker:ibkr_paper', 'IBKR Paper credentials', async () => {
+      setIbkrPaper({ baseUrl: ibkrUrl, accountId: ibkrAcct });
+      await api.postCredentials('ibkr_paper', { base_url: ibkrUrl, account_id: ibkrAcct });
+    });
   }
 
   async function saveTradierPaper() {
-    setSaving('tradier');
-    setTradierPaper({ token: tradierTok, accountId: tradierAcct });
-    await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
-    setSaving(null);
+    await saveBroker('tradier', 'broker:tradier_paper', 'Tradier Paper credentials', async () => {
+      setTradierPaper({ token: tradierTok, accountId: tradierAcct });
+      await api.postCredentials('tradier_paper', { token: tradierTok, account_id: tradierAcct });
+    });
   }
 
   async function saveTradierLive() {
-    setSaving('tradierLive');
-    setTradierLive({ token: tradierLiveTok, accountId: tradierLiveAcct });
-    await api.postCredentials('tradier_live', { token: tradierLiveTok, account_id: tradierLiveAcct });
-    setSaving(null);
+    await saveBroker('tradierLive', 'broker:tradier_live', 'Tradier Live credentials', async () => {
+      setTradierLive({ token: tradierLiveTok, accountId: tradierLiveAcct });
+      await api.postCredentials('tradier_live', { token: tradierLiveTok, account_id: tradierLiveAcct });
+    });
   }
 
   async function saveAlpacaPaper() {
-    setSaving('alpaca');
-    setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
-    await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
-    setSaving(null);
+    await saveBroker('alpaca', 'broker:alpaca_paper', 'Alpaca Paper credentials', async () => {
+      setAlpacaPaper({ keyId: alpacaKeyId, secretKey: alpacaSecret });
+      await api.postCredentials('alpaca_paper', { key_id: alpacaKeyId, secret_key: alpacaSecret });
+    });
   }
 
   async function saveTastytradePaper() {
-    setSaving('tastytrade');
-    setTastytradePaper({ clientSecret: tastyClientSecret, refreshToken: tastyRefreshToken, accountId: tastyAccountId });
-    await api.postCredentials('tastytrade_paper', {
-      client_secret: tastyClientSecret, refresh_token: tastyRefreshToken, account_id: tastyAccountId,
+    await saveBroker('tastytrade', 'broker:tastytrade_paper', 'Tastytrade Paper credentials', async () => {
+      setTastytradePaper({ clientSecret: tastyClientSecret, refreshToken: tastyRefreshToken, accountId: tastyAccountId });
+      await api.postCredentials('tastytrade_paper', {
+        client_secret: tastyClientSecret, refresh_token: tastyRefreshToken, account_id: tastyAccountId,
     });
-    setSaving(null);
+    });
   }
-
   return (
     <>
       <SectionIntro
@@ -1896,6 +2148,7 @@ function BrokersForm() {
           >
             {saving === 'ibkr' ? 'Saving…' : 'Save IBKR Paper'}
           </button>
+          {saveFailures.ibkr && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -1929,6 +2182,7 @@ function BrokersForm() {
           >
             {saving === 'tradierLive' ? 'Saving…' : 'Save Tradier Live'}
           </button>
+          {saveFailures.tradierLive && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -1961,6 +2215,7 @@ function BrokersForm() {
           >
             {saving === 'tradier' ? 'Saving…' : 'Save Tradier Paper'}
           </button>
+          {saveFailures.tradier && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -1994,6 +2249,7 @@ function BrokersForm() {
           >
             {saving === 'alpaca' ? 'Saving…' : 'Save Alpaca Paper'}
           </button>
+          {saveFailures.alpaca && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2036,6 +2292,7 @@ function BrokersForm() {
           >
             {saving === 'tastytrade' ? 'Saving…' : 'Save Tastytrade Paper'}
           </button>
+          {saveFailures.tastytrade && <Text size={11} tone="reject">Save failed</Text>}
         </div>
       </div>
 
@@ -2083,14 +2340,20 @@ function DataForm() {
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState('');
 
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const mounted = useSaveDraft('schedule:ingestion', 'Nightly OHLCV ingestion', JSON.stringify([enabled, time]), baseline);
   useEffect(() => {
+    let cancelled = false;
     getIngestionSchedule()
       .then((s) => {
+        if (cancelled) return;
+        setBaseline(JSON.stringify([s.enabled, s.time]));
         setEnabled(s.enabled);
         setTime(s.time);
         setNextRun(s.next_run);
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   function formatNextRun(iso: string | null): string {
@@ -2109,7 +2372,9 @@ function DataForm() {
     setSaving(true);
     setSaveResult('');
     try {
-      const result = await saveIngestionSchedule({ enabled, time });
+      const result = await trackSave('schedule:ingestion', 'Nightly OHLCV ingestion', () => saveIngestionSchedule({ enabled, time }));
+      if (!mounted.current) return;
+      setBaseline(JSON.stringify([result.enabled, result.time]));
       setNextRun(result.next_run);
       setSaveResult('Saved');
     } catch {
@@ -2201,6 +2466,8 @@ function DataForm() {
 /* ---------- Reusable schedule section ---------- */
 
 function ScheduleSection({
+  channel,
+  saveLabel,
   title,
   blurb,
   manualBlurb,
@@ -2211,6 +2478,8 @@ function ScheduleSection({
   triggerLabel = 'Run now',
   showDaysOfWeek = false,
 }: {
+  channel: string;
+  saveLabel: string;
   title: string;
   blurb: string;
   manualBlurb?: string;
@@ -2233,14 +2502,21 @@ function ScheduleSection({
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState('');
 
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const scheduleValue = JSON.stringify([enabled, time, ...(showDaysOfWeek ? [daysOfWeek] : [])]);
+  const mounted = useSaveDraft(channel, saveLabel, scheduleValue, baseline);
   useEffect(() => {
+    let cancelled = false;
     loadSchedule()
       .then((s) => {
+        if (cancelled) return;
+        setBaseline(JSON.stringify([s.enabled, s.time, ...(showDaysOfWeek ? [(s as IngestionSchedule & { days_of_week?: number[] }).days_of_week ?? [5]] : [])]));
         setEnabled(s.enabled); setTime(s.time); setNextRun(s.next_run);
         const dow = (s as IngestionSchedule & { days_of_week?: number[] }).days_of_week;
         if (Array.isArray(dow)) setDaysOfWeek(dow);
       })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function formatNextRun(iso: string | null) {
@@ -2256,7 +2532,9 @@ function ScheduleSection({
   async function handleSave() {
     setSaving(true); setSaveResult('');
     try {
-      const r = await saveSchedule(showDaysOfWeek ? { enabled, time, days_of_week: daysOfWeek } : { enabled, time });
+      const r = await trackSave(channel, saveLabel, () => saveSchedule(showDaysOfWeek ? { enabled, time, days_of_week: daysOfWeek } : { enabled, time }));
+      if (!mounted.current) return;
+      setBaseline(JSON.stringify([r.enabled, r.time, ...(showDaysOfWeek ? [(r as IngestionSchedule & { days_of_week?: number[] }).days_of_week ?? daysOfWeek] : [])]));
       setNextRun(r.next_run);
       setSaveResult('Saved');
     } catch { setSaveResult('Save failed'); }
@@ -2273,7 +2551,7 @@ function ScheduleSection({
   return (
     <>
       <SectionIntro title={title} blurb={blurb} />
-      <Row label="Enable schedule" hint="Runs at the configured time every day" defaultValue="Off">
+      <Row label="Enable schedule" hint={formatScheduleCadence(showDaysOfWeek, daysOfWeek)} defaultValue="Off">
         <Toggle defaultOn={enabled} onChange={(on) => setEnabled(on)} />
       </Row>
       <Row label="Run time (HH:MM)" hint="24-hour operator timezone (see Scan → Operator timezone)" defaultValue={defaultTime}>
@@ -2317,6 +2595,7 @@ function ScheduleSection({
 function EdgarScheduleSection() {
   return (
     <ScheduleSection
+      channel="schedule:edgar" saveLabel="EDGAR fundamentals"
       title="EDGAR fundamentals"
       blurb="Refreshes SEC fundamental data (revenue, margins, EPS, debt) for the full SP500 + NDX100 + DOW30 universe. Runs after OHLCV so the DB is warm before market open."
       manualBlurb="Fetch fundamentals immediately in the background. Takes several minutes for the full universe — check logs for progress."
@@ -2332,6 +2611,7 @@ function EdgarScheduleSection() {
 function Sp500ScheduleSection() {
   return (
     <ScheduleSection
+      channel="schedule:sp500" saveLabel="S&P 500 liquidity update"
       title="S&P 500 list update"
       blurb="Re-fetches 20-day average dollar volume for every symbol in sp500.csv and updates the liquidity column. Run after market close so the day's data is included."
       manualBlurb="Run the S&P 500 liquidity update immediately. Downloads ~500 symbols from Yahoo Finance — takes 1–3 minutes."
@@ -2353,29 +2633,122 @@ function OverrideInput({ field, label, unit, scale = 1, decimals = 0, min, max, 
   field: 'pullbackTolerancePct' | 'maCrossoverLookback' | 'breakoutVolumeMult';
   label: string; unit: string; scale?: number; decimals?: number; min: number; max: number; step: number;
 }) {
-  const value = useScanParamsStore((s) => s[field]);
+  const storeValue = useScanParamsStore((s) => s[field]);
   const setParam = useScanParamsStore((s) => s.setParam);
   const f = 10 ** decimals;
+
+  const [draft, setDraft] = useState<string>(
+    storeValue === null ? '' : String(Math.round(storeValue * scale * f) / f),
+  );
+  const [error, setError] = useState<string | null>(() => {
+    if (storeValue !== null && !isSchemaValidStrategyOverride(field, storeValue)) {
+      return field === 'pullbackTolerancePct'
+        ? 'Invalid stored pullback tolerance. Enter a value between 0.5% and 15% or clear.'
+        : field === 'maCrossoverLookback'
+        ? 'Invalid stored MA crossover lookback. Enter an integer between 1 and 30 bars or clear.'
+        : 'Invalid stored breakout volume multiplier. Enter a value greater than 1.0× and at most 3.0× or clear.';
+    }
+    return null;
+  });
+
+  const lastSyncedValue = useRef<number | null>(storeValue);
+  useEffect(() => {
+    const valid = draft.trim() === '' || (field === 'pullbackTolerancePct'
+      ? validatePullbackToleranceDraft(draft).valid
+      : field === 'maCrossoverLookback'
+      ? validateMaCrossoverLookbackDraft(draft).valid
+      : validateBreakoutVolumeMultDraft(draft).valid);
+    reportDraft(`strategy:${field}`, label, !valid, 'invalid value not applied');
+  }, [field, label, draft]);
+  useEffect(() => () => discardDraft(`strategy:${field}`), [field]);
+
+
+  useEffect(() => {
+    if (storeValue !== lastSyncedValue.current) {
+      lastSyncedValue.current = storeValue;
+      if (storeValue === null) {
+        setDraft('');
+        setError(null);
+      } else if (isSchemaValidStrategyOverride(field, storeValue)) {
+        setDraft(String(Math.round(storeValue * scale * f) / f));
+        setError(null);
+      }
+    }
+  }, [storeValue, scale, f, field]);
+
+  function handleChange(raw: string) {
+    setDraft(raw);
+    if (raw.trim() === '') {
+      setError(null);
+      setParam(field, null);
+      clearDiscarded(`strategy:${field}`);
+      lastSyncedValue.current = null;
+      return;
+    }
+
+    const res =
+      field === 'pullbackTolerancePct'
+        ? validatePullbackToleranceDraft(raw)
+        : field === 'maCrossoverLookback'
+        ? validateMaCrossoverLookbackDraft(raw)
+        : validateBreakoutVolumeMultDraft(raw);
+
+    if (!res.valid) {
+      setError(res.error);
+    } else {
+      setError(null);
+      try {
+        setParam(field, res.value);
+        clearDiscarded(`strategy:${field}`);
+        lastSyncedValue.current = res.value;
+      } catch {
+        setError('Could not store this value in this browser.');
+      }
+    }
+  }
+
+  function handleClear() {
+    setDraft('');
+    setError(null);
+    setParam(field, null);
+    clearDiscarded(`strategy:${field}`);
+    lastSyncedValue.current = null;
+  }
+
   return (
-    <>
-      <input
-        type="number"
-        className={styles.numInput}
-        aria-label={label}
-        placeholder="follows horizon profile"
-        value={value === null ? '' : Math.round(value * scale * f) / f}
-        min={min} max={max} step={step}
-        onChange={(e) =>
-          setParam(field, e.target.value === '' ? null : Number(e.target.value) / scale)
-        }
-      />
-      <Text size={12} tone="secondary">{unit}</Text>
-      {value !== null && (
-        <button type="button" className={styles.btn} aria-label={`Clear ${label}`} onClick={() => setParam(field, null)}>
-          clear
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <input
+          type="number"
+          className={styles.numInput}
+          aria-label={label}
+          placeholder="follows horizon profile"
+          value={draft}
+          min={min}
+          max={max}
+          step={step}
+          aria-invalid={!!error}
+          aria-errormessage={error ? `${field}-error` : undefined}
+          onChange={(e) => handleChange(e.target.value)}
+        />
+        <Text size={12} tone="secondary">{unit}</Text>
+        {(storeValue !== null || draft !== '') && (
+          <button
+            type="button"
+            className={styles.btn}
+            aria-label={`Clear ${label}`}
+            onClick={handleClear}
+          >
+            clear
+          </button>
+        )}
+      </div>
+      {error && (
+        <span id={`${field}-error`} role="alert">
+          <Text size={11} tone="reject">{error}</Text>
+        </span>
       )}
-    </>
+    </div>
   );
 }
 
@@ -2586,6 +2959,7 @@ function StrategyTuningForm() {
   return (
     <div>
       <ScheduleSection
+        channel="schedule:tuning" saveLabel="Strategy tuning schedule"
         title="Automatic tuning schedule"
         blurb="Run walk-forward optimization automatically at a fixed time — Saturday-only by default, since this is compute-heavy and doesn't need daily freshness. The job is skipped if a run is already active."
         defaultTime="05:00"

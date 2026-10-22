@@ -42,7 +42,7 @@ import {
 import { api }               from '@/lib/api';
 import {
   applyPickedContract, contractKeyFor, horizonFieldsFrom, mergePlan, resolveBasketCards,
-  rrOverridesForPlan, withCachedEstimate,
+  rrOverridesForPlan, entryOverridesForPlan, withCachedEstimate,
   cacheStructural, cacheFirstPassage, cacheExitPlan,
   type OverriddenCard, type RecomputedPlanShape, type CachedFirstPassage, type CachedStructural, type CachedExitPlan,
 } from '@/lib/tradeCardOverride';
@@ -947,6 +947,7 @@ export default function Step7Page() {
           final_stop:  pickedCard.exit.finalStop ?? null,
           ...(pickedCard.exit.targetSource ? { target_stock_price: pickedCard.exit.target, target_source: pickedCard.exit.targetSource } : {}),
           ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+          ...entryOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
           ...horizonFieldsFrom(useScanStore.getState().context),
         }, controller.signal)
           .then((plan) => {
@@ -1022,6 +1023,7 @@ export default function Step7Page() {
         final_stop: resolved.exit.finalStop ?? null,
           ...(resolved.exit.targetSource ? { target_stock_price: resolved.exit.target, target_source: resolved.exit.targetSource } : {}),
         ...rrOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
+        ...entryOverridesForPlan(useScanStore.getState().scanResult, useScanStore.getState().scanOverrides),
         ...horizonFieldsFrom(useScanStore.getState().context),
       }, controller.signal)
         .then((plan) => {
@@ -1332,17 +1334,13 @@ export default function Step7Page() {
     const { patchNote, removeNote } = useDirectSendNotesStore.getState();
     patchNote(note.recId, { removing: true, status: null });
     try {
-      // A 404 is final only when the server had already answered this send's
-      // save before the note existed (ORDER-UNKNOWN, NOT-REMOVED). On
-      // SAVE-UNCONFIRMED the create may still be in flight, so it is not.
-      await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+      // A 404 is final across all note kinds (including SAVE-UNCONFIRMED: Kenneth 2026-10-15 decision, #171).
+      await removeTrackedRow(note.recId, true);
       removeNote(note.recId);
     } catch (e) {
       patchNote(note.recId, {
         removing: false,
-        status: note.kind === 'save-unconfirmed' && isNotFound(e)
-          ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
-          : `Remove failed: ${whyOf(e)}. Try again.`,
+        status: `Remove failed: ${whyOf(e)}. Try again.`,
       });
     }
   }

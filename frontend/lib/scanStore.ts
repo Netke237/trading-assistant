@@ -136,6 +136,11 @@ export interface ScanResult {
    *  2026-10-02. Step 7's recompute-plan sends these, not live scanOverrides
    *  (STEP3-PARAM-REACH) -- see rrOverridesForPlan. */
   rr_overrides?: Record<string, number> | null;
+  /** The Entry Quality overrides (entry_* keys) the scan priced its plans with;
+   *  `{}` when it overrode none. Absent, or null, on results from before
+   *  2026-10-21. Step 7's recompute-plan sends these (APP-AUDIT-B-ENTRY-OVERRIDES)
+   *  -- see entryOverridesForPlan. */
+  entry_overrides?: Record<string, number> | null;
   /** The request fields the result was produced from. Absent, or null, on
    *  results from before 2026-10-02. A result restored into an empty browser
    *  rebuilds its ScanContext from this (contextFromScanRequest). */
@@ -434,6 +439,8 @@ interface ScanStoreState {
   addToStockBasket:      (card: PositionCardData) => void;
   removeFromStockBasket: (symbol: string) => void;
   clearStockBasket:      () => void;
+  /** Explicitly wipe obsolete scan results and candidate artifacts when scan scope changes (e.g. custom tickers edited). */
+  clearScanResults:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
   /** Last-run status for the options-mode scan session, as reported by the
@@ -697,6 +704,17 @@ export const useScanStore = create<ScanStoreState>()(
         stockBasketSources: Object.fromEntries(Object.entries(s.stockBasketSources).filter(([key]) => key !== symbol)),
       })),
       clearStockBasket:      () => set({ stockBasket: [], stockBasketSources: {} }),
+      clearScanResults:      () => set({
+        previousRun:             null,
+        previousStockScanResult: null,
+        scanResult:              null,
+        stockScanResult:         null,
+        stockScanRequest:        null,
+        stockScanAt:             null,
+        optionsScanAt:           null,
+        rejectedLog:             [],
+        conflictedSymbols:       [],
+      }),
       setStockScanError:   (message) => set({ stockScanError: message }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
       setLastOptionsScanMeta: (status, updatedAt) => set({

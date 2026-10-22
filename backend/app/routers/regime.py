@@ -184,7 +184,7 @@ async def get_regime(
             vix_closes = [c['close'] for c in vix_history]
             if len(vix_closes) >= 2:
                 vix_pct_30d = _vix_percentile(vix_closes[-31:-1], vix)
-                vix_pct_252d = _vix_percentile(vix_closes[:-1], vix)
+                vix_pct_252d = _vix_percentile(vix_closes[-253:-1], vix)
         except Exception:
             pass
 

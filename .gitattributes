@@ -10,3 +10,6 @@ backend/migrations/init-scripts/* text eol=lf
 # multi-line PowerShell continuations in LF-only files is historically
 # fragile, so pin them to CRLF rather than relying on core.autocrlf.
 *.bat text eol=crlf
+
+# Cloud setup/startup scripts run in Linux even when edited on Windows.
+scripts/cloud/*.sh text eol=lf

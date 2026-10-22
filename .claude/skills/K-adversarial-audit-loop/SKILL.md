@@ -18,6 +18,8 @@ If Kenneth doesn't say which mode, ask — it's the difference between "tell me 
 
 ## The audit loop (core mechanic, used by both modes)
 
+**Task metadata:** In this repository, follow `docs/agents/task-ratings.md` before publishing audit findings as tasks or starting remediation. Every phase/defect/build ticket needs exactly one `size:*` label, one `complexity:*` label, and a completion percentage tied to recorded milestones. Include the estimate rationale and evidence in tracking updates; re-estimate after the plan review or a material scope change. Discovery and a clean evidence audit do not count as implementing the fixes. Preserve existing claims, audit counters and merge gates.
+
 1. **Establish the content.** Either write the implementation plan yourself (use `writing-plans` if it applies) or identify the existing artifact Kenneth means — a diff, branch, uncommitted changes, or a described feature. Don't start round 1 until you can point to something concrete.
 
 2. **Spawn an audit subagent.** Use the `Agent` tool, `run_in_background: false` (you need the findings before you can act on them). Prompt it explicitly to invoke the `bmad-review-adversarial-general` skill via the `Skill` tool, point it at the exact content (file paths, plan text, or `git diff` scope), and ask it to return findings as a markdown list. Give it enough standalone context to actually review — it has no memory of this conversation.

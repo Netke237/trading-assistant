@@ -5,6 +5,7 @@ import { Text } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { captureCurrentSnapshot, applySearchProfile, stableStringify } from '@/lib/searchProfileSnapshot';
+import { isValidSearchProfile, safeCompareTimestamps } from '@/lib/searchProfileValidation';
 import { SaveProfileDialog } from '@/components/molecules/SaveProfileDialog';
 import { RenameProfileDialog } from '@/components/molecules/RenameProfileDialog';
 import { ConfirmDialog } from '@/components/molecules/ConfirmDialog';
@@ -19,27 +20,30 @@ export function SearchProfileBar() {
   const deleteProfile  = useSearchProfilesStore((s) => s.deleteProfile);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // The dropdown re-filters by mode on every screenerMode change — clear the
   // selection so it can't point at an id no longer in its own option list.
-  useEffect(() => { setSelectedId(null); }, [screenerMode]);
+  useEffect(() => { setSelectedId(null); setError(null); }, [screenerMode]);
 
   // Pre-Breakout has no equivalent of universe/direction/horizon/execution
   // params today (SearchProfile.mode is 'options' | 'stocks' only) — hide
   // the bar entirely rather than force a cast onto a third mode it can't
   // represent.
   if (screenerMode === 'prebreakout') return null;
+  const activeMode = screenerMode as 'options' | 'stocks';
 
   const modeProfiles = profiles
-    .filter((p) => p.mode === screenerMode)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .filter(isValidSearchProfile)
+    .filter((p) => p.mode === activeMode)
+    .sort((a, b) => safeCompareTimestamps(a.updatedAt, b.updatedAt));
   const selected = modeProfiles.find((p) => p.id === selectedId) ?? null;
 
   const isDirty = selected
-    ? stableStringify(captureCurrentSnapshot(screenerMode)) !==
+    ? stableStringify(captureCurrentSnapshot(activeMode)) !==
       stableStringify({
         mode: selected.mode, universe: selected.universe, direction: selected.direction,
         horizonPreset: selected.horizonPreset, holdMin: selected.holdMin, holdMax: selected.holdMax,
@@ -49,10 +53,31 @@ export function SearchProfileBar() {
     : false;
 
   function handleSelect(id: string) {
-    setSelectedId(id || null);
-    if (!id) return;
+    if (!id) {
+      setSelectedId(null);
+      setError(null);
+      return;
+    }
     const p = modeProfiles.find((x) => x.id === id);
-    if (p) applySearchProfile(p);
+    if (p) {
+      try {
+        applySearchProfile(p);
+        setSelectedId(id);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  function handleUpdate() {
+    if (!selected) return;
+    try {
+      updateProfile(selected.id, captureCurrentSnapshot(activeMode));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   // A scan already in flight was built from whatever universe/direction/
@@ -90,7 +115,7 @@ export function SearchProfileBar() {
             type="button"
             className={styles.btn}
             disabled={!isDirty}
-            onClick={() => updateProfile(selected.id, captureCurrentSnapshot(screenerMode))}
+            onClick={handleUpdate}
           >
             Update &ldquo;{selected.name}&rdquo;
           </button>
@@ -103,6 +128,12 @@ export function SearchProfileBar() {
         </>
       )}
 
+      {error && (
+        <div role="alert" style={{ width: '100%', marginTop: '4px' }}>
+          <Text size={11} tone="reject">{error}</Text>
+        </div>
+      )}
+
       {modeProfiles.length === 0 && (
         <Text size={11} tone="dim">No saved profiles yet — configure the panel below, then Save as new…</Text>
       )}
@@ -112,9 +143,15 @@ export function SearchProfileBar() {
           mode={screenerMode}
           onClose={() => setShowSaveDialog(false)}
           onSave={(name) => {
-            const id = useSearchProfilesStore.getState().saveProfile(name, captureCurrentSnapshot(screenerMode));
-            setSelectedId(id);
-            setShowSaveDialog(false);
+            try {
+              const id = useSearchProfilesStore.getState().saveProfile(name, captureCurrentSnapshot(activeMode));
+              setSelectedId(id);
+              setError(null);
+              setShowSaveDialog(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              setShowSaveDialog(false);
+            }
           }}
         />
       )}
@@ -122,14 +159,33 @@ export function SearchProfileBar() {
         <RenameProfileDialog
           currentName={selected.name}
           onClose={() => setShowRenameDialog(false)}
-          onSave={(name) => { renameProfile(selected.id, name); setShowRenameDialog(false); }}
+          onSave={(name) => {
+            try {
+              renameProfile(selected.id, name);
+              setError(null);
+              setShowRenameDialog(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              setShowRenameDialog(false);
+            }
+          }}
         />
       )}
       {showDeleteConfirm && selected && (
         <ConfirmDialog
           title={`Delete profile "${selected.name}"?`}
           onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={() => { deleteProfile(selected.id); setSelectedId(null); setShowDeleteConfirm(false); }}
+          onConfirm={() => {
+            try {
+              deleteProfile(selected.id);
+              setSelectedId(null);
+              setError(null);
+              setShowDeleteConfirm(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+              setShowDeleteConfirm(false);
+            }
+          }}
         />
       )}
     </div>

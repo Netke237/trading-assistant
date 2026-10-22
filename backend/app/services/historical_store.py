@@ -44,6 +44,7 @@ from app.database import AsyncSessionLocal
 # scheduling_tz, not market_session: market_session imports strategy_watch_scheduler, which
 # would make an import cycle with this module (plan 2.10, round 3).
 from app.services.scheduling_tz import MARKET_TZ
+from app.data.provider_symbols import dash_class_ticker
 from app.data.tiingo import fetch_historical_candles
 from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
 from app.services.history_basis import verified_boundary
@@ -307,7 +308,7 @@ def _yfinance_fetch(symbol: str, start: date, end: date) -> list[dict]:
         buf = io.StringIO()
         with contextlib.redirect_stderr(buf):
             df = yf.download(
-                symbol,
+                dash_class_ticker(symbol),   # BRK.B -> BRK-B: yfinance's spelling
                 start=start.isoformat(),
                 end=end.isoformat(),
                 progress=False,
@@ -577,6 +578,7 @@ async def refresh_adjustments(
                             state.seam_date = state.old_source = state.seam_signature = None
                             state.floor_requested_start = state.floor_date = None
                             state.floor_provider = state.floor_checked_at = None
+                            state.window_verified_through = state.window_verified_at = None
                         await db.commit()
                         notify_bars_changed(symbol)
             except Exception as exc:

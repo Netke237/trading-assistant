@@ -16,6 +16,7 @@
 import type { Direction } from '@/types/domain';
 import type { ConfidenceGate, FundamentalsGate, SpreadsConfig } from '@/lib/settingsStore';
 import { atrMultForHorizon } from '@/lib/settingsStore';
+import { normalizeWeightOverride, SCORE_WEIGHT_KEYS } from '@/lib/resolveStockScanRequest';
 import { sanitizeHoldDays } from '@/lib/horizonPresets';
 import { regimeGateOverridesFrom } from '@/lib/regimeGateOverrides';
 
@@ -63,6 +64,7 @@ export interface OptionsScanRequestBody {
   max_price?: number;
   min_cap_usd?: number;
   max_cap_usd?: number;
+  cap_filter_units_version?: 1;
   confidence_caution_below?: number;
   confidence_reject_below?: number;
   confidence_atr_mult_target?: number;
@@ -95,7 +97,7 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
   const maxPrice = Number(ctx.maxPriceRaw);
   const minCap = Number(ctx.minCapRaw);
   const maxCap = Number(ctx.maxCapRaw);
-  const capMultiplier = ctx.capUnit === 'B' ? 1e9 : 1;
+  const capMultiplier = ctx.capUnit === 'B' ? 1e9 : 1e6;
 
   if (Number.isFinite(minPrice) && ctx.minPriceRaw !== '') filters.min_price = minPrice;
   if (Number.isFinite(maxPrice) && ctx.maxPriceRaw !== '') filters.max_price = maxPrice;
@@ -119,7 +121,10 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
           // in place of contract_rules.yaml's 55 (open question #57).
           min_stock_score: _mss,
           ...scoreOnlyOverrides } = scanOverrides;
-  const effectiveOverrides = { ...scoreOnlyOverrides, shortlist_max_candidates: ctx.shortlistMaxCandidates };
+  const normalizedScoreOverrides: Record<string, number | boolean | string> = Object.fromEntries(
+    Object.entries(scoreOnlyOverrides).map(([k, v]) => [k, SCORE_WEIGHT_KEYS.has(k) ? normalizeWeightOverride(v) : v]),
+  );
+  const effectiveOverrides = { ...normalizedScoreOverrides, shortlist_max_candidates: ctx.shortlistMaxCandidates };
 
   const gate = ctx.confidenceGate;
   const cautionOv = scanOverrides.confidence_caution_below;
@@ -166,6 +171,7 @@ export function buildOptionsScanRequestBody(ctx: ResolvedScanContext): OptionsSc
   const hold = sanitizeHoldDays(ctx.holdMinDays, ctx.holdMaxDays);
 
   return {
+    cap_filter_units_version: 1,
     universe: ctx.universe,
     direction: ctx.direction,
     horizon: ctx.horizon,

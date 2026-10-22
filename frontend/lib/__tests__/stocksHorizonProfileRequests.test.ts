@@ -116,6 +116,36 @@ describe('scanParamsStore migration (v11 -> v12)', () => {
 
 describe('searchProfilesStore migration (v4 -> v5)', () => {
   const key = 'bamendjou:search-profiles';
+  const baseProfile = {
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    direction: 'Bullish' as const,
+    horizonPreset: 'Swing' as const,
+    holdMin: 5,
+    holdMax: 15,
+    universe: {
+      pick: 'SP500' as const,
+      customRaw: '',
+      minPriceRaw: '',
+      maxPriceRaw: '',
+      minCapRaw: '',
+      maxCapRaw: '',
+      capUnit: 'B' as const,
+    },
+    scanSettings: {
+      confidenceGate: {
+        enabled: true,
+        cautionBelow: 50,
+        rejectBelow: 35,
+        atrMult: {
+          intraday: { target: 2.0, stop: 1.5 },
+          swing: { target: 3.0, stop: 1.5 },
+          position: { target: 2.5, stop: 1.5 },
+        },
+      },
+    },
+  };
+
   beforeEach(() => {
     localStorage.clear();
     useSearchProfilesStore.setState({ profiles: [], legacyTargetPctDropped: false });
@@ -123,12 +153,13 @@ describe('searchProfilesStore migration (v4 -> v5)', () => {
 
   it('resets each saved profile\'s override fields to follow the profile, other fields kept', async () => {
     localStorage.setItem(key, JSON.stringify({ version: 4, state: { profiles: [{
+      ...baseProfile,
       id: 'saved', name: 'Saved', mode: 'stocks', strategy: 'pullback_ema', scanOverrides: { fast_ema: 11 },
       strategyParams: {
         ...SCAN_PARAM_DEFAULTS, pullbackTolerancePct: 0.08, rsiOversold: 25, maCrossoverFast: 20,
         meanReversionVariants: ['mean_reversion_rsi'], btMinTrades: 12, btMinWinRate: 0.5,
       },
-    }, { id: 'opt', name: 'Options', mode: 'options', scanOverrides: {} }] } }));
+    }, { ...baseProfile, id: 'opt', name: 'Options', mode: 'options', scanOverrides: {} }] } }));
     await useSearchProfilesStore.persist.rehydrate();
     const [stocks, options] = useSearchProfilesStore.getState().profiles;
     const sp = stocks.strategyParams as unknown as Record<string, unknown>;

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "DEFECT-PREBREAKOUT-1",
+    "title": "Inspection inputs sizing resolution disparity in Pullback sub-mode",
+    "category": "state-reflection",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "In frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:218-220, inspectionInputs passes raw inspectionRisk.portfolioValue and inspectionRisk.maxLossPerTradePct to SavedScanReportInspector. In contrast, the actual scan dispatch (line 158) resolves sizing through scanSizingFromRisk(), which validates positivity, handles 0% fallbacks, and clamps sizing parameters. If risk limits contain unvalidated values, the inspection input payload does not exactly reflect the executed scan parameters.",
+    "evidence": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:158, 218-220",
+    "remediation": "Update inspectionInputs in Pullback mode to call scanSizingFromRisk() when building account_size and risk_pct."
+  },
+  {
+    "id": "DEFECT-PREBREAKOUT-2",
+    "title": "Asynchronous run_id capture latency in Pre-Breakout / Fib scan metadata",
+    "category": "run-tracking",
+    "severity": "low",
+    "gate_blocking": false,
+    "description": "In frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:186, 202, runId is captured via a metadata callback passed into api.fibPullbackScan and api.prebreakoutScan. If network response headers or report generation fails, runId remains null, displaying 'Displayed rows: run identity unavailable for the rows shown' even when rows were successfully parsed.",
+    "evidence": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:202, 270",
+    "remediation": "Return run_id directly in the envelope response or persist run identity synchronously with candidate rows."
+  },
+  {
+    "id": "DEFECT-PREBREAKOUT-3",
+    "title": "Setup-origin candidate chart backtest hydration is unsupported for Pre-Breakout and Fib setups",
+    "category": "feature-limitation",
+    "severity": "info",
+    "gate_blocking": false,
+    "description": "Opening a Pre-Breakout or Fib Pullback row via ↗ (buildCandidateChartHref) sets status to 'unsupported', rendering 'Original backtest unavailable: unsupported. Live chart below; no historical result has been substituted.' Pullback mode supplies full BacktestArtifact references. The candidate chart currently supports backtest curves only for Pullback setups.",
+    "evidence": "frontend/lib/candidateChart.ts:12-15; frontend/lib/useOriginalBacktest.ts:8; issue #391",
+    "remediation": "Natively tracked under issue #391 (SETUP-BACKTEST-CHART), which adds breakout_setup and fibonacci_pullback backtest artifacts to Candidate Chart."
+  }
+]

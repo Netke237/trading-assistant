@@ -1,7 +1,7 @@
 """Ingestion router — manual trigger, status, and schedule endpoints.
 
 POST /api/data/ingest          → trigger an ingestion run (fire-and-forget)
-GET  /api/data/ingest/status   → current job state + single-provider symbols
+GET  /api/data/ingest/status   → current job state + single-provider symbols + Tiingo usage
 GET  /api/data/ingest/schedule → nightly schedule config
 POST /api/data/ingest/schedule → update nightly schedule config
 """
@@ -13,6 +13,7 @@ import re
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.data import tiingo_budget
 from app.services.ingestion_job import (
     get_ingestion_state,
     single_provider_symbols,
@@ -75,7 +76,14 @@ async def ingest_status() -> dict:
     except Exception as exc:
         logger.warning("ingest status: single-provider symbols unavailable — %s", exc)
         singles = {}
-    return {**get_ingestion_state(), "single_provider_symbols": singles}
+    usage, usage_error = None, None
+    try:
+        usage = await tiingo_budget.usage_summary()
+    except Exception as exc:
+        logger.warning("ingest status: tiingo usage unavailable — %s", exc)
+        usage_error = f"tiingo usage unavailable: {exc}"
+    return {**get_ingestion_state(), "single_provider_symbols": singles,
+            "tiingo_usage": usage, "tiingo_usage_error": usage_error}
 
 
 # ── Schedule endpoints ────────────────────────────────────────────────────────

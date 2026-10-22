@@ -846,6 +846,8 @@ class ScanRequest(BaseModel):
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
     max_cap_usd: Optional[float] = None
+    # Conversion provenance for scheduled replay; direct USD API calls remain compatible.
+    cap_filter_units_version: Literal[1] | None = None
     # Holding horizon (calendar days). The backend derives the contract DTE window
     # from these: dte = hold * dte_holding_multiplier. When absent, contract_rules.yaml
     # hard_reject.min_dte/max_dte apply as a fallback.
@@ -1125,6 +1127,11 @@ class ScanResult(BaseModel):
     # be edited after the scan (STEP3-PARAM-REACH). {} = the scan overrode
     # none. None = absent: a result from before 2026-10-02, or recording failed.
     rr_overrides: Optional[dict[str, float]] = None
+    # The Entry Quality overrides (entry_* keys) this scan priced its plans with,
+    # as config_loader.effective_entry_overrides validated them. Step 7's
+    # recompute-plan sends these back rather than live scanOverrides (APP-AUDIT-B-ENTRY-OVERRIDES).
+    # {} = the scan overrode none. None = absent: a result from before this change, or recording failed.
+    entry_overrides: Optional[dict[str, float]] = None
     # The request fields this result was produced from, so a result restored
     # from /api/scan/last into an empty browser (no persisted ScanContext) can
     # rebuild the direction and hold days Steps 5-7 read, instead of falling

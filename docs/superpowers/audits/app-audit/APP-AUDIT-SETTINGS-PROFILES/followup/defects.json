@@ -1,0 +1,112 @@
+[
+  {
+    "phase": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
+    "title": "Failed Search Profile writes leave changed profiles active until reload",
+    "owner": "B profile persistence; I recovery; J feedback",
+    "touches": "frontend/lib/searchProfilesStore.ts; frontend/components/organisms/SearchProfileBar/index.tsx; frontend/components/molecules/SaveProfileDialog/index.tsx",
+    "blocked_by": [
+      381
+    ],
+    "evidence": "storage/findings.md S1; storage/output.json profile-{save,update,rename,delete}-*",
+    "repro": "Inject targeted localStorage setItem QuotaExceededError or SecurityError on bamendjou:search-profiles. Through Step 3 save, update, rename and delete the synthetic baseline profile. All four operations change the real in-memory store although exact saved bytes remain unchanged. Applying the failed update reads Bearish while saved baseline remains Bullish; reload restores the old data. Eight cases reproduce this. No saved bytes were corrupted in these cases.",
+    "expected": "Keep committed profiles aligned with readback, or present an explicit unsaved/error state that cannot masquerade as a saved profile.",
+    "retest": "Both exception types across CRUD; verify raw bytes, rendered profiles, effective apply behavior, reload and successful retry.",
+    "number": 398,
+    "url": "https://github.com/Netke237/trading-assistant/issues/398",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-THEME-SYNC",
+    "title": "Theme changes do not synchronize across tabs as Settings promises",
+    "owner": "B Appearance; J presentation",
+    "touches": "frontend/lib/theme.ts; frontend/components/ThemeProvider/index.tsx; frontend/app/(frame)/settings/page.tsx",
+    "blocked_by": [
+      377
+    ],
+    "evidence": "storage/findings.md S4; storage/output.json process-restart-and-cross-tab",
+    "repro": "Open two same-origin Settings tabs, change light to dark in one. The other receives a native storage event and can read dark from localStorage, but remains light. The Theme row explicitly promises \"Persisted in localStorage; synced across tabs\" at page.tsx:225. Browser-process restart correctly restores dark.",
+    "expected": "The other tab updates its theme after the storage change; reconcile the explicit UI promise with supported behavior.",
+    "retest": "Both directions in two tabs, saved readback, same-tab application and process restart. This is a UI defect below the numeric gate.",
+    "number": 399,
+    "url": "https://github.com/Netke237/trading-assistant/issues/399",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
+    "title": "An ordinary Settings edit in a stale tab overwrites unrelated saved values",
+    "owner": "B Settings persistence; I concurrency/recovery",
+    "touches": "frontend/lib/settingsStore.ts",
+    "blocked_by": [
+      371
+    ],
+    "evidence": "storage/findings.md S5; storage/output.json process-restart-and-cross-tab",
+    "repro": "Use normal Settings UI to set Markov lookback35; open a second same-origin tab. In tab A set lookback55. In stale tab B change confidence caution to64 and blur. The whole-store write silently changes saved lookback55 back to35. This case uses no importer, direct harness storage writes or injected failure; exact raw bytes and storage events are captured.",
+    "expected": "An edit to confidence preserves the newer saved Markov value or surfaces a conflict. A normal two-tab edit must not silently lose unrelated persisted data.",
+    "retest": "Different-field and same-field stale-tab edits, raw bytes/reload, explicit conflict/recovery behavior; preserve storage keys and schema compatibility.",
+    "number": 400,
+    "url": "https://github.com/Netke237/trading-assistant/issues/400",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-SCHEDULE-RECOVERY",
+    "title": "Saving after invalid scan schedule YAML overwrites the only recovery bytes",
+    "owner": "B schedule persistence; I recovery; G scheduled consumers",
+    "touches": "backend/app/services/scan_schedule_store.py",
+    "blocked_by": [],
+    "evidence": "settings-states/schedule_yaml.py; settings-states/yaml-output.json *-next-write-preservation; settings-states/findings.md item2",
+    "repro": "In a temporary actual ScanScheduleStore, load malformed syntax (entries: [unterminated), a wrong root list, or an invalid version string. Each silently yields an empty list while initially preserving the file. Upsert a real-schema-valid captured options entry. The next ordinary write replaces the original file with version2 data and creates no backup. Three variants reproduce one recovery loss mechanism; no real configuration was used.",
+    "expected": "An unresolved load failure blocks ordinary mutation or preserves the original bytes for recovery and exposes the failure.",
+    "retest": "Each invalid-load variant followed by normal API create/update; exact original backup or refusal, surfaced error and independent process reopening. Existing #374 concerns four other schedule stores and failed-write memory rollback, a different mechanism.",
+    "number": 401,
+    "url": "https://github.com/Netke237/trading-assistant/issues/401",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-SCHEDULE-FEEDBACK",
+    "title": "Scheduled scan failures and unresolvable profile selections give no explanation",
+    "owner": "B Settings schedule UI; G automation; J presentation",
+    "touches": "frontend/app/(frame)/settings/page.tsx",
+    "blocked_by": [
+      399
+    ],
+    "evidence": "settings-states/output.json schedule-invalid-cadence-feedback, schedule-update-failure-feedback, schedule-delete-failure-feedback, schedule-legacy-profile-refusal; settings-states/findings.md items3/5",
+    "repro": "With explicit mocked responses, cadence0 gets schema-equivalent422 and silently snaps back to35; label blur500 leaves Failed draft displayed while the ledger retains Renamed fixed; delete500 leaves the row without an error. Selecting a synthetic legacy options profile missing required fields throws in the actual resolver; no PUT occurs and the prior request is preserved, but no explanation appears. Successful operations/readbacks pass.",
+    "expected": "Explain the failed operation or unresolvable profile, identify any unsaved draft and permit a clear retry. Keep the prior committed record.",
+    "retest": "All three HTTP failures and resolver failure followed by successful retry/remount; verify no false success or mutation. These are UI feedback defects; mocks do not prove a real backend write failure.",
+    "number": 402,
+    "url": "https://github.com/Netke237/trading-assistant/issues/402",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE",
+    "title": "A schedule with a missing profile visually selects a different saved profile",
+    "owner": "B profile/schedule presentation; G consumer; J UI",
+    "touches": "frontend/app/(frame)/settings/page.tsx",
+    "blocked_by": [
+      402
+    ],
+    "evidence": "settings-states/output.json schedule-missing-profile-display; settings-states/missing-profile.png; settings-states/findings.md item4",
+    "repro": "Mount a synthetic schedule whose saved profile_id is deleted-profile while available options contain only audit-options-b. The controlled select retains the missing value but Chromium renders Audit options B as selected. The saved id and resolved request are unchanged. No automatic mutation is inferred.",
+    "expected": "Display an explicit unavailable/missing profile option with its stored identity until the operator deliberately reassigns it.",
+    "retest": "Delete a referenced profile, remount Settings, verify displayed identity and saved snapshot; explicitly choose another profile and verify request/readback.",
+    "number": 403,
+    "url": "https://github.com/Netke237/trading-assistant/issues/403",
+    "status": "open; no product fix"
+  },
+  {
+    "phase": "APP-AUDIT-B-TIMEZONE-LOAD-FAILURE",
+    "title": "An unavailable timezone readback displays an editable default without an error",
+    "owner": "B Settings readback; G/H/D scheduler consumers; J feedback",
+    "touches": "frontend/app/(frame)/settings/page.tsx",
+    "blocked_by": [
+      403
+    ],
+    "evidence": "settings-states/output.json timezone-initial-get-failure; settings-states/findings.md item6",
+    "repro": "Initial GET /settings/scheduling returns mocked503 while the fixture stored timezone is Asia/Tokyo. The field displays its initial Europe/Berlin default with no loading/error/unknown marker. This is the failed initial-load path, distinct from #372 late successful GET overwriting an edit. Scheduler timing was not executed.",
+    "expected": "Distinguish unavailable readback from a confirmed stored timezone; an unconfirmed default must not look like the saved server value.",
+    "retest": "Pending/failing/recovered initial GET, informed edits and saved readback. Coordinate with #372 and serial Settings changes; no claim that a scheduler used the displayed timezone.",
+    "number": 404,
+    "url": "https://github.com/Netke237/trading-assistant/issues/404",
+    "status": "open; no product fix"
+  }
+]

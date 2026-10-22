@@ -29,7 +29,9 @@ import { api } from '@/lib/api';
 import type { MarketRegime, SectorTile, NewsItem, SentimentData } from '@/types/domain';
 import type { Candle } from '@/types/chart';
 import { alignmentVerdict, descriptorFromState } from '@/lib/regimeAlignment';
+import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import { formatRegimeAge, formatRegimeAverage } from '@/lib/regimeDuration';
+import { formatOrdinal } from '@/lib/formatOrdinal';
 import { regimeStatusTooltip, regimeMetricTooltip, regimeNoDataTooltip } from '@/lib/statusTooltips';
 import styles from '../screener.module.css';
 import pageStyles from './page.module.css';
@@ -88,15 +90,19 @@ function sentimentFromRegime(r: MarketRegime, horizon: string): SentimentData | 
   };
 }
 
-/** Bumped by every `fetchRegime` call. Module-level, not a ref: it must
+/** Step 1's own request order, for what only Step 1 writes (the page's regime
+ *  data, `regimeSentiment`, the failure banner). Separate from the shared gate
+ *  ticket (`lib/regimeFetchOrder.ts`): a later Step 2/3 fetch must not stop a
+ *  Step 1 response from delivering the sentiment. `step1RegimeRequestSeq` is
+ *  bumped by every `fetchRegime` call; `step1LastAppliedSeq` is the newest
+ *  request whose response was written. Module-level, not refs: they must
  *  outlive the component, because an earlier mount's request can still answer
  *  after a later mount's request has started (or answered). */
-let regimeSentimentRequestSeq = 0;
+let step1RegimeRequestSeq = 0;
+let step1LastAppliedSeq = 0;
 
 export default function Step1RegimePage() {
-  const setRegime = useScanStore((s) => s.setRegime);
   const setCombinedRegime = useScanStore((s) => s.setCombinedRegime);
-  const setRegimeDirection = useScanStore((s) => s.setRegimeDirection);
   const setRegimeSentiment = useScanStore((s) => s.setRegimeSentiment);
   const context = useScanStore((s) => s.context);
   const markov = useSettingsStore((s) => s.markov);
@@ -119,29 +125,34 @@ export default function Step1RegimePage() {
   const fetchRegime = useCallback(() => {
     setRegimeFetchFailed(false);
     // Written here, not by an effect: these callbacks still run after the
-    // user leaves Step 1 (as setRegime does). Only the latest request writes
-    // the shared reading: an older request answering or failing after a newer
-    // one started leaves it alone, so the latest request wins.
-    const seq = ++regimeSentimentRequestSeq;
+    // user leaves Step 1. The shared gate takes the response only if no newer
+    // Step 1–3 response already landed (`applyRegimeResponse`); the page's own
+    // reading and the sentiment likewise only if no newer Step 1 response
+    // landed. A failure shows only for the latest Step 1 request started, so
+    // an older request failing after a newer one started leaves it all alone.
+    const ticket = beginRegimeFetch();
+    const seq = ++step1RegimeRequestSeq;
     setRegimeSentiment(null);
-    // Always fetch with 'intraday' so the HMM is always computed —
-    // the regime step is visited before horizon selection (step 3).
-    api.getRegime('intraday', { lookback: markov.lookback, threshold: markov.threshold, smoothing: markov.smoothing }).then((r) => {
-      setRegimeData(r);
-      setRegime(r.overall);
-      if (seq === regimeSentimentRequestSeq) {
+    // `fetchGateRegime` sends 'intraday' (so the HMM is always computed — the
+    // regime step is visited before horizon selection, step 3) with the
+    // Settings Markov values.
+    fetchGateRegime().then((r) => {
+      applyRegimeResponse(ticket, r);
+      if (seq > step1LastAppliedSeq) {
+        step1LastAppliedSeq = seq;
+        setRegimeData(r);
         setRegimeSentiment(sentimentFromRegime(r, useScanStore.getState().context?.horizon ?? 'Swing'));
       }
-      setRegimeDirection(r.regime_direction ?? null);
-      const direction = useScanStore.getState().context?.direction ?? 'Bullish';
-      const descriptor = descriptorFromState(r.omm?.state ?? '');
-      setCombinedRegime(alignmentVerdict(direction, descriptor));
     }).catch(() => {
+      if (seq !== step1RegimeRequestSeq) return;
       setOffline(true);
       setRegimeFetchFailed(true);
-      if (seq === regimeSentimentRequestSeq) setRegimeSentiment(null);
+      setRegimeSentiment(null);
     });
-  }, [setRegime, setRegimeDirection, setCombinedRegime, setRegimeSentiment, markov]);
+    // `markov` is read inside fetchGateRegime, not here; it is a dependency so
+    // a Settings change re-creates fetchRegime and the mount effect refetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setRegimeSentiment, markov]);
 
   // The verdict follows the context's direction, not only the moment the
   // regime fetch resolved: StoreHydration can restore a scan's context
@@ -328,7 +339,7 @@ export default function Step1RegimePage() {
                       </Text>
                     ))}
                   {vix30 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix30)} percentile (30-day window)</Text>
                   )}
                 </>
               ) : intraOmm ? (
@@ -350,7 +361,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix30 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix30)}th percentile (30-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix30)} percentile (30-day window)</Text>
                   )}
                 </>
               ) : regime?.intraday_hmm_status === 'insufficient_data' ? (
@@ -384,7 +395,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix252)} percentile (252-day window)</Text>
                   )}
                 </>
               ) : (
@@ -414,7 +425,7 @@ export default function Step1RegimePage() {
                     );
                   })}
                   {vix252 != null && (
-                    <Text size={11} tone="dim">VIX at {Math.round(vix252)}th percentile (252-day window)</Text>
+                    <Text size={11} tone="dim">VIX at {formatOrdinal(vix252)} percentile (252-day window)</Text>
                   )}
                 </>
               ) : (

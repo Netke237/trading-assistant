@@ -1,0 +1,734 @@
+{
+  "boundary": "All API/WebSocket requests mocked; no provider/backend app launched",
+  "browser": "151.0.7922.173",
+  "regime": {
+    "overall": "PASS",
+    "headline": "Mock metrics PASS; directional OMM Bear",
+    "metrics": [],
+    "omm": {
+      "state": "Bear",
+      "p_stay": 0.75,
+      "stability": "Stable",
+      "regime_age_days": 37,
+      "avg_regime_duration": 4,
+      "duration_stride_bars": 20,
+      "transition_row": [
+        0.15,
+        0.75,
+        0.1
+      ],
+      "state_order": [
+        "Bull",
+        "Bear",
+        "Choppy"
+      ],
+      "conviction_pct": -60,
+      "conviction_label": "Weak conviction"
+    },
+    "intraday_hmm": {
+      "state": "Trending",
+      "p_stay": 0.65,
+      "p_transition": [
+        {
+          "to": "Choppy",
+          "prob": 0.25
+        },
+        {
+          "to": "Mean-reverting",
+          "prob": 0.1
+        }
+      ]
+    },
+    "intraday_hmm_status": "ok",
+    "intraday_omm": null,
+    "vix_pct_30d": 25,
+    "vix_pct_252d": 2.7,
+    "hmm_state": "Bear",
+    "alignment": "Aligned",
+    "regime_direction": "BEAR",
+    "conviction_pct": -60,
+    "conviction_label": "Weak conviction"
+  },
+  "modes": [
+    {
+      "mode": "options",
+      "step1_combined": "REJECT",
+      "expected_step1": "REJECT",
+      "units_visible": true,
+      "stay_percent_visible": true,
+      "hmm_percent_visible": true,
+      "vix_252_label_visible": true,
+      "page_errors": [],
+      "step1_next_dialog": true,
+      "run_dialog": true,
+      "after_run_url": "http://127.0.0.1:3027/screener/step-3-direction",
+      "step3_combined": "REJECT",
+      "scan_requests": [],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/config/health",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-sources",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan-reports/latest/options",
+          "query": "",
+          "body": null
+        }
+      ]
+    },
+    {
+      "mode": "stocks",
+      "step1_combined": "REJECT",
+      "expected_step1": "REJECT",
+      "units_visible": true,
+      "stay_percent_visible": true,
+      "hmm_percent_visible": true,
+      "vix_252_label_visible": true,
+      "page_errors": [],
+      "step1_next_dialog": true,
+      "run_dialog": false,
+      "after_run_url": "http://127.0.0.1:3027/screener/step-6-backtest",
+      "step3_combined": "REJECT",
+      "scan_requests": [
+        {
+          "method": "POST",
+          "path": "/api/stock-scan",
+          "query": "",
+          "body": {
+            "universe": [
+              "SP500"
+            ],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "pullback_ema",
+            "pullback_require_reversal": false,
+            "params_horizon": "Swing",
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "account_size": 100000,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "overrides": {},
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "confidence_atr_mult_target": 3,
+            "confidence_atr_mult_stop": 1.5,
+            "hold_max_days": 15
+          }
+        }
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/config/health",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-sources",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan-reports/latest/stocks",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "POST",
+          "path": "/api/stock-scan",
+          "query": "",
+          "body": {
+            "universe": [
+              "SP500"
+            ],
+            "direction": "Bullish",
+            "horizon": "Swing",
+            "strategy": "pullback_ema",
+            "pullback_require_reversal": false,
+            "params_horizon": "Swing",
+            "bt_min_trades": 5,
+            "bt_min_win_rate": 0.45,
+            "account_size": 100000,
+            "risk_pct": 0.0375,
+            "shortlist_max_candidates": 10,
+            "overrides": {},
+            "confidence_caution_below": 50,
+            "confidence_reject_below": 35,
+            "confidence_atr_mult_target": 3,
+            "confidence_atr_mult_stop": 1.5,
+            "hold_max_days": 15
+          }
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-sources",
+          "query": "",
+          "body": null
+        }
+      ]
+    },
+    {
+      "mode": "prebreakout",
+      "step1_combined": "REJECT",
+      "expected_step1": "REJECT",
+      "units_visible": true,
+      "stay_percent_visible": true,
+      "hmm_percent_visible": true,
+      "vix_252_label_visible": true,
+      "page_errors": [],
+      "step1_next_dialog": true,
+      "run_dialog": false,
+      "after_run_url": "http://127.0.0.1:3027/screener/step-4-prebreakout",
+      "step3_combined": "REJECT",
+      "scan_requests": [],
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/config/health",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/watchlist",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/portfolio",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data-sources",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/stock-scan/last-run",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "?horizon=intraday&lookback=20&threshold=0.02&smoothing=0",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/SPY",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/candles/QQQ",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/news",
+          "query": "?symbols=SPY,QQQ,VIX,DIA",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/sectors",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/index-changes",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/historical-data/prefetch/status",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/data/ingest/last-refresh",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/regime",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan-reports/latest/prebreakout",
+          "query": "",
+          "body": null
+        },
+        {
+          "method": "GET",
+          "path": "/api/scan-reports/latest/prebreakout",
+          "query": "",
+          "body": null
+        }
+      ]
+    }
+  ]
+}

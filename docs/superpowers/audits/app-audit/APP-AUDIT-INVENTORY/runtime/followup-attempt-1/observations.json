@@ -1,0 +1,2091 @@
+[
+  {
+    "id": "options:confirmed-nested-chain",
+    "status": "unavailable",
+    "error": "locator.click: Timeout 8000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /^Explain score for/ }).first()\u001b[22m\n"
+  },
+  {
+    "id": "stocks:position-populated",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "status": "observed",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "fixture_identities": [
+      "stock:AAPL",
+      "stock:MSFT"
+    ],
+    "assertion": "actual populated decision workspace with2 synthetic candidate identities; no numbers certified",
+    "state": {
+      "url": "/screener/step-7-position-card",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nLast option scan: Custom · Bullish · Swing (5-15d)\nCOMPLETED\nPENDING\nPRE\n·\n1h 32m\nConfig OK · 10 checks\nMarket Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED\nOptions\nStocks\nPre-Breakout\nSTEP 6 OF 6\nPosition Card\nPrev\n1 of 2\nNext\nAAPL\nMSFT\nAAPL\nAAPL synthetic fixture\nBullish · pullback ema\n70%\nCAUTION\nNow: —\nScan price: $150.00\nStock score: 80 / 100\nRecorded horizon: Swing\nView Chart\nPin to Basket\nMarket Sentiment\nSwing · daily\nConviction\n+25%\nBullish — Synthetic sentiment\nState Bullish · sticky 80% · ≈8 strides\nAlignment\nOMM/HMM Aligned\nInitial strategy targets\nOrder & exits\nCalculations\nQualification\nYour decision\nWhich comes first\nMarket sentiment\nFundamentals\nHow this page works\nUnvalidated — research only. Strategy validation is unavailable; broker sending and automatic arming are blocked.\nFundamental Health\n72\nStrong quality · Low risk\nGrowth\n70\nQuality\n75\nRisk\n68\nScore definitions & safety flags\nInitial strategy targets\nSource: scanned strategy · entry $150.00 · stop $145.00\nFull exit scenarios before costs use the original strategy entry and 30 entered shares. Each row exits the entire position; outcomes are alternatives and must not be added together.\nTarget\tStock price\tReward / share\tReturn\tR:R\tFull position outcome\nT1\t$160.00\t$10.00\t6.67%\t2.00×\t$300.00\nT2\t$165.00\t$15.00\t10.00%\t3.00×\t$450.00\nT3\t$170.00\t$20.00\t13.33%\t4.00×\t$600.00\nOriginal target allocations unavailable\nLatest calculation\nCalculation chronology unavailable\nOrder & exits\nENTRY\n150.00\nSTOP\n145.00\nSHARES\n30\nWIN %\n60%\nPosition value\n$4500.00\nExecution risk / share\n$5.00\nExecution risk / position\n$150.00\nEntered 30 shares · current bullish entry and execution stop · before costs\nEdit T1 / T2 / T3 and share allocations\nStructure & Stops\nEntered execution stop\nStop price\n$145.00\nRisk / share\n$5.00\nLoss for entered 30 shares\n$150.00\nCurrent entered entry and execution stop · before costs\nArithmetic final stop\nNot computed or stale — run Arithmetic plan for the current inputs.\nChecking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan's risk.\nStructural check not computed or stale — check the current entry.\nCheck structure\nCalculations\nOriginal ladder\nSource: editable execution targets · entry $150.00 · execution stop $145.00\nTarget\tStock price\tFull exit / 30 entered shares\tAllocated shares\tAllocated outcome\tReward / share\tR:R\nT1\t$160.00\t$300.00\t10\t$100.00\t$10.00\t2.00×\nT2\t$165.00\t$450.00\t10\t$150.00\t$15.00\t3.00×\nT3\t$170.00\t$600.00\t10\t$200.00\t$20.00\t4.00×\nEach row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.\nOriginal selects the editable ladder; the initial scanned strategy targets above remain separate.\nArithmetic\nArithmetic plan\nNot computed or stale — run Arithmetic plan for the current inputs.\nMonte Carlo stock estimate\nEstimate\nGBM stock simulation · editable execution entry / stop / targets. Execution entry $150.00 · stop $145.00\nNot computed or stale — run Estimate for the current inputs.\nStock Scorecard\nFinal verdict: CAUTION\n80 / 100\nStock score is a filter, not a probability of profit.\nScorer evidence before final caps: PASS\ntrend\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\npullback\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\ntrigger\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nevent\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nvolatility\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nBacktest evidence\nWin rate\n60% win rate\nTrades\n20\nExpectancy\n0.40\nReturn\n12.0%\nMax DD\n5.0%\nSharpe\n1.20\nConfidence\n70%\nSynthetic confidence\nSynthetic inventory backtest\nScan thresholds: ≥ 20 trades · ≥ 50% win rate\nYour decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation\n←\nBack: Backtest\nSTEP 6 OF 6\nDone\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Position Card",
+        "Initial strategy targets",
+        "Order & exits",
+        "Structure & Stops",
+        "Calculations",
+        "Stock Scorecard",
+        "Backtest evidence",
+        "Your decision",
+        "Execution",
+        "Pre-trade checklist"
+      ],
+      "rails": [
+        {
+          "class": "NavRail_rail__apYoW NavRail_railExpanded__P5YJX",
+          "text": "Market Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED"
+        },
+        {
+          "class": "StockPositionCard_decision__XstRF",
+          "text": "Your decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation"
+        },
+        {
+          "class": "ContextRail_rail__ZQtdn",
+          "text": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ],
+      "controls": [
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Skip to content",
+          "title": null,
+          "href": "#workspace",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Config OK · 10 checks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Switch to light mode",
+          "text": "",
+          "title": "Switch to light mode",
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Market Regime",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Universe",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Direction",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Strategy",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "6\nPosition",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "← Exit Workflow",
+          "title": null,
+          "href": "/dashboard",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Options",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Stocks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pre-Breakout",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Prev",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Next",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "AAPL",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "MSFT",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "View Chart",
+          "title": null,
+          "href": "/chart?symbol=AAPL&source=stocks&backtest_artifact_status=original_unavailable",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pin to Basket",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Initial strategy targets",
+          "title": null,
+          "href": "#initial-targets",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Order & exits",
+          "title": null,
+          "href": "#order-exits",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Calculations",
+          "title": null,
+          "href": "#calculations",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Qualification",
+          "title": null,
+          "href": "#qualification",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Your decision",
+          "title": null,
+          "href": "#decision",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Which comes first",
+          "title": null,
+          "href": "#race",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Market sentiment",
+          "title": null,
+          "href": "#market-sentiment",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Fundamentals",
+          "title": null,
+          "href": "#fundamentals",
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "How this page works",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Score definitions & safety flags",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Edit T1 / T2 / T3 and share allocations",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Check structure",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Arithmetic plan",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Estimate",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Ladder",
+          "text": "Ladder\n3 TARGETS",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Arithmetic",
+          "text": "Arithmetic\nRUN ARITHMETIC PLAN FIRST",
+          "title": "Run Arithmetic plan first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Monte Carlo",
+          "text": "Monte Carlo\nRUN ESTIMATE FIRST",
+          "title": "Run Estimate first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Stock stop",
+          "text": "Stock stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Premium stop",
+          "text": "Premium stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Add to Portfolio",
+          "title": "Method pick required",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Recommendation",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "IBKR Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tradier Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Alpaca Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tastytrade Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Auto-trade execution",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "←\nBack: Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Done\n→",
+          "title": null,
+          "href": null,
+          "disabled": true
+        }
+      ]
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":{\"universe\":\"Custom\",\"direction\":\"Bullish\",\"horizon\":\"Swing (5-15d)\",\"holdMin\":5,\"holdMax\":15},\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"COMPLETED\",\"screenerMode\":\"stocks\",\"activeStrategy\":null,\"stockScanResult\":{\"scan_id\":\"audit-stocks-fixture\",\"timestamp\":\"2026-10-12T08:00:00Z\",\"candidates\":[{\"symbol\":\"AAPL\",\"company\":\"AAPL synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}},{\"symbol\":\"MSFT\",\"company\":\"MSFT synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}}],\"rejected\":[]},\"stockScanRequest\":{\"bt_min_trades\":20,\"bt_min_win_rate\":0.5,\"horizon\":\"Swing\"},\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":\"IDLE\",\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":\"IDLE\",\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "audit-initialized": "synthetic-isolated"
+      },
+      "session": {}
+    },
+    "network_indices": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40
+    ]
+  },
+  {
+    "id": "stocks:position-next-candidate",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "status": "observed",
+    "fixture_identity": "stock:MSFT",
+    "assertion": "actual candidate navigation changes visible company",
+    "state": {
+      "url": "/screener/step-7-position-card",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nLast option scan: Custom · Bullish · Swing (5-15d)\nCOMPLETED\nPENDING\nPRE\n·\n1h 32m\nConfig OK · 10 checks\nMarket Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED\nOptions\nStocks\nPre-Breakout\nSTEP 6 OF 6\nPosition Card\nPrev\n2 of 2\nNext\nAAPL\nMSFT\nMSFT\nMSFT synthetic fixture\nBullish · pullback ema\n70%\nCAUTION\nNow: —\nScan price: $150.00\nStock score: 80 / 100\nRecorded horizon: Swing\nView Chart\nPin to Basket\nMarket Sentiment\nSwing · daily\nConviction\n+25%\nBullish — Synthetic sentiment\nState Bullish · sticky 80% · ≈8 strides\nAlignment\nOMM/HMM Aligned\nInitial strategy targets\nOrder & exits\nCalculations\nQualification\nYour decision\nWhich comes first\nMarket sentiment\nFundamentals\nHow this page works\nUnvalidated — research only. Strategy validation is unavailable; broker sending and automatic arming are blocked.\nFundamental Health\n72\nStrong quality · Low risk\nGrowth\n70\nQuality\n75\nRisk\n68\nScore definitions & safety flags\nInitial strategy targets\nSource: scanned strategy · entry $150.00 · stop $145.00\nFull exit scenarios before costs use the original strategy entry and 30 entered shares. Each row exits the entire position; outcomes are alternatives and must not be added together.\nTarget\tStock price\tReward / share\tReturn\tR:R\tFull position outcome\nT1\t$160.00\t$10.00\t6.67%\t2.00×\t$300.00\nT2\t$165.00\t$15.00\t10.00%\t3.00×\t$450.00\nT3\t$170.00\t$20.00\t13.33%\t4.00×\t$600.00\nOriginal target allocations unavailable\nLatest calculation\nCalculation chronology unavailable\nOrder & exits\nENTRY\n150.00\nSTOP\n145.00\nSHARES\n30\nWIN %\n60%\nPosition value\n$4500.00\nExecution risk / share\n$5.00\nExecution risk / position\n$150.00\nEntered 30 shares · current bullish entry and execution stop · before costs\nEdit T1 / T2 / T3 and share allocations\nStructure & Stops\nEntered execution stop\nStop price\n$145.00\nRisk / share\n$5.00\nLoss for entered 30 shares\n$150.00\nCurrent entered entry and execution stop · before costs\nArithmetic final stop\nNot computed or stale — run Arithmetic plan for the current inputs.\nChecking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan's risk.\nStructural check not computed or stale — check the current entry.\nCheck structure\nCalculations\nOriginal ladder\nSource: editable execution targets · entry $150.00 · execution stop $145.00\nTarget\tStock price\tFull exit / 30 entered shares\tAllocated shares\tAllocated outcome\tReward / share\tR:R\nT1\t$160.00\t$300.00\t10\t$100.00\t$10.00\t2.00×\nT2\t$165.00\t$450.00\t10\t$150.00\t$15.00\t3.00×\nT3\t$170.00\t$600.00\t10\t$200.00\t$20.00\t4.00×\nEach row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.\nOriginal selects the editable ladder; the initial scanned strategy targets above remain separate.\nArithmetic\nArithmetic plan\nNot computed or stale — run Arithmetic plan for the current inputs.\nMonte Carlo stock estimate\nEstimate\nGBM stock simulation · editable execution entry / stop / targets. Execution entry $150.00 · stop $145.00\nNot computed or stale — run Estimate for the current inputs.\nStock Scorecard\nFinal verdict: CAUTION\n80 / 100\nStock score is a filter, not a probability of profit.\nScorer evidence before final caps: PASS\ntrend\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\npullback\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\ntrigger\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nevent\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nvolatility\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nBacktest evidence\nWin rate\n60% win rate\nTrades\n20\nExpectancy\n0.40\nReturn\n12.0%\nMax DD\n5.0%\nSharpe\n1.20\nConfidence\n70%\nSynthetic confidence\nSynthetic inventory backtest\nScan thresholds: ≥ 20 trades · ≥ 50% win rate\nYour decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation\n←\nBack: Backtest\nSTEP 6 OF 6\nDone\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Position Card",
+        "Initial strategy targets",
+        "Order & exits",
+        "Structure & Stops",
+        "Calculations",
+        "Stock Scorecard",
+        "Backtest evidence",
+        "Your decision",
+        "Execution",
+        "Pre-trade checklist"
+      ],
+      "rails": [
+        {
+          "class": "NavRail_rail__apYoW NavRail_railExpanded__P5YJX",
+          "text": "Market Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED"
+        },
+        {
+          "class": "StockPositionCard_decision__XstRF",
+          "text": "Your decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation"
+        },
+        {
+          "class": "ContextRail_rail__ZQtdn",
+          "text": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ],
+      "controls": [
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Skip to content",
+          "title": null,
+          "href": "#workspace",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Config OK · 10 checks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Switch to light mode",
+          "text": "",
+          "title": "Switch to light mode",
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Market Regime",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Universe",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Direction",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Strategy",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "6\nPosition",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "← Exit Workflow",
+          "title": null,
+          "href": "/dashboard",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Options",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Stocks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pre-Breakout",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Prev",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Next",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "AAPL",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "MSFT",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "View Chart",
+          "title": null,
+          "href": "/chart?symbol=MSFT&source=stocks&backtest_artifact_status=original_unavailable",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pin to Basket",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Initial strategy targets",
+          "title": null,
+          "href": "#initial-targets",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Order & exits",
+          "title": null,
+          "href": "#order-exits",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Calculations",
+          "title": null,
+          "href": "#calculations",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Qualification",
+          "title": null,
+          "href": "#qualification",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Your decision",
+          "title": null,
+          "href": "#decision",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Which comes first",
+          "title": null,
+          "href": "#race",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Market sentiment",
+          "title": null,
+          "href": "#market-sentiment",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Fundamentals",
+          "title": null,
+          "href": "#fundamentals",
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "How this page works",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Score definitions & safety flags",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Edit T1 / T2 / T3 and share allocations",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Check structure",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Arithmetic plan",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Estimate",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Ladder",
+          "text": "Ladder\n3 TARGETS",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Arithmetic",
+          "text": "Arithmetic\nRUN ARITHMETIC PLAN FIRST",
+          "title": "Run Arithmetic plan first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Monte Carlo",
+          "text": "Monte Carlo\nRUN ESTIMATE FIRST",
+          "title": "Run Estimate first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Stock stop",
+          "text": "Stock stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Premium stop",
+          "text": "Premium stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Add to Portfolio",
+          "title": "Method pick required",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Recommendation",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "IBKR Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tradier Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Alpaca Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tastytrade Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Auto-trade execution",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "←\nBack: Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Done\n→",
+          "title": null,
+          "href": null,
+          "disabled": true
+        }
+      ]
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":{\"universe\":\"Custom\",\"direction\":\"Bullish\",\"horizon\":\"Swing (5-15d)\",\"holdMin\":5,\"holdMax\":15},\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"COMPLETED\",\"screenerMode\":\"stocks\",\"activeStrategy\":null,\"stockScanResult\":{\"scan_id\":\"audit-stocks-fixture\",\"timestamp\":\"2026-10-12T08:00:00Z\",\"candidates\":[{\"symbol\":\"AAPL\",\"company\":\"AAPL synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}},{\"symbol\":\"MSFT\",\"company\":\"MSFT synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}}],\"rejected\":[]},\"stockScanRequest\":{\"bt_min_trades\":20,\"bt_min_win_rate\":0.5,\"horizon\":\"Swing\"},\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":\"IDLE\",\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":\"IDLE\",\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "audit-initialized": "synthetic-isolated"
+      },
+      "session": {}
+    },
+    "network_indices": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44
+    ]
+  },
+  {
+    "id": "stocks:disclosure:How this page works",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "status": "observed",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "fixture_identity": "stock:MSFT/summary:How this page works",
+    "assertion": "actual keyboard Enter on summary opens nested disclosure; no order/arm action",
+    "state": {
+      "url": "/screener/step-7-position-card",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nLast option scan: Custom · Bullish · Swing (5-15d)\nCOMPLETED\nPENDING\nPRE\n·\n1h 32m\nConfig OK · 10 checks\nMarket Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED\nOptions\nStocks\nPre-Breakout\nSTEP 6 OF 6\nPosition Card\nPrev\n2 of 2\nNext\nAAPL\nMSFT\nMSFT\nMSFT synthetic fixture\nBullish · pullback ema\n70%\nCAUTION\nNow: —\nScan price: $150.00\nStock score: 80 / 100\nRecorded horizon: Swing\nView Chart\nPin to Basket\nMarket Sentiment\nSwing · daily\nConviction\n+25%\nBullish — Synthetic sentiment\nState Bullish · sticky 80% · ≈8 strides\nAlignment\nOMM/HMM Aligned\nInitial strategy targets\nOrder & exits\nCalculations\nQualification\nYour decision\nWhich comes first\nMarket sentiment\nFundamentals\nHow this page works\nReview the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.\nUnvalidated — research only. Strategy validation is unavailable; broker sending and automatic arming are blocked.\nFundamental Health\n72\nStrong quality · Low risk\nGrowth\n70\nQuality\n75\nRisk\n68\nScore definitions & safety flags\nInitial strategy targets\nSource: scanned strategy · entry $150.00 · stop $145.00\nFull exit scenarios before costs use the original strategy entry and 30 entered shares. Each row exits the entire position; outcomes are alternatives and must not be added together.\nTarget\tStock price\tReward / share\tReturn\tR:R\tFull position outcome\nT1\t$160.00\t$10.00\t6.67%\t2.00×\t$300.00\nT2\t$165.00\t$15.00\t10.00%\t3.00×\t$450.00\nT3\t$170.00\t$20.00\t13.33%\t4.00×\t$600.00\nOriginal target allocations unavailable\nLatest calculation\nCalculation chronology unavailable\nOrder & exits\nENTRY\n150.00\nSTOP\n145.00\nSHARES\n30\nWIN %\n60%\nPosition value\n$4500.00\nExecution risk / share\n$5.00\nExecution risk / position\n$150.00\nEntered 30 shares · current bullish entry and execution stop · before costs\nEdit T1 / T2 / T3 and share allocations\nStructure & Stops\nEntered execution stop\nStop price\n$145.00\nRisk / share\n$5.00\nLoss for entered 30 shares\n$150.00\nCurrent entered entry and execution stop · before costs\nArithmetic final stop\nNot computed or stale — run Arithmetic plan for the current inputs.\nChecking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan's risk.\nStructural check not computed or stale — check the current entry.\nCheck structure\nCalculations\nOriginal ladder\nSource: editable execution targets · entry $150.00 · execution stop $145.00\nTarget\tStock price\tFull exit / 30 entered shares\tAllocated shares\tAllocated outcome\tReward / share\tR:R\nT1\t$160.00\t$300.00\t10\t$100.00\t$10.00\t2.00×\nT2\t$165.00\t$450.00\t10\t$150.00\t$15.00\t3.00×\nT3\t$170.00\t$600.00\t10\t$200.00\t$20.00\t4.00×\nEach row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.\nOriginal selects the editable ladder; the initial scanned strategy targets above remain separate.\nArithmetic\nArithmetic plan\nNot computed or stale — run Arithmetic plan for the current inputs.\nMonte Carlo stock estimate\nEstimate\nGBM stock simulation · editable execution entry / stop / targets. Execution entry $150.00 · stop $145.00\nNot computed or stale — run Estimate for the current inputs.\nStock Scorecard\nFinal verdict: CAUTION\n80 / 100\nStock score is a filter, not a probability of profit.\nScorer evidence before final caps: PASS\ntrend\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\npullback\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\ntrigger\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nevent\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nvolatility\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nBacktest evidence\nWin rate\n60% win rate\nTrades\n20\nExpectancy\n0.40\nReturn\n12.0%\nMax DD\n5.0%\nSharpe\n1.20\nConfidence\n70%\nSynthetic confidence\nSynthetic inventory backtest\nScan thresholds: ≥ 20 trades · ≥ 50% win rate\nYour decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation\n←\nBack: Backtest\nSTEP 6 OF 6\nDone\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Position Card",
+        "Initial strategy targets",
+        "Order & exits",
+        "Structure & Stops",
+        "Calculations",
+        "Stock Scorecard",
+        "Backtest evidence",
+        "Your decision",
+        "Execution",
+        "Pre-trade checklist"
+      ],
+      "rails": [
+        {
+          "class": "NavRail_rail__apYoW NavRail_railExpanded__P5YJX",
+          "text": "Market Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED"
+        },
+        {
+          "class": "StockPositionCard_decision__XstRF",
+          "text": "Your decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation"
+        },
+        {
+          "class": "ContextRail_rail__ZQtdn",
+          "text": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ],
+      "controls": [
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Skip to content",
+          "title": null,
+          "href": "#workspace",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Config OK · 10 checks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Switch to light mode",
+          "text": "",
+          "title": "Switch to light mode",
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Market Regime",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Universe",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Direction",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Strategy",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "6\nPosition",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "← Exit Workflow",
+          "title": null,
+          "href": "/dashboard",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Options",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Stocks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pre-Breakout",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Prev",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Next",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "AAPL",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "MSFT",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "View Chart",
+          "title": null,
+          "href": "/chart?symbol=MSFT&source=stocks&backtest_artifact_status=original_unavailable",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pin to Basket",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Initial strategy targets",
+          "title": null,
+          "href": "#initial-targets",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Order & exits",
+          "title": null,
+          "href": "#order-exits",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Calculations",
+          "title": null,
+          "href": "#calculations",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Qualification",
+          "title": null,
+          "href": "#qualification",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Your decision",
+          "title": null,
+          "href": "#decision",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Which comes first",
+          "title": null,
+          "href": "#race",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Market sentiment",
+          "title": null,
+          "href": "#market-sentiment",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Fundamentals",
+          "title": null,
+          "href": "#fundamentals",
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "How this page works\nReview the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Score definitions & safety flags",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Edit T1 / T2 / T3 and share allocations",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Check structure",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Arithmetic plan",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Estimate",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Ladder",
+          "text": "Ladder\n3 TARGETS",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Arithmetic",
+          "text": "Arithmetic\nRUN ARITHMETIC PLAN FIRST",
+          "title": "Run Arithmetic plan first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Monte Carlo",
+          "text": "Monte Carlo\nRUN ESTIMATE FIRST",
+          "title": "Run Estimate first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Stock stop",
+          "text": "Stock stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Premium stop",
+          "text": "Premium stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Add to Portfolio",
+          "title": "Method pick required",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Recommendation",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "IBKR Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tradier Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Alpaca Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tastytrade Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Auto-trade execution",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "←\nBack: Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Done\n→",
+          "title": null,
+          "href": null,
+          "disabled": true
+        }
+      ]
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":{\"universe\":\"Custom\",\"direction\":\"Bullish\",\"horizon\":\"Swing (5-15d)\",\"holdMin\":5,\"holdMax\":15},\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"COMPLETED\",\"screenerMode\":\"stocks\",\"activeStrategy\":null,\"stockScanResult\":{\"scan_id\":\"audit-stocks-fixture\",\"timestamp\":\"2026-10-12T08:00:00Z\",\"candidates\":[{\"symbol\":\"AAPL\",\"company\":\"AAPL synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}},{\"symbol\":\"MSFT\",\"company\":\"MSFT synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}}],\"rejected\":[]},\"stockScanRequest\":{\"bt_min_trades\":20,\"bt_min_win_rate\":0.5,\"horizon\":\"Swing\"},\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":\"IDLE\",\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":\"IDLE\",\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "audit-initialized": "synthetic-isolated"
+      },
+      "session": {}
+    },
+    "network_indices": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44
+    ]
+  },
+  {
+    "id": "stocks:disclosure:Auto-trade execution",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "status": "observed",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "fixture_identity": "stock:MSFT/summary:Auto-trade execution",
+    "assertion": "actual keyboard Enter on summary opens nested disclosure; no order/arm action",
+    "state": {
+      "url": "/screener/step-7-position-card",
+      "title": "Bamendjou — Options Screener",
+      "text": "Skip to content\nBAMENDJOU\nOptions Screener\nLast option scan: Custom · Bullish · Swing (5-15d)\nCOMPLETED\nPENDING\nPRE\n·\n1h 32m\nConfig OK · 10 checks\nMarket Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED\nOptions\nStocks\nPre-Breakout\nSTEP 6 OF 6\nPosition Card\nPrev\n2 of 2\nNext\nAAPL\nMSFT\nMSFT\nMSFT synthetic fixture\nBullish · pullback ema\n70%\nCAUTION\nNow: —\nScan price: $150.00\nStock score: 80 / 100\nRecorded horizon: Swing\nView Chart\nPin to Basket\nMarket Sentiment\nSwing · daily\nConviction\n+25%\nBullish — Synthetic sentiment\nState Bullish · sticky 80% · ≈8 strides\nAlignment\nOMM/HMM Aligned\nInitial strategy targets\nOrder & exits\nCalculations\nQualification\nYour decision\nWhich comes first\nMarket sentiment\nFundamentals\nHow this page works\nReview the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.\nUnvalidated — research only. Strategy validation is unavailable; broker sending and automatic arming are blocked.\nFundamental Health\n72\nStrong quality · Low risk\nGrowth\n70\nQuality\n75\nRisk\n68\nScore definitions & safety flags\nInitial strategy targets\nSource: scanned strategy · entry $150.00 · stop $145.00\nFull exit scenarios before costs use the original strategy entry and 30 entered shares. Each row exits the entire position; outcomes are alternatives and must not be added together.\nTarget\tStock price\tReward / share\tReturn\tR:R\tFull position outcome\nT1\t$160.00\t$10.00\t6.67%\t2.00×\t$300.00\nT2\t$165.00\t$15.00\t10.00%\t3.00×\t$450.00\nT3\t$170.00\t$20.00\t13.33%\t4.00×\t$600.00\nOriginal target allocations unavailable\nLatest calculation\nCalculation chronology unavailable\nOrder & exits\nENTRY\n150.00\nSTOP\n145.00\nSHARES\n30\nWIN %\n60%\nPosition value\n$4500.00\nExecution risk / share\n$5.00\nExecution risk / position\n$150.00\nEntered 30 shares · current bullish entry and execution stop · before costs\nEdit T1 / T2 / T3 and share allocations\nStructure & Stops\nEntered execution stop\nStop price\n$145.00\nRisk / share\n$5.00\nLoss for entered 30 shares\n$150.00\nCurrent entered entry and execution stop · before costs\nArithmetic final stop\nNot computed or stale — run Arithmetic plan for the current inputs.\nChecking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan's risk.\nStructural check not computed or stale — check the current entry.\nCheck structure\nCalculations\nOriginal ladder\nSource: editable execution targets · entry $150.00 · execution stop $145.00\nTarget\tStock price\tFull exit / 30 entered shares\tAllocated shares\tAllocated outcome\tReward / share\tR:R\nT1\t$160.00\t$300.00\t10\t$100.00\t$10.00\t2.00×\nT2\t$165.00\t$450.00\t10\t$150.00\t$15.00\t3.00×\nT3\t$170.00\t$600.00\t10\t$200.00\t$20.00\t4.00×\nEach row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.\nOriginal selects the editable ladder; the initial scanned strategy targets above remain separate.\nArithmetic\nArithmetic plan\nNot computed or stale — run Arithmetic plan for the current inputs.\nMonte Carlo stock estimate\nEstimate\nGBM stock simulation · editable execution entry / stop / targets. Execution entry $150.00 · stop $145.00\nNot computed or stale — run Estimate for the current inputs.\nStock Scorecard\nFinal verdict: CAUTION\n80 / 100\nStock score is a filter, not a probability of profit.\nScorer evidence before final caps: PASS\ntrend\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\npullback\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\ntrigger\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nevent\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nvolatility\n80\nweight 20% · contribution 16.00\nMeasured · Status unavailable\nBacktest evidence\nWin rate\n60% win rate\nTrades\n20\nExpectancy\n0.40\nReturn\n12.0%\nMax DD\n5.0%\nSharpe\n1.20\nConfidence\n70%\nSynthetic confidence\nSynthetic inventory backtest\nScan thresholds: ≥ 20 trades · ≥ 50% win rate\nYour decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nAuto-trade mode\nManual — I press the button\nAfter scan — fire when next scan PASS\nArmed — add to Strategy Watches now\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation\n←\nBack: Backtest\nSTEP 6 OF 6\nDone\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+      "headings": [
+        "Position Card",
+        "Initial strategy targets",
+        "Order & exits",
+        "Structure & Stops",
+        "Calculations",
+        "Stock Scorecard",
+        "Backtest evidence",
+        "Your decision",
+        "Execution",
+        "Pre-trade checklist"
+      ],
+      "rails": [
+        {
+          "class": "NavRail_rail__apYoW NavRail_railExpanded__P5YJX",
+          "text": "Market Regime\nUniverse\nDirection\nStrategy\nBacktest\n6\nPosition\n← Exit Workflow\nCOMPLETED"
+        },
+        {
+          "class": "StockPositionCard_decision__XstRF",
+          "text": "Your decision\nExit method for this trade\nLadder\n3 TARGETS\nArithmetic\nRUN ARITHMETIC PLAN FIRST\nMonte Carlo\nRUN ESTIMATE FIRST\nJUDGED ON\nStock stop\nPremium stop\nA RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.\nSelected stock plan\nChoose a method\nExecution\nAdd to Portfolio\nMethod pick required — choose which method this trade is judged on before submitting.\nRecommendation\nIBKR Paper\nTradier Paper\nAlpaca Paper\nTastytrade Paper\nAuto-trade execution\nAuto-trade mode\nManual — I press the button\nAfter scan — fire when next scan PASS\nArmed — add to Strategy Watches now\nPre-trade checklist\nRecorded gates unavailable\nRecorded backtest: PASS\nFinal stock verdict: CAUTION\nEarnings: Unknown\nFundamentals: score 72\nMethod: Pick required\nExecution: Unvalidated — broker execution blocked\nSave/send ownership: Not claimed\nRisk, exposure and daily limits\nPending server validation"
+        },
+        {
+          "class": "ContextRail_rail__ZQtdn",
+          "text": "WATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0"
+        }
+      ],
+      "controls": [
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Skip to content",
+          "title": null,
+          "href": "#workspace",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Config OK · 10 checks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Switch to light mode",
+          "text": "",
+          "title": "Switch to light mode",
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Market Regime",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Universe",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Direction",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Strategy",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "6\nPosition",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "← Exit Workflow",
+          "title": null,
+          "href": "/dashboard",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Options",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Stocks",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pre-Breakout",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Prev",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Next",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "AAPL",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "MSFT",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "View Chart",
+          "title": null,
+          "href": "/chart?symbol=MSFT&source=stocks&backtest_artifact_status=original_unavailable",
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Pin to Basket",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Initial strategy targets",
+          "title": null,
+          "href": "#initial-targets",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Order & exits",
+          "title": null,
+          "href": "#order-exits",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Calculations",
+          "title": null,
+          "href": "#calculations",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Qualification",
+          "title": null,
+          "href": "#qualification",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Your decision",
+          "title": null,
+          "href": "#decision",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Which comes first",
+          "title": null,
+          "href": "#race",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Market sentiment",
+          "title": null,
+          "href": "#market-sentiment",
+          "disabled": null
+        },
+        {
+          "tag": "A",
+          "role": null,
+          "label": null,
+          "text": "Fundamentals",
+          "title": null,
+          "href": "#fundamentals",
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "How this page works\nReview the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Score definitions & safety flags",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Edit T1 / T2 / T3 and share allocations",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Check structure",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Arithmetic plan",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Estimate",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Ladder",
+          "text": "Ladder\n3 TARGETS",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Arithmetic",
+          "text": "Arithmetic\nRUN ARITHMETIC PLAN FIRST",
+          "title": "Run Arithmetic plan first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Monte Carlo",
+          "text": "Monte Carlo\nRUN ESTIMATE FIRST",
+          "title": "Run Estimate first",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Stock stop",
+          "text": "Stock stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": "radio",
+          "label": "Premium stop",
+          "text": "Premium stop",
+          "title": null,
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Add to Portfolio",
+          "title": "Method pick required",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Recommendation",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "IBKR Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tradier Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Alpaca Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Tastytrade Paper",
+          "title": "Not configured — Settings → Brokers",
+          "href": null,
+          "disabled": true
+        },
+        {
+          "tag": "DETAILS",
+          "role": null,
+          "label": null,
+          "text": "Auto-trade execution\nAuto-trade mode\nManual — I press the button\nAfter scan — fire when next scan PASS\nArmed — add to Strategy Watches now",
+          "title": null,
+          "href": null,
+          "disabled": null
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Manual — I press the button",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "After scan — fire when next scan PASS",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Armed — add to Strategy Watches now",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "←\nBack: Backtest",
+          "title": null,
+          "href": null,
+          "disabled": false
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": null,
+          "text": "Done\n→",
+          "title": null,
+          "href": null,
+          "disabled": true
+        }
+      ]
+    },
+    "storage": {
+      "local": {
+        "bamendjou-risk-v1": "{\"state\":{\"limits\":{\"maxSingleTradeExposurePct\":0.05,\"maxTotalExposurePct\":0.25,\"maxConcurrentPositions\":10,\"maxDailyRecommendations\":5,\"portfolioValue\":100000,\"maxLossPerTradePct\":0.0375,\"maxSingleStockPositionPct\":0.2,\"maxTotalStockExposurePct\":1},\"dailyRecommendations\":0,\"lastResetDate\":\"2026-10-16\",\"symbols\":[],\"portfolioValueUpdatedAt\":null},\"version\":4}",
+        "bamendjou-scan-store": "{\"state\":{\"scanResult\":null,\"previousRun\":null,\"context\":{\"universe\":\"Custom\",\"direction\":\"Bullish\",\"horizon\":\"Swing (5-15d)\",\"holdMin\":5,\"holdMax\":15},\"scanAt\":null,\"scanDurationMs\":null,\"pickedContracts\":{},\"scanState\":\"COMPLETED\",\"screenerMode\":\"stocks\",\"activeStrategy\":null,\"stockScanResult\":{\"scan_id\":\"audit-stocks-fixture\",\"timestamp\":\"2026-10-12T08:00:00Z\",\"candidates\":[{\"symbol\":\"AAPL\",\"company\":\"AAPL synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}},{\"symbol\":\"MSFT\",\"company\":\"MSFT synthetic fixture\",\"price\":150,\"direction\":\"Bullish\",\"strategy\":{\"strategy\":\"pullback_ema\",\"entry_price\":150,\"stop_price\":145,\"target_price\":160,\"targets\":[160,165,170],\"rr_ratio\":2,\"atr\":3,\"detail\":{}},\"backtest\":{\"n_trades\":20,\"win_rate\":0.6,\"total_return_pct\":12,\"max_drawdown_pct\":5,\"expectancy\":0.4,\"sharpe\":1.2,\"confidence\":70,\"passes_gate\":true,\"summary_text\":\"Synthetic inventory backtest\"},\"sentiment\":{\"horizon\":\"Swing\",\"timeframe\":\"daily\",\"state\":\"Bullish\",\"p_stay\":0.8,\"stability\":\"Stable\",\"regime_age_days\":3,\"avg_regime_duration\":8,\"conviction_pct\":25,\"conviction_label\":\"Bullish\",\"interpretation\":\"Synthetic sentiment\",\"alignment\":\"Aligned\"},\"fundamentals\":{\"score\":72,\"quality_label\":\"Strong\",\"risk_label\":\"Low\",\"growth_score\":70,\"quality_score\":75,\"risk_score\":68,\"safety_flags\":[],\"detail\":{}},\"stock_score\":80,\"stock_status\":\"CAUTION\",\"shares\":30,\"dollar_risk\":150,\"dollar_size\":4500,\"confidence\":70,\"confidence_text\":\"Synthetic confidence\",\"stock_explanation\":{\"status\":\"PASS\",\"components\":{\"trend\":{\"name\":\"trend\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"pullback\":{\"name\":\"pullback\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"trigger\":{\"name\":\"trigger\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"event\":{\"name\":\"event\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16},\"volatility\":{\"name\":\"volatility\",\"raw_score\":80,\"measured\":true,\"weight\":0.2,\"contribution\":16}}}}],\"rejected\":[]},\"stockScanRequest\":{\"bt_min_trades\":20,\"bt_min_win_rate\":0.5,\"horizon\":\"Swing\"},\"previousStockScanResult\":null,\"stockScanAt\":null,\"optionsScanAt\":null,\"stockBasket\":[],\"lastOptionsScanStatus\":\"IDLE\",\"lastOptionsScanUpdatedAt\":null,\"lastStockScanStatus\":\"IDLE\",\"lastStockScanUpdatedAt\":null,\"lastStockScanStrategy\":null,\"optionsCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}},\"stocksCardEdits\":{\"scanId\":null,\"picks\":{},\"invalidation\":{},\"premiumStop\":{},\"entryLimit\":{},\"maxLossOverride\":{}}},\"version\":19}",
+        "bamendjou-portfolio-v1": "{\"state\":{\"positions\":[]},\"version\":7}",
+        "audit-initialized": "synthetic-isolated"
+      },
+      "session": {}
+    },
+    "network_indices": [
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44
+    ]
+  }
+]

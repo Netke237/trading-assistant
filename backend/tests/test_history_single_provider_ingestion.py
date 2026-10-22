@@ -74,7 +74,7 @@ async def env(monkeypatch):
     monkeypatch.setattr(job, "get_alpaca_client", AsyncMock(return_value=object()))
     monkeypatch.setattr(job, "fetch_daily_bars_batch", batch_mock)
     yield {"factory": factory, "clock": clock, "provider": provider,
-           "tiingo": tiingo_mock, "yfinance": yf_mock, "batch": batch_mock}
+           "tiingo": tiingo_mock, "tiingo_fetch": tiingo_fetch, "yfinance": yf_mock, "batch": batch_mock}
     await engine.dispose()
 
 
@@ -128,7 +128,7 @@ async def test_seam_refused_symbol_is_counted_and_rebuilt_not_failed(env):
     assert first == days(fetch_start, fetch_end)[0]
     for key in ("rebuilt", "rebuilt_symbols", "rebuild_details", "rebuild_refused",
                 "rebuild_refused_symbols", "rebuild_errors", "single_provider_updated",
-                "single_provider_failed_symbols"):
+                "single_provider_failed_symbols", "single_provider_errors"):
         assert state[key] == getattr(result, key)
     assert result.alpaca_count == 0 and result.single_provider_updated == 0
     assert result.errors == []
@@ -204,6 +204,37 @@ async def test_single_provider_update_refused_is_reported_without_rebuild(env):
 
 
 @pytest.mark.asyncio
+async def test_single_provider_refusal_reason_is_in_status_and_log(env, app, caplog):
+    """HISTORY-INGEST-GAPS piece 2: the reason is visible per symbol, then reset."""
+    factory = env["factory"]
+    await seed_alpaca(factory, "TEST")
+    await seed_alpaca(factory, "OTHER")
+    await job.run_ingestion(["TEST", "OTHER"])
+    env["clock"]["now"] = NOW2
+    env["tiingo"].side_effect = RuntimeError("tiingo down")
+    with caplog.at_level("WARNING", logger="app.services.ingestion_job"):
+        result = await job.run_ingestion(["TEST", "OTHER"])
+    reasons = {"TEST": "tiingo: tiingo down", "OTHER": "tiingo: tiingo down"}
+    assert result.single_provider_failed_symbols == ["TEST", "OTHER"]
+    assert result.single_provider_errors == reasons
+    assert job.get_ingestion_state()["single_provider_errors"] == reasons
+    logged = [r.getMessage() for r in caplog.records if r.name == "app.services.ingestion_job"]
+    assert "ingestion: single-provider update refused for TEST — tiingo: tiingo down" in logged
+    assert "ingestion: single-provider update refused for OTHER — tiingo: tiingo down" in logged
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        status = (await ac.get("/api/data/ingest/status")).json()
+    assert status["single_provider_errors"] == reasons
+    assert status["single_provider_failed_symbols"] == ["TEST", "OTHER"]
+    assert set(status["single_provider_symbols"]) == {"TEST", "OTHER"}
+
+    env["tiingo"].side_effect = env["tiingo_fetch"]
+    after = await job.run_ingestion(["TEST", "OTHER"])
+    assert after.failed == 0 and after.single_provider_updated == 2
+    assert after.single_provider_errors == {}
+    assert job.get_ingestion_state()["single_provider_errors"] == {}
+
+
+@pytest.mark.asyncio
 async def test_rebuild_request_rebuilds_symbol_that_is_not_seam_refused(env, monkeypatch):
     factory = env["factory"]
     env["provider"]["tiingo_factor"] = 1.0
@@ -247,12 +278,72 @@ async def test_spy_rebuilt_and_current_does_not_trigger_startup_catch_up(env):
     assert job._should_ingest(last) is False
 
 
+def test_ingestion_universe_puts_reference_first_without_duplicates(monkeypatch):
+    """HISTORY-INGEST-GAPS piece 3: SPY is refreshed by every nightly/startup run."""
+    from app.data import universe_presets
+    presets = {"SP500": ["AAA", "BBB"], "NDX100": ["BBB", "CCC"], "DOW30": ["SPY", "AAA"]}
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: presets[keys[0]])
+    assert job.STALENESS_REFERENCE == "SPY"
+    assert job.ingestion_universe() == ["SPY", "AAA", "BBB", "CCC"]
+
+
+def test_ingestion_universe_falls_back_to_reference(monkeypatch):
+    from app.data import universe_presets
+
+    def boom(keys):
+        raise RuntimeError("csv missing")
+
+    monkeypatch.setattr(universe_presets, "expand_universe", boom)
+    assert job.ingestion_universe() == ["SPY"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale, started", [(True, True), (False, False)])
+async def test_startup_catch_up_includes_reference(env, monkeypatch, stale, started):
+    from app.data import universe_presets
+    factory = env["factory"]
+    await seed_alpaca(factory, "SPY", end=STALE if stale else date(2026, 10, 12))
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: ["TEST"])
+    start = MagicMock(return_value=True)
+    monkeypatch.setattr(job, "start_ingestion_task", start)
+    assert await job.startup_catch_up() is started
+    if started:
+        start.assert_called_once_with(["SPY", "TEST"], years=6)
+    else:
+        start.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_nightly_run_refreshes_single_provider_reference(env, monkeypatch):
+    from app.data import universe_presets
+    from app.services import ingestion_scheduler
+    factory = env["factory"]
+    await seed_alpaca(factory, "SPY")
+    await job.run_ingestion(["SPY"])          # SPY becomes single-provider (Tiingo)
+    env["clock"]["now"] = NOW2
+    async with factory() as db:
+        assert job._should_ingest(await hs._last_stored_date("SPY", db)) is True
+    await seed_alpaca(factory, "TEST", end=date(2026, 10, 13))
+    monkeypatch.setattr(universe_presets, "expand_universe", lambda keys: ["TEST"])
+    monkeypatch.setattr(ingestion_scheduler, "_run_nightly_maintenance", AsyncMock())
+    monkeypatch.setattr(job, "_task", None)
+    await ingestion_scheduler._run_nightly()
+    await job._task
+    state = job.get_ingestion_state()
+    assert state["status"] == "completed" and state["failed"] == 0
+    assert state["single_provider_updated"] == 1
+    async with factory() as db:
+        last = await hs._last_stored_date("SPY", db)
+    assert last == date(2026, 10, 13)
+    assert job._should_ingest(last) is False
+
+
 @pytest.mark.asyncio
 async def test_state_has_new_keys_before_any_run():
     state = job.get_ingestion_state()
     for key in ("rebuilt", "rebuilt_symbols", "rebuild_details", "rebuild_refused",
                 "rebuild_refused_symbols", "rebuild_errors", "single_provider_updated",
-                "single_provider_failed_symbols"):
+                "single_provider_failed_symbols", "single_provider_errors"):
         assert key in state
 
 
@@ -296,19 +387,23 @@ async def test_ingest_status_includes_single_provider_symbols(app):
     singles = {"SPY": {"provider": "tiingo", "rebuilt_at": "2026-10-13T12:00:00+00:00",
                        "floor_date": "2025-10-13"}}
     with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
-         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value=singles)):
+         patch("app.routers.ingestion.single_provider_symbols", AsyncMock(return_value=singles)), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(return_value={})):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/api/data/ingest/status")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "idle", "single_provider_symbols": singles}
+    assert resp.json() == {"status": "idle", "single_provider_symbols": singles,
+                           "tiingo_usage": {}, "tiingo_usage_error": None}
 
 
 @pytest.mark.asyncio
 async def test_ingest_status_survives_single_provider_query_error(app):
     with patch("app.routers.ingestion.get_ingestion_state", return_value={"status": "idle"}), \
          patch("app.routers.ingestion.single_provider_symbols",
-               AsyncMock(side_effect=RuntimeError("db down"))):
+               AsyncMock(side_effect=RuntimeError("db down"))), \
+         patch("app.data.tiingo_budget.usage_summary", AsyncMock(return_value={})):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             resp = await ac.get("/api/data/ingest/status")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "idle", "single_provider_symbols": {}}
+    assert resp.json() == {"status": "idle", "single_provider_symbols": {},
+                           "tiingo_usage": {}, "tiingo_usage_error": None}

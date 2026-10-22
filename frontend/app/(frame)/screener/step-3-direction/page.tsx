@@ -13,9 +13,10 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
-import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
+import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { scanLogTotals } from './scanLogTotals';
@@ -47,6 +48,7 @@ interface ParamDef {
   redundant?: true;
   deprecated?: true;
   visibleFor?: string[];   // if set, only show when scanOverrides.trend_method (or default) is in this list
+  scale?: number;          // scale factor between stored representation and UI representation (e.g. 100 for percentage fraction)
 }
 
 const PARAM_DEFS: ParamDef[] = [
@@ -207,9 +209,9 @@ const PARAM_DEFS: ParamDef[] = [
   // ALL — Reward/Risk
   { key: 'rr_target_r_multiple', label: 'Target (R-multiple)', type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 10, step: 0.25, unit: 'R',
     hint: 'First target distance in multiples of the stock-stop distance, with nearby structure preferred. Default: 2R' },
-  { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+  { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 100, step: 0.5, unit: '%', scale: 100,
     hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 3%' },
-  { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+  { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 100, step: 0.5, unit: '%', scale: 100,
     hint: 'Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 3%' },
 ];
 
@@ -234,10 +236,14 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   'options': 'Options contract filtering. Applied after a stock qualifies — determines which expiries and strikes are shown for that stock.',
 };
 
-function formatDefault(val: number | boolean | string | null): string {
+function formatDefault(val: number | boolean | string | null, def?: ParamDef): string {
   if (val === null) return 'N/A';
   if (typeof val === 'boolean') return val ? 'On' : 'Off';
   if (typeof val === 'string') return val;
+  if (typeof val === 'number') {
+    const scaled = def?.scale ? val * def.scale : val;
+    return String(Number(scaled.toFixed(4)));
+  }
   return String(val);
 }
 
@@ -246,6 +252,9 @@ function countActiveOverrides(defs: ParamDef[], overrides: Record<string, number
     if (d.redundant || d.deprecated || d.type === 'display') return false;
     const ov = overrides[d.key];
     if (ov === undefined) return false;
+    if (d.scale && typeof ov === 'number' && typeof defaults[d.key] === 'number') {
+      return Math.abs(ov - (defaults[d.key] as number)) >= 1e-6;
+    }
     return ov !== defaults[d.key];
   }).length;
 }
@@ -272,7 +281,7 @@ function ParamRow({
           <Text size={12} tone="dim">{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <span className={formStyles.redundantNote}>(redundant)</span>
@@ -289,7 +298,7 @@ function ParamRow({
           <Text size={12} tone="dim">{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal)}</Data>
+          <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal, def)}</Data>
           {!isNa && def.unit && <Text size={11} tone="dim">{def.unit}</Text>}
         </div>
         <div className={formStyles.paramsInput}>
@@ -343,7 +352,7 @@ function ParamRow({
           <Text size={12}>{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <div className={formStyles.segmentedTiny}>
@@ -382,7 +391,7 @@ function ParamRow({
           <Text size={12}>{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <button
@@ -402,9 +411,15 @@ function ParamRow({
   }
 
   // Number input
+  const formatNumberValue = (val: number | undefined): string => {
+    if (val === undefined) return '';
+    const scaled = def.scale ? val * def.scale : val;
+    return String(Number(scaled.toFixed(4)));
+  };
+
   const inputValue = currentOverride !== undefined
-    ? String(currentOverride)
-    : String(defaultVal);
+    ? (typeof currentOverride === 'number' ? formatNumberValue(currentOverride) : String(currentOverride))
+    : (typeof defaultVal === 'number' ? formatNumberValue(defaultVal) : String(defaultVal));
 
   return (
     <div className={formStyles.paramsRow} data-param-key={def.key}>
@@ -412,7 +427,7 @@ function ParamRow({
         <Text size={12}>{def.label}</Text>
       </div>
       <div className={formStyles.paramsValue}>
-        <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+        <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
       </div>
       <div className={formStyles.paramsInput}>
         <input
@@ -425,25 +440,62 @@ function ParamRow({
           aria-label={def.label}
           onChange={(e) => {
             const raw = e.target.value;
-            if (raw === '' || raw === String(defaultVal)) {
+            if (raw === '') {
               const next = { ...scanOverrides };
               delete next[def.key];
               useScanStore.getState().setScanOverrides(next);
             } else {
               const num = Number(raw);
               if (!Number.isNaN(num)) {
-                useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
+                if (def.scale) {
+                  const storedVal = Number((num / def.scale).toFixed(6));
+                  const isDefault = typeof defaultVal === 'number' && Math.abs(storedVal - defaultVal) < 1e-6;
+                  if (isDefault) {
+                    const next = { ...scanOverrides };
+                    delete next[def.key];
+                    useScanStore.getState().setScanOverrides(next);
+                  } else {
+                    useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: storedVal });
+                  }
+                } else {
+                  if (raw === String(defaultVal)) {
+                    const next = { ...scanOverrides };
+                    delete next[def.key];
+                    useScanStore.getState().setScanOverrides(next);
+                  } else {
+                    useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
+                  }
+                }
               }
             }
           }}
           onBlur={() => {
             const current = useScanStore.getState().scanOverrides[def.key];
             if (typeof current !== 'number') return;
-            let clamped = current;
-            if (def.min !== undefined) clamped = Math.max(clamped, def.min);
-            if (def.max !== undefined) clamped = Math.min(clamped, def.max);
-            if (clamped !== current) {
-              useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
+            if (def.scale) {
+              const minStored = def.min !== undefined ? def.min / def.scale : undefined;
+              const maxStored = def.max !== undefined ? def.max / def.scale : undefined;
+              let clamped = current;
+              if (minStored !== undefined) clamped = Math.max(clamped, minStored);
+              if (maxStored !== undefined) clamped = Math.min(clamped, maxStored);
+              clamped = Number(clamped.toFixed(6));
+              if (clamped !== current) {
+                const isDefault = typeof defaultVal === 'number' && Math.abs(clamped - defaultVal) < 1e-6;
+                const next = { ...useScanStore.getState().scanOverrides };
+                if (isDefault) {
+                  delete next[def.key];
+                } else {
+                  next[def.key] = clamped;
+                }
+                useScanStore.getState().setScanOverrides(next);
+              }
+            } else {
+              let clamped = current;
+              if (def.min !== undefined) clamped = Math.max(clamped, def.min);
+              if (def.max !== undefined) clamped = Math.min(clamped, def.max);
+              if (clamped !== current) {
+                useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
+              }
             }
           }}
         />
@@ -622,13 +674,15 @@ export default function Step3Page() {
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
   const regimeLoadedRef = useRef(false);
 
+  // Same request and the same ordering as Steps 1 and 2: an older answer
+  // never replaces a newer one that already landed on the shared gate, and
+  // this page keeps the descriptor only of a response that was applied.
   useEffect(() => {
-    api.getRegime().then((r) => {
-      useScanStore.getState().setRegime(r.overall);
+    const ticket = beginRegimeFetch();
+    fetchGateRegime().then((r) => {
+      if (!applyRegimeResponse(ticket, r)) return;
       descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
       regimeLoadedRef.current = true;
-      const dir = useScanStore.getState().context?.direction ?? 'Bullish';
-      useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});
   }, []);
 
@@ -641,7 +695,7 @@ export default function Step3Page() {
     // resolves Custom dynamically and passes every other key through unchanged.
     const scoringHz = presetByKey(resolveParamsHorizon(newHz, newMax)).scoringHorizon;
     setContext({
-      universe:      context?.universe ?? 'SP500',
+      universe:      context?.universe ?? useUniverseStore.getState().pick ?? 'SP500',
       direction:     newDir,
       horizon:       horizonDisplayString(scoringHz, newMin, newMax),
       horizonPreset: newHz,
