@@ -98,8 +98,10 @@ STALENESS_REFERENCE = "SPY"
 #   single_provider_skipped_current  action SINGLE_PROVIDER_CURRENT
 #   revalidated                      action REVALIDATE
 #   revalidation_skipped_budget      a selected revalidation refused by ensure_room
-#   tiingo_requests / tiingo_bytes   ledger rows with caller "nightly" between the run's
-#                                    start and end; None when the ledger cannot be read
+#   tiingo_requests / tiingo_bytes   ledger rows with the run's own caller ("nightly" for
+#                                    the scheduled/startup runs, "on_demand" for a manual
+#                                    run) between the run's start and end; None when the
+#                                    ledger cannot be read
 #
 # A revalidated symbol was also written SUFFIX_ONLY in pass 1, so it counts in both.
 RUN_COUNTERS = ("suffix_only", "adjustment_changed", "prefix_refetched", "prefix_rescaled",
@@ -148,10 +150,11 @@ def counters_for(action: str | None, reason: str | None) -> list[str]:
     return out
 
 
-async def _ledger_usage(since: datetime) -> tuple[int | None, int | None]:
-    """This run's nightly Tiingo (requests, bytes); (None, None) if the ledger is unreadable."""
+async def _ledger_usage(caller: str, since: datetime) -> tuple[int | None, int | None]:
+    """This run's Tiingo (requests, bytes) under its own caller; (None, None) if the
+    ledger is unreadable."""
     try:
-        return await tiingo_budget.caller_usage("nightly", since, tiingo_budget._utcnow())
+        return await tiingo_budget.caller_usage(caller, since, tiingo_budget._utcnow())
     except Exception as exc:
         logger.warning("ingestion: tiingo usage ledger unreadable, counters unknown — %s", exc)
         return None, None
@@ -352,6 +355,7 @@ async def run_ingestion(
     fetch_end = date.today()
     fetch_start = fetch_end - timedelta(days=years * 365)
     ledger_since = tiingo_budget._utcnow()     # the ledger's own clock (requested_at)
+    ledger_caller = tiingo_budget.current_caller()   # this run's ledger caller
     alpaca_result: dict[str, list[dict]] = {}
 
     def record(sym: str, result, *, first: bool) -> None:
@@ -527,7 +531,7 @@ async def run_ingestion(
         pruned = await _prune_old_rows(years) if symbols else 0
         _state["pruned_rows"] = pruned
 
-        requests, size = await _ledger_usage(ledger_since)
+        requests, size = await _ledger_usage(ledger_caller, ledger_since)
         _state.update({
             "status":         "completed",
             "done":           len(symbols),
@@ -546,7 +550,7 @@ async def run_ingestion(
         )
 
     except Exception as exc:
-        requests, size = await _ledger_usage(ledger_since)
+        requests, size = await _ledger_usage(ledger_caller, ledger_since)
         _state.update({
             "status":      "error",
             "error":       str(exc),

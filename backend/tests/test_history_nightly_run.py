@@ -453,6 +453,25 @@ async def test_unreadable_ledger_reports_none_and_the_run_completes(nightly, mon
     assert state["prefix_confirmed"] == 1
 
 
+async def test_manual_run_counts_its_own_on_demand_tiingo_requests(nightly):
+    """A manual POST /api/data/ingest run has no caller("nightly") context: its Tiingo
+    requests are ledgered as on_demand, and its counters must count those rows."""
+    env = nightly
+    await seed_to_n_minus(env)
+    env.night, env.now = N, et(N)
+    env.log.clear()
+    assert budget.current_caller() == "on_demand"
+    await job.run_ingestion(N_UNIVERSE)                 # outside caller("nightly")
+    async with env.ledger() as db:
+        rows = (await db.execute(select(Log.caller, Log.response_bytes)
+                                 .where(Log.requested_at == et(N)))).all()
+    assert env.tiingo_symbols() and len(rows) == len(env.tiingo_symbols())
+    assert {c for c, _ in rows} == {"on_demand"}
+    state = job.get_ingestion_state()
+    assert state["tiingo_requests"] == len(rows) > 0
+    assert state["tiingo_bytes"] == sum(b for _, b in rows) > 0
+
+
 async def test_caller_usage_counts_only_the_caller_inside_the_range(nightly):
     env = nightly
     t0 = et(N)
