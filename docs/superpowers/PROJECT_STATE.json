@@ -8746,12 +8746,13 @@
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "tracking_issue": 335,
       "plan": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
-      "plan_audit_clean": false,
+      "plan_audit_clean": true,
       "plan_stage": {
-        "rounds": 2,
-        "clean": false
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean"
       },
       "verify": {
         "kind": "present",
@@ -8761,7 +8762,7 @@
       },
       "size": "L",
       "complexity": 4,
-      "completion_pct": 10,
+      "completion_pct": 20,
       "audit_history": [
         {
           "round": 1,
@@ -8806,9 +8807,24 @@
             "clear market._expirations_cache per replay; mock answers expirations with the capture's list and raises on unknown requests; zero-row and thin chains counted and listed; T1 replays two captures in one process"
           ],
           "outstanding": []
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent a656b5ee)",
+          "reviewed": "git diff d5e46b24 bcdef1b3 of the plan (round-2 fixes and interactions); sha256 6ad3d5f8152fede759b6aa8f41a18bd764b0a0f15f2f2b4dfe433b5ab9e73a34",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_logged": [
+            "replayed rows carry today's quote-liveness labels (unused by calibration and M3)",
+            "mock-raised errors are swallowed into 0-row chains by fetch_option_chain_async's catch-all; already counted and listed"
+          ]
         }
       ],
-      "note": "Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
+      "note": "Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
     }
   ],
   "already_shipped": [
