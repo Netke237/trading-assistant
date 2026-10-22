@@ -8746,11 +8746,11 @@
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "tracking_issue": 335,
       "plan": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "verify": {
@@ -8762,8 +8762,36 @@
       "size": "L",
       "complexity": 4,
       "completion_pct": 10,
-      "audit_history": [],
-      "note": "Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent aef3a155)",
+          "reviewed": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md@08867341 (sha256 d296cb487a1debdb575b6481120d4958d51d8067879a8a1f1705db0f6c07c456)",
+          "gate_findings": 7,
+          "findings": [
+            "G1 stored scans are schema v2 with pre-D5 premium-stop R/R basis; comparing to shipped full-premium R/R fabricates inflation and band changes",
+            "G2 cards store no Heston params/rmse/chain: M1 reproduction and M4 options on cards cannot run",
+            "G3 Tradier captures carry no spot; M3 spot source unstated",
+            "G4 M3 two-sided filter differs from scan.py chain (one-sided bid=0 rows and delta-0 rows are calibrated by the app)",
+            "G5 lru_cache keyed on chain not grid: option A shows no effect and ~0 s timings; grids are locals so cannot be monkeypatched",
+            "G6 'default repricing horizon' differs from the cards' display_reprice_years horizon",
+            "G7 effect definition missed ladder T1-T3 est. option/rrContribution and alternatives' rrRatio (half-expiry horizon); picked_method misidentified"
+          ],
+          "fixes": [
+            "M1 compares exit premiums; both R/Rs on full-premium basis; input-recovery check on non-Heston cards' ladder estimatedOptionPrice; stored rrRatio never compared",
+            "M1 reach + exit gap only; M4 evaluated on fits and labelled fits",
+            "M3 spot by put-call parity at the nearest-ATM two-sided pair, recorded; else skipped and counted",
+            "M3 rows from shipped fetch_option_chain_async via httpx mock of the captured raw records; no two-sided filter",
+            "cache_clear before every calibration; wide grid via script-local _run_calibration copy pinned to shipped on default grid; timings relative only",
+            "card horizon via display_reprice_years for Swing and Position protocol requests, plus alternatives' half-expiry horizon",
+            "effect covers headline, ladder T1-T3, alternatives and Step 7 band; picked_method removed"
+          ],
+          "outstanding": []
+        }
+      ],
+      "note": "Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
     }
   ],
   "already_shipped": [
