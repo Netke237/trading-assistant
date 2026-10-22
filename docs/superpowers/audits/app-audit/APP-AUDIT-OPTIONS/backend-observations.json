@@ -1,0 +1,489 @@
+{
+  "probe_metadata": {
+    "timestamp": "2026-10-22T06:33:17.176679+00:00",
+    "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "platform": "win32",
+    "baseline_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+    "config_hashes": {
+      "scoring_rules.yaml": "5d556a1aaf2b5fc188815a81ca3884c2a58e55920652ed8428c310cd19209b76",
+      "contract_rules.yaml": "1b658c4e78a4a4f44fe2f58a7d8878fd53cb8c6dc9a835fd3ef8dc3d166e6784",
+      "risk_rules.yaml": "c961cdec2db7a776cfd45f2cddae8d229d9c4089e05d82a20ec92f0c2726434d"
+    }
+  },
+  "suites": {
+    "contract_scoring_arithmetic": [
+      {
+        "name": "liquidity_full_pass",
+        "passed": true,
+        "details": {
+          "observed": [
+            100,
+            100,
+            []
+          ],
+          "expected": [
+            100,
+            100,
+            []
+          ]
+        }
+      },
+      {
+        "name": "liquidity_preferred_boundary",
+        "passed": true,
+        "details": {
+          "observed": [
+            60,
+            60,
+            []
+          ],
+          "expected": [
+            60,
+            60,
+            []
+          ]
+        }
+      },
+      {
+        "name": "liquidity_partial_soft_fail",
+        "passed": true,
+        "details": {
+          "observed": [
+            30,
+            30,
+            [
+              "thin_liquidity"
+            ]
+          ],
+          "expected": [
+            30,
+            30,
+            [
+              "thin_liquidity"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "liquidity_zero_floors_disabled",
+        "passed": true,
+        "details": {
+          "observed": [
+            100,
+            100,
+            []
+          ],
+          "expected": [
+            100,
+            100,
+            []
+          ]
+        }
+      },
+      {
+        "name": "spread_tight",
+        "passed": true,
+        "details": {
+          "observed": [
+            50,
+            0.039999999999999855,
+            []
+          ],
+          "expected": [
+            50,
+            0.04,
+            []
+          ]
+        }
+      },
+      {
+        "name": "spread_elevated_soft_fail",
+        "passed": true,
+        "details": {
+          "observed": [
+            0,
+            0.2,
+            [
+              "spread_elevated"
+            ]
+          ],
+          "expected": [
+            0,
+            0.2,
+            [
+              "spread_elevated"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "delta_center",
+        "passed": true,
+        "details": {
+          "observed": [
+            100,
+            []
+          ],
+          "expected": [
+            100,
+            []
+          ]
+        }
+      },
+      {
+        "name": "delta_in_zone_moderate",
+        "passed": true,
+        "details": {
+          "observed": [
+            50,
+            []
+          ],
+          "expected": [
+            50,
+            []
+          ]
+        }
+      },
+      {
+        "name": "delta_outside_preferred",
+        "passed": true,
+        "details": {
+          "observed": [
+            20,
+            [
+              "delta_outside_preferred"
+            ]
+          ],
+          "expected": [
+            20,
+            [
+              "delta_outside_preferred"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "dte_center_40",
+        "passed": true,
+        "details": {
+          "observed": [
+            97,
+            40,
+            []
+          ],
+          "expected": [
+            97,
+            40,
+            []
+          ]
+        }
+      },
+      {
+        "name": "dte_soft_decay_short",
+        "passed": true,
+        "details": {
+          "observed": [
+            17,
+            15,
+            [
+              "dte_outside_preferred"
+            ]
+          ],
+          "expected": [
+            17,
+            15,
+            [
+              "dte_outside_preferred"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "composite_pass_score",
+        "passed": true,
+        "details": {
+          "observed": [
+            "PASS",
+            79
+          ],
+          "expected": [
+            "PASS",
+            79
+          ]
+        }
+      },
+      {
+        "name": "hard_reject_open_interest",
+        "passed": true,
+        "details": {
+          "observed": [
+            "REJECT",
+            [
+              "open_interest_too_low"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "hard_reject_delta_otm",
+        "passed": true,
+        "details": {
+          "observed": [
+            "REJECT",
+            [
+              "delta_too_low_far_otm"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "hard_reject_stock_score",
+        "passed": true,
+        "details": {
+          "observed": [
+            "REJECT",
+            [
+              "stock_score_below_threshold"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "hard_reject_too_many_soft_failures",
+        "passed": true,
+        "details": {
+          "observed": [
+            "REJECT",
+            [
+              "dte_too_short",
+              "too_many_soft_failures"
+            ],
+            [
+              "thin_liquidity",
+              "spread_elevated",
+              "delta_outside_preferred",
+              "dte_outside_preferred"
+            ]
+          ]
+        }
+      }
+    ],
+    "trade_plan_and_sizing_arithmetic": [
+      {
+        "name": "trade_plan_time_stop",
+        "passed": true,
+        "details": {
+          "observed": 12,
+          "expected": 12
+        }
+      },
+      {
+        "name": "trade_plan_premium_stop",
+        "passed": true,
+        "details": {
+          "observed": 2.7,
+          "expected": 2.7
+        }
+      },
+      {
+        "name": "trade_plan_risk_basis_full_premium",
+        "passed": true,
+        "details": {
+          "observed": "full_premium",
+          "expected": "full_premium"
+        }
+      },
+      {
+        "name": "sizing_normal_approved",
+        "passed": true,
+        "details": {
+          "observed": [
+            true,
+            null,
+            []
+          ]
+        }
+      },
+      {
+        "name": "sizing_adjusted_to_cap",
+        "passed": true,
+        "details": {
+          "observed": [
+            true,
+            3,
+            [
+              "size_reduced_to_fit_exposure_limit"
+            ]
+          ],
+          "expected_adjusted": 3
+        }
+      },
+      {
+        "name": "sizing_single_contract_too_expensive",
+        "passed": true,
+        "details": {
+          "observed": [
+            false,
+            [
+              "single_trade_exposure_too_high"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "sizing_exceeds_max_contracts",
+        "passed": true,
+        "details": {
+          "observed": [
+            false,
+            [
+              "exceeds_max_contracts_per_trade"
+            ]
+          ]
+        }
+      },
+      {
+        "name": "sizing_portfolio_too_small",
+        "passed": true,
+        "details": {
+          "observed": [
+            false,
+            [
+              "portfolio_too_small"
+            ]
+          ]
+        }
+      }
+    ],
+    "scan_orchestration_trace": [
+      {
+        "name": "trace_stock_prescreen_pass",
+        "passed": true,
+        "details": {
+          "status": "PASS",
+          "score": 82
+        }
+      },
+      {
+        "name": "trace_direction_conviction_floor",
+        "passed": true,
+        "details": {
+          "trend_score": 80,
+          "min_trend": 30.0
+        }
+      },
+      {
+        "name": "trace_chain_scoring_and_ranking",
+        "passed": true,
+        "details": {
+          "valid_count": 3,
+          "scores": [
+            74,
+            66,
+            64
+          ]
+        }
+      },
+      {
+        "name": "trace_primary_contract_selected",
+        "passed": true,
+        "details": {
+          "selected_strike": 185,
+          "score": 74
+        }
+      },
+      {
+        "name": "trace_alternatives_count",
+        "passed": true,
+        "details": {
+          "runner_up_count": 2
+        }
+      },
+      {
+        "name": "trace_bullish_trade_card_no_unvalidated_reason",
+        "passed": true,
+        "details": {
+          "unvalidatedReason": null,
+          "finalStatus": "PASS"
+        }
+      },
+      {
+        "name": "trace_bearish_trade_card_unvalidated_caution",
+        "passed": true,
+        "details": {
+          "finalStatus": "CAUTION",
+          "unvalidatedReason": "Bearish setups are Unvalidated: no bearish strategy has passed validation yet (decision STOCKS-PARAMS-PER-HORIZON-2026-10-05). Visible for research; no PASS, no auto-trade, no opening order."
+        }
+      }
+    ],
+    "defect_investigations": [
+      {
+        "name": "defect_162_strike_truncation_confirmed",
+        "passed": true,
+        "details": {
+          "fractional_strike": 182.5,
+          "lossy_contract_id": "AAPL|182|2026-11-20|C",
+          "lossless_contract_id": "AAPL|182.5|2026-11-20|C",
+          "discrepancy": "int(strike) truncates 182.5 to 182",
+          "locations": [
+            "backend/app/routers/scan.py:1280 (contract id formatting)",
+            "backend/app/routers/scan.py:1297 (ContractDetails.strike)",
+            "backend/app/routers/scan.py:1434 (AlternativeContract.strike)",
+            "backend/app/routers/contracts.py:127 (_parse_strikes requires plain digits, rejecting 182.5 with 422)",
+            "backend/app/data/market.py:int(strike) in chain builders"
+          ]
+        }
+      },
+      {
+        "name": "defect_179_iv_jump_discontinuity_confirmed",
+        "passed": true,
+        "details": {
+          "score_at_50": 9,
+          "score_at_54": 1,
+          "score_at_55": 0,
+          "score_at_56": 19,
+          "score_at_60": 17,
+          "score_at_70": 13,
+          "jump_at_boundary": 19,
+          "non_monotonic_inversion": "IV 60 scores 17 while IV 50 scores 9 (more expensive option scores higher)",
+          "contract_score_impact": "IV weight is 0.15, yielding up to 2.85 points inflation in final contract score",
+          "location": "backend/app/scoring/contract_validator.py:361-372"
+        }
+      },
+      {
+        "name": "defect_335_heston_rr_overpricing_confirmed",
+        "passed": true,
+        "details": {
+          "pinned_parameters": {
+            "kappa": 0.5,
+            "theta": 0.08,
+            "sigma_v": 0.6,
+            "rho": -0.8
+          },
+          "feller_condition": {
+            "2_kappa_theta": 0.08,
+            "sigma_v_squared": 0.36,
+            "violation_factor": 4.5
+          },
+          "target_exit_premium_heston": 19.06,
+          "target_exit_premium_bs": 18.6,
+          "overpricing_factor": 1.025,
+          "rr_ratio_heston": 2.81,
+          "rr_ratio_bs": 2.72,
+          "rr_ratio_inflation": 0.09,
+          "locations": [
+            "backend/app/models/heston_cache.py:306-314 (tight 2x2x2x2 boundary grid)",
+            "backend/app/scoring/reward_risk.py:145-155 (heston_price feeds exit_premium)",
+            "backend/app/routers/scan.py:1014-1065 (heston calibration in options scan pipeline)"
+          ]
+        }
+      }
+    ]
+  },
+  "findings": [],
+  "summary": {
+    "total_tests": 34,
+    "passed_tests": 34,
+    "failed_tests": 0
+  }
+}
