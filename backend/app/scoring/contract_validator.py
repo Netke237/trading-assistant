@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
 
+from app.data.strike import format_strike
 from app.services.config_health import config_health
 
 logger = logging.getLogger(__name__)
@@ -515,7 +516,19 @@ def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int, int]:
 
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
-    return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
+    # format_strike (EXACT-STRIKE): a float integral strike is `185`, never
+    # `185.0`, so the evidence id matches the card's and the chain row's. The
+    # id is an evidence label, so an invalid strike falls back to its old text
+    # rather than raising inside scoring.
+    strike = contract.get("strike")
+    if strike is None:
+        strike_text = ""
+    else:
+        try:
+            strike_text = format_strike(strike)
+        except (TypeError, ValueError):
+            strike_text = str(strike)
+    return f"{contract.get('symbol', '')}|{strike_text}|{contract.get('expiry', '')}|{side}"
 
 
 def validate_contract(

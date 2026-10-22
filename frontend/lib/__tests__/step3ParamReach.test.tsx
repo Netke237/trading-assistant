@@ -141,9 +141,15 @@ describe('missingCardContracts / withCardContract', () => {
     expect(missingCardContracts([card()], [undefined], 'C')).toHaveLength(1);
   });
 
-  it('truncates a fractional strike as the backend does', () => {
-    const c = card({ contractDetails: { strike: 182.5, expiry: '2026-12-18', right: 'C' } as never });
-    expect(missingCardContracts([c], [[]], 'C')[0]?.strike).toBe(182);
+  // EXACT-STRIKE ES-3: the backend matches strikes exactly, so the rescue
+  // asks for the card's exact strike (182, not 182.5, would return the wrong
+  // row or nothing).
+  it('sends a fractional strike exactly', () => {
+    const c = card({ contract: 'XOM|182.5|2026-12-18|C',
+      contractDetails: { strike: 182.5, expiry: '2026-12-18', right: 'C' } as never });
+    expect(missingCardContracts([c], [[]], 'C')[0]?.strike).toBe(182.5);
+    expect(missingCardContracts([c], [[]], 'C'))
+      .toEqual([{ index: 0, id: 'XOM|182.5|2026-12-18|C', expiry: '2026-12-18', strike: 182.5 }]);
   });
 
   it('skips a card of the other right, or with no contract details', () => {
@@ -158,8 +164,15 @@ describe('missingCardContracts / withCardContract', () => {
     expect(missingCardContracts([card(), other], [[row(ID)], []], 'C').map((r) => r.index)).toEqual([1]);
   });
 
-  // Ids carry int(strike), so 182 vs 182.5 cannot be told apart by id at
-  // all -- this pins only that a DIFFERENT id is never taken.
+  // Ids carry the exact strike, so 182 and 182.5 are different ids.
+  it('appends a 182.5 card\'s own row, never the 182 row', () => {
+    const HALF = 'XOM|182.5|2026-12-18|C';
+    const rows = [row('a')];
+    expect(withCardContract(rows, [row('XOM|182|2026-12-18|C'), row(HALF)], HALF).map((r) => r.id))
+      .toEqual(['a', HALF]);
+    expect(withCardContract(rows, [row('XOM|182|2026-12-18|C')], HALF).map((r) => r.id)).toEqual(['a']);
+  });
+
   it('appends only a row with the card\'s id, never another id', () => {
     const rows = [row('a')];
     const out = withCardContract(rows, [row('XOM|182|2026-12-18|C'), row(ID)], ID);
