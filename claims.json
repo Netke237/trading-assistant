@@ -2,14 +2,6 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/exact-strike-41be05fa",
-      "claimed_at": "2026-10-22T06:42:56Z",
-      "expires_at": "2026-10-22T12:48:13Z",
-      "note": "Take #162: exact fractional strikes end to end (plan r2 clean; Q1/Q2 answered A/A)",
-      "task": "EXACT-STRIKE"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-settings-lost-update-0a62fb27",
       "claimed_at": "2026-10-22T09:33:14Z",
       "expires_at": "2026-10-22T13:36:25Z",
