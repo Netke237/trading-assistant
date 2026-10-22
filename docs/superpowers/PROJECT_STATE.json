@@ -7977,8 +7977,7 @@
       "plan_audit_clean": false,
       "plan_stage": {
         "rounds": 3,
-        "clean": false,
-        "closed_by": "cap"
+        "clean": false
       },
       "verify": {
         "kind": "present",
