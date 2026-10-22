@@ -6,6 +6,7 @@ Tests: backend/tests/test_heston_rr_overpricing_probe.py.
 Run (Python 3.11, from backend/):
     python scripts/heston_rr_overpricing_probe.py            # M1, M2, M3
     python scripts/heston_rr_overpricing_probe.py --only m1  # one measurement
+    python scripts/heston_rr_overpricing_probe.py --options  # M4 (T2): options A-D on fits
 
 READ-ONLY EVIDENCE. Nothing under backend/app, backend/config or frontend is
 changed, no database is opened, and no network is used: `main()` installs a
@@ -26,9 +27,13 @@ Every number in them is computed here. The only wall-clock quantity is the
 calibration time, labelled single-thread and relative: it is not an
 abandonment rate (see plan section 2, M4).
 
-T2 extends this file with an `--options` mode (M4). The pieces it needs are
-module-level on purpose: `heston_chain`, `calibrate`, `exit_gaps`, `m2_rows`,
-`M2_REGIMES`, `replay_chain`, `parity_spot`, `shipped_grids`.
+T2 adds the `--options` mode (M4): options A(i), A(ii), B (four limits), C and
+D evaluated on M2's 192 and M3's 134 fits, plus a reconciliation run of today's
+code on the synthetic chain committed in 2026-09 (`heston_latency_probe.chain`).
+It writes options.json / options.md only and leaves m1-m3 and provenance.json
+as T1 wrote them (options.json carries its own provenance block). A(ii) runs
+through `run_calibration_with_grids`, a script-local copy of the shipped
+`_run_calibration` with the grids as arguments, pinned by T2's tests.
 """
 from __future__ import annotations
 
@@ -1168,6 +1173,651 @@ def m3_markdown(m3: dict) -> str:
     return "\n".join(L)
 
 
+# ── M4: options A-D, evaluated on M2's and M3's fits (T2) ────────────────────
+#
+# Plan section 2, M4. Every result here is about FITS (one calibrated chain and
+# its scored proxy), never about cards: no stored card carries the chain, fit
+# or parameters an option needs. Prototypes live only in this file.
+
+# A(ii)'s wider box (plan section 2, M4, option A). v0 stays the solved seed.
+WIDE_GRID = {"kappa": [0.5, 1.5, 3.0, 6.0],
+             "theta": [0.02, 0.04, 0.08, 0.16, 0.25],
+             "sigma_v": [0.2, 0.4, 0.6, 0.9, 1.2],
+             "rho": [-0.95, -0.8, -0.5, -0.2]}
+B_LIMITS = (0.05, 0.10, 0.20, 0.30)
+# T1-T3 as the shipped ladder (`estimate_targets`) spaces them: T1 = the base
+# move, T2 = 1.5x it, T3 = 2.0x it. A 10 % base makes T1/T2 the same +-10 % /
+# +-15 % moves M2 and M3 report, so option D reproduces their exits.
+LADDER_BASE_MOVE = 0.10
+LADDER = (("T1", 1.0), ("T2", 1.5), ("T3", 2.0))
+CARD_HORIZONS = ("card_swing", "card_position")
+ALL_HORIZONS = ("card_swing", "card_position", "alternatives_half_expiry")
+CALIBRATED_OPTIONS = ("D", "A_i", "A_ii")
+OPTION_ORDER = ("D", "A_i", "A_ii", *(f"B_{L:.2f}" for L in B_LIMITS), "C")
+OPTION_TITLES = {
+    "D": "D. Leave as is (shipped 2-rung grid)",
+    "A_i": "A(i). Shipped 3-rung HESTON_FULL_CALIBRATION grid",
+    "A_ii": "A(ii). Wider box (4 x 5 x 5 x 4)",
+    **{f"B_{L:.2f}": f"B. Fit-error limit L = {L:.2f}" for L in B_LIMITS},
+    "C": "C. Anchor Heston to the market (scored proxy)",
+}
+
+
+def run_calibration_with_grids(chain: list[dict], S: float, r: float,
+                               grids: dict[str, list[float]]):
+    """SCRIPT-LOCAL COPY of `heston_cache._run_calibration`, with the four
+    searched grids passed in instead of chosen by `_USE_FULL_GRID` (they are
+    locals there and cannot be patched). The seed, the search loop, the
+    flat-BS gate and the verdict are the shipped ones; only the WARNING log
+    line is left out (it changes no result). Pinned by
+    `test_local_run_calibration_copy_matches_shipped_on_default_and_full_grid`
+    (same method, rmse and params) and by an AST check that the search loop is
+    the shipped loop verbatim."""
+    from app.models.heston import CalibrationResult
+    from app.models.heston import heston_price  # noqa: F401  (the name the copied loop calls)
+
+    v0_seed = hc._seed_v0(chain, S, r)
+    kappa_grid = list(grids["kappa"])
+    theta_grid = list(grids["theta"])
+    sigma_v_grid = list(grids["sigma_v"])
+    rho_grid = list(grids["rho"])
+    v0_grid = [v0_seed]
+
+    best_rmse = float("inf")
+    best_params = None
+    best_chain: list[dict] = []
+
+    for v0 in v0_grid:
+        for kappa in kappa_grid:
+            for theta in theta_grid:
+                for sigma_v in sigma_v_grid:
+                    for rho in rho_grid:
+                        params = HestonParams(v0=v0, kappa=kappa, theta=theta,
+                                              sigma_v=sigma_v, rho=rho)
+                        sse = 0.0
+                        priced: list[dict] = []
+                        for c in chain:
+                            mid = c.get("mid_price", 0.0)
+                            if mid <= 0:
+                                continue
+                            try:
+                                model_p = heston_price(S, c["strike"], c["expiry_years"],
+                                                       r, params, c.get("is_call", True))
+                                sse += ((model_p - mid) / mid) ** 2
+                                priced.append(c)
+                            except Exception:
+                                continue
+                        if not priced:
+                            continue
+                        rmse = math.sqrt(sse / len(priced))
+                        if rmse < best_rmse:
+                            best_rmse = rmse
+                            best_params = params
+                            best_chain = priced
+
+    if best_params is None:
+        fallback = HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7)
+        return CalibrationResult(params=fallback, rmse=float("inf"), method="bs_fallback")
+
+    baseline_rmse, baseline_sigma = hc._flat_bs_baseline(best_chain, S, r)
+    if baseline_rmse is None:
+        return CalibrationResult(
+            params=HestonParams(v0=v0_seed, kappa=2.0, theta=v0_seed, sigma_v=0.3, rho=-0.7),
+            rmse=float("inf"), method="bs_fallback")
+    if baseline_rmse <= best_rmse:
+        return CalibrationResult(
+            params=HestonParams(v0=baseline_sigma ** 2, kappa=2.0, theta=baseline_sigma ** 2,
+                                sigma_v=0.3, rho=-0.7),
+            rmse=round(baseline_rmse, 6), method="bs_flat")
+    return CalibrationResult(params=best_params, rmse=round(best_rmse, 6), method="heston_grid")
+
+
+def calibrate_with_grids(option_chain: list[dict], S: float, grids: dict[str, list[float]], r: float = R):
+    """`calibrate_cached`'s own wrapper (usable-strike filter, < 3 -> thin-chain
+    bs_fallback, the JSON round trip the lru_cache key forces) around the local
+    copy. No cache: every call searches."""
+    from app.models.heston import CalibrationResult
+    chain = [c for c in option_chain if c.get("mid_price", 0) > 0 and c.get("expiry_years", 0) > 0]
+    if len(chain) < 3:
+        return CalibrationResult(params=hc._thin_chain_params(chain, S, r), rmse=float("inf"),
+                                 method="bs_fallback")
+    return run_calibration_with_grids(json.loads(json.dumps(chain, sort_keys=True)), S, r, grids)
+
+
+def option_grids() -> dict[str, dict[str, list[float]]]:
+    g = shipped_grids()
+    return {"D": g["default"], "A_i": g["full"], "A_ii": WIDE_GRID}
+
+
+def calibrate_option(chain: list[dict], S: float, which: str, grids: Optional[dict] = None) -> tuple[dict, object]:
+    """One calibration for option D (shipped, default grid), A_i (shipped,
+    `_USE_FULL_GRID` patched True) or A_ii (the local copy on WIDE_GRID). The
+    shipped lru_cache is cleared before EVERY call, whichever path runs."""
+    grids = grids or option_grids()
+    hc._run_calibration.cache_clear()
+    t0 = time.perf_counter()
+    if which == "D":
+        res = heston_mod.calibrate_heston(chain, S, R)
+    elif which == "A_i":
+        with mock.patch.object(hc, "_USE_FULL_GRID", True):
+            res = heston_mod.calibrate_heston(chain, S, R)
+    elif which == "A_ii":
+        res = calibrate_with_grids(chain, S, WIDE_GRID)
+    else:
+        raise ValueError(which)
+    secs = time.perf_counter() - t0
+    accepted = res.method == "heston_grid"
+    rec: dict = {"method": res.method, "accepted": accepted, "rel_rmse": _finite(res.rmse),
+                 "params": asdict(res.params), "seconds_single_thread": round(secs, 4)}
+    if accepted:
+        p, g = res.params, grids[which]
+        sides = {}
+        for name in ("kappa", "theta", "sigma_v", "rho"):
+            v = getattr(p, name)
+            sides[name] = "min" if v == min(g[name]) else "max" if v == max(g[name]) else "interior"
+        rec["boundary_sides"] = sides
+        rec["feller_ratio"] = p.sigma_v ** 2 / (2.0 * p.kappa * p.theta)
+    return rec, res
+
+
+def scored_proxy(rows: list[dict], contract_overrides: Optional[dict] = None) -> tuple[Optional[dict], list[dict]]:
+    """The scored proxy and the in-band rows, by exactly `exit_gaps`' rule."""
+    lo, hi = selection_delta_band(contract_overrides)
+    inband = [r for r in rows if float(r.get("price", 0)) > 0
+              and lo <= abs(float(r.get("delta") or 0)) <= hi]
+    if not inband:
+        return None, inband
+    return min(inband, key=lambda r: (abs(abs(float(r["delta"])) - 0.5), float(r["strike"]))), inband
+
+
+def ladder_targets(S: float, is_call: bool) -> list[tuple[str, float, float]]:
+    """(level, signed move, stock target) for T1-T3."""
+    out = []
+    for lvl, mult in LADDER:
+        m = LADDER_BASE_MOVE * mult
+        out.append((lvl, m if is_call else -m, S * (1 + m) if is_call else S * (1 - m)))
+    return out
+
+
+def _leg(res) -> dict:
+    return {"exit": res.estimated_exit_premium, "rr": res.rr_ratio, "band": step7_band(res.rr_ratio),
+            "model": res.model_used}
+
+
+def anchored_leg(params: HestonParams, target: float, K: float, T: float, mid: float, is_call: bool,
+                 reprice_years: Optional[float], anchor: float) -> Optional[dict]:
+    """Option C: exit = heston(target) x mid / heston(now), with estimate_rr's
+    own full-premium arithmetic (exit floored at 0.01, R/R rounded to 2 dp,
+    exit shown to the cent). None where the Heston price at the target fails
+    (fell back / non-finite / <= 0): the shipped path then prices with BS.
+    With anchor = 1.0 this equals estimate_rr's Heston leg (pinned by a test)."""
+    ry = reprice_years if reprice_years is not None else _default_reprice_years(T)
+    try:
+        d = heston_price_detail(target, K, ry, R, params, is_call)
+        raw = None if d.fell_back else d.price
+    except Exception:
+        raw = None
+    if raw is None or not math.isfinite(raw) or raw <= 0:
+        return None
+    exit_p = max(raw * anchor, 0.01)
+    rr = round((exit_p - mid) / mid, 2)
+    return {"exit": round(exit_p, 2), "rr": rr, "band": step7_band(rr), "model": "Heston repriced"}
+
+
+def _bs_legs(ctx: dict, H: dict) -> dict:
+    p = ctx["proxy"]
+    T = p["dte"] / 365.0
+    out = {}
+    for h in ALL_HORIZONS:
+        ry = H[h](p["dte"])
+        out[h] = []
+        for lvl, move, target in ladder_targets(ctx["S"], ctx["is_call"]):
+            res = estimate_rr(stock_price=ctx["S"], target_price=target, invalidation_price=ctx["S"],
+                              strike=p["strike"], expiry_years=T, current_premium=p["mid"],
+                              is_call=ctx["is_call"], r=R, reprice_years=ry, heston_params=None)
+            out[h].append({"level": lvl, "move": move, "target": target, **_leg(res)})
+    return out
+
+
+def evaluate_pricing(ctx: dict, params: Optional[HestonParams], H: dict, bs: dict, anchor: bool = False) -> dict:
+    """What the scored proxy would show under one option's pricing: Heston (the
+    option's params), anchored Heston (C), or BS when the option yields no
+    accepted fit. Levels at T1-T3 on the three horizons."""
+    if params is None:
+        return {"heston": False, "levels": bs}
+    p, S, is_call = ctx["proxy"], ctx["S"], ctx["is_call"]
+    K, mid, T = p["strike"], p["mid"], p["dte"] / 365.0
+    now = heston_price_detail(S, K, T, R, params, is_call)
+    out: dict = {"heston_now": now.price, "heston_now_fell_back": now.fell_back}
+    a = None
+    if anchor:
+        if now.fell_back or not (math.isfinite(now.price) and now.price > 0):
+            return {"heston": False, "levels": bs, "anchor_failed": True}
+        a = mid / now.price
+        out["anchor_factor"] = a
+        out["proxy_heston_over_mid"] = now.price * a / mid
+        out["in_band_heston_over_mid"] = None   # C anchors the scored proxy only
+    else:
+        out["proxy_heston_over_mid"] = now.price / mid
+        out["in_band_heston_over_mid"] = [
+            heston_price_detail(S, float(r["strike"]), r["dte"] / 365.0, R, params, is_call).price
+            / float(r["price"]) for r in ctx["in_band"]]
+    levels = {}
+    fell = 0
+    for h in ALL_HORIZONS:
+        ry = H[h](p["dte"])
+        levels[h] = []
+        for i, (lvl, move, target) in enumerate(ladder_targets(S, is_call)):
+            if anchor:
+                leg = anchored_leg(params, target, K, T, mid, is_call, ry, a)
+                if leg is None:
+                    leg = {k: bs[h][i][k] for k in ("exit", "rr", "band", "model")}
+            else:
+                leg = _leg(estimate_rr(stock_price=S, target_price=target, invalidation_price=S, strike=K,
+                                       expiry_years=T, current_premium=mid, is_call=is_call, r=R,
+                                       reprice_years=ry, heston_params=params))
+            if leg["model"] != "Heston repriced":
+                fell += 1
+            levels[h].append({"level": lvl, "move": move, "target": target, **leg})
+    out["levels"] = levels
+    out["levels_not_heston"] = fell
+    out["heston"] = fell == 0
+    # The shipped ladder floors a dip; count any non-increasing Heston ladder.
+    out["non_monotone_ladders"] = sum(
+        1 for h in ALL_HORIZONS
+        if any(levels[h][j + 1]["exit"] < levels[h][j]["exit"] for j in range(len(LADDER) - 1)))
+    return out
+
+
+def options_contexts(limit: Optional[int] = None) -> list[dict]:
+    """M2's 192 fits and M3's 134 calibrated chains, rebuilt exactly as T1
+    builds them (m2_rows; replay_chain + heston_chain + parity spot)."""
+    ctxs: list[dict] = []
+    for dte in M2_DTES:
+        for width in M2_WIDTHS:
+            for regime, (atm, skew) in M2_REGIMES.items():
+                for right in RIGHTS:
+                    rows = m2_rows(dte, width, atm, skew, right)
+                    ctxs.append({"source": "m2", "id": f"m2/{dte}/{width}/{regime}/{right}", "dte": dte,
+                                 "width": width, "regime": regime, "right": right, "S": SPOT,
+                                 "is_call": right == "C", "rows": rows})
+    for cdir in sorted(p for p in CAPTURE_DIR.iterdir() if (p / "rows.json").exists()):
+        cap = load_capture(cdir)
+        for symbol, expiries in cap["meta"]["expiries"].items():
+            spot = parity_spot(cap["rows"], symbol)
+            for expiry in expiries:
+                for right in RIGHTS:
+                    rows, transport = replay_chain(cap, symbol, expiry, right)
+                    if transport.anomalies or not rows or len(heston_chain(rows)) < 3 or spot is None:
+                        continue
+                    ctxs.append({"source": "m3", "id": f"m3/{cdir.name}/{symbol}/{expiry}/{right}",
+                                 "capture": cdir.name, "symbol": symbol, "expiry": expiry, "right": right,
+                                 "dte": rows[0]["dte"], "S": spot["spot"], "is_call": right == "C",
+                                 "rows": rows})
+    if limit:
+        ctxs = ctxs[:limit] + [c for c in ctxs if c["source"] == "m3"][:limit]
+    return ctxs
+
+
+def evaluate_fit(ctx: dict, H: dict, grids: dict) -> dict:
+    proxy, inband = scored_proxy(ctx["rows"])
+    chain = heston_chain(ctx["rows"])
+    meta = {k: v for k, v in ctx.items() if k not in ("rows",)}
+    fit: dict = {**meta, "heston_chain_rows": len(chain), "calibrations": {}, "options": {}}
+    results = {}
+    for which in CALIBRATED_OPTIONS:
+        rec, res = calibrate_option(chain, ctx["S"], which, grids)
+        fit["calibrations"][which] = rec
+        results[which] = res
+    if proxy is None:
+        fit["proxy"] = None
+        return fit
+    ctx = {**ctx, "proxy": {"strike": float(proxy["strike"]), "delta": float(proxy["delta"]),
+                            "mid": float(proxy["price"]), "dte": proxy["dte"]},
+           "in_band": inband}
+    fit["proxy"] = ctx["proxy"]
+    fit["in_band_strikes"] = len(inband)
+    bs = _bs_legs(ctx, H)
+    fit["bs_levels"] = bs
+    for which in CALIBRATED_OPTIONS:
+        res = results[which]
+        params = res.params if res.method == "heston_grid" else None
+        fit["options"][which] = evaluate_pricing(ctx, params, H, bs)
+    d_rec, d_res = fit["calibrations"]["D"], results["D"]
+    for L in B_LIMITS:
+        keep = d_rec["accepted"] and d_rec["rel_rmse"] is not None and d_rec["rel_rmse"] <= L
+        fit["options"][f"B_{L:.2f}"] = {"heston": keep and fit["options"]["D"]["heston"],
+                                        "pricing": "D" if keep else "BS"}
+    fit["options"]["C"] = evaluate_pricing(ctx, d_res.params if d_rec["accepted"] else None, H, bs, anchor=True)
+    return fit
+
+
+def option_levels(fit: dict, opt: str) -> dict:
+    o = fit["options"][opt]
+    if opt.startswith("B_"):
+        return fit["options"]["D"]["levels"] if o["pricing"] == "D" else fit["bs_levels"]
+    return o["levels"]
+
+
+def summarize_options(fits: list[dict]) -> dict:
+    out: dict = {}
+    for opt in OPTION_ORDER:
+        s: dict = {"fits": len(fits)}
+        withp = [f for f in fits if f["proxy"] is not None]
+        s["fits_with_scored_proxy"] = len(withp)
+        lab = [f for f in withp if f["options"][opt]["heston"]]
+        labD = {f["id"] for f in withp if f["options"]["D"]["heston"]}
+        s["heston_labelled"] = len(lab)
+        s["label_lost_vs_D"] = sum(1 for f in withp if f["id"] in labD and not f["options"][opt]["heston"])
+        s["label_gained_vs_D"] = sum(1 for f in withp if f["id"] not in labD and f["options"][opt]["heston"])
+        src = (lambda f: f["options"]["D"]) if opt.startswith("B_") else (lambda f: f["options"][opt])
+        s["proxy_heston_over_mid"] = _spread([src(f)["proxy_heston_over_mid"] for f in lab])
+        s["in_band_heston_over_mid"] = (None if opt == "C" else
+                                        _spread([x for f in lab for x in (src(f)["in_band_heston_over_mid"] or [])]))
+        # Fits whose pricing differs from D in either direction.
+        changed = {f["id"] for f in withp if f["options"][opt]["heston"] or f["id"] in labD}
+        s["fits_heston_under_D_or_option"] = len(changed)
+        per = {}
+        for h in ALL_HORIZONS:
+            for i, (lvl, _) in enumerate(LADDER):
+                d_exit, d_rr, bandch = [], [], 0
+                for f in withp:
+                    lo, ld = option_levels(f, opt)[h][i], option_levels(f, "D")[h][i]
+                    if lo["band"] != ld["band"]:
+                        bandch += 1
+                    if f["id"] in changed:
+                        d_exit.append(lo["exit"] - ld["exit"])
+                        d_rr.append(round(lo["rr"] - ld["rr"], 2))
+                per[f"{h}/{lvl}"] = {"delta_exit_vs_D": _spread(d_exit), "delta_rr_vs_D": _spread(d_rr),
+                                     "band_changes_vs_D": bandch}
+        s["levels"] = per
+        heads = {}
+        anyc = set()
+        for h in CARD_HORIZONS:
+            ids = {f["id"] for f in withp if option_levels(f, opt)[h][0]["band"] != option_levels(f, "D")[h][0]["band"]}
+            heads[h] = len(ids)
+            anyc |= ids
+        s["step7_headline_band_changes_vs_D"] = {**heads, "either_card_horizon": len(anyc)}
+        s["step7_headline_band_change_share_vs_D"] = (len(anyc) / len(withp)) if withp else None
+        if opt in CALIBRATED_OPTIONS:
+            cal = [f["calibrations"][opt] for f in fits]
+            meth: dict[str, int] = {}
+            for c in cal:
+                meth[c["method"]] = meth.get(c["method"], 0) + 1
+            s["methods"] = meth
+            acc = [c for c in cal if c["accepted"]]
+            s["accepted_rel_rmse"] = _spread([c["rel_rmse"] for c in acc])
+            s["accepted_feller_ratio"] = _spread([c["feller_ratio"] for c in acc])
+            sides: dict = {}
+            for c in acc:
+                for k, v in c["boundary_sides"].items():
+                    sides.setdefault(k, {}).setdefault(v, 0)
+                    sides[k][v] += 1
+            s["winner_position"] = sides
+            s["winners_all_interior"] = sum(1 for c in acc if all(v == "interior" for v in c["boundary_sides"].values()))
+            s["winners_any_boundary"] = sum(1 for c in acc if any(v != "interior" for v in c["boundary_sides"].values()))
+            ratios = [f["calibrations"][opt]["seconds_single_thread"] / f["calibrations"]["D"]["seconds_single_thread"]
+                      for f in fits if f["calibrations"]["D"]["seconds_single_thread"] > 0]
+            s["calibration_seconds_relative_to_D"] = {
+                "per_fit": _spread(ratios),
+                "sum_ratio": (sum(f["calibrations"][opt]["seconds_single_thread"] for f in fits)
+                              / sum(f["calibrations"]["D"]["seconds_single_thread"] for f in fits)),
+            }
+        else:
+            s["calibration_seconds_relative_to_D"] = {"per_fit": None, "sum_ratio": 1.0,
+                                                      "note": "no extra calibration (reuses D's fit)"}
+        s["levels_not_heston_on_labelled_fits"] = sum(
+            f["options"][opt].get("levels_not_heston", 0) for f in withp if opt in ("D", "A_i", "A_ii", "C"))
+        s["non_monotone_heston_ladders"] = sum(
+            f["options"][opt].get("non_monotone_ladders", 0) for f in withp if opt in ("D", "A_i", "A_ii", "C"))
+        out[opt] = s
+    return out
+
+
+def t1_consistency(fits: list[dict]) -> dict:
+    """Option D re-calibrates every chain; it must reproduce T1's stored M2/M3
+    method, rel-RMSE, params, scored proxy and Heston/mid."""
+    stored: dict[str, dict] = {}
+    m2p, m3p = OUT_DIR / "m2.json", OUT_DIR / "m3.json"
+    if m2p.exists():
+        for f in json.loads(m2p.read_text())["fits"]:
+            stored[f"m2/{f['dte']}/{f['width']}/{f['regime']}/{f['right']}"] = f
+    if m3p.exists():
+        for c in json.loads(m3p.read_text())["captures"]:
+            for x in c["chains"]:
+                if x["status"] == "calibrated":
+                    stored[f"m3/{c['capture'].split('/')[-1]}/{x['symbol']}/{x['expiry']}/{x['right']}"] = x
+    mism = []
+    for f in fits:
+        s = stored.get(f["id"])
+        d = f["calibrations"]["D"]
+        if s is None:
+            mism.append({"id": f["id"], "why": "not in T1 output"})
+            continue
+        why = []
+        if s["method"] != d["method"]:
+            why.append("method")
+        if s["rel_rmse"] != d["rel_rmse"]:
+            why.append("rel_rmse")
+        if s["params"] != d["params"]:
+            why.append("params")
+        if s.get("accepted") and s.get("gaps", {}).get("scored_proxy"):
+            sp = s["gaps"]["scored_proxy"]
+            if f["proxy"] is None or sp["strike"] != f["proxy"]["strike"]:
+                why.append("scored proxy")
+            elif abs(sp["heston_over_mid"] - f["options"]["D"]["proxy_heston_over_mid"]) > 1e-9:
+                why.append("heston_over_mid")
+            else:
+                for e in sp["exits"]:
+                    for i, (lvl, mult) in enumerate(LADDER):
+                        if abs(abs(e["move"]) - LADDER_BASE_MOVE * mult) < 1e-12:
+                            lv = f["options"]["D"]["levels"][e["horizon"]][i]
+                            if (lv["exit"], lv["rr"]) != (e["heston_exit"], e["heston_rr"]):
+                                why.append(f"{e['horizon']}/{lvl} exit")
+        if why:
+            mism.append({"id": f["id"], "why": why})
+    ids = {f["id"] for f in fits}
+    return {"t1_fits": len(stored), "m4_fits": len(fits),
+            "t1_fits_missing_from_m4": sorted(set(stored) - ids),
+            "mismatches": mism, "all_match": not mism and set(stored) == ids}
+
+
+# ── 2026-09 reconciliation: the chain the 1.36x figure most likely came from ──
+
+def recon_2026_09() -> dict:
+    """Today's shipped calibration on `heston_latency_probe.chain()` -- the
+    synthetic chain committed with TIMEOUT-DELETE-INNER on 2026-09-13, the
+    change whose round 2 logged the 1.36x / 0.48x figure. Same 6 DTE x 4 widths
+    as M2. That chain: spot 201.86, the spec's section 7 reference smile
+    (iv = 0.345 + 0.45*(-m) + 1.6*m^2), OTM only (calls above spot, puts
+    below, in ONE chain), strikes on a $2.50 ladder over spot*(1 +- 0.45*sqrt(T)).
+    Calibrated two ways: the whole chain (as that probe calibrates it) and
+    scan.py's heston_chain filter. Deltas for the filter and the in-band set
+    are BS at each strike's smile IV, rounded to 4 dp as market.py rounds."""
+    import heston_latency_probe as lp
+    cells = []
+    for dte in M2_DTES:
+        for n in M2_WIDTHS:
+            raw = lp.chain(dte, n)
+            T = dte / 365.0
+            rows = []
+            for c in raw:
+                K, is_call = c["strike"], c["is_call"]
+                m = math.log(K / lp.SPOT)
+                iv = lp.ATM + lp.SKEW * (-m) + lp.CURV * m ** 2
+                d1 = (math.log(lp.SPOT / K) + (lp.R + 0.5 * iv * iv) * T) / (iv * math.sqrt(T))
+                delta = _norm_cdf(d1) if is_call else _norm_cdf(d1) - 1.0
+                rows.append({"strike": K, "dte": dte, "price": c["mid_price"], "delta": round(delta, 4),
+                             "right": "C" if is_call else "P", "iv": iv})
+            lo, hi = selection_delta_band()
+            for variant, chain in (("whole_chain", raw), ("scan_filtered", heston_chain(rows))):
+                rec, res = calibrate(chain, lp.SPOT)
+                entry = {"dte": dte, "n_strikes_requested": n, "chain_rows": len(rows), "variant": variant,
+                         "calibrated_rows": len(chain), "method": rec["method"], "rel_rmse": rec["rel_rmse"],
+                         "params": rec["params"]}
+                if rec["accepted"]:
+                    p = res.params
+                    entry["feller_ratio"] = p.sigma_v ** 2 / (2.0 * p.kappa * p.theta)
+                    per = []
+                    for r in rows:
+                        h = heston_price_detail(lp.SPOT, r["strike"], T, R, p, r["right"] == "C").price
+                        per.append({"strike": r["strike"], "right": r["right"], "delta": r["delta"],
+                                    "mid": r["price"], "heston_over_mid": h / r["price"],
+                                    "in_band": lo <= abs(r["delta"]) <= hi})
+                    entry["strikes"] = per
+                    inb = [x for x in per if x["in_band"]]
+                    entry["proxy"] = (min(inb, key=lambda x: (abs(abs(x["delta"]) - 0.5), x["strike"]))
+                                      if inb else None)
+                    entry["atm_nearest"] = min(per, key=lambda x: (abs(math.log(x["strike"] / lp.SPOT)), x["strike"]))
+                    entry["in_band_spread"] = _spread([x["heston_over_mid"] for x in inb])
+                    entry["out_of_band_spread"] = _spread([x["heston_over_mid"] for x in per if not x["in_band"]])
+                    entry["all_spread"] = _spread([x["heston_over_mid"] for x in per])
+                cells.append(entry)
+    out = {"chain_source": "backend/scripts/heston_latency_probe.py chain()",
+           "spot": lp.SPOT, "smile": {"atm": lp.ATM, "skew": lp.SKEW, "curvature": lp.CURV},
+           "cells": cells}
+    for variant in ("whole_chain", "scan_filtered"):
+        cs = [c for c in cells if c["variant"] == variant]
+        acc = [c for c in cs if c["method"] == "heston_grid"]
+        winners: dict[str, int] = {}
+        for c in acc:
+            k = "kappa={kappa:g} theta={theta:g} sigma_v={sigma_v:g} rho={rho:g}".format(**c["params"])
+            winners[k] = winners.get(k, 0) + 1
+        out[variant] = {
+            "cells": len(cs), "accepted": len(acc),
+            "methods": {m: sum(1 for c in cs if c["method"] == m) for m in sorted({c["method"] for c in cs})},
+            "winners": winners,
+            "feller_ratio": _spread([c["feller_ratio"] for c in acc]),
+            "proxy_heston_over_mid": _spread([c["proxy"]["heston_over_mid"] for c in acc if c["proxy"]]),
+            "atm_nearest_heston_over_mid": _spread([c["atm_nearest"]["heston_over_mid"] for c in acc]),
+            "in_band_heston_over_mid": _spread([x["heston_over_mid"] for c in acc for x in c["strikes"] if x["in_band"]]),
+            "out_of_band_heston_over_mid": _spread([x["heston_over_mid"] for c in acc for x in c["strikes"]
+                                                    if not x["in_band"]]),
+            "proxy_by_dte": {str(d): _spread([c["proxy"]["heston_over_mid"] for c in acc if c["dte"] == d and c["proxy"]])
+                             for d in M2_DTES},
+        }
+    return out
+
+
+def run_options(limit: Optional[int] = None, progress: bool = True) -> dict:
+    H = horizons()
+    grids = option_grids()
+    ctxs = options_contexts(limit)
+    fits = []
+    t0 = time.perf_counter()
+    for i, ctx in enumerate(ctxs, 1):
+        fits.append(evaluate_fit(ctx, H, grids))
+        if progress and (i % 10 == 0 or i == len(ctxs)):
+            print(f"  options: {i}/{len(ctxs)} fits, {time.perf_counter() - t0:.0f}s", file=sys.stderr, flush=True)
+    return {
+        "basis": ("Every result is about FITS (a calibrated chain and its scored proxy), never cards. "
+                  "Exit premiums and R/R through shipped estimate_rr (full-premium basis, premium = mid) "
+                  "except option C's anchored exits, which use estimate_rr's own arithmetic. "
+                  "T1-T3 = the shipped ladder spacing (T2 = 1.5x, T3 = 2.0x the T1 move) with a "
+                  f"{LADDER_BASE_MOVE:.0%} T1 move. Calibration seconds: single thread, this cloud box, "
+                  "cache cleared before every calibration; relative to D only, not abandonment rates."),
+        "grids": grids,
+        "b_limits": list(B_LIMITS),
+        "ladder": {"base_move": LADDER_BASE_MOVE, "levels": [list(x) for x in LADDER]},
+        "summary": {"all": summarize_options(fits),
+                    "m2": summarize_options([f for f in fits if f["source"] == "m2"]),
+                    "m3": summarize_options([f for f in fits if f["source"] == "m3"])},
+        "t1_consistency": t1_consistency(fits),
+        "fits": fits,
+    }
+
+
+def _rel(s: dict) -> str:
+    c = s["calibration_seconds_relative_to_D"]
+    if c["per_fit"] is None:
+        return "1 (no recalibration)"
+    return f"{c['per_fit']['median']:.2f}× median ({c['per_fit']['min']:.2f}–{c['per_fit']['max']:.2f}); total {c['sum_ratio']:.2f}×"
+
+
+def options_markdown(o: dict, recon: dict) -> str:
+    L = ["# HESTON-RR-OVERPRICING — M4: options A–D on fits", "",
+         "Generated by `backend/scripts/heston_rr_overpricing_probe.py --options`; machine output in `options.json`.", "",
+         "**These are fits, not cards.** " + o["basis"], "",
+         f"Fits: M2's {o['summary']['m2']['D']['fits']} synthetic fits and M3's {o['summary']['m3']['D']['fits']} real-chain "
+         "fits, rebuilt exactly as T1 builds them. Option D re-calibrates every chain with the shipped default grid "
+         "in the same run, so every A timing is paired with its own D timing.", ""]
+    tc = o["t1_consistency"]
+    L += [f"**Consistency with T1:** D reproduces T1's stored method, rel-RMSE, params, scored proxy, Heston÷mid and "
+          f"the ±10 % / ±15 % exits on {tc['m4_fits'] - len(tc['mismatches'])} of {tc['m4_fits']} fits "
+          f"(T1 stored {tc['t1_fits']}); all match: **{tc['all_match']}**."
+          + (f" Mismatches: {tc['mismatches']}." if tc["mismatches"] else ""), "",
+          "Grids: " + "; ".join(f"{k}: " + ", ".join(f"{n} {v}" for n, v in g.items()) for k, g in o["grids"].items()) + ".", ""]
+    for part, title in (("m2", "M2 synthetic fits"), ("m3", "M3 real-chain fits"), ("all", "M2 + M3")):
+        S = o["summary"][part]
+        L += [f"## Summary — {title}", "",
+              "Band change = the T1 (headline) Step 7 band differs from option D's, at the Swing or Position card "
+              "horizon. Label = every T1–T3 level on every horizon priced \"Heston repriced\".", "",
+              "| option | fits with proxy | labelled Heston | lost vs D | gained vs D | scored proxy Heston÷mid (min / median / max) | in-band Heston÷mid (min / median / max) | headline band changes vs D (swing / position / either) | calibration time vs D |",
+              "|---|---|---|---|---|---|---|---|---|"]
+        for opt in OPTION_ORDER:
+            s = S[opt]
+            hb = s["step7_headline_band_changes_vs_D"]
+            share = s["step7_headline_band_change_share_vs_D"]
+            nd = S["D"]["heston_labelled"]
+            lost = (f"{s['label_lost_vs_D']} ({100 * s['label_lost_vs_D'] / nd:.1f} % of D's {nd}; "
+                    f"{100 * s['label_lost_vs_D'] / s['fits_with_scored_proxy']:.1f} % of all)") if nd else str(s['label_lost_vs_D'])
+            L.append(f"| {OPTION_TITLES[opt]} | {s['fits_with_scored_proxy']} | {s['heston_labelled']} | "
+                     f"{lost} | {s['label_gained_vs_D']} | {_rng(s['proxy_heston_over_mid'])} | "
+                     f"{'– (anchors the proxy only)' if opt == 'C' else _rng(s['in_band_heston_over_mid'])} | "
+                     f"{hb['card_swing']} / {hb['card_position']} / {hb['either_card_horizon']} "
+                     f"({_f(share * 100 if share is not None else None, 1)} %) | {_rel(s)} |")
+        L.append("")
+        L += ["Calibration outcome per option:", "",
+              "| option | methods | accepted rel-RMSE (min / median / max) | Feller ratio (min / median / max) | winners with every parameter interior | winners on ≥1 boundary | winner position per parameter |",
+              "|---|---|---|---|---|---|---|"]
+        for opt in CALIBRATED_OPTIONS:
+            s = S[opt]
+            L.append(f"| {OPTION_TITLES[opt]} | {s['methods']} | {_rng(s['accepted_rel_rmse'], 4)} | "
+                     f"{_rng(s['accepted_feller_ratio'], 2)} | {s['winners_all_interior']} | {s['winners_any_boundary']} | "
+                     f"{s['winner_position']} |")
+        L.append("")
+        L += ["Change in the scored proxy's exit premium and full-premium R/R against D, per horizon and level "
+              "(over the fits priced by Heston under D or under the option; all fits for the band count):", "",
+              "| option | horizon / level | Δ exit $ (min / median / max) | Δ R/R (min / median / max) | band changes vs D |",
+              "|---|---|---|---|---|"]
+        for opt in OPTION_ORDER:
+            if opt == "D":
+                continue
+            for k, v in S[opt]["levels"].items():
+                L.append(f"| {opt} | {k} | {_rng(v['delta_exit_vs_D'], 3)} | {_rng(v['delta_rr_vs_D'], 2)} | "
+                         f"{v['band_changes_vs_D']} |")
+        L += ["", f"Heston levels that fell back to BS on labelled fits, per option: "
+                  f"{ {opt: S[opt]['levels_not_heston_on_labelled_fits'] for opt in ('D', 'A_i', 'A_ii', 'C')} }; "
+                  f"non-increasing Heston T1–T3 ladders: "
+                  f"{ {opt: S[opt]['non_monotone_heston_ladders'] for opt in ('D', 'A_i', 'A_ii', 'C')} }.", ""]
+    L += ["## 2026-09 reconciliation run", "",
+          f"Today's shipped `calibrate_heston` (cache cleared) on `{recon['chain_source']}`: spot {recon['spot']}, "
+          f"smile iv = {recon['smile']['atm']} + {recon['smile']['skew']}·(−m) + {recon['smile']['curvature']}·m², "
+          "OTM calls above spot and OTM puts below in one chain, $2.50 strike ladder over spot·(1 ± 0.45·√T); "
+          "the same 6 DTE × 4 widths as M2. Whole chain = as that probe calibrates it; scan-filtered = scan.py's "
+          "heston_chain rule (deltas: BS at each strike's smile IV, 4 dp).", "",
+          "| variant | cells | accepted | methods | winners (params: cells) | Feller ratio | scored proxy Heston÷mid | ATM-nearest Heston÷mid | in-band Heston÷mid | out-of-band Heston÷mid |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
+    for v in ("whole_chain", "scan_filtered"):
+        r = recon[v]
+        L.append(f"| {v} | {r['cells']} | {r['accepted']} | {r['methods']} | {r['winners']} | {_rng(r['feller_ratio'], 2)} | "
+                 f"{_rng(r['proxy_heston_over_mid'])} | {_rng(r['atm_nearest_heston_over_mid'])} | "
+                 f"{_rng(r['in_band_heston_over_mid'])} | {_rng(r['out_of_band_heston_over_mid'])} |")
+    L += ["", "Scored proxy Heston÷mid by DTE:", "", "| variant | " + " | ".join(str(d) for d in M2_DTES) + " |",
+          "|---|" + "---|" * len(M2_DTES)]
+    for v in ("whole_chain", "scan_filtered"):
+        L.append(f"| {v} | " + " | ".join(_rng(recon[v]["proxy_by_dte"][str(d)]) for d in M2_DTES) + " |")
+    L += ["", "## Limits", "",
+          "- Fits, not cards: no stored card carries the chain, fit or parameters an option needs.",
+          "- T1–T3 use a fixed 10 % / 15 % / 20 % stock move, not each card's own ATR-derived target.",
+          "- Calibration seconds are single-thread on this cloud box (cache cleared each time) and are compared "
+          "relative to D only. Scan abandonment at the 2.0 s guard is driven by GIL queueing under concurrency, so "
+          "these are not abandonment rates.",
+          "- M3: five captures from 3–5 October 2026, seven symbols, near-dated expiries only; parity spot has no "
+          "dividend term.", ""]
+    return "\n".join(L)
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def _write(name: str, obj) -> Path:
@@ -1184,11 +1834,40 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", choices=("m1", "m2", "m3"), action="append",
                     help="run only these measurements (repeatable); default all")
+    ap.add_argument("--options", action="store_true",
+                    help="M4 only (T2): options A-D on M2's and M3's fits -> options.json / options.md")
+    ap.add_argument("--options-render", action="store_true",
+                    help="re-render options.md from the committed options.json (no calibration)")
+    ap.add_argument("--options-limit", type=int, default=None,
+                    help="development only: the first N M2 and N M3 fits (outputs are NOT written)")
     args = ap.parse_args(argv)
     which = args.only or ["m1", "m2", "m3"]
 
     logging.getLogger("app").setLevel(logging.ERROR)
     warnings.simplefilter("ignore")      # scipy IntegrationWarning from the shipped pricer
+
+    if args.options_render:
+        doc = json.loads((OUT_DIR / "options.json").read_text())
+        _write("options.md", options_markdown(doc, doc["recon_2026_09"]))
+        print("M4 markdown re-rendered from options.json")
+        return 0
+
+    if args.options:
+        with forbid_network():
+            prov = provenance()
+            o = run_options(limit=args.options_limit)
+            recon = recon_2026_09()
+            doc = {"provenance": prov, **o, "recon_2026_09": recon}
+            if args.options_limit:
+                out = Path(os.environ.get("TMPDIR", "/tmp")) / "heston_options_dev.json"
+                out.write_text(json.dumps(doc, indent=1, allow_nan=False, default=str) + "\n")
+                print(options_markdown(o, recon))
+                print(f"dev run: {out}")
+            else:
+                _write("options.json", doc)
+                _write("options.md", options_markdown(o, recon))
+                print("M4 written")
+        return 0
 
     with forbid_network():
         _write("provenance.json", provenance())

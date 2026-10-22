@@ -306,3 +306,107 @@ def test_cache_clear_is_called_before_each_calibration(monkeypatch):
     for i, e in enumerate(events):
         if e == "calibrate":
             assert i > 0 and events[i - 1] == "cache_clear"
+
+
+# ── T2 (M4): the script-local `_run_calibration` copy and the option helpers ──
+#
+# Plan section 2, M4 option A: the wider box runs through a SCRIPT-LOCAL copy of
+# `_run_calibration` that takes the grids as arguments; a test pins that copy
+# against the shipped function (same method, rmse and params on the default grid
+# for fixture chains). Also pinned here: the copy's search loop is the shipped
+# loop verbatim, the copy equals the shipped function on the 3-rung full grid,
+# option C's anchored leg reduces to estimate_rr's Heston leg at anchor 1, and
+# every option's calibration clears the shipped lru_cache first.
+
+def _fixture_chains():
+    out = []
+    for dte, width, regime, right in ((45, 15, "atm20_steep", "C"), (365, 15, "atm35_steep", "P"),
+                                      (90, 25, "atm20_mild", "P")):
+        atm, skew = probe.M2_REGIMES[regime]
+        out.append((f"m2/{dte}/{width}/{regime}/{right}",
+                    probe.heston_chain(probe.m2_rows(dte, width, atm, skew, right)), probe.SPOT))
+    cap = probe.load_capture(CAPTURE_1003)
+    rows, _ = probe.replay_chain(cap, "AAPL", "2026-10-30", "C")
+    spot = probe.parity_spot(cap["rows"], "AAPL")["spot"]
+    out.append(("m3/1003/AAPL/2026-10-30/C", probe.heston_chain(rows), spot))
+    rows, _ = probe.replay_chain(cap, "AAPL", "2026-10-09", "C")      # the gate rejects this one (bs_flat)
+    out.append(("m3/1003/AAPL/2026-10-09/C", probe.heston_chain(rows), spot))
+    return out
+
+
+def _shipped(chain, S, full=False, monkeypatch=None):
+    hc._run_calibration.cache_clear()
+    if full:
+        monkeypatch.setattr(hc, "_USE_FULL_GRID", True)
+    try:
+        return probe.heston_mod.calibrate_heston(chain, S, probe.R)
+    finally:
+        if full:
+            monkeypatch.setattr(hc, "_USE_FULL_GRID", False)
+
+
+def test_local_run_calibration_copy_matches_shipped_on_default_and_full_grid(monkeypatch):
+    grids = probe.shipped_grids()
+    methods = set()
+    for name, chain, S in _fixture_chains():
+        want = _shipped(chain, S)
+        got = probe.calibrate_with_grids(chain, S, grids["default"])
+        assert (got.method, got.rmse, got.params) == (want.method, want.rmse, want.params), name
+        methods.add(want.method)
+    assert {"heston_grid", "bs_flat"} <= methods        # both sides of the gate are exercised
+    name, chain, S = _fixture_chains()[0]
+    want = _shipped(chain, S, full=True, monkeypatch=monkeypatch)
+    got = probe.calibrate_with_grids(chain, S, grids["full"])
+    assert (got.method, got.rmse, got.params) == (want.method, want.rmse, want.params)
+    # The wider box actually reaches rungs the shipped grids do not have.
+    assert set(probe.WIDE_GRID["kappa"]) > set(grids["full"]["kappa"])
+
+
+def test_local_copy_search_loop_is_the_shipped_loop_verbatim():
+    def _loop(fn):
+        tree = ast.parse(probe._dedent(probe.inspect.getsource(fn)))
+        return next(ast.unparse(n) for n in ast.walk(tree)
+                    if isinstance(n, ast.For) and isinstance(n.target, ast.Name) and n.target.id == "v0")
+    assert _loop(probe.run_calibration_with_grids) == _loop(hc._run_calibration.__wrapped__)
+
+
+def test_anchored_leg_with_unit_anchor_equals_estimate_rr_heston_leg():
+    from app.models.heston import HestonParams
+    from app.scoring.reward_risk import estimate_rr
+    p = HestonParams(v0=0.06, kappa=0.5, theta=0.08, sigma_v=0.6, rho=-0.8)
+    for is_call, target, ry in ((True, 110.0, 20 / 365), (False, 90.0, None)):
+        res = estimate_rr(stock_price=100.0, target_price=target, invalidation_price=100.0, strike=100.0,
+                          expiry_years=60 / 365, current_premium=4.37, is_call=is_call, r=probe.R,
+                          reprice_years=ry, heston_params=p)
+        leg = probe.anchored_leg(p, target, 100.0, 60 / 365, 4.37, is_call, ry, 1.0)
+        assert res.model_used == "Heston repriced"
+        assert (leg["exit"], leg["rr"]) == (res.estimated_exit_premium, res.rr_ratio)
+        half = probe.anchored_leg(p, target, 100.0, 60 / 365, 4.37, is_call, ry, 0.5)
+        assert half["exit"] < leg["exit"]
+
+
+def test_calibrate_option_clears_cache_before_every_option(monkeypatch):
+    events: list = []
+    real = hc._run_calibration
+
+    class _Spy:
+        __wrapped__ = real.__wrapped__
+
+        def __call__(self, *a, **k):
+            events.append(("calibrate", hc._USE_FULL_GRID))
+            return real(*a, **k)
+
+        def cache_clear(self):
+            events.append("cache_clear")
+            real.cache_clear()
+
+    monkeypatch.setattr(hc, "_run_calibration", _Spy())
+    real_copy = probe.calibrate_with_grids
+    monkeypatch.setattr(probe, "calibrate_with_grids",
+                        lambda *a, **k: (events.append(("copy", a[2] is probe.WIDE_GRID)), real_copy(*a, **k))[1])
+    name, chain, S = _fixture_chains()[0]
+    for which in ("D", "A_i", "A_ii", "D"):
+        probe.calibrate_option(chain, S, which)
+    assert events == ["cache_clear", ("calibrate", False), "cache_clear", ("calibrate", True),
+                      "cache_clear", ("copy", True), "cache_clear", ("calibrate", False)]
+    assert hc._USE_FULL_GRID is False
