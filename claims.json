@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/options-contract-floor-override-cc55c73a",
       "claimed_at": "2026-10-22T08:07:39Z",
-      "expires_at": "2026-10-22T12:16:08Z",
+      "expires_at": "2026-10-22T12:17:21Z",
       "note": "Take #389: Step 3 Options contract underlying-score floor override",
       "task": "OPTIONS-CONTRACT-FLOOR-OVERRIDE"
     },
