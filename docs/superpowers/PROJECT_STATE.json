@@ -8533,17 +8533,45 @@
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
       "status": "planned",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent-3cfb7d8c-ce49-4f98-99fa-d50e8c769183",
+          "reviewed": "docs/superpowers/plans/2026-10-22-app-audit-b-settings-lost-update-plan.md commit fbe77d1a SHA256 26fd92ef1e188259876b7a99f3bd795eed241d2a0f33f27c5b53acceb6c00e21",
+          "gate_findings": 7,
+          "findings": [
+            "F-01: Coarse top-level key merge treats independent subfield edits as conflicts on nested config objects",
+            "F-02: Uninitialized or null lastCommittedSettings on fresh session crashes setItem with unhandled TypeError",
+            "F-03: setState(mergedState, false) in setItem lacks re-entrancy protection, causing recursive setItem invocations",
+            "F-04: Line 40 direct write to localStorage bypasses reportingLocalStorage error tracking",
+            "F-05: Merging independent threshold edits without re-clamping violates rejectBelow <= cautionBelow ordering invariant",
+            "F-06: Asynchronous rehydrate() in syncSettingsFromStorage creates a race condition where stale in-memory state overwrites disk updates",
+            "F-07: Unmigrated lastCommittedSettings on initial read from pre-v24 disk state causes false diff detection"
+          ],
+          "fixes": [
+            "F-01: Implemented leaf-property 3-way merge on nested configuration objects",
+            "F-02: Added getDefaultPersistedSettings() fallback to prevent null dereference",
+            "F-03: Added isMerging re-entrancy guard flag to createSettingsStorage()",
+            "F-04: Explicitly mandated writing through wrapped reportingStorage.setItem to preserve useSettingsSaveStatus tracking",
+            "F-05: Added clampGateThresholds re-clamping for merged confidenceGate and fundamentalsGate",
+            "F-06: Implemented synchronous setState and baseline update in syncSettingsFromStorage",
+            "F-07: Added migrateSettings on read for pre-v24 disk state when establishing baseline"
+          ],
+          "outstanding": [],
+          "clean": false
+        }
+      ],
       "branch": "board/app-audit-b-settings-lost-update-0a62fb27",
       "plan": "docs/superpowers/plans/2026-10-22-app-audit-b-settings-lost-update-plan.md",
       "covers": [
