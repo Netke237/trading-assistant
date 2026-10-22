@@ -393,6 +393,60 @@ async def test_nightly_task_records_nightly_caller(ledger, gov, http):
     assert [r.caller for r in await rows(ledger)] == ["nightly"]
 
 
+# ── R2-F1 (#498): a run-scoped tally of the run's own recorded attempts ───────
+
+@pytest.mark.asyncio
+async def test_run_usage_counts_only_attempts_recorded_in_its_context(ledger, gov, http):
+    started, sibling_done = asyncio.Event(), asyncio.Event()
+
+    async def sibling():                       # same caller, created outside the tally
+        await started.wait()
+        await fetch("TWO")
+        sibling_done.set()
+
+    other = asyncio.create_task(sibling())
+    with budget.run_usage() as usage:
+        await fetch("ONE")
+        await asyncio.create_task(fetch("ONE"))   # a child task created inside: counted
+        started.set()
+        await sibling_done.wait()              # recorded while the tally is open: not counted
+    await other
+    recorded = await rows(ledger)
+    assert [(r.symbol, r.caller) for r in recorded] == [("ONE", "on_demand")] * 2 + [
+        ("TWO", "on_demand")]
+    assert (usage.requests, usage.bytes, usage.unrecorded) == (
+        2, sum(r.response_bytes for r in recorded if r.symbol == "ONE"), False)
+    assert usage.bytes > 0
+
+
+@pytest.mark.asyncio
+async def test_run_usage_does_not_count_a_refused_attempt(ledger, gov, http):
+    with budget.run_usage() as usage:
+        for _ in range(3):
+            await fetch("ONE")
+        with pytest.raises(g.ProviderUnavailable, match="requests_per_hour budget exhausted"):
+            await fetch("ONE")
+    assert len(http.calls) == 3
+    assert (usage.requests, usage.unrecorded) == (3, False)
+
+
+@pytest.mark.asyncio
+async def test_run_usage_flags_an_attempt_the_ledger_could_not_record(gov, http, monkeypatch):
+    class Broken:
+        async def __aenter__(self):
+            raise RuntimeError("database down")
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(budget, "AsyncSessionLocal", Broken)
+    monkeypatch.setattr(budget, "_load_settings", lambda: SMALL)
+    with budget.run_usage() as usage:
+        assert await fetch("ONE")
+    assert len(http.calls) == 1
+    assert (usage.requests, usage.bytes, usage.unrecorded) == (0, 0, True)
+
+
 @pytest.mark.asyncio
 async def test_probe_records_probe_caller_and_reports_exhaustion(ledger, monkeypatch):
     from app.routers import data_sources

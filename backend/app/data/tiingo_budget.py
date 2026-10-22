@@ -65,6 +65,18 @@ DEFAULT_RESERVE = {"requests_per_day": 100, "symbols_per_month": 25,
 _CALLER: contextvars.ContextVar[str] = contextvars.ContextVar("tiingo_caller", default="on_demand")
 
 
+@dataclass
+class RunUsage:
+    """The attempts recorded inside one `run_usage()` block (and the tasks it creates)."""
+    requests: int = 0
+    bytes: int = 0
+    unrecorded: bool = False     # the ledger failed to record at least one attempt
+
+
+_RUN_USAGE: contextvars.ContextVar[RunUsage | None] = contextvars.ContextVar(
+    "tiingo_run_usage", default=None)
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -85,6 +97,22 @@ def caller(name: str):
         yield
     finally:
         _CALLER.reset(token)
+
+
+@contextlib.contextmanager
+def run_usage():
+    """Tally the attempts recorded inside the block, for a run's own counters.
+
+    The tally is one mutable object in a context variable: tasks created inside the block
+    copy the context and add to the same tally; code running in any other task (endpoints,
+    schedulers, other jobs on the same caller) never sees it.
+    """
+    usage = RunUsage()
+    token = _RUN_USAGE.set(usage)
+    try:
+        yield usage
+    finally:
+        _RUN_USAGE.reset(token)
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -227,6 +255,14 @@ async def _record(symbol: str | None, resp, caller_name: str, now: datetime) -> 
             await db.commit()
     except Exception as exc:
         logger.error("tiingo_budget: ledger write failed, request not recorded — %s", exc)
+        usage = _RUN_USAGE.get()
+        if usage is not None:
+            usage.unrecorded = True
+        return
+    usage = _RUN_USAGE.get()
+    if usage is not None:
+        usage.requests += 1
+        usage.bytes += len(resp.content)
 
 
 async def ensure_room(symbol: str | None, caller_name: str | None = None) -> None:
