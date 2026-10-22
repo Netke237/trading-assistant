@@ -507,7 +507,6 @@ def test_short_expiry_low_variance_is_integrated_to_convergence():
 # its `except Exception` returned Black-Scholes at sqrt(v0) with nothing to
 # tell a caller that the number was not a Heston price.
 
-import hashlib
 import types
 
 import app.models.heston as heston_module
@@ -670,19 +669,23 @@ _GOLDEN_PRICES = {
 }
 
 
-def test_ordinary_prices_are_bit_for_bit_unchanged():
+def test_ordinary_prices_are_unchanged():
+    # rel=1e-12, not ==: the values were captured on one machine, and CI's
+    # libm/QUADPACK may differ in the last bit without any price moving. The
+    # floor's smallest real effect is far larger (the shortfalls it lifts are
+    # ~1e-6 relative), so this tolerance still catches any floor change.
     for (spot, K, dte, p, is_call), expected in _GOLDEN_PRICES.items():
         actual = heston_price(spot, K, dte / 365, R, HestonParams(*p), is_call)
-        assert actual == expected, (
+        assert actual == pytest.approx(expected, rel=1e-12, abs=0.0), (
             f"heston_price({spot}, {K}, {dte}/365, {p}, "
             f"{'call' if is_call else 'put'}) moved: {actual!r} != {expected!r}"
         )
 
 
-def _in_band_grid_prices() -> list[float]:
-    """The 648 in-band prices test_no_arbitrage_bounds_hold_across_the_scanner_delta_band
-    walks, in its order."""
-    prices = []
+def _in_band_grid_points() -> list[tuple]:
+    """The 648 in-band (spot, K, T, params, is_call) points
+    test_no_arbitrage_bounds_hold_across_the_scanner_delta_band walks."""
+    points = []
     for v0 in (0.01, 0.09):
         for kappa in (0.5, 3.0):
             for theta in (0.02, 0.08):
@@ -696,20 +699,24 @@ def _in_band_grid_prices() -> list[float]:
                             for K in range(120, 321, 20):
                                 for is_call in (True, False):
                                     if 0.15 <= abs(bs_delta(S, K, T, R, sigma, is_call)) <= 0.90:
-                                        prices.append(heston_price(S, K, T, R, params, is_call))
-    return prices
+                                        points.append((S, K, T, params, is_call))
+    return points
 
 
-# sha256 over float.hex() of each of the 648 prices, one per line, captured on
-# the pre-H-1 pricer. None of them was below forward intrinsic.
-_IN_BAND_GRID_DIGEST = "c98406d5312d1aa06c1ccd58a3c91a450590b33f729d27c4f15a4c591ddf5ca7"
-
-
-def test_in_band_grid_is_bit_for_bit_unchanged():
-    prices = _in_band_grid_prices()
-    assert len(prices) == 648
-    digest = hashlib.sha256("\n".join(p.hex() for p in prices).encode()).hexdigest()
-    assert digest == _IN_BAND_GRID_DIGEST, (
-        "an in-band price moved -- the floor must only ever touch a price "
-        "below forward intrinsic, and none of these was"
-    )
+def test_floor_never_engages_on_the_in_band_grid():
+    # The floor is max(raw, forward intrinsic, 0). A price STRICTLY above its
+    # forward intrinsic (and above 0) is therefore exactly the raw Heston
+    # value, i.e. unchanged by H-1. Checking that property, rather than a
+    # digest of the exact floats, proves the same thing without failing on
+    # a last-bit libm difference between machines.
+    points = _in_band_grid_points()
+    assert len(points) == 648
+    for spot, K, T, params, is_call in points:
+        price = heston_price(spot, K, T, R, params, is_call)
+        disc_k = K * math.exp(-R * T)
+        intrinsic = spot - disc_k if is_call else disc_k - spot
+        assert price > max(intrinsic, 0.0), (
+            f"in-band price at or below forward intrinsic -- the floor engaged: "
+            f"K={K} T={T:.4f} {params} {'call' if is_call else 'put'}: "
+            f"{price!r} vs {intrinsic!r}"
+        )
