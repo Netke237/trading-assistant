@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/heston-rr-overpricing-fd5b379b",
-      "claimed_at": "2026-10-22T21:22:17Z",
-      "expires_at": "2026-10-23T00:23:09Z",
-      "note": "Re-take #335 after expiry during a usage-limit pause (same branch, same session)",
-      "task": "HESTON-RR-OVERPRICING"
-    }
-  ]
+  "claims": []
 }
