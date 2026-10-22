@@ -60,18 +60,28 @@ The original design rationale and tier numbers are in the
 `claude/options-scan-liquidity-profiles` (merged to `main` at `ab705ea7`) —
 this folder holds the *output*, not the design discussion.
 
+## Recalibration of 2026-10-22 (after #121 and #161)
+
+- **Post-#121 Underlying Floor (`min_stock_score: 45`):** Under MEAS Day 2 decision `MEAS-DAY2-ANSWERS-2026-10-11` (issue #121, PR #319), `contract_rules.yaml` lowered the underlying stock score floor from 55 to 45 across both Bullish and Bearish directions. All 18 options profiles inherit this backend default (`contract_rules.yaml` key `min_stock_score`), enabling viable option setups on higher-quality recovering names (e.g., NFLX, TSLA, CSCO) that scored in the 45–54 band.
+- **Post-#161 Liquidity Rules:** Following PR #213 / commit `ab705ea7` and issue #161, `min_volume` is treated as an optional hard floor (0 = off), allowing Intraday/Swing/SemiAnnual Baseline profiles to accept low-volume off-hours contracts provided open interest satisfies `min_open_interest: 200`. Low volume and low OI are scored under the single consolidated `thin_liquidity` soft flag rather than accumulating double penalties.
+- **Schema Version 5 Sync:** `searchProfilesStore` operates on Schema Version 5 (issue #381 / PR #497). The export file (`search-profiles-export.json`) and browser console script (`import-search-profiles.js`) are updated to Schema Version 5:
+  - Explicit string primitives for all 4 universe bounds (`minPriceRaw`, `maxPriceRaw`, `minCapRaw`, `maxCapRaw`) and `customRaw`, with `capUnit: 'B'`.
+  - Complete `confidenceGate` structure containing `atrMult` for `intraday`, `swing`, and `position`.
+  - Strict omission of stocks-mode `strategy` and `strategyParams` fields on options profiles.
+- **Headless Mini PC Measurement Runner:** Added `backend/scripts/run_options_profiles_measurement.py` and `docs/search-profiles/MINI_PC_RUNBOOK.md` to automate live and dry-run profile execution on the mini PC with structured JSON and Markdown reporting.
+
 ## Files
 
 - `Bamendjou_Options_Search_Profiles.xlsx` — human-readable table of all 18
   profiles and their filter values (hard-reject + soft-rank/preferred), with
-  a Legend & Notes tab.
+  a Legend & Notes tab updated for the 2026-10-22 recalibration.
 - `search-profiles-export.json` — the raw `bamendjou:search-profiles`
-  localStorage payload. Originally a real save; the 2026-09-29 corrections
-  were applied to it by script (renamed profiles; each edited profile's
-  `updatedAt` is a 2026-09-29 timestamp, untouched ones keep 2026-09-15), in
-  the same shape the app writes.
+  localStorage payload updated to Schema Version 5. Profile IDs remain strictly
+  stable, and recalibrated profiles carry `updatedAt: "2026-10-22T00:00:00.000Z"`.
 - `import-search-profiles.js` — the same JSON embedded in a paste-into-
   DevTools-console script (see below).
+- `MINI_PC_RUNBOOK.md` — step-by-step instructions for running measurement scans
+  on the mini PC via `backend/scripts/run_options_profiles_measurement.py`.
 
 ## Why this isn't just "available" to another user automatically
 
@@ -127,9 +137,9 @@ Not unconditionally. Two concrete dependencies:
    re-derived and re-saved.
 
 Structurally, the export itself is stable: `searchProfilesStore` is at
-schema `version: 3` with a `migrate()` path, so an older-shaped profile
-loads fine going forward — but that's a statement about today's code, not a
-promise about all future schema changes to that store.
+schema `version: 5` (persisted via `searchProfilesPersistStorage` with strict
+schema validation and a future-version write barrier), so an older-shaped profile
+loads and migrates cleanly going forward.
 
 ## Using one for a scheduled/background scan
 
