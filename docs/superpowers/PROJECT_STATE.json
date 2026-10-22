@@ -7972,12 +7972,13 @@
       "branch": "board/app-audit-presentation-58612753",
       "tracking_issue": 358,
       "plan": "docs/superpowers/plans/2026-10-22-app-audit-presentation-plan.md",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 2,
-        "clean": false
+        "rounds": 3,
+        "clean": false,
+        "closed_by": "cap"
       },
       "verify": {
         "kind": "present",
@@ -8036,9 +8037,27 @@
             "Added not-run disposition; supplemental-key rows not-run unless captured for that exact key"
           ],
           "outstanding": []
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent aa0ff446)",
+          "reviewed": "git diff 6f8327a4..ec58eef6 of the plan (round-2 fixes and interactions); plan sha256 15b11674ad2ecf5e55a5cf900522f4a0ef77a82a5d42f258177fc077046637b1",
+          "gate_findings": 2,
+          "findings": [
+            "R3-1 module-level client/server split mislabels server-rendered instances of client-set modules (ContextRail via server-only FrameLayout: 38 route instances / 342 state rows would be not-triggered; Text/Title on not-found and loading)",
+            "R3-2 native ownership by nearest ancestor fiber assigns children-slot JSX to the wrapper (80 of 751 locatable natives inside TableRow/SectionCard/RailSection/SettingsRow/...), so rendered natives would be not-triggered"
+          ],
+          "fixes": [
+            "UNAUDITED (applied after the cap, plan sha256 89632fb52aebb457b5712a09c92861ee0054feabf6f1c76a962de1e765ce6774): per-render-site classification via server-environment closure with host evidence for server-rendered instances; native authorship from a source JSX-containment map, unresolved children-slot natives observed-asserted, never not-triggered"
+          ],
+          "outstanding": [
+            "R3-1 and R3-2 fixes not independently reviewed: plan stage reached its 3-round cap without a clean round; no fourth round run; needs Kenneth (#358)"
+          ]
         }
       ],
-      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. Plan round 1: 6, round 2: 5 gate findings, all fixed; plan round 3 (last of the plan-stage cap) pending."
+      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. PLAN STAGE AT CAP, NOT CLEAN: rounds 1-3 found 6/5/2 gate findings; round-3 fixes applied but unaudited. Stopped per audit_rule; questions to Kenneth on #358 (needs-kenneth). No tickets cut, no evidence captured."
     }
   ],
   "already_shipped": [
