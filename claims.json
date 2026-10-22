@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "claimed_at": "2026-10-22T13:34:19Z",
-      "expires_at": "2026-10-22T20:22:29Z",
+      "expires_at": "2026-10-22T20:32:38Z",
       "note": "Take #335: measure Heston R/R overpricing on current main, then options for Kenneth",
       "task": "HESTON-RR-OVERPRICING"
     },
