@@ -16,11 +16,12 @@ test('loads only opaque identity and exact candidate symbol, zero trades remains
   expect(api.getOriginalBacktest).toHaveBeenCalledWith(id,'AAA',expect.any(AbortSignal));
   expect(result.current.status).toBe('ready');
 });
-test.each(['prebreakout','fib'] as const)('unsupported %s never fetches forged IDs', async source => {
+test.each(['prebreakout','fib'] as const)('supported %s fetches original artifact', async source => {
+  (api.getOriginalBacktest as jest.Mock).mockResolvedValue(artifact());
   const {result} = renderHook(() => useOriginalBacktest({...context,source}));
   await act(async () => {});
-  expect(result.current).toEqual({status:'unavailable',reason:'unsupported'});
-  expect(api.getOriginalBacktest).not.toHaveBeenCalled();
+  expect(result.current.status).toBe('ready');
+  expect(api.getOriginalBacktest).toHaveBeenCalledWith(id,'AAA',expect.any(AbortSignal));
 });
 test.each([
   {...artifact(),artifact_id:id2}, {...artifact(),identity:{symbol:'BBB'}},
