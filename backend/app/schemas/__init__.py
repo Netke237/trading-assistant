@@ -30,8 +30,11 @@ OptionRight = Literal['C', 'P']
 # Smart-mode union keeps an int an int, and canonical_strike returns an
 # integral value as int, so an integer strike serialises as `185`, never
 # `185.0` (byte-identical to the old `strike: int`), while a fractional strike
-# such as 22.5 is kept exactly (3 dp) instead of being truncated. Non-finite,
-# <= 0 and bool values are refused.
+# such as 22.5 is kept exactly (3 dp) instead of being truncated. Non-finite
+# and <= 0 values are refused. A JSON bool is NOT refused here: pydantic's lax
+# int branch turns True into 1 before canonical_strike runs (as the old
+# `strike: int` did); canonical_strike's own bool check applies only to
+# direct Python calls.
 Strike = Annotated[Union[int, float], AfterValidator(canonical_strike)]
 TrendDir = Literal['up', 'flat', 'down']
 RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)', 'Delta approximation']
