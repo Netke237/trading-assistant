@@ -1,0 +1,36 @@
+{
+  "application_source": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+  "application_unchanged_by_reconciliation": true,
+  "runtime": {
+    "python": "Python 3.11.16",
+    "node": "v24.19.0"
+  },
+  "typecheck": {
+    "command": "npm run typecheck --prefix frontend",
+    "exit_code": 0
+  },
+  "frontend": {
+    "command": "NODE_OPTIONS=--max-old-space-size=4096 npm run test --prefix frontend -- --runInBand",
+    "exit_code": 0,
+    "suites_passed": 319,
+    "tests_passed": 5995,
+    "duration_seconds": 280.118,
+    "log_sha256": "88b17ad5610ff7365c7a84ec7cb8da426e6b2b3852132f4978a88214db64df9a"
+  },
+  "backend": {
+    "command": "PYTHONUNBUFFERED=1 ../backend/.venv/bin/python -m pytest tests/test_options_cap_units.py tests/test_vix_percentile_window.py tests/test_schedule_store_rollback.py tests/test_scan_schedule_recovery.py tests/test_weight_units.py tests/test_entry_quality.py tests/test_scan_schedule.py tests/test_scan_schedule_entry.py -q -o faulthandler_timeout=60",
+    "cwd": "backend",
+    "network_permission_enabled": true,
+    "exit_code": 0,
+    "tests_passed": 132,
+    "duration_seconds": 5.79,
+    "log_sha256": "c511d09c38b02d7683925da4eb7f2e47c5248fd6ec06c878649203b6926fa3c1",
+    "earlier_attempt": {
+      "result": "Interrupted after stall without any test result; SIGTERM exit143. Not a passing run.",
+      "network_permission_enabled": false,
+      "cause": "Not established; retry with diagnostics and network permission passed.",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "limits": "Existing automated regressions and unit suites. No live delivery, provider jobs or broker execution."
+}
