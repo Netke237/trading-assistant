@@ -8376,7 +8376,7 @@
         "board item #351",
         "programme #348 lane C"
       ],
-      "notes": "Independent plan round 1 clean. Execution #376/#378/#379 complete. Independent code round 1 clean. 359 tests passed, 0 failed, typecheck clean. 5 defects cataloged.",
+      "notes": "SELF-MERGE PENDING, PR #507, audited head a46df1fd. Lane C Options scores, contracts, reports and trade-card numbers (#351). Plan round 1 clean, code round 1 clean. 359 tests passed, 0 failed, typecheck clean. 5 defects cataloged.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report.md",
