@@ -1,0 +1,38 @@
+{
+  "audit_phase": "APP-AUDIT-STOCKS",
+  "lane": "D",
+  "target_issue": 352,
+  "head_commit": "2b2cba2c",
+  "python": "Python 3.11.15",
+  "node": "v24.14.0",
+  "frameworks": {
+    "next": "15.5.23",
+    "react": "19.2.5",
+    "zustand": "^5.0.2",
+    "fastapi": "0.110.0",
+    "sqlalchemy": "2.0.28",
+    "alembic": "1.19.1",
+    "pydantic": "2.6.4"
+  },
+  "artifacts": [
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/reconciliation.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/defects.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/README.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/report.md"
+  ],
+  "test_suites": [
+    {
+      "path": "backend/tests/test_audit_stocks_lane_d.py",
+      "runner": "pytest (python 3.11)",
+      "tests_passed": 16,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-stocks/__tests__/auditStocksLaneD.test.tsx",
+      "runner": "jest",
+      "tests_passed": 6,
+      "tests_failed": 0
+    }
+  ],
+  "verification_status": "clean; 0 gate-blocking defects; 2 operational/informational findings cataloged"
+}
