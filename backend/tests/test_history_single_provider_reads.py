@@ -152,3 +152,23 @@ async def test_3b_normal_symbol_falls_through_in_order(world, monkeypatch, state
     await hs.get_bars(SYM, START, D)
     assert world.calls == ["alpaca_client", "alpaca", "tiingo", "yfinance"]
     assert (await stored(world))[D] == "yfinance"
+
+
+@pytest.mark.asyncio
+async def test_4_on_demand_append_leaves_window_anchor_unchanged(world):
+    """HISTORY-INCREMENTAL-NIGHTLY B0: only the nightly writer moves the anchor."""
+    through = date(2026, 5, 29)
+    at = datetime(2026, 5, 30, 1, tzinfo=timezone.utc)
+    async with world.factory() as db:
+        await hs._store_bars(SYM, bars(START, D2, source="tiingo"), db)
+        db.add(State(symbol=SYM, basis_provider="tiingo",
+                     window_verified_through=through, window_verified_at=at))
+        await db.commit()
+    await hs.get_bars(SYM, START, D)
+    assert world.calls == ["tiingo"]
+    rows = await stored(world)
+    assert rows[D1] == "tiingo" and rows[D] == "tiingo"
+    async with world.factory() as db:
+        st = await db.get(State, SYM)
+    assert st.window_verified_through == through
+    assert hs._as_utc(st.window_verified_at) == at

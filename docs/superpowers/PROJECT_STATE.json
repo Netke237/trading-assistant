@@ -6439,9 +6439,9 @@
       "tracking_issue": 413,
       "verify": {
         "kind": "absent",
-        "path": "backend/app/services/history_incremental.py",
-        "pattern": "def classify_nightly_symbol",
-        "note": "PRESENCE ONLY of the nightly classifier. Correctness requires tests and the independent phase audit."
+        "path": "frontend/components/molecules/TiingoBudget/index.tsx",
+        "pattern": "TiingoBudget",
+        "note": "PRESENCE ONLY of the Stage C Settings -> Data molecule (the phase's last stage); absent until Stage C. Stage-level probes: HISTORY-INCREMENTAL-NIGHTLY-A / -B. Correctness requires tests and the per-stage audits."
       },
       "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C.",
       "audit_history": [
@@ -6540,7 +6540,7 @@
       "owner": "agent",
       "name": "Incremental nightly, Stage A: persisted Tiingo usage ledger",
       "summary": "provider_request_log table + migration, tiingo_budget ledger enforcing hourly/daily/31-day-symbols/31-day-bytes limits with nightly reserve under one asyncio lock, recorded per HTTP attempt in tiingo.fetch_historical_candles; status endpoint tiingo_usage. Plan section 4 / section 5 Stage A.",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 1,
       "audit_clean": true,
       "depends_on": [
@@ -6555,7 +6555,7 @@
         "pattern": "__tablename__ = \"provider_request_log\"",
         "note": "PRESENCE ONLY of the ledger table model."
       },
-      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4). Built 2026-10-21: #477 A1 87db4f83, #478 A2 fb0fa49c (both closed after coordinator verification); origin/main merged at 0b5871ef. Code audit pending (#479). Code round 1 CLEAN. Coordinator full suite on 3bce685a: 9487 passed, 11 skipped; failures only the Windows baseline (atomic_yaml x3, credential-permission x3, tzset error, Tradier saturation timing tests -- also failing on origin/main) and the live-quote-flaky test_p6_request_validation (also failing on origin/main).",
+      "notes": "Stage A of the approved HISTORY-INCREMENTAL-NIGHTLY plan (plan stage clean at round 5). Own code-audit target, cap 3 code rounds. Limits: Tiingo free tier (HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21); nightly reserve 100 req/day, 25 symbols/31 d, 100 MB/31 d (HISTORY-INCREMENTAL-DECISIONS-2026-10-19 D4). Built 2026-10-21: #477 A1 87db4f83, #478 A2 fb0fa49c (both closed after coordinator verification); origin/main merged at 0b5871ef. Code audit pending (#479). Code round 1 CLEAN. Coordinator full suite on 3bce685a: 9487 passed, 11 skipped; failures only the Windows baseline (atomic_yaml x3, credential-permission x3, tzset error, Tradier saturation timing tests -- also failing on origin/main) and the live-quote-flaky test_p6_request_validation (also failing on origin/main). MERGED to main 2026-10-21 by Kenneth (PR #484, merge commit 5c41d96a).",
       "audit_history": [
         {
           "round": 1,
@@ -6575,6 +6575,81 @@
             "cancelled send after dispatch not recorded (under-count)",
             "ensure_room vs send_recorded TOCTOU (refusal counts only)",
             "nightly context inherited by tasks created inside the ingestion task (refusals only)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "HISTORY-INCREMENTAL-NIGHTLY-B",
+      "owner": "agent",
+      "name": "Incremental nightly, Stage B: incremental writer",
+      "summary": "Window-anchor state columns (B0), pure nightly classifier T1-T6 + RESCALE/CONFIRM/REVALIDATE (B1), incremental update_history branches + Tiingo-only anchored recent window (B2), two-pass nightly run with Tiingo priority queue and run counters (B3). Plan sections 2 and 5 Stage B.",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [
+        "HISTORY-INCREMENTAL-NIGHTLY",
+        "HISTORY-INCREMENTAL-NIGHTLY-A"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
+      "tracking_issue": 413,
+      "branch": "claude/history-incremental-b-687c68",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/ingestion_job.py",
+        "pattern": "revalidation_skipped_budget",
+        "note": "PRESENCE ONLY of the B3 run counters in the two-pass nightly. Correctness requires tests and the independent stage audit."
+      },
+      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified. B2 #496 8c819eb6 and B3 #497 9560e7f2 committed and coordinator-verified (B2 full suite 9684 passed, baseline only). Built, NOT audited: code audit pending (#498). Code stage: round 1 R1-F1 fixed 084a8283; round 2 R2-F1 fixed 047eae25; round 3 CLEAN (3 of 3 code rounds).",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent af00f53934192f59d (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 5c41d96a 773951a6 -- backend (B0-B3: ohlcv_daily model, migration b7d4e2a9c816, history_incremental, history_backfill, ingestion_job, historical_store, tiingo_budget helper, settings example, tests) against plan sections 2, 4, 5, 8 and tickets #494-#497",
+          "findings": [
+            "R1-F1 (Low) run counters tiingo_requests/tiingo_bytes count only caller='nightly' ledger rows, so a manual POST /api/data/ingest run reports 0 Tiingo requests on the status endpoint (reproduced: 5 made, 0 shown); root cause the #497 coordinator clarification 4"
+          ],
+          "fixes": "fixed at 084a8283: count the run's own caller's ledger rows (superseded by the round-2 fix)",
+          "outstanding": [],
+          "clean": false,
+          "sanity_check": "classifier T1-T6/RESCALE (i)-(iii)/CONFIRM/revalidation/single-provider steps traced against plan; writer transactions, rollback, D1-a fallback, stale_reasons/verified_boundary/get_bars interactions; two-pass queue, deferral, seam rebuild, budget gating, counters; migration chain; 251 focused tests run plus a reproduction for R1-F1",
+          "below_gate_logged": [
+            "single_provider_updated counts SINGLE_PROVIDER_CURRENT skips",
+            "revalidate_no_reply counts suffix_only twice for one symbol",
+            "revalidation ensure_room hard-coded to 'nightly' in manual runs",
+            "Tiingo-only event applied >21 calendar days late keeps old factors before the anchor (plan 2.6 design)"
+          ]
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent ae0074ca6a5e3cbd6 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 63aea464 084a8283 -- backend (the R1-F1 fix) plus interactions: caller ContextVar on every run_ingestion entry path, concurrent on-demand Tiingo traffic, error path, the new test",
+          "findings": [
+            "R2-F1 (Medium) a manual run counts every caller='on_demand' ledger row in its time window, so on-demand get_bars/scan/watch Tiingo requests overlapping a long manual run inflate tiingo_requests/tiingo_bytes on the status endpoint"
+          ],
+          "fixes": "fixed at 047eae25: run-scoped Tiingo tally (tiingo_budget.run_usage ContextVar, incremented by _record after a successful ledger commit, unrecorded flag on a failed write); run_ingestion wraps its work in it; caller_usage removed",
+          "outstanding": [],
+          "clean": false,
+          "sanity_check": "traced _run_nightly/startup_catch_up caller('nightly') -> create_task context copy, router entry in default context, single-run guard, error path, probe caller; ran test_history_nightly_run.py (29 passed)",
+          "below_gate_logged": [
+            "new manual-run test calls run_ingestion directly, not through start_ingestion_task/router"
+          ]
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent ae152114885c978cb (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff -w cbbfb6e8 047eae25 -- backend (the R2-F1 fix) plus interactions: every Tiingo request path (tiingo.fetch_historical_candles, Governor.call inline, httpx in to_thread, send_recorded/_record in the run task), all create_task sites, ledger-outage and 429 paths, re-indent, error branch, changed/deleted tests",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "governor awaits inline (no worker/queue); only httpx.get runs in a thread and _record runs back in the run task; no long-lived task is created from the ingestion path; single-run guard; ledger outage -> unrecorded -> None; 429 retries counted per attempt; -w diff shows only the with-block and _ledger_counters swap; 76 focused tests run",
+          "below_gate_logged": [
+            "session __aexit__ raising after a successful commit flags unrecorded (counters None, not wrong)",
+            "RunUsage docstring mentions child tasks with no current use"
           ]
         }
       ]
@@ -8035,7 +8110,7 @@
       "completion_pct": 85,
       "size": "L",
       "complexity": 5,
-      "note": "SELF-MERGE PENDING, PR #500, audited head21c09e98c0e70fc47661493113038f8ddea781f3. Built/unmerged85%, L/5. Plan/code clean; frontend unchanged after allowed main/state/doc records. Exact-head native CI and final ownership/mergeability/hold checks pending. Main records preserved; no shipped claim.",
+      "note": "SELF-MERGE PENDING, PR #500, audited head21c09e98c0e70fc47661493113038f8ddea781f3. User-authorized #499/#122 merged and integrated throughbf0b3b54 with PROJECT_STATE-only conflict; frontend unchanged. Built/unmerged85%, L/5. Exact new-head CI pending.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -8129,9 +8204,20 @@
         "pr": 500,
         "audited_head": "21c09e98c0e70fc47661493113038f8ddea781f3",
         "implementation_head": "a9c4a33d",
-        "ci": "pending on the new documentation head",
+        "ci": "pending on new head after integrating user-authorized #499/#122 merges",
         "merge": "not attempted; built/unmerged"
-      }
+      },
+      "additional_main_integrations": [
+        {
+          "head": "bf0b3b5400f1aa0e5a695a3d13139f8b893fcf09",
+          "reason": "User explicitly requested merging eligible PRs; verified #499 at70e48af2 and #122 atbf0b3b54 merged.",
+          "conflicts": [
+            "docs/superpowers/PROJECT_STATE.json"
+          ],
+          "frontend_bytes": "unchanged from audited21c09e98",
+          "checks": "TypeScript and4 phase suites/97 tests pass; merged cloud installer preservation tests7/7 pass. Frontend remains identical to audited21c09e98."
+        }
+      ]
     }
   ],
   "already_shipped": [
