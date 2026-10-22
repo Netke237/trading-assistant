@@ -54,6 +54,12 @@ All read-only, no network, no database, Python 3.11, rate `r = 0.05` (what `scan
 
 **M3 — Real chains.** Use the five committed Tradier captures, `backend/scripts/out/tradier_chain_raw/*/rows.json` (2026-10-03 to 05; near-dated expiries only, which the report states).
 - Chain rows come from the **shipped** `market.fetch_option_chain_async`, called with an httpx mock transport that returns the capture's own `raw` Tradier records for that symbol, expiry and right. IBKR/tastytrade/yfinance enrichment is patched to no-ops; they only add IV-rank fields, which calibration does not read. The rows are therefore exactly what the app builds (one-sided `bid = 0` rows included, `ask <= 0` dropped, mid and delta rounded as shipped).
+- **Replay date and caches.** The shipped function computes `dte` from `date.today()` and caches expiry lists per symbol in the module-level `market._expirations_cache`. So for each capture × symbol replay the probe:
+  - patches `market.date` with a `date` subclass whose `today()` returns the capture's ET date, from `meta.capture_et`;
+  - clears `market._expirations_cache` (and any other per-symbol cache the function reads) before the call;
+  - has the mock answer the expirations endpoint with exactly that capture's expiry list for the symbol, and fail loudly (raise, not 404) on any request for an expiry or symbol the capture does not hold.
+
+  Every symbol × expiry × right that comes back with 0 rows, or with fewer than 3 rows after filtering, is **counted and listed** in the output, with the reason. None is silently dropped. The report states per capture how many chains were calibrated.
 - They are then filtered with the same `heston_chain` rule as M2. No "two-sided only" filter is applied; a two-sided-only run, if added, is a separately labelled variant.
 - **Spot** is not in the captures. Per capture × symbol it is taken from put–call parity at the strike nearest the money that has both a two-sided call and a two-sided put on the same expiry: `S = C_mid − P_mid + K·e^{−rT}`. The value and the strike used are recorded. Where no such pair exists, the symbol is skipped and counted. Parity spot has no dividend term, and the report says so.
 - Each symbol × expiry × right with at least 3 rows after filtering is calibrated with shipped code. The same quantities as M2 are recorded (both horizons).
@@ -87,7 +93,7 @@ It records agreement or the exact differences in `recompute.md`. Disagreements a
 
 - **T1** — `backend/scripts/heston_rr_overpricing_probe.py` (M1–M3) and its outputs, with tests in `backend/tests/test_heston_rr_overpricing_probe.py`:
   - the `heston_chain` re-implementation matches `scan.py`'s source block and reads the app's constants;
-  - the M3 mock transport makes the shipped `fetch_option_chain_async` return exactly the capture's rows for a fixture capture (row count, ids, mids);
+  - the M3 replay, run for **two captures in one process** (one of them dated 2026-10-03, one 2026-10-05), makes the shipped `fetch_option_chain_async` return exactly each capture's rows: row count, ids, expiry, mids, and **`dte` equal to each capture row's stored `dte`**;
   - put–call-parity spot on a fixture;
   - M1 input recovery reproduces a fixture non-Heston card's ladder to ±$0.01;
   - `cache_clear` is called before each calibration (a spy).

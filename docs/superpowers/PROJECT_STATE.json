@@ -8746,11 +8746,11 @@
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "tracking_issue": 335,
       "plan": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": false
       },
       "verify": {
@@ -8789,9 +8789,26 @@
             "effect covers headline, ladder T1-T3, alternatives and Step 7 band; picked_method removed"
           ],
           "outstanding": []
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent a263393e)",
+          "reviewed": "git diff 08867341 d5e46b24 of the plan (round-1 fixes and interactions); sha256 8994cda21e04e46d922b260b22b16073482bc8da88f0df5c49baf67cc5593cda",
+          "gate_findings": 2,
+          "findings": [
+            "R2-F1 M3 replay computes dte from date.today(), so captured chains get wrong/zero DTE (half fall to bs_fallback, the rest calibrate at the wrong T)",
+            "R2-F2 market._expirations_cache keyed by symbol and today's date serves capture 1's expiry list to captures 2-5, silently emptying their chains"
+          ],
+          "fixes": [
+            "patch market.date to each capture's ET date; T1 asserts replayed dte equals the capture row's dte",
+            "clear market._expirations_cache per replay; mock answers expirations with the capture's list and raises on unknown requests; zero-row and thin chains counted and listed; T1 replays two captures in one process"
+          ],
+          "outstanding": []
         }
       ],
-      "note": "Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
+      "note": "Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
     }
   ],
   "already_shipped": [
