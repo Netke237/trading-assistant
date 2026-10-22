@@ -8742,7 +8742,7 @@
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
       "status": "built",
-      "audit_rounds": 4,
+      "audit_rounds": 5,
       "audit_clean": true,
       "plan_stage": {
         "rounds": 3,
@@ -8751,10 +8751,10 @@
         "closure_evidence": "Fresh independent subagent dad00795-9934-4a92-8812-6e99fc161443 reviewed commit 5933eae1 SHA256 923e4712ea3ec1ffc64762efec301b93e879ca2f834c1405ca637b1296680ee9; 0 gate findings."
       },
       "code_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "Fresh independent general-purpose subagent (subagent-6e9a6a0b-a5c8-4daa-aa21-a31ccf280491) applying bmad-review-adversarial-general reviewed git diff origin/main..HEAD (98999847, diff SHA256 10f3f819dd56a95aca703f108857f90cfc17410ae388e08451bd5c615b4654c0, 4 files) against plan and Issue #400; 0 gate findings."
+        "closure_evidence": "Fresh independent general-purpose subagent (9935f078-5942-40e9-acce-b6a9228a107f) applying bmad-review-adversarial-general reviewed git diff be3cedcf..b6874f67 against plan and Issue #400; 0 gate findings."
       },
       "audit_history": [
         {
@@ -8822,6 +8822,18 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 5,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "subagent-9935f078-5942-40e9-acce-b6a9228a107f",
+          "reviewed": "git diff be3cedcf..b6874f67 (commit b6874f673ea1bc642d17f0ce36f0befa88f29cd0)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "branch": "board/app-audit-b-settings-lost-update-44082238",
@@ -8830,14 +8842,15 @@
         "board item #400",
         "remediation from #350"
       ],
-      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Code audit round 1 clean (0 gate findings). Self-merge pending.",
+      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Code audit round 2 clean (0 gate findings). Self-merge pending CI.",
       "verify": {
         "kind": "present",
         "path": "frontend/lib/settingsStore.ts",
         "pattern": "syncSettingsFromStorage",
         "note": "Verify presence of syncSettingsFromStorage in settingsStore.ts"
       },
-      "tickets": []
+      "tickets": [],
+      "completion_pct": 98
     }
   ],
   "already_shipped": [
