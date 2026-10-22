@@ -8571,7 +8571,7 @@
       "plan": "docs/superpowers/plans/2026-10-22-setup-backtest-chart-plan.md",
       "branch": "board/setup-backtest-chart-4777cda7",
       "tracking_issue": 391,
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": true,
       "verify": {
         "kind": "present",
@@ -8579,10 +8579,10 @@
         "pattern": "test_setup_backtest_chart",
         "note": "PRESENCE ONLY of setup backtest chart tests (#391)."
       },
-      "completion_pct": 95,
+      "completion_pct": 98,
       "size": "L",
       "complexity": 4,
-      "note": "Plan stage clean after 1 round. Code stage clean after 1 round (continuous round 2). Implementation complete and verified clean; ready for PR.",
+      "note": "SELF-MERGE PENDING, PR #514, audited head 6aa0d66a. Plan stage clean after 1 round. Code stage clean after 2 rounds (continuous round 3). Implementation complete and verified clean; all 3 CI checks passed on exact head.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -8607,13 +8607,22 @@
           "reviewed": "origin/main..HEAD@db257049",
           "gate_findings": 0,
           "findings": []
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "3d9cddb9-7314-4424-a0a5-91a2093e211a",
+          "reviewed": "3ca330ff..HEAD@6aa0d66a",
+          "gate_findings": 0,
+          "findings": []
         }
       ],
       "code_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "Fresh independent subagent b4ebb850-0aeb-49aa-a4da-83654365f30e reviewed diff origin/main..HEAD (db257049); 0 gate findings; report docs/superpowers/audits/SETUP-BACKTEST-CHART/code-r1.md"
+        "closure_evidence": "Fresh independent subagent 3d9cddb9-7314-4424-a0a5-91a2093e211a reviewed diff 3ca330ff..HEAD (539236f2 and 6aa0d66a); 0 gate findings; report docs/superpowers/audits/SETUP-BACKTEST-CHART/code-r2.md"
       }
     }
   ],
