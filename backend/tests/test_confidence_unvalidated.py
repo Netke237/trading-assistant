@@ -87,7 +87,7 @@ def _fake_signal():
 def _fake_bt():
     return MagicMock(passes_gate=True, n_trades=10, win_rate=0.6, total_return_pct=15.0,
                      max_drawdown_pct=5.0, expectancy=1.2, sharpe=1.5, confidence=65,
-                     summary_text="ok")
+                     summary_text="ok", n_time_exits=0)
 
 
 def _run_process_stock(req, *, card_status: str = "PASS"):

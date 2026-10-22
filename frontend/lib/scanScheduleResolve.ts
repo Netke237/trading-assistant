@@ -17,7 +17,8 @@
  * Settings row warns via scheduleRiskIgnored() below.
  */
 import type { SearchProfile } from '@/types/searchProfile';
-import { presetByKey, resolveParamsHorizon } from '@/lib/horizonPresets';
+import { presetByKey, resolveParamsHorizon, tunedParamsHorizon } from '@/lib/horizonPresets';
+import { SCAN_PARAM_DEFAULTS } from '@/lib/scanParamsStore';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { buildOptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
@@ -121,7 +122,9 @@ export function resolveProfileToScanRequest(
     direction: profile.direction,
     horizon: scoringHz,
     strategy: profile.strategy,
-    params: profile.strategyParams,
+    // Saved overrides only (absent = follow the profile), STOCKS-HORIZON-T1 H5.
+    params: { ...SCAN_PARAM_DEFAULTS, ...profile.strategyParams },
+    paramsHorizon: tunedParamsHorizon(profile.horizonPreset, profile.holdMax),
     requireReversal,
     scanOverrides: profile.scanOverrides,
     confidenceGate: profile.scanSettings.confidenceGate,
@@ -130,6 +133,11 @@ export function resolveProfileToScanRequest(
     // The profile's own hold, Custom included, as the options branch (B6).
     holdMinDays: profile.holdMin,
     holdMaxDays: profile.holdMax,
+    minPriceRaw: profile.universe.minPriceRaw,
+    maxPriceRaw: profile.universe.maxPriceRaw,
+    minCapRaw: profile.universe.minCapRaw,
+    maxCapRaw: profile.universe.maxCapRaw,
+    capUnit: profile.universe.capUnit,
   });
 }
 

@@ -142,7 +142,8 @@ describe('P2-24 -- at a $0.01 mid the Premium stop row is read-only', () => {
 describe('code round 1 fixes', () => {
   it('C1-1: the ladder R:R keeps the scan-basis risk when the row shows the live-mid global', () => {
     render(<TradeCard data={card()} liveMid={1.0} />);
-    fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+    const ladder = screen.getByRole('button', { name: /fixed % ladder plan/i });
+    if (ladder.getAttribute('aria-expanded') === 'false') fireEvent.click(ladder);
     // Re-pinned by TRADING-REVIEW-PHASE-C-RR: the risk leg is the full premium
     // at the scan-basis entry. (8.00 - 5.20) / 5.20 = 0.5x; the live mid's
     // 0.60 global stop would print 4.7x, the old 3.12 premium stop 0.9x.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { type ReactNode, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits, pickedFieldsFrom } from '@/lib/cardEdits';
@@ -10,16 +10,18 @@ import type { MethodPick, PickedMethod } from '@/types/domain';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { useRiskStore } from '@/lib/riskStore';
-import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs } from '@/lib/paperTrade';
+import { buildPaperStockPosition, stockCardSnapshotOf, invalidTargetRungs, stockPositionLevels } from '@/lib/paperTrade';
 import { checkMethodPick, MISSING_METHOD_PICK_TITLE, MISSING_METHOD_PICK_MESSAGE } from '@/lib/risk';
 import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { stockEarningsGate, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 import { api } from '@/lib/api';
+import { buildCandidateChartHref } from '@/lib/candidateChart';
 import { useStockExecutionField, useStockExecutionIdentity } from '@/lib/useStockExecutionField';
 import { defaultStockOverlay as defaultOverlay, patchStockOverlay, stockExecutionBlock, useStockOrderOwnershipStore, type StockEditOverlay } from '@/lib/stockExecutionSession';
 import { sendStockSaveFirst } from '@/lib/stockDirectSend';
 import { _horizonEnum } from '@/lib/analysisStore';
-import { winRateTooltip } from '@/lib/statusTooltips';
+import { sanitizeHoldDays } from '@/lib/horizonPresets';
+import { stockStatusTooltip, winRateTooltip } from '@/lib/statusTooltips';
 import type { PositionCardData } from '@/types/stockDomain';
 // The SAME prose the options card's Arithmetic Profit Target section uses.
 // The stocks plan is built from the same compute_final_stop /
@@ -31,6 +33,36 @@ import { StockAutoTradeArm } from '@/components/organisms/StockAutoTradeArm';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import styles from './StockPositionCard.module.css';
+import { StatusBadge } from '@/components/atoms/StatusBadge';
+import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
+import { PositionEvidence } from './PositionEvidence';
+import { InitialStrategyTargets } from './InitialStrategyTargets';
+
+function PositionDisclosure({ active, children }: { active: boolean; children: ReactNode }) {
+  return active ? <details className={styles.autoTrade}><summary>Auto-trade execution</summary>{children}</details> : <>{children}</>;
+}
+
+function PositionGroup({ active, tag = 'div', children, ...props }: { active: boolean; tag?: 'div' | 'section' | 'aside' | 'details'; children: ReactNode; className?: string; id?: string }) {
+  if (!active) return <>{children}</>;
+  const Tag = tag;
+  return <Tag {...props}>{children}</Tag>;
+}
+
+/** Position presentation reorders evidence only; embedded cards retain their order. */
+function MethodEvidenceStack({ position, original, arithmetic, monteCarlo }: {
+  position: boolean; original: ReactNode; arithmetic: ReactNode; monteCarlo: ReactNode;
+}) {
+  return position ? <>
+    <section aria-label="Original ladder evidence" className={styles.workspaceCard}>{original}</section>
+    <section aria-label="Arithmetic evidence">{arithmetic}</section>
+    <section aria-label="Monte Carlo evidence">{monteCarlo}</section>
+  </> : <>{monteCarlo}{arithmetic}</>;
+}
+
+// Backend stock barrier statistics use trading-day medians; half-days can occur.
+function medianTradingDays(days: number | null) {
+  return days != null ? `~${days} trading days` : 'unlikely';
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,6 +116,7 @@ function concentrationFlag(
 }
 
 interface StockPositionCardProps {
+  presentation?: 'embedded' | 'position';
   card: PositionCardData;
   strategyKey: string;
   afterScanArmed?: boolean;
@@ -175,12 +208,15 @@ export function clearedPickMessage(method: PickedMethod | null): string | null {
 }
 
 export function StockPositionCard({
+  presentation = 'embedded',
   card,
   strategyKey,
   afterScanArmed,
   onAfterScanToggle,
 }: StockPositionCardProps) {
   const executionIdentity = useStockExecutionIdentity(card.symbol);
+  const position = presentation === 'position';
+  const [latest, setLatest] = useState<{ identity: string | null; method: 'arithmetic' | 'monte_carlo' } | null>(null);
   const sessionAfterScanArmed = useScanStore(s => !!s.stockAfterScanIntent[card.symbol]);
   const toggleAfterScanIntent = useScanStore(s => s.setStockAfterScanIntent);
   const orderOwnership = useStockOrderOwnershipStore(s => s.bySymbol[card.symbol]);
@@ -246,14 +282,38 @@ export function StockPositionCard({
   const rrAt = (t: number) =>
     riskPerShare > 0 ? Math.abs(t - overlay.entry) / riskPerShare : 0;
 
+  // Match the stop basis accepted by the existing position builder, including
+  // its direction check and cent rounding. Invalid stops have no valid displayed
+  // risk basis; a trade with an invalid stop must not be described as riskless.
+  const roundedExecutionStop = stockPositionLevels(overlay.entry, card.direction as Direction, overlay.stop).stop;
+  const stopDistance = roundedExecutionStop == null ? null : (card.direction === 'Bullish'
+    ? overlay.entry - roundedExecutionStop : roundedExecutionStop - overlay.entry);
+  const executionStop = roundedExecutionStop != null && roundedExecutionStop > 0
+    && stopDistance != null && Number.isFinite(stopDistance) && stopDistance > 0 ? roundedExecutionStop : null;
+  const executionRiskPerShare = executionStop == null ? null : stopDistance;
+  const enteredSharesValid = Number.isFinite(overlay.shares) && overlay.shares >= 0;
+  const positionValue = Number.isFinite(overlay.entry) && overlay.entry > 0 && enteredSharesValid
+    ? overlay.entry * overlay.shares : null;
+  const executionRiskDollars = executionRiskPerShare != null && enteredSharesValid
+    ? executionRiskPerShare * overlay.shares : null;
+  const executionMoney = (value: number | null) => value != null && Number.isFinite(value)
+    ? `$${value.toFixed(2)}` : 'Unavailable';
+
   // Store selectors
   // Display label like "Swing (5–15d)"; _horizonEnum maps it to the backend enum.
   const scanHorizonLabel = useScanStore((s) => s.context?.horizon ?? null);
+  const recordedRequest = useScanStore((s) => s.stockScanRequest);
   // STOCKS-HORIZON-P0B B7: earnings inside the scan's veto window
   // max(reject_days, hold), aged by the scan's age. Unknown never blocks.
   const scanTimestamp = useScanStore((s) => s.stockScanResult?.timestamp);
   const scanVetoDays  = useScanStore((s) => s.stockScanResult?.veto_days);
   const earningsVeto  = stockEarningsGate(card, scanTimestamp, scanVetoDays).veto;
+  // STOCKS-HORIZON-T1 H6: the scan's hold, written on the position so a stock
+  // raises TIME_STOP once held that long. No scan context -> no hold.
+  const scanContext  = useScanStore((s) => s.context);
+  const holdMaxDays  = scanContext
+    ? sanitizeHoldDays(scanContext.holdMin, scanContext.holdMax).hold_max_days
+    : null;
   const stockBasket  = useScanStore((s) => s.stockBasket);
   const addToBasket  = useScanStore((s) => s.addToStockBasket);
   const removeBasket = useScanStore((s) => s.removeFromStockBasket);
@@ -416,6 +476,30 @@ export function StockPositionCard({
           && row.rowOptionPrice === methodPick.rowOptionPrice)));
   const pickMissing = !checkMethodPick(methodPick) || pickedMethodGone;
 
+  // Picks persist a price pair, not a row key. Duplicate prices cannot identify
+  // which row supplied its statistics; never borrow the first matching result.
+  const selectedMatches = !pickedMethodGone && methodPick && pickedOption
+    ? pickedOption.rows.filter(row => row.rowStockPrice === methodPick.rowStockPrice
+      && row.rowOptionPrice === methodPick.rowOptionPrice) : [];
+  const selectedRow = selectedMatches.length === 1 ? selectedMatches[0] : null;
+  const selectedTarget = !pickedMethodGone ? methodPick?.rowStockPrice ?? null : null;
+  const arithmeticMatches = selectedRow && methodPick?.method === 'arithmetic'
+    ? (plan?.targets ?? []).filter(row => `arith-${row.rrRatio}` === selectedRow.key && row.price === selectedTarget) : [];
+  const arithmeticTarget = arithmeticMatches.length === 1 ? arithmeticMatches[0] : null;
+  const mcTarget = selectedRow && methodPick?.method === 'monte_carlo'
+    ? estimate?.targets.find((row, index) => `mc-${index}` === selectedRow.key && row.price === selectedTarget) ?? null : null;
+  const selectedEvidence = arithmeticTarget ?? mcTarget;
+  const selectedWindow = arithmeticTarget ? plan?.horizonDays : mcTarget ? estimate?.horizonDays : null;
+  const selectedMove = selectedTarget != null && Number.isFinite(overlay.entry) && overlay.entry > 0
+    && (card.direction === 'Bullish' || card.direction === 'Bearish')
+    ? (card.direction === 'Bullish' ? selectedTarget - overlay.entry : overlay.entry - selectedTarget) : null;
+  const selectedReward = methodPick?.method === 'arithmetic'
+    ? arithmeticTarget && selectedMove != null ? Math.sign(selectedMove) * arithmeticTarget.rewardPerShare : null
+    : selectedMove;
+  const selectedOutcome = selectedReward != null && enteredSharesValid ? selectedReward * overlay.shares : null;
+  const selectedCalculationStop = methodPick?.method === 'arithmetic' && !pickedMethodGone ? plan?.stop.price ?? null : executionStop;
+
+
   const applyMethodPickRef = useRef(applyMethodPick);
   useEffect(() => { applyMethodPickRef.current = applyMethodPick; }, [applyMethodPick]);
   // Keep the unavailable-method explanation with this execution identity.
@@ -521,6 +605,7 @@ export function StockPositionCard({
           // Phase G (piece 5) — `methodPick` is this card's own local pick
           // state (synced from stocksCardEdits.picks).
           ...pickedFieldsFrom(methodPick),
+          holdMaxDays,
         },
         broker: execMode,
         orderType,
@@ -583,6 +668,7 @@ export function StockPositionCard({
       }, ctrl.signal);
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimate(res);
+      setLatest({ identity: executionIdentity, method: 'monte_carlo' });
     } catch (e) {
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setEstimateErr(String(e));
@@ -624,6 +710,7 @@ export function StockPositionCard({
       }, ctrl.signal);
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlan(res);
+      setLatest({ identity: executionIdentity, method: 'arithmetic' });
     } catch (e) {
       if (ctrl.signal.aborted || !dependencyCurrent()) return;
       setPlanErr(String(e));
@@ -732,6 +819,7 @@ export function StockPositionCard({
         ),
         // Phase G (piece 5) — same confirmed send-path gap as submit() above.
         ...pickedFieldsFrom(methodPick),
+        holdMaxDays,
       };
       const ownership = useStockOrderOwnershipStore.getState();
       if (!ownership.claim(card.symbol, { identity: executionIdentity, recId: position.recId, status: 'in-flight' })) return;
@@ -778,25 +866,89 @@ export function StockPositionCard({
   const bearishUnvalidated = isBearishUnvalidated(card.direction);
 
   return (
-    <div className={styles.wrap} key={executionIdentity ?? card.symbol}>
+    <div className={position ? styles.workspace : styles.wrap} key={executionIdentity ?? card.symbol}>
+      {position && <>
+        <header data-presentation="stocks-v2" className={styles.identity} aria-label="Stock context">
+          <div><Data size={24}>{card.symbol}</Data><Text size={14} weight={600}>{card.company}</Text><Text size={11} tone="secondary">{card.direction} · {card.strategy.strategy.replace(/_/g, ' ')}</Text></div>
+          <div className={styles.identityBadges}><ConfidenceBadge confidence={card.confidence} title={card.confidence_text ?? undefined} /><StatusBadge status={card.stock_status} tooltip={stockStatusTooltip(card.stock_status, card.stock_score)} /></div>
+          <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
+          <Text size={12} tone="secondary">Scan price: {Number.isFinite(card.price) ? `$${card.price.toFixed(2)}` : 'Unavailable'}</Text>
+          <Text size={12} tone="secondary">Stock score: {Number.isFinite(card.stock_score) ? `${card.stock_score} / 100` : 'Unavailable'}</Text>
+          <Text size={12} tone="secondary">{recordedRequest?.horizon
+            ? `Recorded horizon: ${recordedRequest.horizon}${recordedRequest.hold_max_days != null ? ` · hold ${recordedRequest.hold_max_days} days` : ''}`
+            : 'Recorded horizon unavailable'}</Text>
+          <div className={styles.actionRow}>        <a
+          href={buildCandidateChartHref(card, 'stocks')}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.actionBtn}
+        >
+          <Text size={12}>View Chart</Text>
+        </a>
+        <button
+          type="button"
+          className={styles.actionBtn}
+          onClick={() => (pinned ? removeBasket(card.symbol) : addToBasket(card))}
+        >
+          <Text size={12}>{pinned ? 'Unpin from Basket' : 'Pin to Basket'}</Text>
+        </button>
+</div>
+        </header>
+        <section id="market-sentiment"><MarketSentiment s={card.sentiment} compact /></section>
+        <nav aria-label="Position sections" className={styles.sectionLinks}>
+          <a href="#initial-targets">Initial strategy targets</a><a href="#order-exits">Order &amp; exits</a><a href="#calculations">Calculations</a><a href="#qualification">Qualification</a><a href="#decision">Your decision</a><a href="#race">Which comes first</a><a href="#market-sentiment">Market sentiment</a><a href="#fundamentals">Fundamentals</a>
+        </nav>
+        <details className={styles.help}><summary>How this page works</summary><Text size={12}>Review the order and evidence, calculate a second opinion, then pick an exit method. Saving and sending use your existing edited order. Risk limits require server validation.</Text></details>
+      </>}
+      <PositionGroup active={position} className={styles.workspaceNotes}>
       <Text size={12} tone="caution">{bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : stockExecutionBlock()}</Text>
       {earningsVeto && <Text size={12} tone="reject">{EARNINGS_VETO_MESSAGE}</Text>}
-      <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>
+      {!position && <Text size={12} tone="secondary">Now: {fetchingSpot ? 'Loading…' : spotPrice != null ? `$${spotPrice.toFixed(2)}` : '—'}</Text>}
 
       {orderOwnership && !added && !queued && !warning && <Text size={12} tone="caution">{orderOwnership.message ?? `${card.symbol}: stock send in flight — do not resend.`}</Text>}
+      </PositionGroup>
+      {position && <section id="fundamentals"><FundamentalHealthCard f={card.fundamentals} compact /></section>}
+      {position && <InitialStrategyTargets card={card} shares={overlay.shares} />}
+      {position && <section className={styles.latest} aria-label="Latest calculation">
+        <Text size={11} tone="dim">Latest calculation</Text>
+        {!latest || latest.identity !== executionIdentity ? <Text size={12}>Calculation chronology unavailable</Text>
+          : !(latest.method === 'arithmetic' ? plan : estimate) ? <Text size={12}>Latest result unavailable — recalculate</Text>
+          : <><Text size={12}>Latest: {latest.method === 'arithmetic' ? 'Arithmetic' : 'Monte Carlo'}</Text>
+            {latest.method === 'arithmetic' && plan && <Data size={12}>Stop {plan.stop.price.toFixed(2)} · risk/share {plan.stop.riskPerShare.toFixed(2)} · {plan.horizonDays} trading days</Data>}
+            {latest.method === 'monte_carlo' && estimate && <Data size={12}>Stop {overlay.stop.toFixed(2)} · {(estimate.invalidation.probability * 100).toFixed(0)}% · {estimate.horizonDays} trading days</Data>}
+            {(latest.method === 'arithmetic' ? plan?.targets : estimate?.targets)?.map((t, i) => <Data key={i} size={12}>T{i + 1} {t.price.toFixed(2)} · {(t.probability * 100).toFixed(0)}%{t.expectedDays != null ? ` · ${medianTradingDays(t.expectedDays)}` : ' · unlikely'}</Data>)}</>}
+      </section>}
+      <PositionGroup active={position} className={styles.workspaceColumns}>
+      <PositionGroup active={position} className={styles.workspaceMain}>
+      <PositionGroup active={position} tag="section" id="order-exits" className={styles.workspaceCard}>
+      {position && <h3>Order &amp; exits</h3>}
       {/* Section 1 — Sizing grid, Row 1 */}
       <div className={styles.grid4}>
         <EditableField label="ENTRY"    value={overlay.entry} onChange={(v) => patch({ entry: v })} />
         <EditableField label="STOP"     value={overlay.stop}  onChange={(v) => patch({ stop: v })}  tone="reject" />
-        <EditableField label="T1 TARGET" value={overlay.t1}  onChange={(v) => patch({ t1: v })}    tone="pass" />
+        {position ? <EditableField label="SHARES" value={overlay.shares}
+          onChange={(v) => patch({ shares: Math.max(1, Math.round(v)) })} integer />
+          : <EditableField label="T1 TARGET" value={overlay.t1} onChange={(v) => patch({ t1: v })} tone="pass" />}
         <div className={styles.editCell}>
-          <Text size={10} tone="dim">R:R AT T1</Text>
-          <Data size={14} weight={500}>{rrT1.toFixed(1)}×</Data>
+          {position ? <><Text size={10} tone="dim">WIN %</Text>
+            <Data size={14} weight={500} tone={winTone} title={winRateTooltip(card.backtest.win_rate, 0.5)}>
+              {(card.backtest.win_rate * 100).toFixed(0)}%
+            </Data></> : <><Text size={10} tone="dim">R:R AT T1</Text>
+            <Data size={14} weight={500}>{rrT1.toFixed(1)}×</Data></>}
         </div>
       </div>
 
-      {/* Section 1 — Sizing grid, Row 2 */}
-      <div className={styles.grid4}>
+      {position && <section aria-label="Execution risk" className={styles.executionRisk}>
+        <div className={styles.riskGrid}>
+          <div><Text size={11} tone="dim">Position value</Text><Data size={14}>{executionMoney(positionValue)}</Data></div>
+          <div><Text size={11} tone="dim">Execution risk / share</Text><Data size={14} tone="reject">{executionMoney(executionRiskPerShare)}</Data></div>
+          <div><Text size={11} tone="dim">Execution risk / position</Text><Data size={14} tone="reject">{executionMoney(executionRiskDollars)}</Data></div>
+        </div>
+        <Text size={11} tone="secondary">Entered {overlay.shares} shares · current {card.direction.toLowerCase()} entry and execution stop · before costs</Text>
+        {executionStop == null && <Text size={12} tone="reject">Execution stop invalid — use a positive stop {card.direction === 'Bullish' ? 'below' : 'above'} the entered entry.</Text>}
+      </section>}
+      {/* Section 1 — Sizing grid, Row 2 (embedded presentation) */}
+      {!position && <div className={styles.grid4}>
         <EditableField
           label="SHARES"
           value={overlay.shares}
@@ -817,9 +969,11 @@ export function StockPositionCard({
             {(card.backtest.win_rate * 100).toFixed(0)}%
           </Data>
         </div>
-      </div>
+      </div>}
 
       {/* Section 2 — Sell-to-Close plan (T1 / T2 / T3) */}
+      <PositionGroup active={position} tag="details" className={styles.exitEditors}>
+      {position && <summary>Edit T1 / T2 / T3 and share allocations</summary>}
       <div className={styles.targetsSection}>
         <div className={styles.targetsHeading}>
           <Text size={11} tone="dim">SELL-TO-CLOSE PLAN</Text>
@@ -856,6 +1010,12 @@ export function StockPositionCard({
                 ? (price - overlay.entry) / overlay.entry
                 : (overlay.entry - price) / overlay.entry) * 100
             : 0;
+          const targetInputValid = Number.isFinite(price) && price > 0
+            && Number.isFinite(overlay.entry) && overlay.entry > 0;
+          const executionRR = executionRiskPerShare != null && targetInputValid
+            ? (card.direction === 'Bullish' ? price - overlay.entry : overlay.entry - price) / executionRiskPerShare : null;
+          const displayedRR = position ? executionRR : rr;
+          const rrAvailable = !position || (displayedRR != null && Number.isFinite(displayedRR));
           const retPct = profitPct.toFixed(1);
           return (
             <div key={id} className={styles.targetRow}>
@@ -863,15 +1023,15 @@ export function StockPositionCard({
                 <Text size={12} weight={500}>{id}</Text>
               </div>
               <div className={styles.targetValues}>
-                <EditableField label="" value={price} onChange={onPrice} />
-                <Data size={12} tone={rr >= 1.5 ? 'pass' : rr >= 1 ? 'caution' : 'reject'}>
-                  {rr.toFixed(1)}×
+                <EditableField label={position ? `${id} TARGET` : ''} value={price} onChange={onPrice} />
+                <Data size={12} tone={!rrAvailable ? 'dim' : displayedRR! >= 1.5 ? 'pass' : displayedRR! >= 1 ? 'caution' : 'reject'}>
+                  {rrAvailable ? `${displayedRR!.toFixed(1)}×` : 'Unavailable'}
                 </Data>
-                <Data size={12} tone={profitPct > 0 ? 'pass' : 'reject'}>
-                  {retPct}%
+                <Data size={12} tone={position && !targetInputValid ? 'dim' : profitPct > 0 ? 'pass' : 'reject'}>
+                  {position && !targetInputValid ? 'Unavailable' : `${retPct}%`}
                 </Data>
                 <EditableField
-                  label=""
+                  label={position ? `${id} SHARES` : ''}
                   value={sh}
                   onChange={(v) => onShares(Math.max(0, Math.round(v)))}
                   integer
@@ -882,12 +1042,112 @@ export function StockPositionCard({
         })}
       </div>
 
+      </PositionGroup>
+      {position && err?.includes('wrong side of entry') && <Text size={12} tone="reject">{err}</Text>}
+      {position && <section id="structure-stops" aria-label="Structure & Stops" className={styles.targetsSection}>
+        <h3>Structure &amp; Stops</h3>
+        <div className={styles.stopComparison}>
+          <section aria-label="Entered execution stop" className={styles.stopBasis}>
+            <Text size={12}>Entered execution stop</Text>
+            <div><Text size={11} tone="dim">Stop price</Text><Data size={14}>{executionMoney(executionStop)}</Data></div>
+            <div><Text size={11} tone="dim">Risk / share</Text><Data size={14} tone="reject">{executionMoney(executionRiskPerShare)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for entered {overlay.shares} shares</Text><Data size={14} tone="reject">{executionMoney(executionRiskDollars)}</Data></div>
+            <Text size={11} tone="secondary">Current entered entry and execution stop · before costs</Text>
+            {executionStop == null && <Text size={11} tone="reject">Execution stop invalid — use a positive stop {card.direction === 'Bullish' ? 'below' : 'above'} the entered entry.</Text>}
+          </section>
+          {plan ? <section aria-label="Arithmetic final stop" className={styles.stopBasis}>
+            <Text size={12}>Arithmetic final stop</Text>
+            <div><Text size={11} tone="dim">Stop price</Text><Data size={14}>{executionMoney(plan.stop.price)}</Data></div>
+            <div><Text size={11} tone="dim">Risk / share</Text><Data size={14} tone="reject">{executionMoney(plan.stop.riskPerShare)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for entered {overlay.shares} shares</Text><Data size={14} tone="reject">{executionMoney(enteredSharesValid ? plan.stop.riskPerShare * overlay.shares : null)}</Data></div>
+            <div><Text size={11} tone="dim">Loss for suggested {plan.recommendedShares != null ? `${plan.recommendedShares} ` : ''}shares</Text><Data size={14} tone="reject">{executionMoney(plan.recommendedShares != null && Number.isFinite(plan.recommendedShares) && plan.recommendedShares >= 0 ? plan.stop.riskPerShare * plan.recommendedShares : null)}</Data></div>
+            <Text size={11} tone="secondary">Returned Arithmetic stop and risk / share · before costs</Text>
+            <div><Text size={11} tone="dim">Final stop source</Text><Text size={11}>{plan.stop.source}</Text></div>
+            <div><Text size={11} tone="dim">Structural candidate</Text><Data size={12}>{executionMoney(plan.stop.structuralPrice)}</Data><Text size={11}>{plan.stop.structuralSource ?? 'Unavailable'}</Text></div>
+            <div><Text size={11} tone="dim">Structural confidence</Text><Data size={12}>{plan.stop.structuralConfidence ?? 'Unavailable'}</Data></div>
+            <div><Text size={11} tone="dim">ATR(14)</Text><Data size={12}>{executionMoney(plan.atr)}</Data></div>
+            <div><Text size={11} tone="dim">ATR floor</Text><Data size={12}>{executionMoney(plan.stop.atrFloorPrice)}</Data></div>
+            <div><Text size={11} tone="dim">Candidate / floor distance</Text><Data size={12}>{executionMoney(plan.stop.distanceDollar)}</Data></div>
+            <Text size={11} tone="secondary">{stopJustification(plan.stop)}</Text>
+          </section> : <div className={styles.stopBasis}>
+            <Text size={12}>Arithmetic final stop</Text>
+            <Text size={11} tone="secondary">{planning ? 'Computing Arithmetic final stop…' : 'Not computed or stale — run Arithmetic plan for the current inputs.'}</Text>
+          </div>}
+        </div>
+        {planErr && <Text size={11} tone="reject">Arithmetic calculation failed: {planErr}</Text>}
+        <Text size={11} tone="secondary">Checking structure, computing or selecting Arithmetic does not change the entered execution stop. The structural candidate is a reference; only the returned Arithmetic final stop defines that plan&apos;s risk.</Text>
+        <Text size={11} tone="dim">{checkingStructure ? 'Checking current structure…' : !structural && !structuralErr ? 'Structural check not computed or stale — check the current entry.' : 'Structural check result'}</Text>          <button
+            type="button"
+            className={styles.actionBtn}
+            onClick={onCheckStructure}
+            disabled={checkingStructure}
+          >
+            <Text size={12}>{checkingStructure ? 'Checking…' : 'Check structure'}</Text>
+          </button>        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
+
+        {structural && (
+          <div className={styles.estimateBlock}>
+            <div className={styles.estimateRow}>
+              <Text size={11} tone="dim">STRUCTURAL</Text>
+              <Data size={12}>{structural.price.toFixed(2)}</Data>
+              {structural.distancePct != null && (
+                // Same "(N% away)" format the options TradeCard already shows next
+                // to its own structural-stop price — distancePct was captured here
+                // but had never actually been rendered.
+                <Text size={11} tone="dim">({structural.distancePct.toFixed(1)}% away)</Text>
+              )}
+              <Text size={11} tone="dim">{structural.source ?? '—'}</Text>
+              <Text size={11} tone="dim">Confidence: {structural.confidence ?? 'Unavailable'}</Text>
+              <Data size={12} tone="dim">
+                {/* Guarded: a structural level that lands exactly on entry would
+                    otherwise divide by zero and render Infinity. */}
+                {Math.abs(overlay.entry - structural.price) > 0
+                  ? `${(Math.abs(overlay.t1 - overlay.entry) / Math.abs(overlay.entry - structural.price)).toFixed(1)}× R:R`
+                  : '—'}
+              </Data>
+            </div>
+            <Text size={11} tone="dim">
+              Reference level only — the risk basis stays your STOP. Saved with the
+              position so STRUCTURAL STOP BREACHED can fire.
+            </Text>
+          </div>
+        )}</section>}
+      </PositionGroup>
+      <PositionGroup active={position} tag="section" id="calculations" className={styles.workspaceMain}>
+      {position && <h3>Calculations</h3>}
+      <MethodEvidenceStack position={position} original={<>
+        <h4>Original ladder</h4>
+        <Text size={12} tone="secondary">Source: editable execution targets · entry {executionMoney(overlay.entry)} · execution stop {executionMoney(executionStop)}</Text>
+        <div className={styles.initialTableWrap}><table className={styles.initialTable}>
+          <thead><tr>{['Target', 'Stock price', `Full exit / ${overlay.shares} entered shares`, 'Allocated shares', 'Allocated outcome', 'Reward / share', 'R:R'].map(label => <th key={label} scope="col"><Text size={11} tone="dim">{label}</Text></th>)}</tr></thead>
+          <tbody>{[
+            { label: 'T1', price: overlay.t1, shares: overlay.sharesT1 },
+            { label: 'T2', price: overlay.t2, shares: overlay.sharesT2 },
+            { label: 'T3', price: overlay.t3, shares: overlay.sharesT3 },
+          ].map(t => {
+            const reward = Number.isFinite(overlay.entry) && overlay.entry > 0 && Number.isFinite(t.price) && t.price > 0
+              ? (card.direction === 'Bullish' ? t.price - overlay.entry : overlay.entry - t.price) : null;
+            const rr = reward != null && executionRiskPerShare != null ? reward / executionRiskPerShare : null;
+            return <tr key={t.label}>
+              <th scope="row"><Text size={12}>{t.label}</Text></th>
+              <td><Data size={14}>{executionMoney(t.price)}</Data></td>
+              <td><Data size={14}>{executionMoney(reward != null && enteredSharesValid ? reward * overlay.shares : null)}</Data></td>
+              <td><Data size={12}>{Number.isFinite(t.shares) && t.shares >= 0 ? t.shares : 'Unavailable'}</Data></td>
+              <td><Data size={12}>{executionMoney(reward != null && Number.isFinite(t.shares) && t.shares >= 0 ? reward * t.shares : null)}</Data></td>
+              <td><Data size={12}>{executionMoney(reward)}</Data></td>
+              <td><Data size={12}>{rr != null && Number.isFinite(rr) ? `${rr.toFixed(2)}×` : 'Unavailable'}</Data></td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+        <Text size={11} tone="secondary">Each row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.</Text>
+        <Text size={11} tone="dim">Original selects the editable ladder; the initial scanned strategy targets above remain separate.</Text>
+      </>} monteCarlo={<>
       {/* Section 2b — On-demand analytics: first-passage estimate + structural stop.
           Both are explicit user actions, never fired by the scan — the Monte
           Carlo is CPU work and the structural lookup is a candle fetch. */}
-      <div className={styles.targetsSection}>
+      <div className={position ? styles.workspaceCard : styles.targetsSection}>
         <div className={styles.targetsHeading}>
-          <Text size={11} tone="dim">PROBABILITY &amp; STRUCTURE</Text>
+          <>{position ? <h4>Monte Carlo stock estimate</h4> : <Text size={11} tone="dim">PROBABILITY &amp; STRUCTURE</Text>}</>
         </div>
 
         <div className={styles.actionRow}>
@@ -899,16 +1159,18 @@ export function StockPositionCard({
           >
             <Text size={12}>{estimating ? 'Estimating…' : 'Estimate'}</Text>
           </button>
-          <button
+          {!position && <>          <button
             type="button"
             className={styles.actionBtn}
             onClick={onCheckStructure}
             disabled={checkingStructure}
           >
             <Text size={12}>{checkingStructure ? 'Checking…' : 'Check structure'}</Text>
-          </button>
+          </button></>}
         </div>
 
+        {position && <Text size={12} tone="secondary">GBM stock simulation · editable execution entry / stop / targets. Execution entry {executionMoney(overlay.entry)} · stop {executionMoney(executionStop)}</Text>}
+        {position && !estimate && <Text size={11} tone="dim">{estimating ? 'Estimating current inputs…' : 'Not computed or stale — run Estimate for the current inputs.'}</Text>}
         {estimateErr && <Text size={11} tone="reject">{estimateErr}</Text>}
 
         {estimate && (
@@ -919,15 +1181,17 @@ export function StockPositionCard({
             <Text size={11} tone="dim">
               Chance of reaching each target within {estimate.horizonDays} trading days
             </Text>
+            {position && <Text size={11} tone="secondary">Independent reach probabilities; the same path can also hit the stop. Conditional median time among paths that reach each barrier, regardless of which barrier is hit first. Full-exit outcomes for {overlay.shares} entered shares, before costs.</Text>}
             {estimate.targets.map((t, i) => (
-              <div key={`fp-${i}`} className={styles.estimateRow}>
+              <div key={`fp-${i}`} className={position ? styles.methodTargetRow : styles.estimateRow}>
                 <Text size={11} tone="dim">T{i + 1}</Text>
                 <Data size={12}>{t.price.toFixed(2)}</Data>
+                {position && <div><Text size={10} tone="dim">Full exit / {overlay.shares} shares</Text><Data size={14}>{executionMoney(enteredSharesValid && Number.isFinite(overlay.entry) && overlay.entry > 0 ? (card.direction === 'Bullish' ? t.price - overlay.entry : overlay.entry - t.price) * overlay.shares : null)}</Data></div>}
                 <Data size={12} tone={t.probability >= 0.5 ? 'pass' : t.probability >= 0.25 ? 'caution' : 'reject'}>
                   {(t.probability * 100).toFixed(0)}%
                 </Data>
                 <Data size={12} tone="dim">
-                  {t.expectedDays != null ? `~${t.expectedDays.toFixed(0)}d` : 'unlikely'}
+                  {position ? medianTradingDays(t.expectedDays) : t.expectedDays != null ? `~${t.expectedDays.toFixed(0)}d` : 'unlikely'}
                 </Data>
               </div>
             ))}
@@ -938,7 +1202,7 @@ export function StockPositionCard({
                 {(estimate.invalidation.probability * 100).toFixed(0)}%
               </Data>
               <Data size={12} tone="dim">
-                {estimate.invalidation.expectedDays != null
+                {position ? medianTradingDays(estimate.invalidation.expectedDays) : estimate.invalidation.expectedDays != null
                   ? `~${estimate.invalidation.expectedDays.toFixed(0)}d`
                   : 'unlikely'}
               </Data>
@@ -949,7 +1213,7 @@ export function StockPositionCard({
           </div>
         )}
 
-        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
+        {!position && <>        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
 
         {structural && (
           <div className={styles.estimateBlock}>
@@ -976,9 +1240,9 @@ export function StockPositionCard({
               position so STRUCTURAL STOP BREACHED can fire.
             </Text>
           </div>
-        )}
+        )}</>}
       </div>
-
+      </>} arithmetic={<>
       {/* Section 2c — ARITHMETIC PROFIT TARGET (piece 6, the stocks arithmetic
           plan). The options card's section with every option row removed:
           no contract price, no pricing model, no IV, no delta, no premium stop
@@ -990,9 +1254,9 @@ export function StockPositionCard({
 
           Click-gated like the two fetches above, and for the same reason: a
           candle fetch plus a Monte Carlo is not scan work. */}
-      <div className={styles.targetsSection}>
+      <div className={position ? styles.workspaceCard : styles.targetsSection}>
         <div className={styles.targetsHeading}>
-          <Text size={11} tone="dim">ARITHMETIC PROFIT TARGET</Text>
+          <>{position ? <h4>Arithmetic</h4> : <Text size={11} tone="dim">ARITHMETIC PROFIT TARGET</Text>}</>
         </div>
 
         <div className={styles.actionRow}>
@@ -1006,10 +1270,12 @@ export function StockPositionCard({
           </button>
         </div>
 
+        {position && !plan && <Text size={11} tone="dim">{planning ? 'Computing current inputs…' : 'Not computed or stale — run Arithmetic plan for the current inputs.'}</Text>}
         {planErr && <Text size={11} tone="reject">{planErr}</Text>}
 
         {plan && (
           <div className={styles.estimateBlock}>
+            {position && <Text size={11} tone="secondary">GBM stock simulation · {plan.horizonDays} {plan.daysBasis} days. All target rows share the returned final stop {executionMoney(plan.stop.price)}. Independent reach probabilities; conditional median time among paths that reach each barrier, regardless of which barrier is hit first. Full-exit outcomes for {overlay.shares} entered shares, before costs.</Text>}
             {/* ── The stop row ─────────────────────────────────────────── */}
             <div className={styles.planRow}>
               <Text size={11} tone="dim">STOP</Text>
@@ -1032,7 +1298,7 @@ export function StockPositionCard({
                 {(plan.stop.probability * 100).toFixed(0)}% reached
               </Data>
               <Data size={12} tone="dim">
-                {plan.stop.expectedDays != null
+                {position ? medianTradingDays(plan.stop.expectedDays) : plan.stop.expectedDays != null
                   ? `~${plan.stop.expectedDays.toFixed(0)} trading days`
                   : 'unlikely'}
               </Data>
@@ -1053,14 +1319,15 @@ export function StockPositionCard({
             {/* ── Target rows ──────────────────────────────────────────── */}
             {plan.targets.map((t, i) => (
               <div key={`plan-t-${i}`} className={styles.planTarget}>
-                <div className={styles.planRow}>
+                <div className={position ? styles.methodTargetRow : styles.planRow}>
                   <Text size={11} tone="dim">{t.rrRatio}R</Text>
                   <Data size={13} tone="pass">{t.price.toFixed(2)}</Data>
+                  {position && <div><Text size={10} tone="dim">Full exit / {overlay.shares} shares</Text><Data size={14}>{executionMoney(enteredSharesValid ? t.rewardPerShare * overlay.shares : null)}</Data></div>}
                   <Data size={12} tone={t.probability >= 0.5 ? 'pass' : t.probability >= 0.25 ? 'caution' : 'reject'}>
                     {(t.probability * 100).toFixed(0)}% reached
                   </Data>
                   <Data size={12} tone="dim">
-                    {t.expectedDays != null
+                    {position ? medianTradingDays(t.expectedDays) : t.expectedDays != null
                       ? `~${t.expectedDays.toFixed(0)} trading days`
                       : 'unlikely'}
                   </Data>
@@ -1167,13 +1434,18 @@ export function StockPositionCard({
 
             {/* ── The two-barrier race ─────────────────────────────────── */}
             {plan.race && (
-              <div className={styles.planRace}>
+              <div id={position ? 'race' : undefined} className={styles.planRace}>
                 <Text size={10} tone="dim">
                   Which comes first, over {plan.horizonDays} trading days
                   ({plan.race.nPaths.toLocaleString()} simulated paths). These three
                   add to 100% because every path is counted once — unlike the
                   percentages above, which are each measured on their own.
                 </Text>
+                {position && <><h4>Which comes first</h4><Text size={11} tone="secondary">Target first / stock stop first / neither are exclusive outcomes. Conditional median time among paths where that barrier wins. Neither can end with a gain or loss; its terminal mean is the average ending stock price. Supporting evidence only.</Text><Text size={11} tone="dim">Race stock stop {executionMoney(plan.race.stopPrice)}</Text></>}
+                {position && plan.race.outcomes.map((o, i) => <div key={`bar-${i}`} className={styles.raceDrawing} aria-label={`${card.direction} target ${o.targetPrice.toFixed(2)} race`}>
+                  <Data size={12}>Target {o.targetPrice.toFixed(2)}</Data>
+                  {[['Target', o.weightTarget], ['Stop', o.weightStop], ['Neither', o.weightNeither]].map(([label, weight]) => <label key={String(label)}><Text size={11}>{label}</Text><meter className={label === 'Target' ? styles.raceTarget : label === 'Stop' ? styles.raceStop : styles.raceNeither} min="0" max="1" value={Number(weight)} /><Data size={11} tone={label === 'Target' ? 'pass' : label === 'Stop' ? 'reject' : 'dim'}>{(Number(weight) * 100).toFixed(0)}%</Data></label>)}
+                </div>)}
                 {plan.race.outcomes.map((o, i) => (
                   <div key={`race-${i}`} className={styles.planRow}>
                     <Data size={11} tone="dim">{o.targetPrice.toFixed(2)}</Data>
@@ -1182,12 +1454,12 @@ export function StockPositionCard({
                         exactly 100%. Re-rounding the raw values here is how a
                         row ends up printing 18 / 40 / 42 and adding to 99. */}
                     <Data size={12} tone="pass">
-                      target {(o.weightTarget * 100).toFixed(0)}%
-                      {o.daysTarget != null ? ` (~${o.daysTarget.toFixed(0)}d)` : ''}
+                      {position ? 'Target first' : 'target'} {(o.weightTarget * 100).toFixed(0)}%
+                      {o.daysTarget != null ? position ? ` (${medianTradingDays(o.daysTarget)})` : ` (~${o.daysTarget.toFixed(0)}d)` : ''}
                     </Data>
                     <Data size={12} tone="reject">
-                      stop {(o.weightStop * 100).toFixed(0)}%
-                      {o.daysStop != null ? ` (~${o.daysStop.toFixed(0)}d)` : ''}
+                      {position ? 'Stock stop first' : 'stop'} {(o.weightStop * 100).toFixed(0)}%
+                      {o.daysStop != null ? position ? ` (${medianTradingDays(o.daysStop)})` : ` (~${o.daysStop.toFixed(0)}d)` : ''}
                     </Data>
                     <Data size={12} tone="dim">
                       neither {(o.weightNeither * 100).toFixed(0)}%
@@ -1209,10 +1481,15 @@ export function StockPositionCard({
           </div>
         )}
       </div>
+      </>} />
 
-      <MarketSentiment s={card.sentiment} />
-
-      <FundamentalHealthCard f={card.fundamentals} />
+      </PositionGroup>
+      {position && <PositionEvidence card={card} pickMissing={pickMissing} earningsVeto={earningsVeto} ownership={orderOwnership?.status} />}
+      </PositionGroup>
+      {!position && <MarketSentiment s={card.sentiment} />}
+      {!position && <FundamentalHealthCard f={card.fundamentals} />}
+      <PositionGroup active={position} tag="aside" id="decision" className={styles.decision}>
+      {position && <h3>Your decision</h3>}
 
       {/* Section 2d — Phase G piece 5 (§6.3): which exit method this trade is
            being taken on. Placed directly above the actions, after all three
@@ -1224,10 +1501,31 @@ export function StockPositionCard({
         onChange={applyMethodPick}
       />
 
+      {position && <section aria-label="Selected stock plan" className={styles.workspaceCard}>
+        <h4>Selected stock plan</h4>
+        {!methodPick || pickedMethodGone ? <Text size={12}>Choose a method</Text> : <>
+          <div><Text size={11} tone="dim">Selected method / target</Text><Data size={14}>{pickedOption?.label} · {selectedTarget == null ? 'Choose a target' : selectedRow?.label ?? (selectedMatches.length > 1 ? 'Target row ambiguous' : 'Target row unavailable')}</Data></div>
+          <div className={styles.riskGrid}>
+            <div><Text size={11} tone="dim">Stock target</Text><Data size={14}>{executionMoney(selectedTarget)}</Data></div>
+            <div><Text size={11} tone="dim">Calculation stop basis</Text><Data size={14}>{methodPick.method === 'arithmetic' ? 'Arithmetic final stop' : 'Current execution stop'} · {executionMoney(selectedCalculationStop)}</Data></div>
+            <div><Text size={11} tone="dim">Execution stop</Text><Data size={14}>{executionMoney(executionStop)}</Data></div>
+            <div><Text size={11} tone="dim">Entered quantity</Text><Data size={14}>{enteredSharesValid ? `${overlay.shares} shares` : 'Unavailable'}</Data></div>
+            <div><Text size={11} tone="dim">Full-position outcome</Text><Data size={14}>{executionMoney(selectedOutcome)}</Data></div>
+          </div>
+          {selectedEvidence ? <>
+            <div><Text size={11} tone="dim">Target hit probability</Text><Data size={14}>{Number.isFinite(selectedEvidence.probability) ? `${(selectedEvidence.probability * 100).toFixed(0)}%` : 'Unavailable'} within {selectedWindow} trading days</Data></div>
+            <div><Text size={11} tone="dim">Median first-touch time</Text><Data size={14}>{selectedEvidence.expectedDays != null && Number.isFinite(selectedEvidence.expectedDays) ? `${selectedEvidence.expectedDays} trading days` : 'Unavailable'}</Data></div>
+            <Text size={11} tone="secondary">Independent target hit probability within the simulated window; the same path can also hit the stop. Time is the median first-touch time among paths that reach the target, using 1/252-year trading days.</Text>
+          </> : <Text size={11} tone="dim">Probability and time unavailable — no uniquely matching current calculation.</Text>}
+          <Text size={11} tone="secondary">{card.direction} full exit at the selected target, before costs, using entered shares. Selection records intent and does not apply a stop, target or share change.</Text>
+        </>}
+      </section>}
+
+      {position && <h3>Execution</h3>}
       {/* Section 3 — Action buttons */}
       <div className={styles.actionRow}>
-        <a
-          href={`/chart?symbol=${encodeURIComponent(card.symbol)}`}
+        {!position && <>        <a
+          href={buildCandidateChartHref(card, 'stocks')}
           target="_blank"
           rel="noopener noreferrer"
           className={styles.actionBtn}
@@ -1241,6 +1539,7 @@ export function StockPositionCard({
         >
           <Text size={12}>{pinned ? 'Unpin from Basket' : 'Pin to Basket'}</Text>
         </button>
+</>}
         <button
           type="button"
           className={styles.actionBtn}
@@ -1307,11 +1606,12 @@ export function StockPositionCard({
 
       {/* Section 6 — Order result / error */}
       {orderId && orderMsg && <Text size={12} tone={orderMsg.tone}>{orderMsg.text}</Text>}
-      {err      && <Text size={12} tone="reject">{err}</Text>}
+      {err && !(position && err.includes('wrong side of entry')) && <Text size={12} tone="reject">{err}</Text>}
       {warning  && <Text size={12} tone="caution">{warning}</Text>}
       {queued   && <Text size={12} tone="caution">Queued — backend unreachable, will sync automatically.</Text>}
 
       {/* Section 7 — Auto-trade arm */}
+      <PositionDisclosure active={position}>
       <StockAutoTradeArm
         symbol={card.symbol}
         strategyKey={strategyKey}
@@ -1319,7 +1619,10 @@ export function StockPositionCard({
         afterScanArmed={afterScanArmed ?? sessionAfterScanArmed}
         onAfterScanToggle={onAfterScanToggle ?? toggleAfterScanIntent}
       />
-
+      </PositionDisclosure>
+      {position && <PositionEvidence checklistOnly card={card} pickMissing={pickMissing} earningsVeto={earningsVeto} ownership={orderOwnership?.status} />}
+      </PositionGroup>
+      </PositionGroup>
     </div>
   );
 }

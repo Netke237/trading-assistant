@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stocks Presentation Proposal</title>
+<style>
+
+:root{--bg:#f0f3fa;--surface:#fff;--soft:#f5f7ff;--border:#d9dfed;--ink:#131722;--muted:#5a6070;--accent:#2962ff;--pass:#1a9188;--pass-soft:#edf7f6;--warn:#9a6409;--warn-soft:#fff7e8;--reject:#cd4547;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--radius:10px}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,Arial,sans-serif}button,input,select{font:inherit}button,a,summary{touch-action:manipulation}button{cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:6px;padding:8px 12px}button:hover:not(:disabled){border-color:var(--accent);background:var(--soft)}button:disabled{opacity:.52;cursor:not-allowed}button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button.active{color:var(--accent);background:#edf2ff;border-color:var(--accent)}a{color:var(--accent);text-decoration:none}h1,h2,h3,p{margin:0}h1{font-size:26px;letter-spacing:-.6px}h2{font-size:17px;letter-spacing:-.3px}h3{font-size:14px}small,.small{font-size:12px}.muted{color:var(--muted)}.eyebrow{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);font-weight:700}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}.green{color:var(--pass)}.red{color:var(--reject)}.warning{color:var(--warn)}.badge{display:inline-flex;align-items:center;border-radius:4px;border:1px solid #b3e0dc;background:var(--pass-soft);color:var(--pass);padding:3px 7px;font-size:10px;letter-spacing:.6px;font-weight:700}.badge.neutral{background:var(--soft);border-color:var(--border);color:var(--muted)}.badge.warn{background:var(--warn-soft);border-color:#ecd2a3;color:var(--warn)}.toolbar{background:#141b2d;color:#fff;padding:10px 24px;display:flex;align-items:center;gap:15px;position:sticky;top:0;z-index:20;font-size:12px}.toolbar strong{letter-spacing:.4px}.toolbar .muted{color:#bbc5da}.toolbar button{padding:5px 9px;background:#222c43;color:#fff;border-color:#42516c;font-size:12px}.toolbar button.active{background:#2962ff;border-color:#7195ff}.toolbar .spacer{flex:1}.shell{display:grid;grid-template-columns:64px minmax(0,1fr);min-height:100vh}.navrail{border-right:1px solid var(--border);background:var(--surface);display:flex;align-items:center;flex-direction:column;padding:20px 10px;gap:25px;color:var(--muted)}.navrail .logo{background:var(--accent);color:white;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-weight:700}.navrail .navon{background:#edf2ff;color:var(--accent);padding:9px;border-radius:7px}.main{max-width:1740px;width:100%;margin:auto;padding:22px 30px 60px}.crumbs{display:flex;gap:16px;align-items:center;font-size:12px;margin-bottom:18px}.pagehead{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:15px}.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.between{justify-content:space-between}.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;min-width:0}.cardhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}.stack{display:grid;gap:16px}.candidate{display:flex;align-items:center;gap:14px;padding:10px 16px;margin-bottom:16px}.candidate .basket{margin-left:auto;font-size:12px;color:var(--muted)}.identity{display:grid;grid-template-columns:1fr 1.15fr auto;gap:25px;align-items:center;margin-bottom:16px;padding:22px}.ticker{font-size:34px;font-weight:700;letter-spacing:-1px}.stockprice{font-size:22px}.contract{border-left:1px solid var(--border);padding-left:25px}.contract-name{font-size:20px;font-weight:700;letter-spacing:-.4px;margin:5px 0}.facts{display:flex;gap:20px;margin-top:10px;flex-wrap:wrap}.facts strong{font-family:var(--mono);font-weight:500}.sectionnav{display:flex;gap:20px;border-bottom:1px solid var(--border);padding:5px 0 12px;margin-bottom:16px;font-size:12px}.workspace{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:18px;align-items:start}.side{position:sticky;top:65px;display:grid;gap:16px}.summary{border-top:3px solid var(--accent)}.summary .metricgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.metric{border-right:1px solid var(--border);padding-right:12px}.metric:last-child{border:0}.metric label{display:block;color:var(--muted);font-size:12px;margin-bottom:7px}.metric .big{font-size:23px;letter-spacing:-.6px;font-family:var(--mono)}.metric .hint{font-size:11px;color:var(--muted);margin-top:5px}.note{padding:10px 12px;border-radius:6px;background:var(--soft);font-size:12px;color:var(--muted);margin-top:12px}.note.warn{color:var(--warn);background:var(--warn-soft)}.method-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.method-grid .wide{grid-column:1/-1}.method .cardhead{margin-bottom:8px}.method .metricgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;padding:14px;background:var(--soft);border-radius:6px}.method .big{font-size:23px}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.buttons button{font-size:12px;padding:7px 10px}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:left;color:var(--muted);font-size:10px;letter-spacing:.5px;font-weight:500;padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:bottom}td{padding:12px 8px;border-bottom:1px solid var(--border);vertical-align:middle}tr:last-child td{border-bottom:0}.targetblock{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}.targetblock .targettop{display:grid;grid-template-columns:45px 1fr 1fr auto;gap:10px;font-size:12px;align-items:center}.targetblock strong{font:500 15px var(--mono)}.targetblock small{display:block;font-size:10px;color:var(--muted);margin-bottom:2px}.targetblock .warnline{font-size:11px;color:var(--warn);margin-top:6px}.disclosure{border-top:1px solid var(--border);margin-top:12px;padding-top:10px}.disclosure summary{color:var(--accent);font-size:12px;cursor:pointer;list-style:none}.disclosure summary::before{content:'＋';margin-right:7px}.disclosure[open] summary::before{content:'−'}.disclosure .content{padding-top:12px;color:var(--muted);font-size:12px}.evidence{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.evidence span{display:block;color:var(--muted);font-size:11px}.evidence strong{font:500 13px var(--mono);color:var(--ink)}.inputrow{display:flex;gap:12px;align-items:center;margin-top:12px}input{border:1px solid var(--border);background:var(--surface);border-radius:5px;color:var(--ink);padding:6px 8px;width:100%;min-width:0}input:focus{outline:2px solid #89a9ff}.inputrow input{width:52px;font-family:var(--mono)}.settingsgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.settingsgrid label{font-size:11px;color:var(--muted)}.settingsgrid input{display:block;margin-top:5px;font-family:var(--mono)}.settingsgrid .readonly{display:block;font:500 14px var(--mono);margin-top:10px;color:var(--ink)}.race{border-top:3px solid var(--pass)}.barriers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;background:var(--soft);padding:14px;border-radius:6px;margin:14px 0}.barriers label{color:var(--muted);font-size:11px;display:block}.barriers strong{font:500 17px var(--mono)}.barriers small{font-size:10px;display:block;color:var(--muted);margin-top:4px}.legend{display:flex;gap:14px;font-size:10px;flex-wrap:wrap;margin:10px 0}.legend i{display:inline-block;width:7px;height:7px;margin-right:4px;border-radius:1px}.split{width:100%;min-width:100px;height:7px;background:var(--border);display:flex;border-radius:2px;overflow:hidden;margin-top:6px}.split .win{background:var(--pass)}.split .lose{background:var(--reject)}.race td{padding-top:15px;padding-bottom:15px}.race tr.picked{background:#edf7f6}.race td strong{font-family:var(--mono)}.race .targetcell{white-space:nowrap}.race .edgered{color:var(--reject)}.race .edgegreen{color:var(--pass)}.race button{font-size:11px;padding:6px 8px}.assumptions{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:12px}.qualgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.scorehead{display:flex;gap:12px;align-items:baseline;margin:12px 0}.scorehead strong{font:500 29px var(--mono)}.scorehead .max{color:var(--muted);font:12px var(--mono)}.scoretable td{padding:9px 5px}.scoretable .obs{font-size:10px;color:var(--muted);display:block;max-width:210px}.scorebar{width:60px;height:4px;background:var(--border);border-radius:2px;display:inline-block;margin-right:7px;vertical-align:middle}.scorebar i{height:100%;display:block;background:var(--pass)}.confidence{padding-top:12px;margin-top:10px;border-top:1px solid var(--border);font-size:12px}.contextgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.buckets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}.buckets label{font-size:11px;color:var(--muted);display:block}.buckets strong{font:500 18px var(--mono)}.checklist{display:grid;gap:10px;font-size:12px}.checklist .check{display:flex;gap:8px;align-items:center}.check .dot{width:7px;height:7px;border-radius:50%;background:var(--border)}.side .card{padding:17px}.decision h2{margin-bottom:6px}.decision .options{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}.decision .options button{text-align:left;font-size:12px;padding:9px}.decision .options small{display:block;font-size:10px;color:var(--muted);margin-top:2px}.picktargets{display:flex;gap:5px;margin-top:8px}.picktargets button{flex:1;font-size:11px;padding:7px 3px}.stopbasis{display:flex;gap:6px;margin-top:7px}.stopbasis button{font-size:11px;flex:1}.execution button{font-size:12px;width:100%;margin-top:8px}.execution select{width:100%;padding:8px;border:1px solid var(--border);border-radius:5px;background:white;margin-top:10px}.stickycaption{font-size:11px;color:var(--muted);margin-top:12px}.mappingbtn{width:100%;font-size:12px}.footer{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);padding:16px 2px}.drawer{position:fixed;inset:0;background:#13172265;z-index:40;display:none}.drawer.open{display:flex;justify-content:flex-end}.drawerbox{width:min(1150px,96vw);background:var(--surface);height:100%;overflow:auto;padding:28px}.drawerbox .sticky{position:sticky;top:-28px;background:white;padding:16px 0;z-index:2}.mappingtable th,.mappingtable td{padding:10px;vertical-align:top}.mappingtable th:nth-child(1){width:18%}.mappingtable th:nth-child(2){width:27%}.mappingtable small{font-size:10px;color:var(--muted);display:block;overflow-wrap:anywhere}.hide{display:none!important}.placeholder{padding:18px;border:1px dashed var(--border);color:var(--muted);font-size:12px;border-radius:6px;margin-top:12px}.scenario-note{font-size:11px;color:var(--muted)}.demo-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#141b2d;color:white;padding:12px 20px;border-radius:7px;z-index:50;font-size:12px;display:none}.mockchart{height:220px;border:1px solid var(--border);border-radius:6px;background:var(--soft);display:grid;place-items:center;color:var(--muted);font-size:12px}section[id]{scroll-margin-top:80px}
+@media(min-width:1700px){.main{padding-left:36px;padding-right:36px}.workspace{grid-template-columns:minmax(0,1fr) 350px}.method .targettop{grid-template-columns:45px 1fr 1fr auto}}
+@media(max-width:1450px){.main{padding:20px}.workspace{grid-template-columns:minmax(0,1fr) 280px;gap:14px}.identity{grid-template-columns:1fr 1.15fr;gap:15px}.identity>.identityactions{grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;display:flex;gap:8px}.method-grid{grid-template-columns:1fr}.method .targettop{grid-template-columns:70px 1fr 1fr auto}.qualgrid{grid-template-columns:1fr}.summary .metric .big{font-size:21px}.race table{font-size:11px}.race th,.race td{padding-left:5px;padding-right:5px}.side .card{padding:14px}.contextgrid{grid-template-columns:1fr}}
+@media(max-width:1100px){.workspace{grid-template-columns:1fr}.side{position:static;grid-template-columns:1fr 1fr}.side .checkcard{grid-column:1/-1}.method-grid,.qualgrid,.contextgrid{grid-template-columns:1fr 1fr}.toolbar .muted{display:none}.identity{grid-template-columns:1fr}.contract{border:0;padding-left:0}.settingsgrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){.shell{grid-template-columns:1fr}.navrail{display:none}.main{padding:14px}.toolbar{flex-wrap:wrap;padding:8px 12px}.toolbar .spacer{display:none}.method-grid,.qualgrid,.contextgrid,.side{grid-template-columns:1fr}.summary .metricgrid,.barriers{grid-template-columns:1fr}.metric{border:0;border-bottom:1px solid var(--border);padding-bottom:10px}.settingsgrid{grid-template-columns:1fr 1fr}.pagehead{align-items:start}.sectionnav{gap:10px;flex-wrap:wrap}.candidate{flex-wrap:wrap}.candidate .basket{margin-left:0}.targetblock .targettop{grid-template-columns:40px 1fr 1fr}.targettop>div:last-child{grid-column:2}.evidence{grid-template-columns:1fr 1fr}}
+
+/* Revision 02: slim context cards and separated probability/time columns. */
+.slim{display:grid;grid-template-columns:auto minmax(180px,1fr) auto auto;align-items:center;gap:10px 24px;padding:12px 18px;margin-bottom:14px;border-radius:8px}
+.slim h2{font-size:13px}.slim .slim-title{display:flex;align-items:center;gap:16px}.slim .slim-title .mono{font-size:20px!important}.slim .slim-title .small{font-size:11px}.slim>.row{gap:16px;justify-content:flex-start}.slim>.row strong{font-size:20px!important}.slim>p{margin-top:0!important;font-size:11px}.slim>.badge{margin-top:0!important;justify-self:end}.slim .disclosure{grid-column:1/-1;border:0;margin:0;padding:0}.slim .disclosure summary{font-size:11px}.slim .disclosure:not([open]){justify-self:end}.slim .content{border-top:1px solid var(--border);margin-top:8px;padding-top:10px}.fundamental-slim{grid-template-columns:auto 1fr auto}.fundamental-slim .buckets{display:flex;gap:30px;margin:0}.fundamental-slim .buckets>div{display:flex;align-items:center;gap:8px}.fundamental-slim .buckets strong{font-size:16px}.market-slim{grid-template-columns:auto auto 1fr auto}.market-slim .disclosure,.fundamental-slim .disclosure{grid-column:1/-1}.targetblock .targettop{grid-template-columns:44px minmax(100px,1fr) minmax(110px,1fr) 132px;column-gap:20px}.targettop>div:last-child{border-left:1px solid var(--border);padding-left:18px;text-align:left}.targettop>div:last-child small{white-space:normal}.targettop>div:last-child strong{font-size:14px;white-space:nowrap}.budget-strip{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--border);margin-top:8px}.budget-strip button{font-size:12px;color:var(--accent)}.override-editor{padding:12px;background:var(--soft);border-radius:6px;margin-top:10px}.override-editor button{font-size:12px}
+@media(max-width:1450px){.slim{column-gap:18px}.market-slim{grid-template-columns:auto auto 1fr}.market-slim>.badge{grid-column:3;grid-row:2}.market-slim .disclosure{grid-column:1/3;grid-row:2;justify-self:start}.fundamental-slim .buckets{gap:20px}.method .targettop{grid-template-columns:55px minmax(130px,1fr) minmax(130px,1fr) 148px;column-gap:24px}}
+@media(max-width:1100px){.slim{grid-template-columns:1fr 1fr}.slim>p{grid-column:1/-1}.market-slim>.badge{grid-column:auto;grid-row:auto}.market-slim .disclosure{grid-column:1/-1;grid-row:auto}.fundamental-slim .buckets{grid-column:1/-1}.method .targettop{grid-template-columns:40px minmax(80px,1fr) minmax(90px,1fr) 115px;column-gap:12px}.targettop>div:last-child{padding-left:12px}}
+@media(max-width:700px){.slim{grid-template-columns:1fr}.slim .slim-title{justify-content:space-between}.slim .disclosure{justify-self:start!important}.fundamental-slim .buckets{gap:18px}.method .targettop{grid-template-columns:40px 1fr 1fr}.targettop>div:last-child{grid-column:2/-1;margin-top:6px;border-left:0;padding-left:0}.targettop>div:last-child small{display:inline;margin-right:8px}}
+
+/* Stocks proposal 02 additions — same tokens as the Options preview */
+.legendbar{background:#1c2438;color:#cfd7ea;font-size:11px;padding:6px 24px;position:sticky;top:44px;z-index:19}
+.legendbar .t{margin:0 4px}
+.t{display:inline-block;font:700 9px/1.4 Inter,Arial,sans-serif;letter-spacing:.5px;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+.t.ex{background:#eef1f6;color:#5a6070;border:1px solid #d9dfed}
+.t.mv{background:#edf2ff;color:#2962ff;border:1px solid #b9cbff}
+.t.nw{background:#edf7f6;color:#1a9188;border:1px solid #b3e0dc}
+.t.be{background:#f4efff;color:#6b3fd1;border:1px dashed #a98be8}
+body.notags .t:not(.keep){display:none}
+body.notags .legendbar{display:none}
+.howto{margin:0 0 14px;border:0;padding:0}
+.stratgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.strat{text-align:left;padding:12px;display:grid;gap:6px;align-content:start}
+.strat strong{font-size:13px}
+.strat small{color:var(--muted);font-size:11px}
+.strat .looks{font-size:11px}
+.strat .ees{font-size:11px;color:var(--muted);line-height:1.45}
+.strat.active{border-color:var(--accent);background:#edf2ff;box-shadow:inset 0 0 0 1px var(--accent)}
+.kpis{position:relative;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;padding:20px 18px 14px;margin-bottom:14px}
+.kpis .kpitag{position:absolute;top:5px;right:10px}
+.kpis label{display:block;font-size:11px;color:var(--muted)}
+.kpis strong{font-size:14px}
+.kpis small{display:block;font-size:10px;color:var(--muted)}
+.smallbtn{font-size:11px;padding:4px 8px;white-space:nowrap}
+.results.bt{font-size:11px}
+.results.bt th,.results.bt td{padding:9px 5px}
+.results tr.rowsel{cursor:pointer}
+.results tr.rowsel:hover{background:var(--soft)}
+.results tr.open{background:#edf2ff}
+.results tr.detailrow>td{background:var(--soft);padding:16px}
+.detailgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.detailgrid.two{grid-template-columns:1fr 1fr}
+.fullcard{margin-top:14px}
+.badge.rej{background:#fdeeee;border-color:#f0b9ba;color:var(--reject)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-left:4px;vertical-align:middle}
+.check .dot{margin:0;flex:none}
+.dot.ok{background:var(--pass)}.dot.warn{background:#e0a020}.dot.bad{background:var(--reject)}.dot.neutral{background:var(--border)}
+.chips{display:flex;gap:5px;margin-left:6px;flex-wrap:wrap}
+.chips b{font:500 11px var(--mono);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--muted)}
+.chips b.on{border-color:var(--accent);color:var(--accent);background:#edf2ff}
+input.mini{width:60px;font-family:var(--mono)}
+input.mini2{width:90px;font-family:var(--mono)}
+input.ed.changed{border-color:var(--warn);background:var(--warn-soft)}
+.settingsgrid.four{grid-template-columns:repeat(4,1fr)}
+.note.bad{color:var(--reject);background:#fdeeee}
+.evidence small{display:block;font-size:10px;color:var(--muted)}
+.planrow{display:grid;grid-template-columns:78px 90px 1fr 1fr;gap:10px;align-items:baseline;font-size:12px;padding:6px 0}
+.planrow>span{font-size:10px;letter-spacing:.5px;color:var(--muted)}
+.planrow strong{font:500 14px var(--mono)}
+.planrow em{font-style:normal;font-size:11px;color:var(--muted)}
+.planrow em.green{color:var(--pass)}.planrow em.warning{color:var(--warn)}
+.planrow.sub{padding-top:0}
+.planrow.sub strong{font-size:12px}
+.tiny{font-size:10.5px;color:var(--muted);margin-top:6px}
+.tiny.warning{color:var(--warn)}
+.race table td{padding-top:10px;padding-bottom:10px}
+.decision .options{grid-template-columns:1fr}
+.decision .options button.active{border-color:var(--accent);background:#edf2ff;color:var(--accent)}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.modes button{font-size:11px;padding:6px;margin:0}
+.modes button.active{border-color:var(--accent);background:#edf2ff;color:var(--accent)}
+textarea{width:100%;border:1px solid var(--border);border-radius:5px;padding:6px 8px;font:12px Inter,Arial,sans-serif;resize:vertical}
+.mappingtable td:nth-child(4){white-space:nowrap}
+@media(max-width:1450px){.detailgrid{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(3,1fr)}.settingsgrid.four{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1100px){.detailgrid,.detailgrid.two{grid-template-columns:1fr}}
+</style>
+</head><body>
+<div class="toolbar">
+<strong>DESIGN PROPOSAL · STOCKS 02</strong>
+<span class="muted">Parity rebuild from the current code · illustrative values · no live trading</span>
+<span class="spacer"></span>
+<button data-view="strategy">Strategy</button>
+<button data-view="backtest">Backtest</button>
+<button class="active" data-view="position">Position</button>
+<button data-view="prebreakout">Pre-Breakout</button>
+<button id="tagtoggle" class="active">Tags on</button>
+<button id="maptop">Information mapping ↗</button>
+</div>
+<div class="legendbar"><span class="t ex">EXISTING</span> same item, same place in the flow · <span class="t mv">MOVED</span> existing item, new position or styling · <span class="t nw">NEW</span> approved addition (2026-10-10) · <span class="t be">BACKEND FIELD</span> already computed, needs to be sent (no calculation change)</div>
+<div class="shell">
+<aside class="navrail"><span class="logo">B</span><span>▦</span><span class="navon">⌕</span><span>☆</span><span>▤</span><span>◷</span><span>⚙</span></aside>
+<main class="main">
+
+<!-- ============================ STRATEGY ============================ -->
+<div class="view hide" data-v="strategy">
+<div class="crumbs"><span class="muted">Options</span><strong>Stocks</strong><span class="muted">Pre-Breakout</span><span class="muted">/</span><span>Step 4 of 6</span></div>
+<div class="pagehead"><div><div class="eyebrow">Step 4 of 6 <span class="t ex">EXISTING</span></div><h1>Strategy</h1>
+<p class="small muted" style="margin-top:4px">Pick a strategy and run a scan. Review the results on Backtest. · Scanning full SP500 universe for stock setups <span class="t ex">EXISTING</span></p></div></div>
+<details class="disclosure howto"><summary>How this page works <span class="t nw">NEW</span></summary><div class="content">Click a card to select a strategy (saved at once; the floating Run button on Steps 1–3 uses it). Adjust parameters, then Run Stock Scan. A successful scan opens Backtest; a failed scan stays here with its reason.</div></details>
+<article class="card slim market-slim">
+<div class="slim-title"><h2>Market Sentiment</h2><span class="small muted">Swing · daily</span></div>
+<div class="row between"><span>Moderate conviction</span><strong class="mono green" style="font-size:24px">+42%</strong></div>
+<p class="small muted">Shared MarketSentiment compact component, fed from the Step 1 regime. <span class="t nw">NEW on this page</span></p>
+<span class="badge">ALIGNED</span>
+<details class="disclosure"><summary>State persistence & full interpretation</summary><div class="content">State, stickiness, regime age, average duration, HMM state, alignment — same fields as the existing MarketSentiment.</div></details>
+</article>
+<div class="workspace">
+<div class="stack">
+<section class="card">
+<div class="cardhead"><h2>Choose a strategy</h2><span class="t mv">MOVED · same 7 cards, same text</span></div>
+<div class="stratgrid"><button class="strat active"><div class="row between"><strong>Pullback to EMA 20</strong><span class="badge " title="existing regimeFitTooltip">Recommended</span></div><small>Steady uptrends</small><span class="looks"><span class="t nw">NEW</span> Looks for: an uptrend that dips to its moving average</span><span class="ees">Entry: Dip to EMA 20 in uptrend + reversal candle<br>Stop: Below the pullback MA by 1.5 ATR<br>Exit: Prior swing high, then 2R / 3R extensions</span></button><button class="strat"><div class="row between"><strong>Breakout from tight base</strong><span class="badge " title="existing regimeFitTooltip">Recommended</span></div><small>Momentum stocks</small><span class="looks"><span class="t nw">NEW</span> Looks for: a quiet range that breaks out on volume</span><span class="ees">Entry: Break above N-day high after narrow range + volume spike<br>Stop: Just under the breakout level (base high)<br>Exit: Measured move — base height projected off the breakout</span></button><button class="strat"><div class="row between"><strong>MA Crossover 20/50</strong><span class="badge warn" title="existing regimeFitTooltip">Neutral</span></div><small>Simple trend entry</small><span class="looks"><span class="t nw">NEW</span> Looks for: a fast average crossing a slow one</span><span class="ees">Entry: SMA 20 crosses above SMA 50<br>Stop: Below 50-SMA<br>Exit: 3 / 4.5 / 6 ATR ladder (cross-back level shown)</span></button><button class="strat"><div class="row between"><strong>Mean Reversion RSI / 200-SMA</strong><span class="badge warn" title="existing regimeFitTooltip">Neutral</span></div><small>Oversold in uptrend</small><span class="looks"><span class="t nw">NEW</span> Looks for: an oversold dip inside a longer uptrend</span><span class="ees">Entry: RSI &lt; 30 while above 200-SMA<br>Stop: Below recent swing low<br>Exit: Return to the 20-SMA, then 2.5 / 3.75 ATR</span></button><button class="strat"><div class="row between"><strong>Mean Reversion BB</strong><span class="badge warn" title="existing regimeFitTooltip">Neutral</span></div><small>Choppy / range-bound</small><span class="looks"><span class="t nw">NEW</span> Looks for: a lower-band touch that turns back up</span><span class="ees">Entry: Price touches lower Bollinger Band + reversal signal<br>Stop: Below lower band<br>Exit: Mid-band, then upper band</span></button><button class="strat"><div class="row between"><strong>Mean Reversion VWAP (15m)</strong><span class="badge warn" title="existing regimeFitTooltip">Neutral</span></div><small>Intraday · 15m session</small><span class="looks"><span class="t nw">NEW</span> Looks for: an intraday stretch below VWAP</span><span class="ees">Entry: Price deviates &gt;1.5% below VWAP + reversal bar toward VWAP (15m bars)<br>Stop: 0.5 ATR below entry<br>Exit: VWAP, then 0.5 ATR past it</span></button><button class="strat"><div class="row between"><strong>Mean Reversion Multi-Signal</strong><span class="badge warn" title="existing regimeFitTooltip">Neutral</span></div><small>High-conviction oversold entries</small><span class="looks"><span class="t nw">NEW</span> Looks for: several oversold signals agreeing</span><span class="ees">Entry: RSI + BB + VWAP daily all confirm simultaneously<br>Stop: Widest of the fired variants&#x27; stops<br>Exit: Tightest of the fired variants&#x27; targets</span></button></div>
+<p class="small muted" style="margin-top:10px">Badge = existing regime-fit (Recommended / Neutral / Avoid) with its existing tooltip. Entry / Stop / Exit lines unchanged. <strong>Note:</strong> the approved “Looks for” line overlaps the existing Entry line — wording to confirm.</p>
+</section>
+<section class="card">
+<div class="cardhead"><h2>Parameters</h2><span class="t mv">MOVED · StrategyParamsPanel unchanged inside</span></div>
+<div class="placeholder">Existing StrategyParamsPanel: horizon-profile values, override indicators, Reset, “profile unavailable” state, custom-horizon note, backtest thresholds (min trades, min win rate), event filter, shortlist max. Every field and tooltip as today.</div>
+<div class="placeholder">Multi-Signal only: existing MeanReversionConfirmPanel (variants, min confirmations, VWAP lookback / deviation), “profile unavailable” note, “Reset signal confirmation to profile”. <span class="t ex">EXISTING</span></div>
+</section>
+</div>
+<aside class="side">
+<div class="card decision"><h2>Run scan <span class="t mv">MOVED</span></h2>
+<button class="primary" style="width:100%;margin-top:12px">Run Stock Scan</button>
+<p class="stickycaption">Disabled reasons as today (“Select a strategy first”, “Select at least one confirmation signal”). Running label “Running backtest scan…”.</p>
+<p class="stickycaption">Last stock scan: Yesterday · 21:43</p>
+<div class="note warn">Scan errors and notices appear here, as today. <span class="t ex">EXISTING</span></div></div>
+<div class="card"><h2>Pre-warm history <span class="t mv">MOVED</span></h2><p class="small muted" style="margin-top:6px">Existing HistoryPrefetchRow: explanation, status, progress, Pre-warm / Re-warm button.</p><button style="width:100%;margin-top:10px">Pre-warm history</button><p class="stickycaption">Last refresh: 10 Oct 2026, 07:02</p></div>
+<div class="card"><h2>After-scan <span class="t nw">NEW</span></h2><p class="small muted" style="margin-top:6px">2 symbols armed — booked to the paper portfolio only if they PASS on the next scan. Arming itself stays on the position card.</p></div>
+<div class="card"><h2>Direct-send notes <span class="t ex">EXISTING</span></h2><p class="small muted" style="margin-top:6px">DirectSendNotesPanel, shown when a send left a note.</p></div>
+</aside>
+</div>
+</div>
+
+<!-- ============================ BACKTEST ============================ -->
+<div class="view hide" data-v="backtest">
+<div class="crumbs"><span class="muted">Options</span><strong>Stocks</strong><span class="muted">Pre-Breakout</span><span class="muted">/</span><span>Step 5 of 6</span></div>
+<div class="pagehead"><div><div class="eyebrow">Step 5 of 6 <span class="t ex">EXISTING</span></div><h1>Backtest Results</h1>
+<p class="small muted" style="margin-top:4px">7 candidates · 498 rejected · 3 over cap <span class="t ex">EXISTING</span></p></div><button class="primary">Send basket (2) <span class="t mv">MOVED</span></button></div>
+<details class="disclosure howto"><summary>How this page works <span class="t nw">NEW</span></summary><div class="content">One row per candidate. Expand a row for a short summary and the full position card. Open Position to review on Step 6.</div></details>
+<div class="note warn" style="margin:0 0 14px">Unvalidated · Research only. Strategy validation is unavailable; automatic arming and broker sending are blocked. Score is a filter. The backtest gate below is historical per-symbol scan evidence, not strategy validation approval. <span class="t ex">EXISTING</span></div>
+<div class="kpis card"><span class="t nw kpitag">NEW strip · existing numbers</span>
+<div><label>Candidates</label><strong class="mono">7</strong></div>
+<div><label>Rejected</label><strong class="mono">498</strong></div>
+<div><label>Over cap</label><strong class="mono">3</strong></div>
+<div><label>Gate this scan used</label><strong class="mono">win ≥45% · trades ≥8</strong><small>from the scan request (today in tooltips)</small></div>
+<div><label>Event filter</label><strong>Avoid</strong><small>1 of 7 hidden by the event filter</small></div>
+<div><label>Last stock scan</label><strong>Yesterday · 21:43</strong></div>
+</div>
+<details class="disclosure card" style="padding:12px 16px;margin:0 0 10px"><summary>Pipeline log <span class="t ex">EXISTING</span></summary><div class="content">Existing ScanFunnel (stock mode), unchanged.</div></details>
+<div class="note warn" style="margin:0 0 14px">Direction banner text, when the scan returns one. <span class="t ex">EXISTING</span> · Scan error / notice and Direct-send notes stay here too. <span class="t ex">EXISTING</span></div>
+<section class="card">
+<div class="cardhead"><h2>Candidates</h2><div class="row"><span class="small muted">Sort</span><button class="smallbtn">Health ↕ <span class="t ex">EXISTING</span></button><button class="smallbtn">Score <span class="t nw">NEW</span></button><button class="smallbtn">Confidence <span class="t nw">NEW</span></button></div></div>
+<div class="tablewrap">
+<table class="results bt">
+<thead><tr><th></th><th>Symbol</th><th>Summary</th><th>Score</th><th>Status</th><th>Δ</th><th>Win %</th><th>Trades</th><th>Return</th><th>Max DD</th><th>Health</th><th>VS SPX</th><th>Event</th><th>Conf</th><th>Gate</th><th>Details</th><th>Position</th></tr></thead>
+<tbody>
+<tr class="rowsel open" data-row="msft"><td>☆</td><td><strong class="mono">MSFT</strong><span class="dot" title="Already in portfolio"></span></td><td class="small">19 trades</td><td class="mono">72</td><td><span class="badge">PASS</span></td><td class="mono green">+4 (↑2)</td><td class="mono green">58%</td><td class="mono">19</td><td class="mono green">14.2%</td><td class="mono red">6.1%</td><td class="mono green">81</td><td class="mono green">+2.4%</td><td class="small warning">E 18d</td><td><span class="badge">64%</span></td><td><span class="badge">PASS</span></td><td><button class="smallbtn">Collapse</button></td><td><button class="smallbtn" data-goto="position">Open Position</button></td></tr>
+<tr class="detailrow" data-detail="msft"><td colspan="17">
+<div class="cardhead"><h3>Quick summary <span class="t nw">NEW</span></h3><span class="small muted">all numbers below already exist; the factor rows need the backend field</span></div>
+<div class="detailgrid">
+<div><h3>Why it scored 72 <span class="t be">BACKEND FIELD</span></h3>
+<table class="scoretable"><tbody>
+<tr><td>Trend<span class="obs">observation text from scorer</span></td><td><span class="scorebar"><i style="width:85%"></i></span>85</td></tr>
+<tr><td>Pullback</td><td><span class="scorebar"><i style="width:70%"></i></span>70</td></tr>
+<tr><td>Trigger</td><td><span class="scorebar"><i style="width:60%"></i></span>60</td></tr>
+<tr><td>Event</td><td><span class="scorebar"><i style="width:55%;background:var(--warn)"></i></span>55</td></tr>
+<tr><td>Volatility</td><td><span class="scorebar"><i style="width:80%"></i></span>80</td></tr>
+</tbody></table></div>
+<div><h3>Backtest vs this scan's gate</h3>
+<div class="evidence" style="margin-top:10px"><div><span>Win rate</span><strong class="green">58%</strong><small>gate ≥45%</small></div><div><span>Trades</span><strong>19</strong><small>gate ≥8</small></div><div><span>Expectancy</span><strong>+0.84</strong><small>gate &gt; floor</small></div><div><span>Return</span><strong class="green">14.2%</strong></div><div><span>Max DD</span><strong class="red">6.1%</strong></div><div><span>Sharpe <span class="t nw">NEW</span></span><strong>1.12</strong></div></div></div>
+<div><h3>Flags</h3>
+<div class="checklist" style="margin-top:10px">
+<div class="check"><i class="dot ok"></i>Backtest gate PASS</div>
+<div class="check"><i class="dot bad"></i>Earnings inside the reject window — no send</div>
+<div class="check"><i class="dot ok"></i>Fundamentals 81</div>
+<div class="check"><i class="dot neutral"></i>Each scan gate flag (gate_flags), as returned</div>
+</div></div>
+</div>
+<details class="disclosure fullcard" open><summary>Full position card — exactly today's Expand <span class="t ex">EXISTING</span></summary><div class="content"><div class="placeholder">The complete StockPositionCard renders here, as today (same component as the Position page: fields, plan, Estimate, Check structure, Arithmetic plan, method pick, Add to Portfolio, Pin, brokers, orders, auto-trade arm, after-scan toggle). See the Position view for its layout.</div></div></details>
+</td></tr>
+<tr class="rowsel" data-row="nvda"><td>★</td><td><strong class="mono">NVDA</strong></td><td class="small">22 trades</td><td class="mono">68</td><td><span class="badge">PASS</span></td><td class="mono muted">0</td><td class="mono green">55%</td><td class="mono">22</td><td class="mono green">21.0%</td><td class="mono red">11.4%</td><td class="mono green">88</td><td class="mono green">+5.1%</td><td class="small muted">—</td><td><span class="badge">59%</span></td><td><span class="badge">PASS</span></td><td><button class="smallbtn">Expand</button></td><td><button class="smallbtn" data-goto="position">Open Position</button></td></tr>
+<tr class="rowsel" data-row="jpm"><td>☆</td><td><strong class="mono">JPM</strong></td><td class="small">15 trades</td><td class="mono">61</td><td><span class="badge warn">CAUTION</span></td><td class="mono red">−3 (↓1)</td><td class="mono warning">47%</td><td class="mono">15</td><td class="mono green">3.2%</td><td class="mono red">7.9%</td><td class="mono warning">58</td><td class="mono muted">+0.4%</td><td class="small muted">D 30d</td><td><span class="badge warn">48%</span></td><td><span class="badge">PASS</span></td><td><button class="smallbtn">Expand</button></td><td><button class="smallbtn" data-goto="position">Open Position</button></td></tr>
+<tr class="rowsel" data-row="ko"><td>☆</td><td><strong class="mono">KO</strong></td><td class="small">12 trades</td><td class="mono">57</td><td><span class="badge warn">CAUTION</span></td><td class="mono muted">—</td><td class="mono red">41%</td><td class="mono">12</td><td class="mono red">−1.8%</td><td class="mono red">5.0%</td><td class="mono green">74</td><td class="mono red">−1.6%</td><td class="small muted">—</td><td><span class="badge neutral">—</span></td><td><span class="badge rej">REJECT</span></td><td><button class="smallbtn">Expand</button></td><td><button class="smallbtn" data-goto="position">Open Position</button></td></tr>
+</tbody></table></div>
+<p class="small muted" style="margin-top:8px">All 17 columns kept, separate, with today's tones and tooltips (win-rate, gate, fundamentals, score-is-a-filter, confidence text). <span class="t ex">EXISTING</span></p>
+<details class="disclosure"><summary>3 over cap <span class="t ex">EXISTING</span></summary><div class="content">symbol: reason, one per line.</div></details>
+<details class="disclosure"><summary>498 rejected <span class="t ex">EXISTING</span></summary><div class="content">symbol: reason, one per line.</div></details>
+</section>
+</div>
+
+<!-- ============================ POSITION ============================ -->
+<div class="view" data-v="position">
+<div class="crumbs"><span class="muted">Options</span><strong>Stocks</strong><span class="muted">Pre-Breakout</span><span class="muted">/</span><span>Step 6 of 6</span></div>
+<div class="pagehead"><div><div class="eyebrow">Step 6 of 6 <span class="t ex">EXISTING</span></div><h1>Position Card</h1></div></div>
+<details class="disclosure howto"><summary>How this page works <span class="t nw">NEW</span></summary><div class="content">Only candidates that passed the backtest gate are listed (as today). Cycle with Prev / Next or the symbol buttons. Edits are kept per scan and symbol between Backtest and Position. Every send saves to Portfolio first; the server decides the final share count.</div></details>
+<div class="note warn" style="margin:0 0 8px">Unvalidated — research only. Strategy validation is unavailable; broker sending and automatic arming are blocked. <span class="t ex">EXISTING</span></div>
+<div class="note bad" style="margin:0 0 8px">Earnings inside the reject window — no send <span class="t ex">EXISTING · when vetoed</span></div>
+<p class="small muted" style="margin:0 0 14px">Also as today, when they apply: the bearish Unvalidated message; “MSFT: stock send in flight — do not resend.” <span class="t ex">EXISTING</span></p>
+<article class="card slim market-slim" id="p-market">
+<div class="slim-title"><h2>Market Sentiment</h2><span class="small muted">Swing · daily</span></div>
+<div class="row between"><span>Moderate conviction</span><strong class="mono green" style="font-size:24px">+42%</strong></div>
+<p class="small muted">Moderate — the regime favours this trade. <span class="t mv">MOVED · was below the methods</span></p>
+<span class="badge">ALIGNED</span>
+<details class="disclosure"><summary>State persistence & full interpretation</summary><div class="content">Everything the existing MarketSentiment shows (state, stickiness, regime age, average duration, HMM state, alignment, insufficient-history state), via the compact variant already shipped for Options.</div></details>
+</article>
+<div class="card candidate">
+<button disabled>← Prev</button><span class="small muted">1 of 6</span><button>Next →</button>
+<span class="chips"><b class="on">MSFT</b><b>NVDA</b><b>JPM</b><b>AMZN</b><b>CRM</b><b>HD</b></span><span class="t mv">MOVED</span>
+<span class="basket"></span><button>Pin to Basket</button><button class="primary">Send basket (2)</button>
+</div>
+<header class="card identity">
+<div>
+<div class="row"><span class="ticker">MSFT</span><span class="badge" title="stockStatusTooltip">PASS</span><span class="badge" title="confidence_text">64%</span><span class="badge warn hide" id="edited">EDITED</span></div>
+<div class="small">Microsoft Corporation · Bullish · pullback ema <span class="t mv">MOVED</span></div>
+<div class="small muted" style="margin-top:6px">Stock score 72 · PASS (status tooltip, as today)</div>
+<div class="stockprice mono" style="margin-top:6px">Now: $429.35 <span class="t mv">MOVED</span></div>
+</div>
+<div class="contract">
+<div class="eyebrow">Sizing</div>
+<div class="facts"><span><strong>$428.10</strong> <span class="small muted">entry</span></span><span><strong class="red">$392</strong> <span class="small muted">risk $</span></span><span><strong>$12,415</strong> <span class="small muted">size $</span></span><span><strong>29</strong> <span class="small muted">shares</span></span><span><strong>2.0×</strong> <span class="small muted">R:R at T1</span></span><span><strong class="green">58%</strong> <span class="small muted">win % (backtest)</span></span></div>
+<p class="small muted" style="margin-top:8px">Same figures as today's top grid, live from your edits. <span class="t mv">MOVED</span></p>
+</div>
+<div class="identityactions"><button>View Chart</button></div>
+</header>
+<article class="card slim fundamental-slim" id="p-fund">
+<div class="slim-title"><h2>Fundamental Health</h2><strong class="mono green" style="font-size:24px">81<span class="small muted"> /100</span></strong></div>
+<p class="small muted">Strong quality · Low risk <span class="t mv">MOVED</span></p>
+<div class="buckets"><div><label>Growth</label><strong class="green">78</strong></div><div><label>Quality</label><strong class="green">90</strong></div><div><label>Risk</label><strong class="green">74</strong></div></div>
+<details class="disclosure"><summary>How to interpret these scores & safety flags</summary><div class="content">Existing FundamentalHealthCard content and safety flags, via the compact variant shipped for Options.</div></details>
+</article>
+<nav class="sectionnav"><a href="#p-order">Order & exits</a><a href="#p-methods">Calculations</a><a href="#p-race">Which comes first</a><a href="#p-qual">Qualification</a><a href="#p-market">Market sentiment</a><a href="#p-fund">Fundamentals</a><span class="t nw">NEW navigation</span></nav>
+<div class="workspace">
+<div class="stack">
+<section class="card summary">
+<div class="cardhead"><h2>Latest calculation <span class="t nw">NEW</span></h2><span class="small muted">repeats the most recent method's numbers</span></div>
+<div class="metricgrid">
+<div class="metric"><label>Plan stop</label><div class="big">$414.60</div><div class="hint">Arithmetic · structural — swing low</div></div>
+<div class="metric"><label>Risk / share</label><div class="big">$13.50</div><div class="hint">34% reached · ~5 trading days</div></div>
+<div class="metric"><label>Plan targets</label><div class="big" style="font-size:19px">$455.10 → $468.60</div><div class="hint">2R / 3R</div></div>
+</div>
+</section>
+<section class="card" id="p-order">
+<div class="cardhead"><h2>Order & exit settings</h2><span class="t mv">MOVED · same editable fields</span></div>
+<div class="settingsgrid four">
+<label>Entry<input class="ed" value="428.10"></label><label>Stop<input class="ed" value="414.60"></label><label>Shares<input class="ed" value="29"></label><label>R:R at T1<span class="readonly">2.0×</span></label>
+</div>
+<h3 style="margin-top:16px">Sell-to-close plan</h3>
+<table class="small" style="margin-top:6px"><thead><tr><th>Leg</th><th>Price</th><th>R:R</th><th>Return</th><th>Shares</th></tr></thead><tbody>
+<tr><td>T1</td><td><input class="ed mini2" value="455.10"></td><td class="mono green">2.0×</td><td class="mono green">6.3%</td><td><input class="ed mini" value="15"></td></tr>
+<tr><td>T2</td><td><input class="ed mini2" value="461.85"></td><td class="mono green">2.5×</td><td class="mono green">7.9%</td><td><input class="ed mini" value="9"></td></tr>
+<tr><td>T3</td><td><input class="ed mini2" value="468.60"></td><td class="mono green">3.0×</td><td class="mono green">9.5%</td><td><input class="ed mini" value="5"></td></tr></tbody></table>
+<h3 style="margin-top:16px">Structural stop</h3>
+<div class="buttons"><button>Check structure</button></div>
+<div class="evidence" style="margin-top:10px"><div><span>Structural</span><strong>$414.60</strong><small>(3.2% away)</small></div><div><span>Source</span><strong>swing low</strong></div><div><span>R:R vs structure</span><strong>2.0× R:R</strong></div></div>
+<div class="note">Reference level only — the risk basis stays your STOP. Saved with the position so STRUCTURAL STOP BREACHED can fire.</div>
+<p class="small muted" style="margin-top:8px">Wrong-side-target error, Check-structure error and loading labels as today. <span class="t ex">EXISTING</span></p>
+</section>
+<section id="p-methods">
+<div class="cardhead" style="margin:2px 0 12px"><h2>Calculation methods</h2><span class="small muted">Independent of each other; they can disagree</span></div>
+<div class="method-grid">
+<article class="card method">
+<div class="cardhead"><h2>Arithmetic Profit Target</h2><span class="t mv">MOVED · every line kept</span></div>
+<div class="buttons"><button class="primary">Arithmetic plan</button></div>
+<div class="planrow"><span>STOP</span><strong>$414.60</strong><em>structural — swing low</em><em>ATR(14) 7.70</em></div>
+<p class="tiny">Stop justification text (stopJustification), as today.</p>
+<div class="planrow"><span>RISK/SHARE</span><strong class="red">$13.50</strong><em class="warning">34% reached</em><em>~5 trading days</em></div>
+<div class="targetblock"><div class="planrow"><span>2R</span><strong class="green">$455.10</strong><em class="green">58% reached</em><em>~7 trading days</em></div>
+<div class="planrow sub"><span>reward/share</span><strong>27.00</strong><em>428.10 + 2 × 13.50 = 455.10</em><em>structure 452.30 · 2.80 away · tol 3.85</em></div>
+<p class="tiny">Within tolerance — snapped onto the structural level.</p></div>
+<div class="targetblock"><div class="planrow"><span>3R</span><strong class="green">$468.60</strong><em class="warning">41% reached</em><em>~11 trading days</em></div>
+<div class="planrow sub"><span>reward/share</span><strong>40.50</strong><em>428.10 + 3 × 13.50 = 468.60</em><em>tol 3.85</em></div>
+<p class="tiny warning">Target sits beyond the next real structural level.</p></div>
+<div class="planrow"><span>SHARES</span><strong>29</strong><em>risk budget $400.00 ÷ $13.50</em><em>≈ $12,415 position</em></div>
+<p class="tiny warning">Concentration line (when over the single-stock cap), Apply N shares, “Sized for the $X stop above, not the card's $Y”, and “this plan is a second opinion” warnings — all as today.</p>
+<p class="tiny">Model caveat when present · “Independent of the other profit-target methods on this page; they can disagree.”</p>
+</article>
+<article class="card method">
+<div class="cardhead"><h2>Monte Carlo Estimate</h2><span class="t mv">MOVED · was “Probability & Structure”</span></div>
+<div class="buttons"><button class="primary">Estimate</button></div>
+<p class="small muted" style="margin-top:10px">Chance of reaching each target within 15 trading days</p>
+<div class="planrow"><span>T1</span><strong>455.10</strong><em class="green">61%</em><em>~6d</em></div>
+<div class="planrow"><span>T2</span><strong>461.85</strong><em class="warning">49%</em><em>~9d</em></div>
+<div class="planrow"><span>T3</span><strong>468.60</strong><em class="warning">38%</em><em>~12d</em></div>
+<div class="planrow"><span>STOP</span><strong>414.60</strong><em class="warning">34%</em><em>~5d</em></div>
+<p class="tiny">“unlikely” when no path reaches a level · model caveat (mean-reversion strategies) verbatim · estimate error as today.</p>
+<div class="note">Source: <span class="mono">/api/stocks/first-passage</span> — the existing Monte Carlo. Nothing new is calculated.</div>
+</article>
+<article class="card method wide">
+<div class="cardhead"><h2>Fixed % Ladder</h2><span class="t mv">MOVED · method option</span></div>
+<p class="small muted">The T1 / T2 / T3 levels in Order & exit settings. This is the “Ladder” choice in Your decision.</p>
+</article>
+</div>
+</section>
+<section class="card race" id="p-race">
+<div class="cardhead"><h2>Which comes first</h2><span class="t mv">MOVED · from the Arithmetic plan</span></div>
+<p class="small muted">Which comes first, over 15 trading days (2,000 simulated paths). These three add to 100% because every path is counted once — unlike the percentages above, which are each measured on their own.</p>
+<table style="margin-top:10px"><thead><tr><th>Target</th><th>First outcome</th><th>Target first</th><th>Stop first</th><th>Neither</th></tr></thead><tbody>
+<tr><td class="mono">455.10</td><td><div class="split"><i class="win" style="width:52%"></i><i class="lose" style="width:31%"></i></div></td><td class="mono green">52% (~6d)</td><td class="mono red">31% (~5d)</td><td class="mono muted">17% (~$431.20)</td></tr>
+<tr><td class="mono">468.60</td><td><div class="split"><i class="win" style="width:37%"></i><i class="lose" style="width:38%"></i></div></td><td class="mono green">37% (~9d)</td><td class="mono red">38% (~6d)</td><td class="mono muted">25% (~$433.90)</td></tr>
+</tbody></table>
+<p class="tiny">Shown after Arithmetic plan runs, as today. The bar is the same numbers drawn, not a new statistic. <span class="t nw">bar = NEW drawing</span></p>
+</section>
+<section id="p-qual">
+<div class="cardhead" style="margin:2px 0 12px"><h2>Why does this trade qualify?</h2><span class="small muted">Score, backtest and gates stay distinct</span></div>
+<div class="qualgrid">
+<article class="card">
+<div class="cardhead"><h2>Stock Scorecard</h2><span class="badge">PASS</span></div>
+<div class="scorehead"><strong>72</strong><span class="max">/ 100 · status PASS</span></div>
+<p class="small muted">Total and status exist today. <span class="t ex">EXISTING</span></p>
+<p class="small" style="margin-top:8px"><span class="t nw">NEW</span> <span class="t be">BACKEND FIELD</span> factor rows:</p>
+<table class="scoretable"><tbody>
+<tr><td>Trend<span class="obs">scorer observation text</span></td><td><span class="scorebar"><i style="width:85%"></i></span>85</td></tr>
+<tr><td>Pullback</td><td><span class="scorebar"><i style="width:70%"></i></span>70</td></tr>
+<tr><td>Trigger</td><td><span class="scorebar"><i style="width:60%"></i></span>60</td></tr>
+<tr><td>Event</td><td><span class="scorebar"><i style="width:55%;background:var(--warn)"></i></span>55</td></tr>
+<tr><td>Volatility</td><td><span class="scorebar"><i style="width:80%"></i></span>80</td></tr>
+</tbody></table>
+<div class="note">Score is a filter, not evidence of profitable edge. <span class="t ex">EXISTING text</span></div>
+</article>
+<article class="card">
+<div class="cardhead"><h2>Backtest evidence</h2><span class="badge">GATE PASS</span></div>
+<div class="scorehead"><strong>64%</strong><span class="max">confidence</span></div>
+<p class="small muted">confidence_text from the scan, as in today's badge tooltip. <span class="t mv">MOVED</span></p>
+<div class="evidence" style="margin-top:10px"><div><span>Win rate</span><strong class="green">58%</strong><small>gate ≥45%</small></div><div><span>Trades</span><strong>19</strong><small>gate ≥8</small></div><div><span>Expectancy</span><strong>+0.84</strong></div><div><span>Return</span><strong class="green">14.2%</strong></div><div><span>Max DD</span><strong class="red">6.1%</strong></div><div><span>Sharpe <span class="t nw">NEW</span></span><strong>1.12</strong></div></div>
+<p class="tiny">Thresholds are the ones this scan used (scan request); “threshold provenance unavailable” for older results — same rule as today's Backtest page.</p>
+</article>
+</div>
+</section>
+</div>
+<aside class="side">
+<div class="card decision"><h2>Your decision</h2><span class="t mv">MOVED · MethodPickSelector</span>
+<div class="options"><button>Ladder<small>T1 · T2 · T3 rows</small></button><button class="active">Arithmetic<small>2R · 3R rows</small></button><button>Monte Carlo<small>Run Estimate first</small></button></div>
+<p class="small red" style="margin-top:10px">Method pick required — choose which method this trade is judged on before submitting.</p>
+<p class="tiny">Or the cleared-pick message (“Your Monte Carlo pick was cleared…”), as today.</p></div>
+<div class="card execution"><h2>Execution</h2><span class="t mv">MOVED · same controls</span>
+<button>Add to Portfolio</button>
+<p class="tiny">Adding… / Added to Portfolio / Queued — will sync.</p>
+<div class="modes"><button class="active">Recommendation</button><button>IBKR Paper</button><button>Tradier Paper</button><button>Alpaca Paper</button><button disabled title="Not configured — Settings → Brokers">Tastytrade Paper</button></div>
+<button disabled title="Earnings inside the reject window — no send">Limit @ $428.10</button><button disabled>Market Order</button>
+<p class="tiny">Order buttons only when a broker is selected; disabled reasons as tooltips; order result, errors, warnings (“Portfolio sized it to N shares (exposure limit).”) and queued note below — as today.</p>
+<details class="disclosure"><summary>Auto-trade arm & after-scan</summary><div class="content">StockAutoTradeArm with its after-scan toggle, unchanged.</div></details></div>
+<div class="card checkcard"><div class="cardhead"><h2>Pre-trade checklist</h2><span class="t nw">NEW · existing gates only</span></div>
+<div class="checklist">
+<div class="check"><i class="dot bad"></i>Strategy validation · Unvalidated</div>
+<div class="check"><i class="dot bad"></i>Earnings veto · inside the reject window</div>
+<div class="check"><i class="dot ok"></i>Backtest gate · PASS</div>
+<div class="check"><i class="dot ok"></i>Market sentiment · Aligned</div>
+<div class="check"><i class="dot warn"></i>Method pick · not chosen</div>
+<div class="check"><i class="dot neutral"></i>Scan gate flags (gate_flags), one line each</div>
+</div>
+<p class="tiny">Exposure and daily risk are judged by the server when you save, so they are not pre-checked here.</p></div>
+</aside>
+</div>
+<div class="note" style="margin-top:16px">Direct-send notes panel and the basket send dialog (StockSendDialog) unchanged. <span class="t ex">EXISTING</span></div>
+</div>
+
+<!-- ============================ PRE-BREAKOUT ============================ -->
+<div class="view hide" data-v="prebreakout">
+<div class="crumbs"><span class="muted">Options</span><span class="muted">Stocks</span><strong>Pre-Breakout</strong><span class="muted">/</span><span>Step 4</span></div>
+<div class="pagehead"><div><div class="eyebrow">Pre-Breakout</div><h1>Setup Scanner</h1><p class="small muted" style="margin-top:4px">Scanning S&amp;P 500 · Bullish <span class="t ex">EXISTING</span></p></div></div>
+<details class="disclosure howto"><summary>How this page works <span class="t nw">NEW</span></summary><div class="content">Three scans. Results are for watching and alerts; there is no trade card for this scanner (exits not designed yet).</div></details>
+<div class="row" style="margin-bottom:10px"><button class="active pbmode" data-pb="pre">Pre-Breakout</button><button class="pbmode" data-pb="pull">Pullback to EMA 50</button><button class="pbmode" data-pb="fib">Fib Pullback</button><span class="t ex">EXISTING</span></div>
+<div class="workspace">
+<div class="stack">
+<section class="card pb" data-pb="pre">
+<p class="small muted">Stocks coiling near a key resistance level — ATR compressed, volume dry, close within 8.0% of swing high. Set a regime alert to be notified when conditions align. <span class="t ex">EXISTING</span></p>
+<table class="results" style="margin-top:12px">
+<thead><tr><th></th><th>Symbol</th><th>Dir</th><th>Confidence</th><th>ATR Ratio</th><th>Vol Ratio</th><th>Proximity %</th><th></th><th></th></tr></thead>
+<tbody>
+<tr class="rowsel open" data-row="amzn"><td>☆ 📈</td><td><strong class="mono">AMZN</strong></td><td class="green">↑</td><td class="mono green">78%</td><td class="mono">0.62</td><td class="mono">0.71</td><td class="mono">0.9</td><td><button class="smallbtn">Set Alert</button></td><td><button class="smallbtn">▾ <span class="t nw">NEW</span></button></td></tr>
+<tr class="detailrow" data-detail="amzn"><td colspan="9">
+<div class="detailgrid">
+<div><h3>Why it's a setup <span class="t nw">NEW</span></h3>
+<div class="checklist" style="margin-top:10px">
+<div class="check"><i class="dot ok"></i>ATR ratio 0.62 · must be below 0.85</div>
+<div class="check"><i class="dot ok"></i>Range tight · 10-bar range within 3.0 × ATR</div>
+<div class="check"><i class="dot ok"></i>Volume ratio 0.71 · must be below 0.90</div>
+<div class="check"><i class="dot ok"></i>0.9% from swing high $201.40 · within 8.0%</div>
+</div>
+<p class="tiny">Same facts as today's hover tooltips (tooltips stay). Swing level and range ratio are already in the scan result, not shown today.</p></div>
+<div><h3>Confidence 78% <span class="t nw">NEW</span> <span class="t be">BACKEND FIELD</span></h3>
+<table class="scoretable"><tbody>
+<tr><td>Proximity<span class="obs">45% of confidence</span></td><td><span class="scorebar"><i style="width:88%"></i></span>88</td></tr>
+<tr><td>ATR compression<span class="obs">30%</span></td><td><span class="scorebar"><i style="width:72%"></i></span>72</td></tr>
+<tr><td>Volume quiet<span class="obs">25%</span></td><td><span class="scorebar"><i style="width:66%"></i></span>66</td></tr>
+</tbody></table></div>
+<div><h3>Chart <span class="t nw">NEW</span></h3><div class="mockchart" style="height:150px">small candlestick chart · swing-high line</div>
+<p class="tiny">📈 Open in Chart and Set Alert stay on the row.</p></div>
+</div>
+</td></tr>
+<tr class="rowsel" data-row="crm"><td>★ 📈</td><td><strong class="mono">CRM</strong></td><td class="green">↑</td><td class="mono green">71%</td><td class="mono">0.70</td><td class="mono">0.79</td><td class="mono">1.6</td><td><button class="smallbtn">Set Alert</button></td><td><button class="smallbtn">▸</button></td></tr>
+<tr class="rowsel" data-row="hd"><td>☆ 📈</td><td><strong class="mono">HD</strong></td><td class="green">↑</td><td class="mono warning">58%</td><td class="mono">0.74</td><td class="mono">0.88</td><td class="mono">2.8</td><td><button class="smallbtn">Set Alert</button></td><td><button class="smallbtn">▸</button></td></tr>
+</tbody></table>
+<p class="tiny">Sorted by confidence, empty state “No results yet — run the scan.”, scan error — as today. <span class="t ex">EXISTING</span></p>
+</section>
+<section class="card pb hide" data-pb="pull">
+<p class="small muted">Trending stocks that have pulled back to EMA 50 (confirmed by EMA 100 trend). Results are ranked by stock score. <span class="t ex">EXISTING</span></p>
+<table class="results" style="margin-top:12px">
+<thead><tr><th></th><th>Symbol</th><th>Company</th><th>Dir</th><th>Score</th><th>Price</th><th>Confidence</th><th></th></tr></thead>
+<tbody>
+<tr><td>☆</td><td><strong class="mono">LOW</strong></td><td class="small">Lowe's Companies</td><td class="green">↑</td><td class="mono green">74</td><td class="mono">$248.30</td><td class="mono">61%</td><td><button class="smallbtn">Set Alert</button></td></tr>
+<tr><td>☆</td><td><strong class="mono">ADBE</strong></td><td class="small">Adobe Inc.</td><td class="green">↑</td><td class="mono warning">63</td><td class="mono">$512.40</td><td class="mono">—</td><td><button class="smallbtn">Set Alert</button></td></tr>
+</tbody></table>
+<p class="tiny">Unchanged columns, tooltips and empty state. No row details were approved for this mode. <span class="t ex">EXISTING</span></p>
+</section>
+<section class="card pb hide" data-pb="fib">
+<p class="small muted">Stocks retracing to a key Fibonacci level (38.2%, 61.8%) after a significant swing move. At-level hits are sorted first. Set a regime alert to be notified when conditions align. <span class="t ex">EXISTING</span></p>
+<table class="results" style="margin-top:12px">
+<thead><tr><th></th><th>Symbol</th><th>Dir</th><th>Fib Level</th><th>Distance</th><th>At Level</th><th>Confidence</th><th></th><th></th></tr></thead>
+<tbody>
+<tr class="rowsel open" data-row="pg"><td>☆ 📈</td><td><strong class="mono">PG</strong></td><td class="green">↑</td><td class="mono">61.8%</td><td class="mono green">0.4%</td><td class="green">YES</td><td class="mono green">92%</td><td><button class="smallbtn">+</button></td><td><button class="smallbtn">▾ <span class="t nw">NEW</span></button></td></tr>
+<tr class="detailrow" data-detail="pg"><td colspan="9">
+<div class="detailgrid two">
+<div><h3>Swing measured from <span class="t nw">NEW</span> <span class="t be">BACKEND FIELD</span></h3>
+<div class="evidence" style="margin-top:10px"><div><span>Swing low</span><strong>$152.10</strong></div><div><span>Swing high</span><strong>$171.80</strong></div><div><span>61.8% level</span><strong>$159.63</strong></div></div></div>
+<div><h3>Chart <span class="t nw">NEW</span></h3><div class="mockchart" style="height:150px">small candlestick chart · fib level lines</div></div>
+</div>
+</td></tr>
+<tr class="rowsel" data-row="ups"><td>☆ 📈</td><td><strong class="mono">UPS</strong></td><td class="green">↑</td><td class="mono">38.2%</td><td class="mono warning">2.1%</td><td class="muted">no</td><td class="mono warning">55%</td><td><button class="smallbtn">+</button></td><td><button class="smallbtn">▸</button></td></tr>
+</tbody></table>
+</section>
+</div>
+<aside class="side">
+<div class="card"><div class="cardhead"><h2>Scan</h2><span class="t mv">MOVED</span></div>
+<textarea rows="2" placeholder="Leave blank to use universe (S&P 500) · or enter specific symbols to override"></textarea>
+<button class="primary" style="width:100%;margin-top:10px">Run Scan</button>
+<details class="disclosure" open><summary>Scan parameters</summary><div class="content">The mode's existing panel, unchanged: PreBreakoutParamsPanel (ATR ratio 0.85, ATR lookback 20, range × ATR 3.0, range bars 10, volume ratio 0.90, proximity 8%, swing lookback 50, Reset) · Pullback EMA 50 / trend EMA 100 with their explanations and Reset · FibPullbackParamsPanel (swing lookback 100, levels 38.2 / 61.8, tolerance 1.5%, EMA filter 20, Reset).</div></details></div>
+<div class="card"><h2>What you can do</h2><p class="small muted" style="margin-top:6px">☆ Watch, 📈 Open in Chart (new tab), Set Alert (CompositeAlertDialog). No trade card. <span class="t ex">EXISTING</span></p></div>
+</aside>
+</div>
+</div>
+
+<div class="footer"><span>STOCK-DESIGN-GRILLING · proposal 02 · 2026-10-10 · values illustrative</span><span>Nothing is removed. Every NEW item was approved on 2026-10-10.</span></div>
+</main>
+</div>
+
+<div class="drawer" id="mapdrawer"><div class="drawerbox">
+<div class="sticky row between"><h2>Current → proposed, item by item</h2><button id="mapclose">Close</button></div>
+<p class="small muted">Built from the current source (2026-10-10). Status: EXISTING = unchanged; MOVED = same item, new place/styling; NEW = approved addition.</p>
+<table class="mappingtable"><thead><tr><th>Page</th><th>Item today</th><th>Where it goes</th><th>Status</th></tr></thead><tbody id="maprows"><tr><td>Strategy</td><td>Header: STEP 4 OF 6, title, “Pick a strategy…”, “Scanning full … universe”</td><td>Page head</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Strategy</td><td>7 strategy cards: label, when, regime-fit badge + tooltip, Entry / Stop / Exit</td><td>Strategy grid (same text)</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>(none)</td><td>“Looks for” line per card</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Strategy</td><td>StrategyParamsPanel (profile values, overrides, Reset, unavailable state, thresholds, event filter, shortlist max)</td><td>Parameters card, unchanged inside</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>Multi-Signal MeanReversionConfirmPanel + its Reset + unavailable note</td><td>Parameters card (only for Multi-Signal)</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Strategy</td><td>Run Stock Scan, disabled reasons, running label, last scan time</td><td>Right column “Run scan”</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>HistoryPrefetchRow (Pre-warm / Re-warm, status, last refresh)</td><td>Right column “Pre-warm history”</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>Scan error / notice text</td><td>Run scan card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>DirectSendNotesPanel</td><td>Right column</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Strategy</td><td>(none)</td><td>Market Sentiment strip</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Strategy</td><td>(none)</td><td>After-scan armed count</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Strategy</td><td>(none)</td><td>“How this page works”</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Backtest</td><td>Header: STEP 5 OF 6, title, counts line, Unvalidated text, last scan</td><td>Page head + warning note</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>Feedback error / notice, DirectSendNotesPanel</td><td>Under the summary strip</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>Event-filter hidden count, gate thresholds (in tooltips)</td><td>Also shown in the summary strip</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Backtest</td><td>Pipeline log (ScanFunnel), direction banner</td><td>Under the summary strip</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>Health sort (desc / asc / off)</td><td>Sort buttons</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>(none)</td><td>Score sort, Confidence sort</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Backtest</td><td>17 columns: watch, symbol + portfolio dot, summary, score, status, Δ (rank), win %, trades, return, max DD, health, VS SPX, event, conf, gate, Expand, Open Position</td><td>Same 17 columns, same tones and tooltips</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>Expand → full StockPositionCard</td><td>Kept: full card under the row</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>(none)</td><td>Quick summary above the full card (score factors, backtest vs gate, flags)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Backtest</td><td>Over-cap list, rejected list with reasons</td><td>Disclosures under table</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Backtest</td><td>Send basket (n) + StockSendDialog</td><td>Page head button</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Header: STEP 6 OF 6, Position Card, Send basket</td><td>Page head / candidate bar</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Prev / n of N / Next, symbol buttons (gate-passing candidates only)</td><td>Candidate bar</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Company, direction · strategy, ConfidenceBadge, StatusBadge + tooltip</td><td>Identity header</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Unvalidated text, bearish Unvalidated text, earnings-veto text, in-flight warning</td><td>Notes above the card</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Position</td><td>Now: quote (loading / — )</td><td>Identity header</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>ENTRY, STOP, T1, R:R AT T1, SHARES, RISK $, SIZE $, WIN %</td><td>Order &amp; exits fields + identity facts</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Sell-to-close plan T1–T3: price, R:R, return %, shares (editable)</td><td>Order &amp; exits table</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Wrong-side-target error</td><td>Order &amp; exits</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Position</td><td>Check structure + structural price, % away, source, R:R, reference note, error</td><td>Order &amp; exits “Structural stop”</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Estimate (Monte Carlo /api/stocks/first-passage): window, T1–T3 %, days / unlikely, STOP %, days, caveat, error</td><td>Monte Carlo Estimate card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Arithmetic plan: stop + source + ATR(14), justification, risk/share + % + days, second-opinion warning</td><td>Arithmetic card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Arithmetic targets: R, price, % reached, days, reward/share, equation, structure · away · tol, compare label, stop-widened note</td><td>Arithmetic card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Arithmetic sizing: shares, risk budget ÷ risk/share, ≈ position, concentration flag, Apply N shares, sized-for note</td><td>Arithmetic card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Two-barrier race: window, paths, target / stop / neither % with days and ~$</td><td>“Which comes first” card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>(none)</td><td>Bar drawing of the race numbers</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Position</td><td>Model caveat, “Independent of the other methods…”</td><td>Arithmetic card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>MarketSentiment (full)</td><td>Compact strip at the top, same content</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>FundamentalHealthCard (full)</td><td>Compact strip under identity, same content</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>MethodPickSelector (Ladder / Arithmetic / Monte Carlo, rows, unavailable reason)</td><td>Right column “Your decision”</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Missing-pick / cleared-pick message</td><td>Your decision</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>View Chart, Pin / Unpin, Add to Portfolio (states)</td><td>Identity / candidate bar / Execution</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Broker modes: Recommendation, IBKR, Tradier, Alpaca, Tastytrade (+ not-configured)</td><td>Execution</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>Limit @ entry, Market Order, disabled reasons; order result, err, warning, queued</td><td>Execution</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>StockAutoTradeArm + after-scan toggle</td><td>Execution disclosure</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>DirectSendNotesPanel, StockSendDialog</td><td>Under the page / dialog</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Position</td><td>(none)</td><td>Latest calculation strip</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Position</td><td>(stock score total only)</td><td>Stock Scorecard factor rows (backend field)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Position</td><td>Backtest stats + confidence_text (Backtest page / tooltip)</td><td>Backtest evidence card</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Position</td><td>(none)</td><td>Sharpe</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Position</td><td>(none)</td><td>Pre-trade checklist (existing gates only)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Position</td><td>(none)</td><td>Section links, “How this page works”</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Pre-Breakout</td><td>Header “Setup Scanner”, “Scanning … · direction”</td><td>Page head</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Mode toggle Pre-Breakout / Pullback to EMA N / Fib Pullback</td><td>Under page head</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Mode description texts</td><td>Top of each mode card</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Symbol override box + Run Scan; params panels + Reset</td><td>Right column “Scan”</td><td><span class="t mv keep">MOVED</span></td></tr><tr><td>Pre-Breakout</td><td>Pre-Breakout table: watch, 📈, symbol, dir, confidence, ATR ratio, vol ratio, proximity %, Set Alert + tooltips</td><td>Same columns</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Pullback table: watch, symbol, company, dir, score, price, confidence, Set Alert + tooltips</td><td>Same columns</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Fib table: watch, 📈, symbol, dir, fib level, distance, at level, confidence, + alert</td><td>Same columns</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>CompositeAlertDialog, empty states, error</td><td>Unchanged</td><td><span class="t ex keep">EXISTING</span></td></tr><tr><td>Pre-Breakout</td><td>Tooltip facts (ratio vs threshold); swing level &amp; range ratio (in data, not shown)</td><td>“Why it&#x27;s a setup” row detail (tooltips stay)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Pre-Breakout</td><td>(none)</td><td>Confidence breakdown (backend field)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Pre-Breakout</td><td>(none)</td><td>Mini chart (Pre-Breakout and Fib rows)</td><td><span class="t nw keep">NEW</span></td></tr><tr><td>Pre-Breakout</td><td>(none)</td><td>Fib swing low / high (backend field)</td><td><span class="t nw keep">NEW</span></td></tr></tbody></table>
+</div></div>
+
+<script>
+const views = document.querySelectorAll('.view');
+function show(v) {
+  views.forEach(x => x.classList.toggle('hide', x.dataset.v !== v));
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  window.scrollTo(0, 0);
+  try { history.replaceState(null, '', '#' + v); } catch (e) {}
+}
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => show(b.dataset.view));
+document.querySelectorAll('[data-goto]').forEach(b => b.onclick = e => { e.preventDefault(); e.stopPropagation(); show(b.dataset.goto); });
+if (['strategy', 'backtest', 'position', 'prebreakout'].includes(location.hash.slice(1))) show(location.hash.slice(1));
+document.querySelectorAll('tr.rowsel').forEach(r => r.addEventListener('click', () => {
+  const tb = r.parentElement;
+  const d = tb.querySelector('[data-detail="' + r.dataset.row + '"]');
+  const wasOpen = r.classList.contains('open');
+  tb.querySelectorAll('tr.rowsel').forEach(x => x.classList.remove('open'));
+  tb.querySelectorAll('tr.detailrow').forEach(x => x.classList.add('hide'));
+  if (!wasOpen) { r.classList.add('open'); if (d) d.classList.remove('hide'); }
+}));
+document.querySelectorAll('.strat').forEach(s => s.onclick = () => {
+  document.querySelectorAll('.strat').forEach(x => x.classList.remove('active'));
+  s.classList.add('active');
+});
+document.querySelectorAll('.decision .options button:not([disabled])').forEach(s => s.onclick = () => {
+  s.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+  s.classList.add('active');
+});
+document.querySelectorAll('input.ed').forEach(i => {
+  const v = i.value;
+  i.oninput = () => {
+    i.classList.toggle('changed', i.value !== v);
+    const any = [...document.querySelectorAll('input.ed')].some(x => x.classList.contains('changed'));
+    document.getElementById('edited').classList.toggle('hide', !any);
+  };
+});
+const dr = document.getElementById('mapdrawer');
+document.getElementById('maptop').onclick = () => dr.classList.add('open');
+document.getElementById('mapclose').onclick = () => dr.classList.remove('open');
+dr.onclick = e => { if (e.target === dr) dr.classList.remove('open'); };
+
+const tt = document.getElementById('tagtoggle');
+tt.onclick = () => { const off = document.body.classList.toggle('notags'); tt.textContent = off ? 'Tags off' : 'Tags on'; tt.classList.toggle('active', !off); };
+document.querySelectorAll('.pbmode').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.pbmode').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('section.pb').forEach(s => s.classList.toggle('hide', s.dataset.pb !== b.dataset.pb));
+});
+document.querySelectorAll('.modes button:not([disabled])').forEach(b => b.onclick = () => {
+  b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+});
+
+</script>
+</body></html>

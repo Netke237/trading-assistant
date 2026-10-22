@@ -10,6 +10,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { reportingLocalStorage } from './reportingLocalStorage';
 
 export const SETTINGS_STORAGE_KEY = 'bamendjou-settings';
 
@@ -465,7 +466,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: SETTINGS_STORAGE_KEY,
       storage: createJSONStorage(() => {
         if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return localStorage;
+        return reportingLocalStorage('Settings (this browser)');
       }),
       skipHydration: true,
       version: 24,

@@ -1,0 +1,4240 @@
+[
+  {
+    "observation_id": "route:/",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/alerts",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/analysis",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/calendar",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/chart",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/dashboard",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/journal",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/portfolio",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-1-regime",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-2-universe",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-3-direction",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-4-prebreakout",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-4-ranking",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-4-stocks",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-5-strategy",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-5-vol-events",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-6-backtest",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-6-contracts",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-7-position-card",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/screener/step-7-trade-card",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/settings",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/strategy-watch",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/validation",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/validation/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/watchlist",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/__test-crash",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/__test-crash/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/chart/standalone",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/chart/standalone/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "hard:/dev/components",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/dev/components/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "settings:theme",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:theme"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:scan",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ScanForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:scan"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:strategy",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:strategy"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:brokers",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#BrokersForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:brokers"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#BrokersForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:risk",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RiskForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:risk"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RiskForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:regime",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:regime"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:notifications",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#NotificationForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:notifications"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#NotificationForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:data",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#DataForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:data"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#DataForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:tuning",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "settings-section:tuning"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "soft:/dashboard",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/NavItems/index.tsx#NavItems"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "primary-link:/dashboard"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/dashboard/page.tsx::surface:frontend/components/organisms/NavItems/index.tsx#NavItems::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:notfound",
+    "artifact": "evidence/observations.json",
+    "route_id": null,
+    "surface_ids": [
+      "surface:frontend/app/not-found.tsx#NotFound"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:default:1279",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/dashboard/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:default:1280",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/dashboard/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:trade-card:1199",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-trade-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:trade-card:1200",
+    "artifact": "evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-trade-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "redirect:asserted:/",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "redirect:asserted:/screener",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/dashboard",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/alerts",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/analysis",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/calendar",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/journal",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/portfolio",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/settings",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/strategy-watch",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/validation",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/validation/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/watchlist",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-1-regime",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-2-universe",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-3-direction",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-4-ranking",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-6-contracts",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:options",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:options"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:options",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:options",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:stocks",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:stocks"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:stocks",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:stocks",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:prebreakout",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:prebreakout"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:prebreakout",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:prebreakout",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "setup:submode:prebreakout",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:prebreakout"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:prebreakout:details:0",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "setup:prebreakout/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:submode:pullback",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:pullback"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:pullback:details:0",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::native:summary:e3e76b62a5a7"
+    ],
+    "fixture_identities": [
+      "setup:pullback/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:submode:fib",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:fib"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:fib:details:0",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "setup:fib/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:theme",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:theme"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:scan",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ScanForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:scan"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:strategy",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:strategy"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:brokers",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#BrokersForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:brokers"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#BrokersForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:risk",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RiskForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:risk"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RiskForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:regime",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:regime"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:notifications",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#NotificationForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:notifications"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#NotificationForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:data",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#DataForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:data"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#DataForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:tuning",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:tuning"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-dialog",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::native:div:4ae7521e72d7"
+    ],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-cancel",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "failed-cancelled",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:failed-cancelled"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-proceed",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "journal:two-rows",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/JournalEntryTable/index.tsx#JournalEntryTable"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "audit-note-AAPL",
+      "audit-note-MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/journal/page.tsx::surface:frontend/components/organisms/JournalEntryTable/index.tsx#JournalEntryTable::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "journal:edit-form",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/JournalEntryForm/index.tsx#JournalEntryForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "audit-note-AAPL"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/journal/page.tsx::surface:frontend/components/organisms/JournalEntryForm/index.tsx#JournalEntryForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "alerts:rules-tab",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/alerts/page.tsx#AlertsPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/alerts/page.tsx::surface:frontend/app/(frame)/alerts/page.tsx#AlertsPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:frame-error",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/error.tsx#FrameError"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "failed-cancelled",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:frame-reset",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/error.tsx#FrameError"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "slots:dashboard-hard",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/portfolio",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/portfolio",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/calendar",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/calendar",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/watchlist",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/watchlist",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/settings",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/settings",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/alerts",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/alerts",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/analysis",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/analysis",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/chart",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/chart",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:back",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:forward",
+    "artifact": "interactive-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "redirect:asserted:/",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "redirect:asserted:/screener",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "redirect:asserted:/screener/step-5-strategy",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/dashboard",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/alerts",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/analysis",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/calendar",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/journal",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/portfolio",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/settings",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/strategy-watch",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/validation",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/validation/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/watchlist",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-1-regime",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-2-universe",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-3-direction",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-4-ranking",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "semantic:/screener/step-6-contracts",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:options",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:options"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:options",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:options",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:stocks",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:stocks"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:stocks",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:stocks",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:button:prebreakout",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "screener-mode:prebreakout"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout::state:normal",
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "mode:next:prebreakout",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "mode:keyboard-back:prebreakout",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "setup:submode:prebreakout",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:prebreakout"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:prebreakout:details:0",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "setup:prebreakout/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:submode:pullback",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:pullback"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:pullback:details:0",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::native:summary:e3e76b62a5a7"
+    ],
+    "fixture_identities": [
+      "setup:pullback/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:submode:fib",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup-submode:fib"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:fib:details:0",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "setup:fib/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:theme",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:theme"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ThemeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:scan",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ScanForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:scan"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:strategy",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:strategy"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:brokers",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#BrokersForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:brokers"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#BrokersForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:risk",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RiskForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:risk"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RiskForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:regime",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:regime"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#RegimeForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:notifications",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#NotificationForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:notifications"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#NotificationForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:data",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#DataForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:data"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#DataForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "settings:section:tuning",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage::native:button:66dadabe2cd4"
+    ],
+    "fixture_identities": [
+      "settings-section:tuning"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-dialog",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::native:div:4ae7521e72d7"
+    ],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-cancel",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "failed-cancelled",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar::state:failed-cancelled"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "shell:reject-proceed",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "journal:two-rows",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/JournalEntryTable/index.tsx#JournalEntryTable"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "audit-note-AAPL",
+      "audit-note-MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/journal/page.tsx::surface:frontend/components/organisms/JournalEntryTable/index.tsx#JournalEntryTable::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "journal:edit-form",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/JournalEntryForm/index.tsx#JournalEntryForm"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "audit-note-AAPL"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/journal/page.tsx::surface:frontend/components/organisms/JournalEntryForm/index.tsx#JournalEntryForm::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "alerts:rules-tab",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/alerts/page.tsx#AlertsPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/alerts/page.tsx::surface:frontend/app/(frame)/alerts/page.tsx#AlertsPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "alerts:builder-n-of-m",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder"
+    ],
+    "native_ids": [
+      "surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder::native:button:8677ab396c82"
+    ],
+    "fixture_identities": [],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/alerts/page.tsx::surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "alerts:builder-regime-condition",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "condition:initial-row:regime"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/alerts/page.tsx::surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:frame-error",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/error.tsx#FrameError"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "failed-cancelled",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:frame-reset",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/error.tsx#FrameError"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "boundary:frame-loading-visible",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/loading.tsx#Loading"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "loading",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "slots:dashboard-hard",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/portfolio",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/portfolio",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/calendar",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/calendar",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/watchlist",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/watchlist",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/settings",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/settings",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/alerts",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/alerts",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/analysis",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/analysis",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:soft:/chart",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:hard:/chart",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:back",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "slots:forward",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "tuning:expanded-two-folds",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ProposalCard"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ProposalCard::native:button:7faa89b037eb"
+    ],
+    "fixture_identities": [
+      "job:audit-tuning-job",
+      "proposal:pullback_ema",
+      "fold:audit-fold-A",
+      "fold:audit-fold-B"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ProposalCard::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:canvas-click-crosshair",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/ChartWorkspace/index.tsx#ChartWorkspace",
+      "surface:frontend/components/organisms/ChartPane/index.tsx#ChartPane"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "chart:AAPL:default-interval"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/ChartWorkspace/index.tsx#ChartWorkspace::state:normal",
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/ChartPane/index.tsx#ChartPane::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:indicator-panel",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/IndicatorPanel/index.tsx#IndicatorPanel"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/IndicatorPanel/index.tsx#IndicatorPanel::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:indicator-added",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "indicator-type:SMA"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "tooltip:css-hover",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip"
+    ],
+    "native_ids": [
+      "surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip::native:span:10495205b752"
+    ],
+    "fixture_identities": [
+      "tooltip:Regime is still being computed."
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "report:filter-breakdown",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "report:audit-report-run"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "report:fixture:details:0",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::native:summary:e3e76b62a5a7",
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:1",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::native:summary:fa570eb1dec5"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw frozen inputs and configuration"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:2",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/molecules/SavedScanResultsTable/index.tsx#SavedScanResultsTable::native:summary:6b0b3a725fa5",
+      "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions::native:summary:eb900dfd5559"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw record"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:3",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions::native:summary:0733992b9597"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Saved exclusions"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:5",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::native:summary:b9a28877d6ef"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw report data"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:legacy-empty",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "report-category:legacy"
+    ],
+    "state_key": "legacy-unsupported",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::state:legacy-unsupported"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:position-card:1199",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:position-card:1200",
+    "artifact": "interactive-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:position-populated",
+    "artifact": "followup-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:AAPL",
+      "stock:MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:position-next-candidate",
+    "artifact": "followup-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "stocks:disclosure:How this page works",
+    "artifact": "followup-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT/summary:How this page works"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:disclosure:Auto-trade execution",
+    "artifact": "followup-attempt-1/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT/summary:Auto-trade execution"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "options:chain-open-diagnostic",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "AAPL"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "options:contract-explanation",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/atoms/ContractExplanationToggle/index.tsx#ContractExplanationToggle",
+      "surface:frontend/components/molecules/ContractScoreExplanation/index.tsx#ContractScoreExplanationContent"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "AAPL|185|2025-05-16|C"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-6-contracts/page.tsx::surface:frontend/components/atoms/ContractExplanationToggle/index.tsx#ContractExplanationToggle::state:expanded-nested",
+      "instance:frontend/app/(frame)/screener/step-6-contracts/page.tsx::surface:frontend/components/molecules/ContractScoreExplanation/index.tsx#ContractScoreExplanationContent::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "options:reload-populated",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/StoreHydration/index.tsx#StoreHydration"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "AAPL|185|2025-05-16|C"
+    ],
+    "state_key": "reload-restart",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-6-contracts/page.tsx::surface:frontend/components/StoreHydration/index.tsx#StoreHydration::state:reload-restart"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "I",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "options:trade-card-fixture",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/TradeCard/index.tsx#TradeCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "AAPL|185|2025-05-16|C"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-trade-card/page.tsx::surface:frontend/components/organisms/TradeCard/index.tsx#TradeCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:position-populated",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:AAPL",
+      "stock:MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:position-next-candidate",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "stocks:disclosure:How this page works",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT/summary:How this page works"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "stocks:disclosure:Auto-trade execution",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "stock:MSFT/summary:Auto-trade execution"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "tuning:expanded-two-folds",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ProposalCard"
+    ],
+    "native_ids": [
+      "surface:frontend/app/(frame)/settings/page.tsx#ProposalCard::native:button:7faa89b037eb"
+    ],
+    "fixture_identities": [
+      "job:audit-tuning-job",
+      "proposal:pullback_ema",
+      "fold:audit-fold-A",
+      "fold:audit-fold-B"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/app/(frame)/settings/page.tsx#ProposalCard::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:canvas-click-crosshair",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/ChartWorkspace/index.tsx#ChartWorkspace",
+      "surface:frontend/components/organisms/ChartPane/index.tsx#ChartPane"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "chart:AAPL:default-interval"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/ChartWorkspace/index.tsx#ChartWorkspace::state:normal",
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/ChartPane/index.tsx#ChartPane::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:indicator-panel",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/IndicatorPanel/index.tsx#IndicatorPanel"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/IndicatorPanel/index.tsx#IndicatorPanel::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:indicator-added",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "indicator-type:SMA"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "chart:indicator-params",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "indicator-type:SMA/param:period"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "chart:structure-panel",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/StructurePanel/index.tsx#StructurePanel"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/StructurePanel/index.tsx#StructurePanel::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "chart:alert-builder",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/chart/page.tsx::surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder::state:expanded-nested"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "tooltip:css-hover",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip"
+    ],
+    "native_ids": [
+      "surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip::native:span:10495205b752"
+    ],
+    "fixture_identities": [
+      "tooltip:Regime is still being computed."
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/settings/page.tsx::surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:two-fixture-rows",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup:prebreakout:AAPL",
+      "setup:prebreakout:MSFT"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:selected-row",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#SelectedRowEvidence",
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx#SelectedSetupChart"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup:prebreakout:AAPL"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#SelectedRowEvidence::state:normal",
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx#SelectedSetupChart::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:selected:details:0",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::native:summary:e3e76b62a5a7",
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "setup:selected/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "setup:selected:details:1",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup:selected/summary:AAPL · Setup evidence"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "setup:composite-alert",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/CompositeAlertDialog/index.tsx#CompositeAlertDialog"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup:prebreakout:AAPL"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/CompositeAlertDialog/index.tsx#CompositeAlertDialog::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "setup:composite-intraday",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/CompositeAlertDialog/index.tsx#CompositeAlertDialog"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "setup:prebreakout:AAPL/model:HMM_intraday"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/CompositeAlertDialog/index.tsx#CompositeAlertDialog::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "report:filter-breakdown",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "report:audit-report-run"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "report:fixture:details:0",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage::native:summary:e3e76b62a5a7",
+      "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel::native:summary:f2730234aaf6",
+      "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel::native:summary:f2730234aaf6"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Scan parameters"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:1",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::native:summary:fa570eb1dec5"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw frozen inputs and configuration"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:2",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/molecules/SavedScanResultsTable/index.tsx#SavedScanResultsTable::native:summary:6b0b3a725fa5",
+      "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions::native:summary:eb900dfd5559"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw record"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:3",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions::native:summary:0733992b9597"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Saved exclusions"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:4",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/molecules/SavedScanResultsTable/index.tsx#SavedScanResultsTable::native:summary:6b0b3a725fa5",
+      "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions::native:summary:eb900dfd5559"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw record"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:fixture:details:5",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [],
+    "native_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::native:summary:b9a28877d6ef"
+    ],
+    "fixture_identities": [
+      "report:fixture/summary:Raw report data"
+    ],
+    "state_key": "expanded-nested",
+    "source_state_requirement_ids": [],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": []
+  },
+  {
+    "observation_id": "report:legacy-empty",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "report-category:legacy"
+    ],
+    "state_key": "legacy-unsupported",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx::surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector::state:legacy-unsupported"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:position-card:1199",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "min-width:position-card:1200",
+    "artifact": "followup-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate"
+    ],
+    "native_ids": [],
+    "fixture_identities": [],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-7-position-card/page.tsx::surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "primary-link:/screener",
+    "artifact": "primary-link-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/NavItems/index.tsx#NavItems"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "primary-link:/screener"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/screener/step-1-regime/page.tsx::surface:frontend/components/organisms/NavItems/index.tsx#NavItems::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  },
+  {
+    "observation_id": "primary-link:/strategy-watch",
+    "artifact": "primary-link-evidence/observations.json",
+    "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "surface_ids": [
+      "surface:frontend/components/organisms/NavItems/index.tsx#NavItems"
+    ],
+    "native_ids": [],
+    "fixture_identities": [
+      "primary-link:/strategy-watch"
+    ],
+    "state_key": "normal",
+    "source_state_requirement_ids": [
+      "instance:frontend/app/(frame)/strategy-watch/page.tsx::surface:frontend/components/organisms/NavItems/index.tsx#NavItems::state:normal"
+    ],
+    "evidence_status": "runtime-observed for this fixture only; no domain correctness pass",
+    "owners": [
+      {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      }
+    ]
+  }
+]

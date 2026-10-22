@@ -1,0 +1,1623 @@
+{
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "python": "3.11.16 (main, Sep 24 2026, 17:56:40) [Clang 22.1.3 ]",
+  "runs": [
+    {
+      "mode": "write",
+      "checks": [
+        {
+          "id": "notifications-save-readback",
+          "expected": "public fields match request; write-only fake secrets persisted and omitted from API",
+          "observed": {
+            "before": {
+              "method": "GET",
+              "url": "/settings/notifications",
+              "request": null,
+              "status": 200,
+              "response": {
+                "gmail": {
+                  "enabled": false,
+                  "to": "",
+                  "smtp_user": ""
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": ""
+                }
+              }
+            },
+            "save": {
+              "method": "POST",
+              "url": "/settings/notifications",
+              "request": {
+                "gmail": {
+                  "enabled": true,
+                  "to": "sink@audit.invalid",
+                  "smtp_user": "fixture@audit.invalid",
+                  "smtp_password": "[redacted fake secret]"
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": "FAKE-AUDIT-CHAT",
+                  "bot_token": "[redacted fake secret]"
+                }
+              },
+              "status": 200,
+              "response": {
+                "gmail": {
+                  "enabled": true,
+                  "to": "sink@audit.invalid",
+                  "smtp_user": "fixture@audit.invalid"
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": "FAKE-AUDIT-CHAT"
+                }
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/settings/notifications",
+              "request": null,
+              "status": 200,
+              "response": {
+                "gmail": {
+                  "enabled": true,
+                  "to": "sink@audit.invalid",
+                  "smtp_user": "fixture@audit.invalid"
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": "FAKE-AUDIT-CHAT"
+                }
+              }
+            },
+            "fake_secret_persisted": true
+          },
+          "status": "pass"
+        },
+        {
+          "id": "notifications-blank-secret-retain",
+          "expected": "blank/null fake secret retains existing value",
+          "observed": {
+            "method": "POST",
+            "url": "/settings/notifications",
+            "request": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid",
+                "smtp_password": ""
+              },
+              "telegram": {
+                "enabled": false,
+                "chat_id": "FAKE-AUDIT-CHAT",
+                "bot_token": null
+              }
+            },
+            "status": 200,
+            "response": {
+              "gmail": {
+                "enabled": true,
+                "to": "sink@audit.invalid",
+                "smtp_user": "fixture@audit.invalid"
+              },
+              "telegram": {
+                "enabled": false,
+                "chat_id": "FAKE-AUDIT-CHAT"
+              }
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "notifications-invalid-rollback",
+          "expected": "missing Telegram config gives 422, original YAML intact",
+          "observed": {
+            "method": "POST",
+            "url": "/settings/notifications",
+            "request": {
+              "gmail": {
+                "enabled": true
+              }
+            },
+            "status": 422,
+            "response": {
+              "detail": [
+                {
+                  "type": "missing",
+                  "loc": [
+                    "body",
+                    "telegram"
+                  ],
+                  "msg": "Field required",
+                  "input": {
+                    "gmail": {
+                      "enabled": true
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "notifications-failed-save-rollback",
+          "expected": "500 with unchanged disk/API and no temporary sidecar",
+          "observed": {
+            "failed": {
+              "method": "POST",
+              "url": "/settings/notifications",
+              "request": {
+                "gmail": {
+                  "enabled": true,
+                  "to": "changed@audit.invalid",
+                  "smtp_user": "fixture@audit.invalid",
+                  "smtp_password": ""
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": "FAKE-AUDIT-CHAT",
+                  "bot_token": null
+                }
+              },
+              "status": 500,
+              "response": "Internal Server Error"
+            },
+            "read": {
+              "method": "GET",
+              "url": "/settings/notifications",
+              "request": null,
+              "status": 200,
+              "response": {
+                "gmail": {
+                  "enabled": true,
+                  "to": "sink@audit.invalid",
+                  "smtp_user": "fixture@audit.invalid"
+                },
+                "telegram": {
+                  "enabled": false,
+                  "chat_id": "FAKE-AUDIT-CHAT"
+                }
+              }
+            },
+            "sidecars": []
+          },
+          "status": "pass"
+        },
+        {
+          "id": "ingestion-schedule-save-readback",
+          "expected": "enabled/time/weekdays match API, disk and configure args",
+          "observed": {
+            "before": {
+              "method": "GET",
+              "url": "/api/data/ingest/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "02:00",
+                "next_run": null
+              }
+            },
+            "save": {
+              "method": "POST",
+              "url": "/api/data/ingest/schedule",
+              "request": {
+                "enabled": true,
+                "time": "01:17"
+              },
+              "status": 200,
+              "response": {
+                "ok": true,
+                "enabled": true,
+                "time": "01:17",
+                "next_run": null
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/ingest/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "01:17",
+                "next_run": null
+              }
+            },
+            "yaml": {
+              "enabled": true,
+              "time": "01:17"
+            },
+            "configure": {
+              "scheduler": "ingestion",
+              "args": [
+                true,
+                "01:17"
+              ]
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "ingestion-schedule-invalid-rollback",
+          "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+          "observed": {
+            "invalid": {
+              "method": "POST",
+              "url": "/api/data/ingest/schedule",
+              "request": {
+                "enabled": true,
+                "time": "24:00"
+              },
+              "status": 422,
+              "response": {
+                "detail": "time out of range"
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/ingest/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "01:17",
+                "next_run": null
+              }
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "ingestion-schedule-failed-save-rollback",
+          "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+          "observed": {
+            "failed": {
+              "method": "POST",
+              "url": "/api/data/ingest/schedule",
+              "request": {
+                "enabled": false,
+                "time": "22:59"
+              },
+              "status": 500,
+              "response": "Internal Server Error"
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/ingest/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "22:59",
+                "next_run": null
+              }
+            },
+            "disk": {
+              "enabled": true,
+              "time": "01:17"
+            },
+            "sidecar_exists": true,
+            "configure_calls_after_failure": 0
+          },
+          "status": "fail"
+        },
+        {
+          "id": "edgar-schedule-save-readback",
+          "expected": "enabled/time/weekdays match API, disk and configure args",
+          "observed": {
+            "before": {
+              "method": "GET",
+              "url": "/api/data/edgar/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "03:00",
+                "next_run": null
+              }
+            },
+            "save": {
+              "method": "POST",
+              "url": "/api/data/edgar/schedule",
+              "request": {
+                "enabled": true,
+                "time": "04:23"
+              },
+              "status": 200,
+              "response": {
+                "ok": true,
+                "enabled": true,
+                "time": "04:23",
+                "next_run": null
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/edgar/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "04:23",
+                "next_run": null
+              }
+            },
+            "yaml": {
+              "enabled": true,
+              "time": "04:23"
+            },
+            "configure": {
+              "scheduler": "edgar",
+              "args": [
+                true,
+                "04:23"
+              ]
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "edgar-schedule-invalid-rollback",
+          "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+          "observed": {
+            "invalid": {
+              "method": "POST",
+              "url": "/api/data/edgar/schedule",
+              "request": {
+                "enabled": true,
+                "time": "24:00"
+              },
+              "status": 422,
+              "response": {
+                "detail": "time out of range"
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/edgar/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "04:23",
+                "next_run": null
+              }
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "edgar-schedule-failed-save-rollback",
+          "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+          "observed": {
+            "failed": {
+              "method": "POST",
+              "url": "/api/data/edgar/schedule",
+              "request": {
+                "enabled": false,
+                "time": "22:59"
+              },
+              "status": 500,
+              "response": "Internal Server Error"
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/edgar/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "22:59",
+                "next_run": null
+              }
+            },
+            "disk": {
+              "enabled": true,
+              "time": "04:23"
+            },
+            "sidecar_exists": true,
+            "configure_calls_after_failure": 0
+          },
+          "status": "fail"
+        },
+        {
+          "id": "sp500-schedule-save-readback",
+          "expected": "enabled/time/weekdays match API, disk and configure args",
+          "observed": {
+            "before": {
+              "method": "GET",
+              "url": "/api/data/sp500/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "04:00",
+                "next_run": null
+              }
+            },
+            "save": {
+              "method": "POST",
+              "url": "/api/data/sp500/schedule",
+              "request": {
+                "enabled": true,
+                "time": "16:41"
+              },
+              "status": 200,
+              "response": {
+                "ok": true,
+                "enabled": true,
+                "time": "16:41",
+                "next_run": null
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/sp500/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "16:41",
+                "next_run": null
+              }
+            },
+            "yaml": {
+              "enabled": true,
+              "time": "16:41"
+            },
+            "configure": {
+              "scheduler": "sp500",
+              "args": [
+                true,
+                "16:41"
+              ]
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "sp500-schedule-invalid-rollback",
+          "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+          "observed": {
+            "invalid": {
+              "method": "POST",
+              "url": "/api/data/sp500/schedule",
+              "request": {
+                "enabled": true,
+                "time": "24:00"
+              },
+              "status": 422,
+              "response": {
+                "detail": "time out of range"
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/sp500/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "16:41",
+                "next_run": null
+              }
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "sp500-schedule-failed-save-rollback",
+          "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+          "observed": {
+            "failed": {
+              "method": "POST",
+              "url": "/api/data/sp500/schedule",
+              "request": {
+                "enabled": false,
+                "time": "22:59"
+              },
+              "status": 500,
+              "response": "Internal Server Error"
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/data/sp500/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "22:59",
+                "next_run": null
+              }
+            },
+            "disk": {
+              "enabled": true,
+              "time": "16:41"
+            },
+            "sidecar_exists": true,
+            "configure_calls_after_failure": 0
+          },
+          "status": "fail"
+        },
+        {
+          "id": "tuning-schedule-save-readback",
+          "expected": "enabled/time/weekdays match API, disk and configure args",
+          "observed": {
+            "before": {
+              "method": "GET",
+              "url": "/api/strategy-tuning/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "05:00",
+                "days_of_week": [
+                  5
+                ],
+                "next_run": null
+              }
+            },
+            "save": {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ]
+              },
+              "status": 200,
+              "response": {
+                "ok": true,
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/strategy-tuning/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              }
+            },
+            "yaml": {
+              "days_of_week": [
+                0,
+                2,
+                5
+              ],
+              "enabled": true,
+              "time": "05:37"
+            },
+            "configure": {
+              "scheduler": "tuning",
+              "args": [
+                true,
+                "05:37",
+                [
+                  0,
+                  2,
+                  5
+                ]
+              ]
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "tuning-schedule-invalid-rollback",
+          "expected": "invalid time gives 422; file, memory and scheduler unchanged",
+          "observed": {
+            "invalid": {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": true,
+                "time": "24:00",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ]
+              },
+              "status": 422,
+              "response": {
+                "detail": "time out of range"
+              }
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/strategy-tuning/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              }
+            }
+          },
+          "status": "pass"
+        },
+        {
+          "id": "tuning-days-invalid-rollback",
+          "expected": "empty/out-of-range weekdays rejected without mutation",
+          "observed": [
+            {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": []
+              },
+              "status": 422,
+              "response": {
+                "detail": "days_of_week must be non-empty ints in 0..6"
+              }
+            },
+            {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  -1
+                ]
+              },
+              "status": 422,
+              "response": {
+                "detail": "days_of_week must be non-empty ints in 0..6"
+              }
+            },
+            {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": true,
+                "time": "05:37",
+                "days_of_week": [
+                  7
+                ]
+              },
+              "status": 422,
+              "response": {
+                "detail": "days_of_week must be non-empty ints in 0..6"
+              }
+            }
+          ],
+          "status": "pass"
+        },
+        {
+          "id": "tuning-schedule-failed-save-rollback",
+          "expected": "500 retains last successfully saved API/disk values and cleans sidecar",
+          "observed": {
+            "failed": {
+              "method": "POST",
+              "url": "/api/strategy-tuning/schedule",
+              "request": {
+                "enabled": false,
+                "time": "22:59",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ]
+              },
+              "status": 500,
+              "response": "Internal Server Error"
+            },
+            "read": {
+              "method": "GET",
+              "url": "/api/strategy-tuning/schedule",
+              "request": null,
+              "status": 200,
+              "response": {
+                "enabled": false,
+                "time": "22:59",
+                "days_of_week": [
+                  0,
+                  2,
+                  5
+                ],
+                "next_run": null
+              }
+            },
+            "disk": {
+              "days_of_week": [
+                0,
+                2,
+                5
+              ],
+              "enabled": true,
+              "time": "05:37"
+            },
+            "sidecar_exists": true,
+            "configure_calls_after_failure": 0
+          },
+          "status": "fail"
+        }
+      ],
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": false,
+              "to": "",
+              "smtp_user": ""
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": ""
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": "[redacted fake secret]"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT",
+              "bot_token": "[redacted fake secret]"
+            }
+          },
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": ""
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT",
+              "bot_token": null
+            }
+          },
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true
+            }
+          },
+          "status": 422,
+          "response": {
+            "detail": [
+              {
+                "type": "missing",
+                "loc": [
+                  "body",
+                  "telegram"
+                ],
+                "msg": "Field required",
+                "input": {
+                  "gmail": {
+                    "enabled": true
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/settings/notifications",
+          "request": {
+            "gmail": {
+              "enabled": true,
+              "to": "changed@audit.invalid",
+              "smtp_user": "fixture@audit.invalid",
+              "smtp_password": ""
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT",
+              "bot_token": null
+            }
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "02:00",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": true,
+            "time": "01:17"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/ingest/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "03:00",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": true,
+            "time": "04:23"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/edgar/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "04:00",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": true,
+            "time": "16:41"
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00"
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/data/sp500/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59"
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "05:00",
+            "days_of_week": [
+              5
+            ],
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 200,
+          "response": {
+            "ok": true,
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "24:00",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "time out of range"
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": []
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              -1
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              7
+            ]
+          },
+          "status": 422,
+          "response": {
+            "detail": "days_of_week must be non-empty ints in 0..6"
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/api/strategy-tuning/schedule",
+          "request": {
+            "enabled": false,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ]
+          },
+          "status": 500,
+          "response": "Internal Server Error"
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": false,
+            "time": "22:59",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        }
+      ],
+      "scheduler_configure_calls": [
+        {
+          "scheduler": "ingestion",
+          "args": [
+            true,
+            "01:17"
+          ]
+        },
+        {
+          "scheduler": "edgar",
+          "args": [
+            true,
+            "04:23"
+          ]
+        },
+        {
+          "scheduler": "sp500",
+          "args": [
+            true,
+            "16:41"
+          ]
+        },
+        {
+          "scheduler": "tuning",
+          "args": [
+            true,
+            "05:37",
+            [
+              0,
+              2,
+              5
+            ]
+          ]
+        }
+      ],
+      "isolation": {
+        "main_imported": false,
+        "scheduler_modules_stubbed": [
+          "ingestion",
+          "edgar",
+          "sp500",
+          "tuning"
+        ],
+        "job_module_stubbed": true,
+        "only_temporary_config_files": true,
+        "next_run": "null stub; real scheduling/timezone computation NOT RUN"
+      },
+      "final": {
+        "/settings/notifications": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "/api/data/ingest/schedule": {
+          "enabled": false,
+          "time": "22:59",
+          "next_run": null
+        },
+        "/api/data/edgar/schedule": {
+          "enabled": false,
+          "time": "22:59",
+          "next_run": null
+        },
+        "/api/data/sp500/schedule": {
+          "enabled": false,
+          "time": "22:59",
+          "next_run": null
+        },
+        "/api/strategy-tuning/schedule": {
+          "enabled": false,
+          "time": "22:59",
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "next_run": null
+        }
+      },
+      "hashes": {
+        "tuning_schedule.yaml": "09efdc8dc2f8a9f3da454ed0e0e9fea7fb555b5ce1461badf464ac5d61bb0521",
+        "sp500_schedule.yaml": "ee4a50237dd932b780f23b4ff61fed05efc5dc3cfe4bc73dbe2888688a9126c6",
+        "edgar_schedule.yaml": "7d708d96938619882cff3ae5baf7c1a3e51d2b95dabe53652f89d80acf147ca7",
+        "ingestion_schedule.yaml": "b8ee54b0051ee8d67988982a52cf346f0211fd1c01d8090d840c60e3f34cef72",
+        "settings.yaml": "4db4e9d6f3191f9320dc7eb51458577b3e57dbc1e22af8250759ae565094887e"
+      }
+    },
+    {
+      "mode": "restart-readback",
+      "checks": [],
+      "requests": [
+        {
+          "method": "GET",
+          "url": "/settings/notifications",
+          "request": null,
+          "status": 200,
+          "response": {
+            "gmail": {
+              "enabled": true,
+              "to": "sink@audit.invalid",
+              "smtp_user": "fixture@audit.invalid"
+            },
+            "telegram": {
+              "enabled": false,
+              "chat_id": "FAKE-AUDIT-CHAT"
+            }
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/ingest/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "01:17",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/edgar/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "04:23",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/data/sp500/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "16:41",
+            "next_run": null
+          }
+        },
+        {
+          "method": "GET",
+          "url": "/api/strategy-tuning/schedule",
+          "request": null,
+          "status": 200,
+          "response": {
+            "enabled": true,
+            "time": "05:37",
+            "days_of_week": [
+              0,
+              2,
+              5
+            ],
+            "next_run": null
+          }
+        }
+      ],
+      "scheduler_configure_calls": [],
+      "isolation": {
+        "main_imported": false,
+        "scheduler_modules_stubbed": [
+          "ingestion",
+          "edgar",
+          "sp500",
+          "tuning"
+        ],
+        "job_module_stubbed": true,
+        "only_temporary_config_files": true,
+        "next_run": "null stub; real scheduling/timezone computation NOT RUN"
+      },
+      "final": {
+        "/settings/notifications": {
+          "gmail": {
+            "enabled": true,
+            "to": "sink@audit.invalid",
+            "smtp_user": "fixture@audit.invalid"
+          },
+          "telegram": {
+            "enabled": false,
+            "chat_id": "FAKE-AUDIT-CHAT"
+          }
+        },
+        "/api/data/ingest/schedule": {
+          "enabled": true,
+          "time": "01:17",
+          "next_run": null
+        },
+        "/api/data/edgar/schedule": {
+          "enabled": true,
+          "time": "04:23",
+          "next_run": null
+        },
+        "/api/data/sp500/schedule": {
+          "enabled": true,
+          "time": "16:41",
+          "next_run": null
+        },
+        "/api/strategy-tuning/schedule": {
+          "enabled": true,
+          "time": "05:37",
+          "days_of_week": [
+            0,
+            2,
+            5
+          ],
+          "next_run": null
+        }
+      },
+      "hashes": {
+        "tuning_schedule.yaml": "09efdc8dc2f8a9f3da454ed0e0e9fea7fb555b5ce1461badf464ac5d61bb0521",
+        "sp500_schedule.yaml": "ee4a50237dd932b780f23b4ff61fed05efc5dc3cfe4bc73dbe2888688a9126c6",
+        "edgar_schedule.yaml": "7d708d96938619882cff3ae5baf7c1a3e51d2b95dabe53652f89d80acf147ca7",
+        "ingestion_schedule.yaml": "b8ee54b0051ee8d67988982a52cf346f0211fd1c01d8090d840c60e3f34cef72",
+        "settings.yaml": "4db4e9d6f3191f9320dc7eb51458577b3e57dbc1e22af8250759ae565094887e"
+      }
+    }
+  ],
+  "restart_hashes_identical": true,
+  "restart_api_identical": false
+}

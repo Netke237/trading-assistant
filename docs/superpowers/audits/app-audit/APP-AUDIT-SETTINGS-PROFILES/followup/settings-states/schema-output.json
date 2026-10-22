@@ -1,0 +1,146 @@
+{
+  "source_sha": "4b1f6b86e8137f499da0c4c430f23b9c250fd8de",
+  "python": "3.11.16 (main, Sep 24 2026, 17:56:40) [Clang 22.1.3 ]",
+  "boundary": "Pure Pydantic schema validation of captured UI payloads; no server/scheduler/DB",
+  "checks": [
+    {
+      "id": "schedule-request-18",
+      "path": "/api/scan-schedule",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-21",
+      "path": "/api/scan-schedule",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-25",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-29",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-33",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-37",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-41",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-45",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-49",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-53",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-57",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 422,
+      "expected_schema_accepts": false,
+      "schema_accepts": false,
+      "error": "1 validation error for ScanScheduleEntry\ncadence_minutes\n  Input should be greater than or equal to 5 [type=greater_than_equal, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than_equal",
+      "status": "pass"
+    },
+    {
+      "id": "schedule-request-71",
+      "path": "/api/scan-schedule/fixture-1",
+      "fixture_status": 200,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    },
+    {
+      "id": "stock-bound-ma_crossover_lookback-0",
+      "field": "ma_crossover_lookback",
+      "value": 0,
+      "expected_schema_accepts": false,
+      "schema_accepts": false,
+      "error": "1 validation error for StockScanRequest\nma_crossover_lookback\n  Input should be greater than 0 [type=greater_than, input_value=0, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than",
+      "status": "pass"
+    },
+    {
+      "id": "stock-bound-breakout_volume_mult-1",
+      "field": "breakout_volume_mult",
+      "value": 1,
+      "expected_schema_accepts": false,
+      "schema_accepts": false,
+      "error": "1 validation error for StockScanRequest\nbreakout_volume_mult\n  Input should be greater than 1 [type=greater_than, input_value=1, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.13/v/greater_than",
+      "status": "pass"
+    },
+    {
+      "id": "stock-bound-breakout_volume_mult-4",
+      "field": "breakout_volume_mult",
+      "value": 4,
+      "expected_schema_accepts": true,
+      "schema_accepts": true,
+      "error": null,
+      "status": "pass"
+    }
+  ],
+  "counts": {
+    "pass": 15,
+    "fail": 0
+  }
+}

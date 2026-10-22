@@ -20,7 +20,7 @@ A Stocks profile is saved from Stocks mode.
   copy of the old request (Custom 15-200) until you open the profile in the
   app and click Update, which re-syncs the entry; the import script cannot do
   that for you.
-- `SemiAnnual_Restrictive_*`: min volume 50 (the Baseline floor) instead of
+- `SemiAnnual_Restrictive_*`: an explicit min volume of 50 (the Baseline floor is now 0, off) instead of
   200, because a single ~200-DTE strike rarely trades 200 contracts a day.
   That is a judgement from the measured Baseline Semi-annual run (3 of 518
   candidates, with 101 contract rejects mostly on liquidity and spread), not a
@@ -122,7 +122,7 @@ Not unconditionally. Two concrete dependencies:
    fundamentals gate, shortlist cap, spreads), and loading any profile writes
    those into Settings, where they stay after the scan. `Restrictive`/`Loose`
    bake in fixed values (0.08/200/1000, except `SemiAnnual_Restrictive` at
-   0.08/50/1000; and 0.30/20/75) — if the app's own defaults change later, these two tiers
+   0.08/50/1000; and 0.30/0/75) — if the app's own defaults change later, these two tiers
    won't auto-rescale relative to the new baseline; they'd need to be
    re-derived and re-saved.
 

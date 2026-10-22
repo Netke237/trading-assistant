@@ -1,60 +1,75 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { reportingLocalStorage } from './reportingLocalStorage';
+import { assertStrategyScanOverrides } from './strategyScanValidation';
 
+/**
+ * STOCKS-HORIZON-T1 H5: the strategy fields are OVERRIDES of the backend
+ * horizon profile (GET /api/config/strategy-profiles). `null` = follow the
+ * profile for the scan's direction x params horizon; a value = an explicit
+ * override sent on the request. The other fields (backtest gate, event
+ * filter, shortlist cap) are plain settings, always sent.
+ */
 export interface ScanParams {
-  pullbackTolerancePct: number;   // fraction: 0.08 = 8%
-  pullbackEmaPeriod:    number;   // EMA to pull back to (e.g. 50)
-  pullbackTrendEma:     number;   // trend-confirmation EMA (e.g. 100)
-  pullbackMaType:       'EMA' | 'SMA';
-  maCrossoverFast:      number;   // fast MA period
-  maCrossoverSlow:      number;   // slow MA period
-  maCrossoverLookback:  number;   // bars
-  breakoutVolumeMult:   number;   // multiplier
-  rsiPeriod:            number;   // RSI look-back period
-  rsiOversold:          number;   // RSI oversold threshold (e.g. 30)
-  rsiTrendSma:          number;   // trend-confirmation SMA (e.g. 200)
-  requireChoppyRegime:  boolean;  // mean-reversion RSI only fires in Choppy regime
+  pullbackTolerancePct: number | null;   // fraction: 0.08 = 8%
+  pullbackEmaPeriod:    number | null;   // EMA to pull back to (e.g. 50)
+  pullbackTrendEma:     number | null;   // trend-confirmation EMA (e.g. 100)
+  pullbackMaType:       'EMA' | 'SMA' | null;
+  maCrossoverFast:      number | null;   // fast MA period
+  maCrossoverSlow:      number | null;   // slow MA period
+  maCrossoverLookback:  number | null;   // bars
+  breakoutVolumeMult:   number | null;   // multiplier
+  rsiPeriod:            number | null;   // RSI look-back period
+  rsiOversold:          number | null;   // RSI oversold threshold (bullish rule)
+  rsiOverbought:        number | null;   // RSI overbought threshold (bearish rule)
+  rsiTrendSma:          number | null;   // trend-confirmation SMA (e.g. 200)
+  requireChoppyRegime:  boolean | null;  // mean-reversion RSI only fires in Choppy regime
   btMinTrades:          number;   // count
   btMinWinRate:         number;   // fraction: 0.30 = 30%
   eventFilter: 'include' | 'avoid' | 'only_pre_event';
   stockShortlistMax:    number;   // max stock candidates returned
-  meanReversionVariants:    string[];  // active signal variants for mean_reversion_multi
-  meanReversionMinConfirm:  number;   // min confirmations required
-  vwapLookback:             number;   // VWAP lookback bars
-  vwapDeviationPct:         number;   // VWAP deviation fraction (0.02 = 2%)
+  meanReversionVariants:    string[] | null;  // active signal variants for mean_reversion_multi
+  meanReversionMinConfirm:  number | null;    // min confirmations required
+  vwapLookback:             number | null;    // VWAP lookback bars
+  vwapDeviationPct:         number | null;    // VWAP deviation fraction (0.02 = 2%)
 }
 
+/** The ScanParams fields that override the backend horizon profile. */
+export const OVERRIDE_FIELDS = [
+  'pullbackTolerancePct', 'pullbackEmaPeriod', 'pullbackTrendEma', 'pullbackMaType',
+  'maCrossoverFast', 'maCrossoverSlow', 'maCrossoverLookback', 'breakoutVolumeMult',
+  'rsiPeriod', 'rsiOversold', 'rsiOverbought', 'rsiTrendSma', 'requireChoppyRegime',
+  'meanReversionVariants', 'meanReversionMinConfirm', 'vwapLookback', 'vwapDeviationPct',
+] as const;
+export type OverrideField = typeof OVERRIDE_FIELDS[number];
+
+/** Every override field null: follow the profile. */
+export const NO_OVERRIDES: Pick<ScanParams, OverrideField> = Object.fromEntries(
+  OVERRIDE_FIELDS.map((f) => [f, null]),
+) as unknown as Pick<ScanParams, OverrideField>;
+
+/** What a saved search profile stores: the plain settings plus only the
+ *  overrides that were set (absent = follow the profile). */
+export type SavedScanParams = Omit<ScanParams, OverrideField> & Partial<Pick<ScanParams, OverrideField>>;
+
 const DEFAULTS: ScanParams = {
-  pullbackTolerancePct: 0.08,
-  pullbackEmaPeriod:    50,
-  pullbackTrendEma:     100,
-  pullbackMaType:       'EMA' as const,
-  maCrossoverFast:      20,
-  maCrossoverSlow:      50,
-  maCrossoverLookback:  10,
-  breakoutVolumeMult:   1.1,
-  rsiPeriod:            14,
-  rsiOversold:          30,
-  rsiTrendSma:          200,
-  requireChoppyRegime:  false,
+  ...NO_OVERRIDES,
   btMinTrades:          5,
   btMinWinRate:         0.45,
   eventFilter:          'include' as const,
   stockShortlistMax:    10,
-  meanReversionVariants:   ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
-  meanReversionMinConfirm: 2,
-  vwapLookback:            20,
-  vwapDeviationPct:        0.02,
 };
 
 interface ScanParamsStore extends ScanParams {
   setParam: <K extends keyof ScanParams>(key: K, value: ScanParams[K]) => void;
   resetToDefaults: () => void;
-  loadParams: (p: ScanParams) => void;
-  setMeanReversionVariants:   (v: string[]) => void;
-  setMeanReversionMinConfirm: (v: number) => void;
-  setVwapLookback:            (v: number) => void;
-  setVwapDeviationPct:        (v: number) => void;
+  /** Restore a saved profile's params: its overrides, every other override
+   *  field back to "follow the profile". */
+  loadParams: (p: SavedScanParams) => void;
+  setMeanReversionVariants:   (v: string[] | null) => void;
+  setMeanReversionMinConfirm: (v: number | null) => void;
+  setVwapLookback:            (v: number | null) => void;
+  setVwapDeviationPct:        (v: number | null) => void;
 }
 
 /**
@@ -106,6 +121,13 @@ export function migrateScanParams(state: unknown, v: number): ScanParams {
       vwapDeviationPct:        0.02,
     };
   }
+  if (v < 12) {
+    // STOCKS-HORIZON-T1 H5: strategy fields became overrides of the backend
+    // horizon profile. Every stored value was a copy of an old hardcoded
+    // default (or a hand edit of one) that would mask the profile on every
+    // scan, so all of them reset to "follow the profile".
+    s = { ...s, ...NO_OVERRIDES };
+  }
 
   return s as unknown as ScanParams;
 }
@@ -114,9 +136,23 @@ export const useScanParamsStore = create<ScanParamsStore>()(
   persist(
     (set) => ({
       ...DEFAULTS,
-      setParam: (key, value) => set({ [key]: value }),
+      setParam: (key, value) => {
+        if (key === 'pullbackTolerancePct' || key === 'maCrossoverLookback' || key === 'breakoutVolumeMult') {
+          if (value !== null && value !== undefined) {
+            assertStrategyScanOverrides({ [key]: value });
+          }
+        }
+        set({ [key]: value });
+      },
       resetToDefaults: () => set({ ...DEFAULTS }),
-      loadParams: (p) => set({ ...p }),
+      loadParams: (p) => {
+        assertStrategyScanOverrides({
+          pullbackTolerancePct: p.pullbackTolerancePct,
+          maCrossoverLookback: p.maCrossoverLookback,
+          breakoutVolumeMult: p.breakoutVolumeMult,
+        });
+        set({ ...NO_OVERRIDES, ...p });
+      },
       setMeanReversionVariants:   (v) => set({ meanReversionVariants: v }),
       setMeanReversionMinConfirm: (v) => set({ meanReversionMinConfirm: v }),
       setVwapLookback:            (v) => set({ vwapLookback: v }),
@@ -124,8 +160,12 @@ export const useScanParamsStore = create<ScanParamsStore>()(
     }),
     {
       name: 'bamendjou:scan-params',
+      storage: createJSONStorage(() => {
+        if (typeof window === 'undefined') return undefined as unknown as Storage;
+        return reportingLocalStorage('Strategy scan parameters (this browser)');
+      }),
       skipHydration: true,
-      version: 11,
+      version: 12,
       migrate: migrateScanParams,
     },
   ),

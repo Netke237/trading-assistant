@@ -14,6 +14,7 @@ import { StatusDot } from '@/components/atoms/StatusDot';
 import { useScanStore } from '@/lib/scanStore';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { api } from '@/lib/api';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 import { scanPipelineStatusTooltip, regimeStatusTooltip, alertStatusTooltip, eventProximityGateTooltip } from '@/lib/statusTooltips';
 import type { AlertItem, UpcomingEvent } from '@/types/domain';
 import styles from './page.module.css';
@@ -43,8 +44,9 @@ export default function DashboardContextRail() {
     api.getEvents().then(setEvents).catch(() => {});
   }, []);
 
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
+  // Positions without a quote are left out of the totals (NO-LIVE-QUOTE NLQ-1).
+  const { deployed, openPnL, unquoted } = openTotals(positions);
+  const note = unquotedNote(unquoted);
 
   const contextStr = context
     ? `${context.universe} · ${context.direction} · ${context.horizon}`
@@ -138,6 +140,7 @@ export default function DashboardContextRail() {
             <Text size={12} tone="secondary">Positions</Text>
             <Data size={12}>{positions.length}</Data>
           </div>
+          {note && <Text size={11} tone="caution">{note}</Text>}
         </div>
       </RailSection>
 

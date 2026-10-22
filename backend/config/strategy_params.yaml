@@ -40,6 +40,30 @@ basket:
   per_sector: 5
   symbols: []
 
+# Per-horizon tuner (STOCKS-HORIZON-T1 H8; strategy_param_store.get_tuning_config).
+tuning:
+  cost_per_leg: 0.0005
+  stress_cost_per_leg: 0.002
+  held_out_months: 12
+  exit_buffer_days: 14
+  windows:
+    Swing:      {train_months: 12, test_months: 3}
+    Position:   {train_months: 12, test_months: 3}
+    Quarterly:  {train_months: 12, test_months: 4}
+    SemiAnnual: {train_months: 16, test_months: 8}
+    Annual:     {train_months: 24, test_months: 12}
+  fire_rate_floor_per_day:
+    Swing: 2.0
+    Position: 1.0
+    Quarterly: 0.6
+    SemiAnnual: 0.4
+    Annual: 0.2
+  adoption: {ci_level: 0.95, min_oos_trades: 100, min_symbols: 20, bootstrap_resamples: 2000, seed: 7}
+  min_train_trades: 30
+  min_folds_not_thin: 4
+  basket: {per_sector: 10}
+  gates: {min_price: null, max_price: null}
+
 strategies:
   pullback_ema:
     active:
@@ -84,6 +108,70 @@ strategies:
       exit_swing_lookback: [10, 20, 30]
       tolerance: [0.02, 0.04, 0.06, 0.08]
 
+    search_by_horizon:
+      bullish:
+        Swing:
+          ema_period: [10, 20, 35]
+          trend_ema: [50, 100]
+          atr_stop_mult: [1.0, 1.5, 2.0]
+          exit_swing_lookback: [10, 20]
+          tolerance: [0.02, 0.04]
+        Position:
+          ema_period: [20, 35, 50]
+          trend_ema: [100, 150, 200]
+          atr_stop_mult: [1.5, 2.0, 2.5]
+          exit_swing_lookback: [20, 30]
+          tolerance: [0.03, 0.06]
+        Quarterly:
+          ema_period: [35, 50, 100]
+          trend_ema: [150, 200]
+          atr_stop_mult: [2.0, 2.5, 3.0]
+          exit_swing_lookback: [30, 50]
+          tolerance: [0.04, 0.08]
+        SemiAnnual:
+          ema_period: [50, 100]
+          trend_ema: [150, 200]
+          atr_stop_mult: [2.5, 3.0, 4.0]
+          exit_swing_lookback: [50, 100]
+          tolerance: [0.04, 0.08]
+        Annual:
+          ema_period: [50, 100, 150]
+          trend_ema: [200]
+          atr_stop_mult: [3.0, 4.0, 5.0]
+          exit_swing_lookback: [100, 150]
+          tolerance: [0.06, 0.1]
+      bearish:
+        Swing:
+          ema_period: [10, 20, 35]
+          trend_ema: [50, 100]
+          atr_stop_mult: [1.0, 1.5, 2.0]
+          exit_swing_lookback: [10, 20]
+          tolerance: [0.02, 0.04]
+        Position:
+          ema_period: [20, 35, 50]
+          trend_ema: [100, 150, 200]
+          atr_stop_mult: [1.5, 2.0, 2.5]
+          exit_swing_lookback: [20, 30]
+          tolerance: [0.03, 0.06]
+        Quarterly:
+          ema_period: [35, 50, 100]
+          trend_ema: [150, 200]
+          atr_stop_mult: [2.0, 2.5, 3.0]
+          exit_swing_lookback: [30, 50]
+          tolerance: [0.04, 0.08]
+        SemiAnnual:
+          ema_period: [50, 100]
+          trend_ema: [150, 200]
+          atr_stop_mult: [2.5, 3.0, 4.0]
+          exit_swing_lookback: [50, 100]
+          tolerance: [0.04, 0.08]
+        Annual:
+          ema_period: [50, 100, 150]
+          trend_ema: [200]
+          atr_stop_mult: [3.0, 4.0, 5.0]
+          exit_swing_lookback: [100, 150]
+          tolerance: [0.06, 0.1]
+
   breakout_base:
     active:
       bullish:
@@ -109,6 +197,60 @@ strategies:
       # that actually sets rung 1. Same combo count as before.
       measured_move_mult: [0.75, 1.0, 1.25, 1.5]
 
+    search_by_horizon:
+      bullish:
+        Swing:
+          base_lookback: [10, 15, 20]
+          atr_tight_max: [3.0, 3.5, 4.0, 4.5]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [0.5, 0.75, 1.0]
+        Position:
+          base_lookback: [15, 20, 30]
+          atr_tight_max: [3.0, 3.5, 4.0, 4.5]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [0.75, 1.0, 1.5]
+        Quarterly:
+          base_lookback: [20, 30, 40]
+          atr_tight_max: [3.5, 4.0, 4.5, 5.0]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [1.0, 1.5, 2.0]
+        SemiAnnual:
+          base_lookback: [30, 40, 60]
+          atr_tight_max: [4.0, 4.5, 5.0]
+          volume_mult: [1.1, 1.3]
+          measured_move_mult: [1.5, 2.0, 3.0]
+        Annual:
+          base_lookback: [40, 60, 90]
+          atr_tight_max: [4.0, 5.0, 6.0]
+          volume_mult: [1.1, 1.3]
+          measured_move_mult: [2.0, 3.0, 4.0]
+      bearish:
+        Swing:
+          base_lookback: [10, 15, 20]
+          atr_tight_max: [3.0, 3.5, 4.0, 4.5]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [0.5, 0.75, 1.0]
+        Position:
+          base_lookback: [15, 20, 30]
+          atr_tight_max: [3.0, 3.5, 4.0, 4.5]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [0.75, 1.0, 1.5]
+        Quarterly:
+          base_lookback: [20, 30, 40]
+          atr_tight_max: [3.5, 4.0, 4.5, 5.0]
+          volume_mult: [1.1, 1.3, 1.5]
+          measured_move_mult: [1.0, 1.5, 2.0]
+        SemiAnnual:
+          base_lookback: [30, 40, 60]
+          atr_tight_max: [4.0, 4.5, 5.0]
+          volume_mult: [1.1, 1.3]
+          measured_move_mult: [1.5, 2.0, 3.0]
+        Annual:
+          base_lookback: [40, 60, 90]
+          atr_tight_max: [4.0, 5.0, 6.0]
+          volume_mult: [1.1, 1.3]
+          measured_move_mult: [2.0, 3.0, 4.0]
+
   ma_crossover:
     active:
       bullish:
@@ -130,6 +272,60 @@ strategies:
       # Newly tunable: this multiple was hardcoded at 3.0 in the signal function
       # and does set rung 1, so the tuner can now see it.
       atr_target_mult: [2.0, 3.0, 4.0]
+
+    search_by_horizon:
+      bullish:
+        Swing:
+          fast: [5, 10, 20]
+          slow: [30, 50]
+          lookback: [3, 5, 10]
+          atr_target_mult: [1.5, 2.0, 3.0]
+        Position:
+          fast: [10, 20, 30]
+          slow: [50, 100, 150]
+          lookback: [5, 10]
+          atr_target_mult: [2.0, 3.0, 4.0]
+        Quarterly:
+          fast: [20, 30, 50]
+          slow: [100, 150, 200]
+          lookback: [5, 10, 20]
+          atr_target_mult: [3.0, 4.0, 5.0]
+        SemiAnnual:
+          fast: [30, 50]
+          slow: [150, 200]
+          lookback: [10, 20]
+          atr_target_mult: [4.0, 6.0, 8.0]
+        Annual:
+          fast: [50, 100]
+          slow: [200, 300]
+          lookback: [10, 20]
+          atr_target_mult: [6.0, 8.0, 10.0]
+      bearish:
+        Swing:
+          fast: [5, 10, 20]
+          slow: [30, 50]
+          lookback: [3, 5, 10]
+          atr_target_mult: [1.5, 2.0, 3.0]
+        Position:
+          fast: [10, 20, 30]
+          slow: [50, 100, 150]
+          lookback: [5, 10]
+          atr_target_mult: [2.0, 3.0, 4.0]
+        Quarterly:
+          fast: [20, 30, 50]
+          slow: [100, 150, 200]
+          lookback: [5, 10, 20]
+          atr_target_mult: [3.0, 4.0, 5.0]
+        SemiAnnual:
+          fast: [30, 50]
+          slow: [150, 200]
+          lookback: [10, 20]
+          atr_target_mult: [4.0, 6.0, 8.0]
+        Annual:
+          fast: [50, 100]
+          slow: [200, 300]
+          lookback: [10, 20]
+          atr_target_mult: [6.0, 8.0, 10.0]
 
   mean_reversion_rsi:
     active:
@@ -155,6 +351,60 @@ strategies:
       rsi_oversold: [25, 30, 35]
       trend_sma: [100, 200]
       exit_sma_period: [10, 20]      # sets rung 1
+
+    search_by_horizon:
+      bullish:
+        Swing:
+          rsi_period: [2, 7, 14]
+          rsi_oversold: [10, 20, 30, 35]
+          trend_sma: [50, 100, 200]
+          exit_sma_period: [5, 10, 20]
+        Position:
+          rsi_period: [7, 14, 21]
+          rsi_oversold: [25, 30, 35, 40]
+          trend_sma: [100, 200]
+          exit_sma_period: [10, 20, 50]
+        Quarterly:
+          rsi_period: [14, 21]
+          rsi_oversold: [30, 35, 40]
+          trend_sma: [100, 200]
+          exit_sma_period: [20, 50]
+        SemiAnnual:
+          rsi_period: [14, 21, 28]
+          rsi_oversold: [30, 35, 40]
+          trend_sma: [200]
+          exit_sma_period: [50, 100]
+        Annual:
+          rsi_period: [14, 21, 28]
+          rsi_oversold: [30, 35, 40]
+          trend_sma: [200]
+          exit_sma_period: [100, 150]
+      bearish:
+        Swing:
+          rsi_period: [2, 7, 14]
+          rsi_overbought: [90, 80, 70, 65]
+          trend_sma: [50, 100, 200]
+          exit_sma_period: [5, 10, 20]
+        Position:
+          rsi_period: [7, 14, 21]
+          rsi_overbought: [75, 70, 65, 60]
+          trend_sma: [100, 200]
+          exit_sma_period: [10, 20, 50]
+        Quarterly:
+          rsi_period: [14, 21]
+          rsi_overbought: [70, 65, 60]
+          trend_sma: [100, 200]
+          exit_sma_period: [20, 50]
+        SemiAnnual:
+          rsi_period: [14, 21, 28]
+          rsi_overbought: [70, 65, 60]
+          trend_sma: [200]
+          exit_sma_period: [50, 100]
+        Annual:
+          rsi_period: [14, 21, 28]
+          rsi_overbought: [70, 65, 60]
+          trend_sma: [200]
+          exit_sma_period: [100, 150]
 
   mean_reversion_bb:
     active:
@@ -182,6 +432,60 @@ strategies:
       # rr_target_mult REMOVED with NO replacement: rung 1 is the mid-band,
       # already fully determined by bb_period/bb_std, which are in the grid
       # above and now genuinely drive the exit as well as the entry.
+
+    search_by_horizon:
+      bullish:
+        Swing:
+          bb_period: [10, 15, 20]
+          bb_std: [1.5, 2.0, 2.5]
+          trend_sma: [50, 100, 200]
+          stop_atr_mult: [0.5, 1.0]
+        Position:
+          bb_period: [20, 30]
+          bb_std: [1.5, 2.0, 2.5]
+          trend_sma: [100, 200]
+          stop_atr_mult: [0.5, 1.0, 1.5]
+        Quarterly:
+          bb_period: [30, 50]
+          bb_std: [2.0, 2.5]
+          trend_sma: [100, 200]
+          stop_atr_mult: [1.0, 1.5, 2.0]
+        SemiAnnual:
+          bb_period: [50, 100]
+          bb_std: [2.0, 2.5]
+          trend_sma: [200]
+          stop_atr_mult: [1.5, 2.0, 3.0]
+        Annual:
+          bb_period: [100, 150]
+          bb_std: [2.0, 2.5]
+          trend_sma: [200]
+          stop_atr_mult: [2.0, 3.0, 4.0]
+      bearish:
+        Swing:
+          bb_period: [10, 15, 20]
+          bb_std: [1.5, 2.0, 2.5]
+          trend_sma: [50, 100, 200]
+          stop_atr_mult: [0.5, 1.0]
+        Position:
+          bb_period: [20, 30]
+          bb_std: [1.5, 2.0, 2.5]
+          trend_sma: [100, 200]
+          stop_atr_mult: [0.5, 1.0, 1.5]
+        Quarterly:
+          bb_period: [30, 50]
+          bb_std: [2.0, 2.5]
+          trend_sma: [100, 200]
+          stop_atr_mult: [1.0, 1.5, 2.0]
+        SemiAnnual:
+          bb_period: [50, 100]
+          bb_std: [2.0, 2.5]
+          trend_sma: [200]
+          stop_atr_mult: [1.5, 2.0, 3.0]
+        Annual:
+          bb_period: [100, 150]
+          bb_std: [2.0, 2.5]
+          trend_sma: [200]
+          stop_atr_mult: [2.0, 3.0, 4.0]
 
   mean_reversion_vwap:
     active:
@@ -211,6 +515,91 @@ strategies:
     exit:
       rr_target_mult: 2.0
 
+  mean_reversion_multi:
+    # STOCKS-HORIZON-T1 H3: the multi params shape (today's frontend values).
+    # Each variant's effective params = its exit: + its direction active: +
+    # variant_params below + the request (merge_multi_params).
+    active:
+      bullish:
+        variants: [mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap_daily]
+        min_confirmations: 2
+        variant_params:
+          mean_reversion_vwap_daily:
+            vwap_lookback: 20
+            vwap_deviation_pct: 0.02
+      bearish:
+        variants: [mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap_daily]
+        min_confirmations: 2
+        variant_params:
+          mean_reversion_vwap_daily:
+            vwap_lookback: 20
+            vwap_deviation_pct: 0.02
+    exit: {}
+
+    search_by_horizon:
+      bullish:
+        Swing:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [10, 20]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.01, 0.02, 0.03]
+          mean_reversion_rsi.rsi_oversold: [25, 30, 35]
+          mean_reversion_bb.bb_std: [1.5, 2.0, 2.5]
+        Position:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [20, 50]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.02, 0.03, 0.05]
+          mean_reversion_rsi.rsi_oversold: [30, 35]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        Quarterly:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_oversold: [30, 35, 40]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        SemiAnnual:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_oversold: [30, 35, 40]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        Annual:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_oversold: [30, 35, 40]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+      bearish:
+        Swing:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [10, 20]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.01, 0.02, 0.03]
+          mean_reversion_rsi.rsi_overbought: [75, 70, 65]
+          mean_reversion_bb.bb_std: [1.5, 2.0, 2.5]
+        Position:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [20, 50]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.02, 0.03, 0.05]
+          mean_reversion_rsi.rsi_overbought: [70, 65]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        Quarterly:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_overbought: [70, 65, 60]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        SemiAnnual:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_overbought: [70, 65, 60]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+        Annual:
+          min_confirmations: [2, 3]
+          mean_reversion_vwap_daily.vwap_lookback: [50, 100]
+          mean_reversion_vwap_daily.vwap_deviation_pct: [0.03, 0.05, 0.08]
+          mean_reversion_rsi.rsi_overbought: [70, 65, 60]
+          mean_reversion_bb.bb_std: [2.0, 2.5]
+
   breakout_setup:
     active:
       bullish:
@@ -231,7 +620,53 @@ strategies:
         resistance_proximity_pct: 0.08
         swing_lookback: 50
         require_trend: true
-    # no search block — SetupSignal has no entry/stop/target; cannot be backtested
+    # Research confirmation grids only; scanner baseline above is unchanged.
+    search_by_horizon:
+      bullish:
+        Swing: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Position: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Annual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+      bearish:
+        Swing: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Position: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+        Annual: {setup_expiry_bars: [3, 5, 8], volume_confirm: [false, true], volume_confirm_mult: [1.5], rr_multiple: [1.5, 2.0, 3.0]}
+
+  fibonacci_pullback:
+    # Fixed scanner detector baseline; research grids do not adopt profiles.
+    active:
+      bullish:
+        fib_swing_lookback: 100
+        fib_levels: [38.2, 61.8]
+        fib_tolerance_pct: 0.015
+        impulse_min_pct: 0.08
+        retracement_recency_bars: 40
+        ema_filter_period: 20
+        setup_expiry_bars: 5
+      bearish:
+        fib_swing_lookback: 100
+        fib_levels: [38.2, 61.8]
+        fib_tolerance_pct: 0.015
+        impulse_min_pct: 0.08
+        retracement_recency_bars: 40
+        ema_filter_period: 20
+        setup_expiry_bars: 5
+    search_by_horizon:
+      bullish:
+        Swing: {setup_expiry_bars: [3, 5, 8]}
+        Position: {setup_expiry_bars: [3, 5, 8]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8]}
+        Annual: {setup_expiry_bars: [3, 5, 8]}
+      bearish:
+        Swing: {setup_expiry_bars: [3, 5, 8]}
+        Position: {setup_expiry_bars: [3, 5, 8]}
+        Quarterly: {setup_expiry_bars: [3, 5, 8]}
+        SemiAnnual: {setup_expiry_bars: [3, 5, 8]}
+        Annual: {setup_expiry_bars: [3, 5, 8]}
 
 composite_trigger:
   conviction_min: 60

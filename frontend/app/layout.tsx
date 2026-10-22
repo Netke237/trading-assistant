@@ -57,6 +57,10 @@ const noFlashScript = `
   if (t === 'light' || t === 'dark') {
     document.documentElement.dataset.theme = t;
   }
+  var d = parsed && parsed.state && parsed.state.density;
+  if (d === 'Compact' || d === 'Comfortable') {
+    document.documentElement.dataset.density = d.toLowerCase();
+  }
 }catch(e){}})();
 `;
 
@@ -66,6 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       translate="no"
       data-theme="dark"
+      data-density="comfortable"
       className={`${sora.variable} ${dmSans.variable} ${jetBrainsMono.variable}`}
       suppressHydrationWarning
     >

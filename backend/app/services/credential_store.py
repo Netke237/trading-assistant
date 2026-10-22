@@ -102,21 +102,31 @@ class CredentialStore:
                     self._data[k] = {**self._data[k], **v}
 
     def save(self) -> None:
+        with self._lock:
+            self._save_locked()
+
+    def _save_locked(self) -> None:
+        """Persist canonical state while the caller holds the writer lock."""
         if not self._path:
             return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(".yaml.tmp")
-        with self._lock:
-            data_copy = {k: dict(v) for k, v in self._data.items()}
+        data_copy = {k: dict(v) for k, v in self._data.items()}
         tmp.write_text(yaml.dump(data_copy, default_flow_style=False))
-        # os.chmod before os.replace: the atomic rename preserves the source
-        # inode's permission bits, so this also locks down the final path.
-        # POSIX-effective only — os.chmod is a no-op-ish best-effort on
-        # Windows (doesn't map cleanly to NTFS ACLs). No Windows-dev-env
-        # expectations found in this repo (CI runs ubuntu-latest), so this
-        # is treated as purely beneficial here.
+        # Atomic replacement preserves the temporary inode's owner-only mode.
         _restrict_permissions(tmp)
         os.replace(tmp, self._path)
+
+    def set_and_save(self, key: str, values: dict) -> None:
+        """Merge one slot and persist it atomically with respect to other writers."""
+        with self._lock:
+            previous = self._data
+            self._data = {**previous, key: {**previous.get(key, {}), **values}}
+            try:
+                self._save_locked()
+            except Exception:
+                self._data = previous
+                raise
 
     def get(self, key: str) -> dict | None:
         with self._lock:

@@ -1,13 +1,166 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import type { PersistStorage, StorageValue } from 'zustand/middleware';
 import type { SearchProfile, SearchProfileSnapshot } from '@/types/searchProfile';
 import { api } from '@/lib/api';
 import { DEFAULT_SPREADS } from '@/lib/settingsStore';
 import { resolveProfileToScanRequest } from '@/lib/scanScheduleResolve';
+import { OVERRIDE_FIELDS } from '@/lib/scanParamsStore';
+import { assertStrategyScanOverrides } from '@/lib/strategyScanValidation';
+import { sanitizeSearchProfiles } from '@/lib/searchProfileValidation';
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
+
+export const CURRENT_SEARCH_PROFILES_SCHEMA_VERSION = 5;
+
+/**
+ * Presence probe for scripts/state.py:
+ * Pins that searchProfilesStore ensures atomic writes and does not leave
+ * unpersisted profile changes active in memory on write failure (#398).
+ */
+export const rollbackSearchProfilesOnWriteFailure = true;
+
+export type PersistedSearchProfiles = Pick<SearchProfilesState, 'profiles' | 'legacyTargetPctDropped'>;
+
+/**
+ * Pre-commit persistence helper.
+ * Enforces transactional / atomic persistence before updating in-memory store state.
+ *
+ * 1. Checks write barrier against disk envelope. If disk version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION,
+ *    refuses write and throws an error immediately to prevent overwriting newer schemas (Finding S3).
+ * 2. Writes the updated payload to localStorage. If localStorage.setItem throws (QuotaExceededError,
+ *    SecurityError, etc.), the error propagates out immediately before Zustand's set() is ever called.
+ * 3. Exact raw disk bytes are preserved byte-for-byte on failure, and in-memory store state is
+ *    never mutated (Finding S1).
+ */
+export function persistProfilesPayload(
+  nextProfiles: SearchProfile[],
+  legacyTargetPctDropped: boolean,
+): void {
+  if (typeof window === 'undefined') return;
+  const currentRaw = localStorage.getItem('bamendjou:search-profiles');
+  if (currentRaw) {
+    try {
+      const currentEnvelope = JSON.parse(currentRaw);
+      if (
+        typeof currentEnvelope?.version === 'number' &&
+        currentEnvelope.version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+      ) {
+        throw new Error(
+          `Write barrier: refusing write to newer schema version ${currentEnvelope.version} (current: ${CURRENT_SEARCH_PROFILES_SCHEMA_VERSION})`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Write barrier:')) {
+        throw err;
+      }
+      // malformed disk contents; proceed to standard write
+    }
+  }
+  const payload: StorageValue<PersistedSearchProfiles> = {
+    state: {
+      profiles: nextProfiles,
+      legacyTargetPctDropped,
+    },
+    version: CURRENT_SEARCH_PROFILES_SCHEMA_VERSION,
+  };
+  localStorage.setItem('bamendjou:search-profiles', JSON.stringify(payload));
+}
+
+/**
+ * Storage adapter with future-version write barrier (Finding S3).
+ *
+ * 1. Read / Rehydration:
+ *    If disk contains a future schema version (e.g. 9999), return CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+ *    to Zustand hydration logic. Zustand evaluates deserializedStorageValue.version === options.version (5)
+ *    as true, bypassing migrate and not calling setItem() during hydration. Disk bytes remain
+ *    100% byte-for-byte exact (beforeRaw === afterRaw).
+ *
+ * 2. Writes (saveProfile / updateProfile / deleteProfile):
+ *    Directly inspects localStorage.getItem(name) at write time. If a future version is present
+ *    on disk, refuses writes completely to prevent discarding future-version profiles, unknown fields,
+ *    or sentinels.
+ */
+export const searchProfilesPersistStorage: PersistStorage<PersistedSearchProfiles> = {
+  getItem: (name: string): StorageValue<PersistedSearchProfiles> | null => {
+    if (typeof window === 'undefined') return null;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const version = typeof parsed.version === 'number' ? parsed.version : 0;
+      const state = (parsed.state && typeof parsed.state === 'object') ? parsed.state : {};
+      const legacyTargetPctDropped = (state as Record<string, unknown>).legacyTargetPctDropped === true;
+
+      if (version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION) {
+        const profiles = sanitizeSearchProfiles((state as Record<string, unknown>).profiles);
+        return {
+          state: {
+            profiles,
+            legacyTargetPctDropped,
+          },
+          version: CURRENT_SEARCH_PROFILES_SCHEMA_VERSION,
+        };
+      }
+
+      const rawProfiles = (state as Record<string, unknown>).profiles;
+      const profiles = version >= CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+        ? sanitizeSearchProfiles(rawProfiles)
+        : (Array.isArray(rawProfiles) ? rawProfiles as SearchProfile[] : []);
+
+      return {
+        state: {
+          profiles,
+          legacyTargetPctDropped,
+        },
+        version,
+      };
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: StorageValue<PersistedSearchProfiles>): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      const currentRaw = localStorage.getItem(name);
+      if (currentRaw) {
+        try {
+          const currentEnvelope = JSON.parse(currentRaw);
+          if (
+            typeof currentEnvelope?.version === 'number' &&
+            currentEnvelope.version > CURRENT_SEARCH_PROFILES_SCHEMA_VERSION
+          ) {
+            console.warn(
+              `[searchProfilesStore] Write barrier: refusing write to newer schema version ${currentEnvelope.version} (current: ${CURRENT_SEARCH_PROFILES_SCHEMA_VERSION})`,
+            );
+            return;
+          }
+        } catch {
+          // malformed disk contents; proceed to standard write
+        }
+      }
+      localStorage.setItem(name, JSON.stringify(value));
+    } catch {
+      // quota exceeded or storage disabled
+    }
+  },
+  removeItem: (name: string): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
 
 interface SearchProfilesState {
   profiles: SearchProfile[];
@@ -32,42 +185,60 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
       dismissLegacyTargetPctNotice: () => set({ legacyTargetPctDropped: false }),
       staleScheduleEntryIds: [],
       saveProfile: (name, snapshot) => {
+        if (snapshot.strategyParams) {
+          assertStrategyScanOverrides({
+            pullbackTolerancePct: snapshot.strategyParams.pullbackTolerancePct,
+            maCrossoverLookback: snapshot.strategyParams.maCrossoverLookback,
+            breakoutVolumeMult: snapshot.strategyParams.breakoutVolumeMult,
+          });
+        }
         const now = new Date().toISOString();
         const id = genId();
-        set((s) => ({
-          profiles: [...s.profiles, { ...snapshot, id, name, createdAt: now, updatedAt: now }],
-        }));
+        const nextProfile: SearchProfile = { ...snapshot, id, name, createdAt: now, updatedAt: now };
+        const nextProfiles = [...get().profiles, nextProfile];
+        persistProfilesPayload(nextProfiles, get().legacyTargetPctDropped);
+        set({ profiles: nextProfiles });
         void resyncScheduleEntriesForProfile(id);
         return id;
       },
       updateProfile: (id, snapshot) => {
-        set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.id === id ? { ...p, ...snapshot, updatedAt: new Date().toISOString() } : p),
-        }));
+        if (snapshot.strategyParams) {
+          assertStrategyScanOverrides({
+            pullbackTolerancePct: snapshot.strategyParams.pullbackTolerancePct,
+            maCrossoverLookback: snapshot.strategyParams.maCrossoverLookback,
+            breakoutVolumeMult: snapshot.strategyParams.breakoutVolumeMult,
+          });
+        }
+        const nextProfiles = get().profiles.map((p) =>
+          p.id === id ? { ...p, ...snapshot, updatedAt: new Date().toISOString() } : p,
+        );
+        persistProfilesPayload(nextProfiles, get().legacyTargetPctDropped);
+        set({ profiles: nextProfiles });
         void resyncScheduleEntriesForProfile(id);
       },
       // Bumps updatedAt too, so a rename reorders the dropdown's
       // most-recently-touched-first sort the same way an edit would.
-      renameProfile: (id, name) => set((s) => ({
-        profiles: s.profiles.map((p) =>
-          p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p),
-      })),
-      deleteProfile: (id) => set((s) => ({
-        profiles: s.profiles.filter((p) => p.id !== id),
-      })),
+      renameProfile: (id, name) => {
+        const nextProfiles = get().profiles.map((p) =>
+          p.id === id ? { ...p, name, updatedAt: new Date().toISOString() } : p,
+        );
+        persistProfilesPayload(nextProfiles, get().legacyTargetPctDropped);
+        set({ profiles: nextProfiles });
+      },
+      deleteProfile: (id) => {
+        const nextProfiles = get().profiles.filter((p) => p.id !== id);
+        persistProfilesPayload(nextProfiles, get().legacyTargetPctDropped);
+        set({ profiles: nextProfiles });
+      },
       clearStaleScheduleEntry: (entryId) => set((s) => ({
         staleScheduleEntryIds: s.staleScheduleEntryIds.filter((id) => id !== entryId),
       })),
     }),
     {
       name: 'bamendjou:search-profiles',
-      storage: createJSONStorage(() => {
-        if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return localStorage;
-      }),
+      storage: searchProfilesPersistStorage,
       skipHydration: true,
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         const st = { ...((persistedState ?? {}) as Record<string, unknown>) };
         // ROUND 5 finding 3. `seedOverrides` was appended to the `version < 2`
@@ -180,7 +351,33 @@ export const useSearchProfilesStore = create<SearchProfilesState>()(
           });
           st.legacyTargetPctDropped = dropped;
         }
+        if (version < 5) {
+          // STOCKS-HORIZON-T1 H5: a saved stocks profile's strategy fields
+          // became overrides of the backend horizon profile. The stored values
+          // were full copies of the old hardcoded defaults, so every override
+          // resets to "follow the profile". Removed rather than written as
+          // null: captureCurrentSnapshot stores only the overrides that are
+          // set, so a migrated profile has the shape a fresh save would have
+          // and does not read as modified. Other saved fields are kept.
+          st.profiles = (Array.isArray(st.profiles) ? st.profiles : []).map((raw) => {
+            if (!raw || typeof raw !== 'object') return raw;
+            const profile = raw as Record<string, unknown>;
+            const sp = profile.strategyParams;
+            if (!sp || typeof sp !== 'object' || Array.isArray(sp)) return raw;
+            const kept = { ...(sp as Record<string, unknown>) };
+            for (const f of OVERRIDE_FIELDS) delete kept[f];
+            return { ...profile, strategyParams: kept };
+          });
+        }
         return st as unknown as SearchProfilesState;
+      },
+      merge: (persistedState, currentState) => {
+        const typed = persistedState as Partial<SearchProfilesState> | undefined;
+        return {
+          ...currentState,
+          ...typed,
+          profiles: sanitizeSearchProfiles(typed?.profiles ?? currentState.profiles),
+        };
       },
       partialize: (state) => ({ profiles: state.profiles, legacyTargetPctDropped: state.legacyTargetPctDropped }),
     },
@@ -219,9 +416,11 @@ async function resyncScheduleEntriesForProfile(profileId: string): Promise<void>
     try {
       resolvedRequest = resolveProfileToScanRequest(profile);
     } catch {
-      // Profile can't be resolved yet (e.g. stocks-mode, Step 5 never
-      // visited) — nothing valid to push; leave the entry as it is rather
-      // than pushing a request that would fail backend validation anyway.
+      // Profile can't be resolved or has invalid parameters.
+      // Mark the referencing entry stale instead of silently succeeding.
+      useSearchProfilesStore.setState((s) => ({
+        staleScheduleEntryIds: Array.from(new Set([...s.staleScheduleEntryIds, entry.id])),
+      }));
       continue;
     }
 

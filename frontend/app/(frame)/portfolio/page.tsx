@@ -15,6 +15,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { usePortfolioUiStore } from '@/lib/portfolioUiStore';
+import { BrokerAttemptPanel } from '@/components/organisms/BrokerAttemptPanel';
 import { ClosePositionDrawer } from '@/components/organisms/ClosePositionDrawer';
 import { PnlChart } from '@/components/organisms/PnlChart';
 import { PnlHeatmap } from '@/components/organisms/PnlHeatmap';
@@ -30,6 +31,7 @@ import styles from './page.module.css';
 import { EditDrawer } from './EditDrawer';
 import { isPartialSave, rejectionMessage } from '@/lib/portfolioRejection';
 import { premiumStopDropText } from '@/lib/premiumStop';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 
 const HISTORY_COLUMNS = '64px 1.6fr 1fr 168px 80px 28px';
 
@@ -108,8 +110,10 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     // Sync open positions FIRST — GET /api/portfolio writes today's equity
-    // snapshot (including open P&L). Only then read performance, otherwise the
-    // curve races ahead of the write and shows a stale value.
+    // snapshot (including open P&L) when every position got a quote; when any
+    // did not, it skips the write and today's point stays as last written
+    // (NO-LIVE-QUOTE NLQ-1). Only then read performance, otherwise the curve
+    // races ahead of a write and shows a stale value.
     (async () => {
       await syncFromBackend();
       fetchPerformance();
@@ -143,11 +147,9 @@ export default function PortfolioPage() {
     return () => setSelectedSymbol(null);
   }, [setSelectedSymbol]);
 
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
-  const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
-  const winners = positions.filter((p) => p.pnlDollar > 0).length;
-  const losers  = positions.filter((p) => p.pnlDollar < 0).length;
+  // A row with no quote carries 0 defaults, not a price: the totals leave it
+  // out and say so, rather than adding a silent 0 (NO-LIVE-QUOTE NLQ-1).
+  const { deployed, openPnL, openPnLPct, winners, losers, unquoted } = openTotals(positions);
 
   const now = new Date();
   const fmtDay = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -178,6 +180,8 @@ export default function PortfolioPage() {
         <Title as="h1" size={24}>Portfolio</Title>
         <Text size={13} tone="secondary">{positions.length} open positions</Text>
       </div>
+
+      <BrokerAttemptPanel />
 
       {lastSyncError && (
         <div role="alert" className={styles.syncErrorBanner}>
@@ -359,16 +363,27 @@ export default function PortfolioPage() {
                   <div className={styles.priceCell}>
                     <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
                     <Text size={11} tone="dim">→</Text>
-                    <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                    {p.quoteUnavailable ? (
+                      <Data size={12} weight={500} title="Quote unavailable">—</Data>
+                    ) : (
+                      <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                    )}
                   </div>
-                  <div className={styles.pnlCell}>
-                    <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                      {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
-                    </Data>
-                    <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                      {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
-                    </Data>
-                  </div>
+                  {p.quoteUnavailable ? (
+                    <div className={styles.pnlCell} title="Quote unavailable">
+                      <Data size={13} weight={500}>—</Data>
+                      <Data size={11}>—</Data>
+                    </div>
+                  ) : (
+                    <div className={styles.pnlCell}>
+                      <Data size={13} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                        {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                      </Data>
+                      <Data size={11} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                        {p.pnlPct > 0 ? '+' : ''}{p.pnlPct.toFixed(1)}%
+                      </Data>
+                    </div>
+                  )}
                   <IvPositionCell position={p} />
                   <Data size={12} className={styles.right}>
                     {p.delta !== undefined ? p.delta.toFixed(2) : '—'}
@@ -431,6 +446,11 @@ export default function PortfolioPage() {
                 <span className={styles.loss}>{losers}</span>
               </Data>
             </div>
+            {unquoted > 0 && (
+              <div className={styles.footerGroup}>
+                <Text size={11} tone="caution">{unquotedNote(unquoted)}</Text>
+              </div>
+            )}
           </div>
         </div>
       )}

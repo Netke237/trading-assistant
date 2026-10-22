@@ -260,3 +260,11 @@ describe('SendToBrokerDialog — tracks the basket, places no broker order (revi
     expect(Object.keys(onSubmit.mock.calls[0][0][0]).sort()).toEqual(['card', 'contracts']);
   });
 });
+
+
+test('T11 non-active basket item warns without requiring a quote confirmation tick', () => {
+  const card = makeCard({ symbol: 'BBB', noLiveQuote: false });
+  render(<SendToBrokerDialog cards={[card]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ BBB: pick() }} onClose={() => {}} onSubmit={() => {}} />);
+  expect(screen.getByText(/Live quote unavailable — the entry premium is the scan-time mid/)).toBeInTheDocument();
+  expect(screen.queryByLabelText('Confirm sending without a live quote')).not.toBeInTheDocument();
+});

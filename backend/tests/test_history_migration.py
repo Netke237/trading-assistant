@@ -19,7 +19,7 @@ def test_history_upgrade_downgrade_preserves_daily_bars(tmp_path):
                        cwd=cwd, env=env, check=True, capture_output=True, text=True)
 
     alembic("stamp", "f62a9e1b4c70")
-    alembic("upgrade", "head")
+    alembic("upgrade", "c15d709a26b1")  # this test pins HISTORY's own migration; later heads need tables this bare DB lacks
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "c15d709a26b1"
         columns = {row[1] for row in db.execute("PRAGMA table_info(ohlcv_history_state)")}

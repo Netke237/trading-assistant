@@ -18,6 +18,8 @@ NORMALIZE: dict[str, str] = {
     "Real Estate":            "Real Estate",
     "Utilities":              "Utilities",
     "Energy":                 "Energy",
+    # Wikipedia GICS label (scripts/fill_sectors.py)
+    "Information Technology": "Technology",
     # Already-canonical pass-throughs (idempotent on re-runs)
     "Financials":             "Financials",
     "Consumer Staples":       "Consumer Staples",

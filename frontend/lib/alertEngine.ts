@@ -48,6 +48,23 @@ export interface AlertPosition {
   /** Per-position alert-type overrides — absent key inherits the global
    *  `enabledTypes` decision (see `effectiveEnabled`). */
   alertOverrides?: AlertOverrides;
+  /** STOCKS-HORIZON-T1 H6 -- ISO entry date (`YYYY-MM-DD`), read with
+   *  `holdMaxDays` for a stock position's TIME_STOP. */
+  entryDate?: string;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days. Null/absent =
+   *  no hold: a stock position never raises TIME_STOP. */
+  holdMaxDays?: number | null;
+}
+
+/** STOCKS-HORIZON-T1 H6 -- whole calendar days from `entryDate` to today, both
+ *  as LOCAL calendar dates (the backend's `date.today() - entry_date` on the
+ *  server's local date). Null when the entry date does not parse. */
+export function daysHeld(entryDate: string | undefined, now: Date = new Date()): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(entryDate ?? '');
+  if (!m) return null;
+  const entered = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Number.isFinite(entered) ? Math.round((today - entered) / 86_400_000) : null;
 }
 
 export interface AlertReason {
@@ -331,16 +348,32 @@ export function scanPortfolio(
       });
     }
 
-    // TIME_STOP — expiry within 3 days. Stock positions carry no expiry, but
-    // dteRemaining defaults/coerces to 0 for them everywhere upstream
-    // (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's `?? 0`
-    // sync, and the backend schema default — portfolio.py's router only
+    // TIME_STOP — an option within 3 days of expiry. Stock positions carry no
+    // expiry, but dteRemaining defaults/coerces to 0 for them everywhere
+    // upstream (paperTrade.ts's buildPaperStockPosition, portfolioStore.ts's
+    // `?? 0` sync, and the backend schema default — portfolio.py's router only
     // overwrites it from a contract's expiry for an options-shaped, 4-part
     // contract string) — so `dteRemaining <= 3` is unconditionally true for
-    // every stock position without this guard. Mirrors the backend's own
-    // alert_generator.py, whose parse_expiry_from_contract already returns
-    // None (never fires) for a `|STOCK` contract.
-    if (!isStock && p.dteRemaining <= TIME_STOP_DTE && enabled('TIME_STOP')) {
+    // every stock position, which is why a stock position takes the hold rule
+    // below instead (STOCKS-HORIZON-T1 H6). Mirrors the backend's own
+    // alert_generator.py: parse_expiry_from_contract returns None for a
+    // `|STOCK` contract, and the hold branch runs instead.
+    if (isStock) {
+      const hold = p.holdMaxDays;
+      const held = hold != null ? daysHeld(p.entryDate) : null;
+      if (hold != null && held != null && held >= hold && enabled('TIME_STOP')) {
+        out.push({
+          recId: p.recId,
+          kind: 'Action',
+          symbol: p.symbol,
+          alertType: 'TIME_STOP',
+          reason: `Time stop — ${p.symbol} held ${held}d (hold ${hold}d)`,
+          referenceValue: held,
+          direction: p.direction,
+          contract: p.contract,
+        });
+      }
+    } else if (p.dteRemaining <= TIME_STOP_DTE && enabled('TIME_STOP')) {
       out.push({
         recId: p.recId,
         kind: 'Action',

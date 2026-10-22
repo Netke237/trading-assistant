@@ -1,0 +1,342 @@
+{
+  "status": "2026-10-19 remediation coordination snapshot; implementation and audit stages remain in owning fix branches",
+  "authority": "Latest user instruction: retain and fix all25 identified defects; only discovery of additional issues is limited to the approved Options/Stocks/Pre-Breakout UI changes.",
+  "approved_ui_issues": [
+    233,
+    234,
+    235
+  ],
+  "direct_report_dependency": 236,
+  "finish_started_count": 6,
+  "parked_count": 0,
+  "findings": [
+    {
+      "issue": 368,
+      "title": "Options millions market-cap filters are sent as dollars",
+      "url": "https://github.com/Netke237/trading-assistant/issues/368",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 369,
+      "title": "252-day VIX percentile uses 259 prior bars",
+      "url": "https://github.com/Netke237/trading-assistant/issues/369",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 370,
+      "title": "Appearance row density resets when the Settings section remounts",
+      "url": "https://github.com/Netke237/trading-assistant/issues/370",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 371,
+      "title": "Settings footer confirms Saved after a failed or unsubmitted backend save",
+      "url": "https://github.com/Netke237/trading-assistant/issues/371",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 372,
+      "title": "Late Settings timezone response overwrites an operator edit",
+      "url": "https://github.com/Netke237/trading-assistant/issues/372",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 373,
+      "title": "Strategy scan stores zero override that the backend rejects",
+      "url": "https://github.com/Netke237/trading-assistant/issues/373",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 374,
+      "title": "Failed schedule writes change API state while disk and scheduler retain old values",
+      "url": "https://github.com/Netke237/trading-assistant/issues/374",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 375,
+      "title": "Notifications help text renders a literal Unicode escape",
+      "url": "https://github.com/Netke237/trading-assistant/issues/375",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 377,
+      "title": "Tuning schedule says every day despite saved weekday selection",
+      "url": "https://github.com/Netke237/trading-assistant/issues/377",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 380,
+      "title": "Stocks manual and scheduled requests drop universe price/cap filters",
+      "url": "https://github.com/Netke237/trading-assistant/issues/380",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 381,
+      "title": "Malformed current-version profile crashes the Search Profile controls",
+      "url": "https://github.com/Netke237/trading-assistant/issues/381",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 382,
+      "title": "Options score-weight percent overrides are applied as raw multipliers",
+      "url": "https://github.com/Netke237/trading-assistant/issues/382",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 383,
+      "title": "Stocks requests ignore Step3 confidence threshold overrides",
+      "url": "https://github.com/Netke237/trading-assistant/issues/383",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 384,
+      "title": "Entry Quality controls reach requests but do not affect the trade plan",
+      "url": "https://github.com/Netke237/trading-assistant/issues/384",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 385,
+      "title": "Stop percentages display fractions and clamp a typed 3 percent to 100 percent",
+      "url": "https://github.com/Netke237/trading-assistant/issues/385",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 386,
+      "title": "Old regime response overwrites the newer direction-aligned scan gate",
+      "url": "https://github.com/Netke237/trading-assistant/issues/386",
+      "classification": "finish_started_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 387,
+      "title": "Shared Run Scan confirmation is bypassed in Stocks and Pre-Breakout",
+      "url": "https://github.com/Netke237/trading-assistant/issues/387",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 388,
+      "title": "Regime VIX percentile labels render incorrect ordinal suffixes",
+      "url": "https://github.com/Netke237/trading-assistant/issues/388",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 398,
+      "title": "Failed Search Profile writes leave changed profiles active until reload",
+      "url": "https://github.com/Netke237/trading-assistant/issues/398",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 399,
+      "title": "Theme changes do not synchronize across tabs as Settings promises",
+      "url": "https://github.com/Netke237/trading-assistant/issues/399",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 400,
+      "title": "An ordinary Settings edit in a stale tab overwrites unrelated saved values",
+      "url": "https://github.com/Netke237/trading-assistant/issues/400",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 401,
+      "title": "Saving after invalid scan schedule YAML overwrites the only recovery bytes",
+      "url": "https://github.com/Netke237/trading-assistant/issues/401",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 402,
+      "title": "Scheduled scan failures and unresolvable profile selections give no explanation",
+      "url": "https://github.com/Netke237/trading-assistant/issues/402",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 403,
+      "title": "A schedule with a missing profile visually selects a different saved profile",
+      "url": "https://github.com/Netke237/trading-assistant/issues/403",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    },
+    {
+      "issue": 404,
+      "title": "An unavailable timezone readback displays an editable default without an error",
+      "url": "https://github.com/Netke237/trading-assistant/issues/404",
+      "classification": "queued_confirmed_defect_fix",
+      "fixed_or_retested": false
+    }
+  ],
+  "started_work": [
+    {
+      "issue": 368,
+      "phase": "APP-AUDIT-B-CAP-UNITS",
+      "branch": "board/app-audit-b-cap-units-96e70c96",
+      "head": "8fea9dba3b00cbea7b6af6a30be8826e4a275ef6",
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/fix368_plan_r2 reviewed plan SHA2567b87fc503577bcae353abd058518b7783a77f7c157a578bd6a4e424af4fdaebd; exactscope verified,0gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-CAP-UNITS/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [
+        407
+      ],
+      "plan_path": "/workspace/fix-368/docs/superpowers/plans/2026-10-17-app-audit-b-cap-units-plan.md",
+      "plan_sha256": "7b87fc503577bcae353abd058518b7783a77f7c157a578bd6a4e424af4fdaebd",
+      "uncommitted": [
+        "?? backend/.venv",
+        "?? frontend/node_modules"
+      ]
+    },
+    {
+      "issue": 369,
+      "phase": "APP-AUDIT-B-VIX-WINDOW",
+      "branch": "board/app-audit-b-vix-window-14595bb2",
+      "head": "9adb7ee3a47c1e049f2f17492a6e2af144133314",
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/fix369_plan_r1 reviewed plan SHA25642b4a2aa3072118bdeecf864f61a5e13242f8a7f3ddba4a346b2669fd3e98e83; exactscope verified,0gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-VIX-WINDOW/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [
+        408
+      ],
+      "plan_path": "/workspace/fix-369/docs/superpowers/plans/2026-10-17-app-audit-b-vix-window-plan.md",
+      "plan_sha256": "42b4a2aa3072118bdeecf864f61a5e13242f8a7f3ddba4a346b2669fd3e98e83",
+      "uncommitted": [
+        "?? backend/.venv",
+        "?? backend/tests/test_vix_percentile_window.py",
+        "?? frontend/node_modules"
+      ]
+    },
+    {
+      "issue": 371,
+      "phase": "APP-AUDIT-B-SAVE-FEEDBACK",
+      "branch": "board/app-audit-b-save-feedback-685245db",
+      "head": "3022d6fed6fc74d97c07c2c3fe7861f5b6ce3b09",
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": false
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [],
+      "plan_path": "/workspace/fix-371/docs/superpowers/plans/2026-10-17-app-audit-b-save-feedback-plan.md",
+      "plan_sha256": "4f58bd929e7feb2f0e697aa865598be8edd7df72a29da823ac7b4532b31a1e05",
+      "uncommitted": [
+        "?? backend/.venv",
+        "?? frontend/node_modules"
+      ]
+    },
+    {
+      "issue": 374,
+      "phase": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
+      "branch": "board/app-audit-b-schedule-rollback-07ec76a0",
+      "head": "93d5c484a38588b7f0dee13b361dc997b7e8a618",
+      "recorded_plan_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [],
+      "plan_path": "/workspace/fix-374/docs/superpowers/plans/2026-10-17-app-audit-b-schedule-rollback-plan.md",
+      "plan_sha256": "92bbb3734e595a2e3858a31c559e4e178c8aa66555b1b2d9ae7b61aa01d547b5",
+      "uncommitted": [
+        " M docs/superpowers/PROJECT_STATE.json",
+        "?? backend/.venv",
+        "?? docs/superpowers/plans/2026-10-17-app-audit-b-schedule-rollback-plan.md",
+        "?? frontend/node_modules"
+      ],
+      "prior_review_to_reconcile": {
+        "reviewer": "/root/fix374_plan_r1",
+        "stage_round": 1,
+        "gate_findings": 0,
+        "plan_sha256": "92bbb3734e595a2e3858a31c559e4e178c8aa66555b1b2d9ae7b61aa01d547b5",
+        "scope": "all four stores, routers, schedulers, tests and original evidence; completed independent second look",
+        "record_status": "Original /tmp report no longer present; preserve completed round and recover verified result in coordinator records, do not reset counters."
+      }
+    },
+    {
+      "issue": 381,
+      "phase": "APP-AUDIT-B-PROFILE-VALIDATION",
+      "branch": "board/app-audit-b-profile-validation-3b841177",
+      "head": "93d5c484a38588b7f0dee13b361dc997b7e8a618",
+      "recorded_plan_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [],
+      "plan_path": "/workspace/fix-381/docs/superpowers/plans/2026-10-17-app-audit-b-profile-validation-plan.md",
+      "plan_sha256": "10dddcf240c3e794e7133b63bc63d675341340e826a7746d9118856797aa12ee",
+      "uncommitted": [
+        " M docs/superpowers/PROJECT_STATE.json",
+        "?? backend/.venv",
+        "?? docs/superpowers/plans/2026-10-17-app-audit-b-profile-validation-plan.md",
+        "?? frontend/node_modules"
+      ]
+    },
+    {
+      "issue": 386,
+      "phase": "APP-AUDIT-B-REGIME-RACE",
+      "branch": "board/app-audit-b-regime-race-c553ef3a",
+      "head": "93d5c484a38588b7f0dee13b361dc997b7e8a618",
+      "recorded_plan_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "recorded_code_stage": {
+        "rounds": 0,
+        "clean": false
+      },
+      "tickets": [],
+      "plan_path": "/workspace/fix-386/docs/superpowers/plans/2026-10-17-app-audit-b-regime-race-plan.md",
+      "plan_sha256": "5454ec391a82dddc6731e177a4ac119648b2e7c3a26272571f48ae0899848679",
+      "uncommitted": [
+        " M docs/superpowers/PROJECT_STATE.json",
+        "?? backend/.venv",
+        "?? docs/superpowers/plans/2026-10-17-app-audit-b-regime-race-plan.md",
+        "?? frontend/node_modules"
+      ]
+    }
+  ],
+  "confirmed_fix_queue_count": 25,
+  "command_access": "GitHub CLI and claim access restored on 2026-10-19; root #350 claim recovered with matching branch/status checks"
+}

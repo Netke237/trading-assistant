@@ -470,15 +470,15 @@ def test_a_malformed_threshold_fails_the_options_scan_before_any_fetching(client
 # A `scope: scan` symbol in config/universe_exclusions.yaml is skipped before
 # any per-symbol work, reported in `rejected` as "Excluded (data): <reason>",
 # counted in `scanned` and in the `failed_data` bucket, so the sum invariant
-# still holds. The shipped file lists CTVA with scope scan (pinned by
+# still holds. The shipped file lists PXD with scope scan (pinned by
 # test_universe_exclusions.py).
 
 _BROKEN_LIST = "universe_exclusions.yaml: 'version' must be 1, got 2"
 
 
-def _ctva_reason() -> str:
+def _pxd_reason() -> str:
     from app.data.universe_exclusions import load_exclusions
-    return load_exclusions()["CTVA"].reason
+    return load_exclusions()["PXD"].reason
 
 
 def _post_options_scan(client, universe, fake_process, *extra_patches):
@@ -515,14 +515,14 @@ def test_an_excluded_symbol_is_rejected_as_data_and_never_processed(client):
         processed.append(symbol)
         return _card(symbol, 60)   # clears the Bearish/Position floor
 
-    r, quotes = _post_options_scan(client, ["AAPL", "CTVA"], _fake_process)
+    r, quotes = _post_options_scan(client, ["AAPL", "PXD"], _fake_process)
     assert r.status_code == 200, r.text
     body = r.json()
 
-    assert processed == ["AAPL"], "CTVA reached per-symbol work"
-    assert "CTVA" not in quotes.call_args.args[0], "CTVA reached the batch quote fetch"
+    assert processed == ["AAPL"], "PXD reached per-symbol work"
+    assert "PXD" not in quotes.call_args.args[0], "PXD reached the batch quote fetch"
     reasons = {x["symbol"]: x["reason"] for x in body["rejected"]}
-    assert reasons["CTVA"] == f"Excluded (data): {_ctva_reason()}"
+    assert reasons["PXD"] == f"Excluded (data): {_pxd_reason()}"
     assert [c["symbol"] for c in body["candidates"]] == ["AAPL"]
 
     pipeline = body["pipeline"]

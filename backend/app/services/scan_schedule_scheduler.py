@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
+from app.services.scan_report_lifecycle import run_reported_scan, persisted_result
 import logging
 from datetime import datetime, timezone
 
@@ -98,15 +100,42 @@ async def _notify_scan_schedule_error(label: str, error: str) -> None:
         logger.error("scan_schedule: failure notification itself failed for %s", label, exc_info=True)
 
 
-async def _notify_scan_schedule_success(label: str, candidate_count: int) -> None:
+# NO-LIVE-QUOTE (plan 3f): appended to the success notice of an options run
+# whose every rejected name was rejected only for no_live_quote.
+NO_LIVE_QUOTE_NOTICE_CLAUSE = "ran outside market hours — no live option quotes"
+
+
+def _ran_without_live_quotes(candidate_count: int, rejected_count: int, no_live_quote_names: int) -> bool:
+    """True when an options run found nothing and EVERY rejected name was
+    rejected only because none of its contracts had a live quote
+    (ScanResult.noLiveQuoteNames, counted by the scan core -- no reason string
+    is parsed here). A run with a candidate had a live quote somewhere, so the
+    clause would be false there."""
+    return (
+        candidate_count == 0
+        and rejected_count > 0
+        and no_live_quote_names == rejected_count
+    )
+
+
+async def _notify_scan_schedule_success(
+    label: str, candidate_count: int, *, no_live_quotes: bool = False,
+) -> None:
     from app.services.notifications.dispatch import notify_enabled_channels
     subject = f"Scheduled scan complete: {label}"
     plain = f"Scan entry '{label}': {candidate_count} candidate(s) found"
     html_body = f"<b>Scheduled scan complete</b>\nScan entry '{html.escape(label)}': {candidate_count} candidate(s) found"
+    if no_live_quotes:
+        plain += f" — {NO_LIVE_QUOTE_NOTICE_CLAUSE}"
+        html_body += f" — {html.escape(NO_LIVE_QUOTE_NOTICE_CLAUSE)}"
     try:
         await notify_enabled_channels(subject, plain, html_body)
     except Exception:
         logger.error("scan_schedule: success notification itself failed for %s", label, exc_info=True)
+
+
+class _LegacyCapUnitsError(ValueError):
+    """Stored cap amounts need explicit profile confirmation before replay."""
 
 
 async def _run_scheduled_entry(entry_id: str) -> None:
@@ -127,6 +156,7 @@ async def _run_scheduled_entry(entry_id: str) -> None:
 
     label = entry.get("label", entry_id)
     mode = entry.get("mode")
+    no_live_quotes = False
 
     async with _SCHEDULED_SCAN_SEMAPHORE:
         from app.database import AsyncSessionLocal
@@ -137,6 +167,14 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                     from app.schemas import ScanRequest, ScanResult
                     from app.routers.scan import _execute_scan_core
                     req = ScanRequest.model_validate(entry["resolved_request"])
+                    if req.cap_filter_units_version != 1 and any(
+                        cap is not None and cap != 0
+                        for cap in (req.min_cap_usd, req.max_cap_usd)
+                    ):
+                        raise _LegacyCapUnitsError(
+                            "Re-save the Search Profile and confirm market-cap filter units "
+                            "before running this schedule."
+                        )
                     # Step 3's min_stock_score is stocks-only, but entries saved
                     # before the options resolver stripped it (open question #57)
                     # still carry it, and contract_validator would apply it as
@@ -148,9 +186,13 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                         ScanResult.model_validate_json(previous_row.result_json)
                         if previous_row and previous_row.result_json else None
                     )
-                    result = await _execute_scan_core(req, db, previous_result=previous_result)
-                    result_json = result.model_dump_json()
+                    result = await run_reported_scan(req, category="options", trigger="scheduled",
+                        callback=lambda: _execute_scan_core(req, db, previous_result=previous_result))
+                    result_json = json.dumps(persisted_result(result), allow_nan=False)
                     candidate_count = len(result.candidates)
+                    no_live_quotes = _ran_without_live_quotes(
+                        candidate_count, len(result.rejected), result.noLiveQuoteNames,
+                    )
                 elif mode == "stocks":
                     from app.schemas.stock_scan import StockScanRequest
                     from app.schemas.stock_scan import StockScanResult
@@ -160,25 +202,29 @@ async def _run_scheduled_entry(entry_id: str) -> None:
                         StockScanResult.model_validate_json(previous_row.result_json)
                         if previous_row and previous_row.result_json else None
                     )
-                    result = await _execute_stock_scan_core(req, db, previous_result=previous_result)
-                    result_json = result.model_dump_json()
+                    result = await run_reported_scan(req, category=req.category, trigger="scheduled",
+                        callback=lambda: _execute_stock_scan_core(req, db, previous_result=previous_result))
+                    result_json = json.dumps(persisted_result(result), allow_nan=False)
                     candidate_count = len(result.candidates)
                 else:
                     raise ValueError(f"unknown schedule entry mode {mode!r}")
             except Exception as exc:
-                logger.error("scan_schedule: entry %s (%s) failed", entry_id, label, exc_info=True)
+                error = str(exc) if isinstance(exc, _LegacyCapUnitsError) else "scan_failed"
+                logger.error("scan_schedule: entry %s (%s) failed: %s", entry_id, label, error)
                 await record_scheduled_scan_run(
                     db, schedule_entry_id=entry_id, mode=mode or "unknown",
-                    status="error", error=str(exc),
+                    status="error", error=error,
                 )
-                await _notify_scan_schedule_error(label, str(exc))
+                await _notify_scan_schedule_error(label, error)
                 return
 
             await record_scheduled_scan_run(
                 db, schedule_entry_id=entry_id, mode=mode,
                 status="success", result_json=result_json,
             )
-            await _notify_scan_schedule_success(label, candidate_count)
+            await _notify_scan_schedule_success(
+                label, candidate_count, no_live_quotes=no_live_quotes,
+            )
 
 
 class ScanScheduleLoopRunner:

@@ -27,6 +27,11 @@ from tastytrade.instruments import Equity, get_option_chain
 from tastytrade.order import LimitOrder, OrderAction
 
 from app.data.ibkr_paper import BrokerOrder, OrderResult
+from app.data.order_errors import (
+    OrderBeforeSubmissionError,
+    OrderPreflightRefusedError,
+    OrderSubmissionUnknownError,
+)
 from app.data.tastytrade_bridge import run_coro
 from app.data.tastytrade_session import get_session
 
@@ -77,7 +82,7 @@ class TastytradePaperAdapter:
     async def _place_order_async(self, order: BrokerOrder) -> OrderResult:
         session = get_session("tastytrade_paper")
         if session is None:
-            raise RuntimeError(
+            raise OrderBeforeSubmissionError(
                 "tastytrade paper order failed: account not configured. "
                 "Add client_secret/refresh_token in Settings → Brokers."
             )
@@ -94,41 +99,51 @@ class TastytradePaperAdapter:
             # SDK internals) is NOT this case and must still get the generic
             # wrap for consistency with every other failure path.
             if "record_not_found" in str(acct_exc) or "find Account" in str(acct_exc):
-                raise RuntimeError(
+                raise OrderBeforeSubmissionError(
                     f"tastytrade could not find account '{self._account_id}'. "
                     "Check the account number under Settings → Brokers → "
                     "Tastytrade Paper matches an account on the logged-in "
                     "tastytrade profile (client_secret / refresh_token)."
                 ) from acct_exc
-            raise RuntimeError(f"tastytrade paper order failed: {acct_exc}") from acct_exc
+            raise OrderBeforeSubmissionError(f"tastytrade paper order failed: {acct_exc}") from acct_exc
 
         try:
             leg = await self._resolve_leg(session, order)
-            if order.order_type != "LMT" or order.limit_price is None:
-                raise ValueError(
-                    "TastytradePaperAdapter only supports limit orders "
-                    "(tastytrade options orders require a price)."
-                )
-            # tastytrade LimitOrder price convention: negative = debit (you
-            # pay), positive = credit (you receive) — a BUY is always a debit.
-            # Confirmed against the installed tastytrade SDK source itself
-            # (order.py's get_sign/set_sign_for), not just documentation, and
-            # locked in by test_place_order_stock_success's exact
-            # Decimal("-150.0") assertion. Still worth a real paper-account
-            # order as a final sanity check before this is trusted with size.
-            price = Decimal(str(order.limit_price))
-            if order.action == "BUY":
-                price = -abs(price)
-            else:
-                price = abs(price)
-            new_order = LimitOrder(legs=[leg], price=price)
+        except ValueError as exc:
+            raise OrderPreflightRefusedError(str(exc)) from exc
+        except Exception as exc:
+            raise OrderBeforeSubmissionError(f"tastytrade paper order failed: {exc}") from exc
+        if order.order_type != "LMT" or order.limit_price is None:
+            raise OrderPreflightRefusedError(
+                "TastytradePaperAdapter only supports limit orders "
+                "(tastytrade options orders require a price)."
+            )
+        # tastytrade LimitOrder price convention: negative = debit (you
+        # pay), positive = credit (you receive) — a BUY is always a debit.
+        # Confirmed against the installed tastytrade SDK source itself
+        # (order.py's get_sign/set_sign_for), not just documentation, and
+        # locked in by test_place_order_stock_success's exact
+        # Decimal("-150.0") assertion. Still worth a real paper-account
+        # order as a final sanity check before this is trusted with size.
+        price = Decimal(str(order.limit_price))
+        if order.action == "BUY":
+            price = -abs(price)
+        else:
+            price = abs(price)
+        new_order = LimitOrder(legs=[leg], price=price)
+        try:
             response = await account.place_order(session, new_order, dry_run=False)
         except Exception as exc:
-            raise RuntimeError(f"tastytrade paper order failed: {exc}") from exc
+            raise OrderSubmissionUnknownError(f"tastytrade paper order failed: {exc}") from exc
+        try:
+            order_id = str(response.order.id)
+            status = str(response.order.status)
+        except Exception as exc:
+            raise OrderSubmissionUnknownError(f"tastytrade paper order failed: {exc}") from exc
 
         return OrderResult(
-            order_id=str(response.order.id),
-            status=str(response.order.status),
+            order_id=order_id,
+            status=status,
             broker="tastytrade_paper",
         )
 

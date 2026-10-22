@@ -1,0 +1,100 @@
+# backend/config/risk_rules.yaml
+# Settings > Risk rewrites this whole file on save and DROPS EVERY COMMENT
+# except these header lines. Keep notes about these values elsewhere.
+
+portfolio:
+  max_total_exposure_pct: 0.25
+  max_concurrent_positions: 10
+  max_daily_recommendations: 5
+  max_same_symbol_positions: 1
+  min_portfolio_value: 5000.0
+  portfolio_value: 100000.0
+  max_single_position_pct: 0.05
+  # STOCK-SENDS (decision STOCK-SENDS-STOCK-CAPS-2026-09-27): stocks are judged at
+  # their real share count against their OWN caps, on dollar value (price x shares)
+  # as a fraction of portfolio value. The two caps above judge options only, and
+  # each kind's total counts only its own open rows.
+  max_single_stock_position_pct: 0.20
+  max_total_stock_exposure_pct: 1.00
+  # Feature C (exit-plan pipeline plan, docs/superpowers/plans/2026-08-26-exit-plan-pipeline.md)
+  # — warning-only, never auto-clamps contract count. Loss basis is whatever
+  # the exit-plan pipeline resolves as the final stop, repriced to a contract
+  # value; overridable per-trade via PortfolioPosition.maxLossOverride.
+  max_loss_per_trade_pct: 0.0375
+
+sizing:
+  max_contracts_per_trade: 5
+
+# Reward-risk calculation defaults (FR-45)
+reward_risk:
+  bullish_target_pct: 0.08      # +8% stock move for T1 target
+  bearish_target_pct: 0.08      # 8% move down for bearish T1
+  bullish_invalidation_pct: 0.03   # -3% stock = invalidation
+  bearish_invalidation_pct: 0.03   # +3% stock = bearish invalidation
+  premium_stop_pct: 0.60        # stop out if option loses 60% of premium
+  target_t1_pct: 0.20           # profit-target ladder for the first-passage estimate (% of premium)
+  target_t2_pct: 0.35
+  target_t3_pct: 0.50
+
+# Exit-plan pipeline tunables (structural stop/target with an ATR floor and
+# ATR-relative structural snap distance) — see docs/superpowers/plans/
+# 2026-08-26-exit-plan-pipeline.md
+exit_plan:
+  stop:
+    atr_multiplier: 2.0          # ATR(14) floor multiplier for the final stop
+  target:
+    rr_ratios: [2.0, 3.0]        # one target row per ratio, both shown independently
+    structural_snap:
+      atr_multiplier: 0.3        # ATR-relative snap distance to a real structural level
+
+# Monte Carlo first-passage-time simulation tunables (profit-target estimator)
+first_passage:
+  max_drift_pct: 0.40    # annualized drift ceiling at a trend score of 100 (0 at score 50, -max at score 0)
+  n_paths: 2000          # simulated GBM paths per estimate
+  sigma_floor: 0.10      # annualized stock volatility floor (guards against degenerate ATR data)
+  sigma_ceiling: 1.50    # annualized stock volatility ceiling
+
+auto_trade:
+  max_arm_age_minutes: 30   # disarm without firing if order was armed longer than this
+  max_daily_loss_pct: 0.02     # 2% of portfolio_value = $2,000 on $100k
+  # NOT READ since A6 (2026-09-24): the daily-loss gate counts the FULL premium,
+  # because the auto-trader places no protective order. Kept, not removed; a
+  # position's premium stop comes from the arm request or reward_risk above.
+  premium_stop_pct: 0.60
+  regime_monitor_interval_minutes: 15
+  regime_flip_sustain_minutes: 0   # 0 = warn on the first REJECT+open-positions tick (original behavior)
+  # INTENTIONAL DEAD CONFIG (not a bug): gap_threshold_pct is reserved for a future
+  # percentage buffer around the stop-loss trigger. No code currently reads this key —
+  # auto_trader.py alerts on any stop breach with no buffer. Verified zero read sites as
+  # of Phase D config audit (2026-07-01). Leave in place; do not remove without adding the
+  # feature that consumes it.
+  gap_threshold_pct: 0.05
+
+# Repricing horizon (barrier-race spec Q2, docs/superpowers/plans/
+# 2026-09-02-barrier-race-spec.md §2.2). "How far into the future do we reprice
+# an option when we ask what it is worth AT a barrier."
+#
+# source: simulation_median — when the Monte Carlo produced a conditional median
+# number of days to that barrier, use it. Only when it did not (nobody hit the
+# barrier) do we fall back to the per-preset table below.
+#
+# Keyed on the HOLDING PRESET, not the scoring horizon. scoringHorizonForHold()
+# collapses Quarterly/SemiAnnual/Annual into "Position"; keying on that would
+# give a 200-day hold and a 20-day hold the same repricing time.
+reprice_horizon:
+  source: simulation_median
+  fallback_days:
+    Intraday: 1
+    Swing: 7
+    Position: 14
+    Quarterly: 25
+    SemiAnnual: 45
+    Annual: 80
+  custom:
+    rule: fraction_of_hold      # days = mean(holdMin, holdMax) * fraction
+    fraction: 0.50
+  clamp:
+    min_days: 1
+    # Not decoration: without it, Annual on a 30-day contract reprices at 80
+    # days — past expiry — and every level silently prices at intrinsic only.
+    max_fraction_of_dte: 0.75

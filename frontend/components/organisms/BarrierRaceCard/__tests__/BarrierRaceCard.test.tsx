@@ -410,7 +410,7 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
   // the reader to go and compare against a row that is nowhere on the page is
   // worse than saying nothing. Neither direction was pinned, so the prop could
   // have been dropped, inverted, or defaulted the other way in silence.
-  const CROSS_REF = /see “Max loss if the stop is hit” on the Arithmetic Profit Target card/;
+  const CROSS_REF = /see “Max loss if the stop is hit” in Structure & Stops/;
 
   it('points at the trade card readout when it is shown', () => {
     renderCard({ stopCostShown: true });
@@ -453,7 +453,7 @@ describe('the comparison row', () => {
     expect(rows).toHaveLength(3);
     const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
     expect(cells).toEqual([
-      '20%$6.24', '', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00',
+      '20%$6.24Estimated dollar outcomeUnavailable', '', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00',
     ]);
     // The bar is in the second cell, and it is still the raw-share bar.
     expect(within(rows[0]).getByRole('img')).toBeInTheDocument();
@@ -603,5 +603,63 @@ describe('controlled race shortcut', () => {
   ])('retains refusal/freshness early returns with a callback: %p', (props) => {
     renderCard({ ...props, onSelectTarget: jest.fn() });
     expect(screen.queryByRole('button', { name: /Use Barrier Race/ })).not.toBeInTheDocument();
+  });
+});
+
+// OPT-PRES-07: the target reward is already returned in the backend's cents.
+describe('selected-contract dollar outcomes', () => {
+  const rows = () => within(screen.getAllByRole('table')[1]).getAllByRole('row').slice(1);
+
+  it('scales every returned reward by entered quantity, retaining selection and per-contract edge', () => {
+    const onSelectTarget = jest.fn();
+    renderCard({ quantity: 2, onSelectTarget });
+    expect(screen.getByText(/2 entered contracts × 100 shares.*selected-contract full exit/)).toBeVisible();
+    ['$208.00', '$364.00', '$520.00'].forEach((amount, i) => {
+      expect(within(rows()[i]).getByText(amount)).toBeVisible();
+      fireEvent.click(within(rows()[i]).getByRole('button'));
+      expect(onSelectTarget).toHaveBeenLastCalledWith(RACE.outcomes[i].targetPct);
+    });
+    expect(within(rows()[0]).getByText('-$193.00')).toBeVisible();
+  });
+
+  it('uses rewardDollar rather than rebuilding it from a percentage or a differently rounded premium', () => {
+    renderCard({ quantity: 3, race: { ...RACE, premiumUsed: 1.03,
+      outcomes: [outcome({ targetPct: 0.2, targetOptionPrice: 1.235, rewardDollar: 0.21 })] } });
+    expect(within(rows()[0]).getByText('$63.00')).toBeVisible();
+    expect(within(rows()[0]).queryByText('$61.50')).not.toBeInTheDocument();
+  });
+
+  it('matches existing formatter precision for a legacy half-cent reward before quantity scaling', () => {
+    renderCard({ quantity: 3, race: { ...RACE, outcomes: [outcome({ rewardDollar: 0.215 })] } });
+    expect(within(rows()[0]).getByText('$63.00')).toBeVisible();
+    expect(screen.getByText(/\$0\.21 \/ \$5\.17/)).toBeInTheDocument();
+  });
+
+  it.each([0, 0.29, -0.29])('preserves a zero or signed reward %s without binary-float tails', (rewardDollar) => {
+    renderCard({ quantity: 3, race: { ...RACE, outcomes: [outcome({ rewardDollar })] } });
+    const amount = rewardDollar === 0 ? '$0.00' : rewardDollar > 0 ? '$87.00' : '-$87.00';
+    expect(within(rows()[0]).getByText(amount)).toBeVisible();
+  });
+
+  it('shows zero quantity as zero and limits spread amounts to the selected contract', () => {
+    renderCard({ quantity: 0, isSpread: true });
+    rows().forEach((row) => expect(within(row).getByText('$0.00')).toBeVisible());
+    expect(screen.getByText(/not a whole-spread outcome/)).toBeVisible();
+  });
+
+  it.each([undefined, NaN, Infinity, -1])('does not invent an amount for unavailable quantity %s', (quantity) => {
+    renderCard({ quantity });
+    rows().forEach((row) => expect(within(row).getByText('Unavailable')).toBeVisible());
+  });
+
+  it.each([NaN, Infinity, undefined])('does not invent an amount for unavailable returned reward %s', (rewardDollar) => {
+    renderCard({ quantity: 2, race: { ...RACE, outcomes: [outcome({ rewardDollar })] } });
+    expect(within(rows()[0]).getByText('Unavailable')).toBeVisible();
+  });
+
+  it('retains availability gates for dollar outcomes when barriers change', () => {
+    renderCard({ quantity: 2, barriersChanged: true });
+    expect(screen.queryByText('$208.00')).not.toBeInTheDocument();
+    expect(screen.queryByText('Estimated dollar outcome')).not.toBeInTheDocument();
   });
 });

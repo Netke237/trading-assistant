@@ -115,7 +115,11 @@ async def test_contract_collision_race_returns_409_already_exists(client, engine
         return await real_execute(self, statement, *args, **kwargs)
 
     async def _rollback_spy(self, *args, **kwargs):
-        seen["rolled_back"] = True
+        # The exposure snapshot restart rolls back the pre-fetch read before
+        # the in-lock re-check. The IntegrityError rollback is the one after
+        # both contract pre-checks have been emptied.
+        if seen["emptied"] >= 2:
+            seen["rolled_back"] = True
         return await real_rollback(self, *args, **kwargs)
 
     with (

@@ -9,15 +9,34 @@ reintroduce a lost-update race between concurrent requests).
 """
 from __future__ import annotations
 
+import logging
 import os
+import shutil
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
 from sqlalchemy import delete, select
 
+logger = logging.getLogger(__name__)
+
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "scan_schedule.yaml"
+
+# File format version. 2 (STOCKS-HORIZON-T1 H4): every stocks entry's
+# resolved_request has had its strategy fields stripped and its params_horizon
+# set (horizon_profiles.migrate_saved_stock_request). A file without the key is
+# version 1.
+_SCHEMA_VERSION = 3
+
+_SCORE_WEIGHT_KEYS = {
+    "weight_trend",
+    "weight_pullback",
+    "weight_trigger",
+    "weight_event",
+    "weight_vol",
+}
 
 
 class ScanScheduleStore:
@@ -25,13 +44,41 @@ class ScanScheduleStore:
         self._path = path
         self._lock = threading.Lock()
         self._entries: dict[str, dict] = {}  # id -> entry dict, the in-memory canonical state
+        self._load_error: str | None = None
         if self._path.exists():
             self._load()
 
+    @property
+    def load_error(self) -> str | None:
+        with self._lock:
+            return self._load_error
+
+    def reload(self) -> None:
+        """Reload canonical state from disk."""
+        if self._path.exists():
+            self._load()
+        else:
+            with self._lock:
+                self._entries = {}
+                self._load_error = None
+
     def _load(self) -> None:
         try:
-            raw = yaml.safe_load(self._path.read_text()) or {}
-            entries = raw.get("entries", [])
+            content = self._path.read_text(encoding="utf-8")
+            raw = yaml.safe_load(content) or {}
+            if not isinstance(raw, dict):
+                raise ValueError(f"Root YAML must be a mapping, got {type(raw).__name__}")
+            try:
+                version_int = int(raw.get("version", 1) or 1)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"Invalid schema version: {raw.get('version')}") from exc
+            raw_entries = raw.get("entries", [])
+            if not isinstance(raw_entries, list):
+                raise ValueError(f"'entries' must be a list, got {type(raw_entries).__name__}")
+            entries = raw_entries
+            migrate = version_int < _SCHEMA_VERSION
+            if migrate:
+                entries = [self._migrate_entry(e) for e in entries]
             loaded: dict[str, dict] = {}
             for entry in entries:
                 try:
@@ -41,8 +88,61 @@ class ScanScheduleStore:
                     continue  # malformed rows are dropped, not fatal
             with self._lock:
                 self._entries = loaded
-        except Exception:
-            pass
+                self._load_error = None
+                if migrate:
+                    self._backup()
+                    self._save_locked()
+        except Exception as exc:
+            with self._lock:
+                self._entries = {}
+                self._load_error = str(exc)
+            logger.warning("scan_schedule: failed to load %s: %s", self._path, exc)
+
+    @staticmethod
+    def _migrate_entry(entry: object) -> object:
+        """v1 -> v2: a stocks entry's saved request loses its strategy fields
+        (old clients always sent them at frozen defaults, which would override
+        the backend profile forever) and gains params_horizon from its hold.
+        v2 -> v3: score weight overrides in resolved_request are normalized to canonical fractions."""
+        if not (isinstance(entry, dict) and isinstance(entry.get("resolved_request"), dict)):
+            return entry
+
+        e = dict(entry)
+        req = dict(e["resolved_request"])
+
+        if e.get("mode") == "stocks":
+            from app.services.horizon_profiles import migrate_saved_stock_request
+            req = migrate_saved_stock_request(req)
+
+        ov = req.get("overrides")
+        if isinstance(ov, dict):
+            updated_ov = dict(ov)
+            changed = False
+            for k in _SCORE_WEIGHT_KEYS:
+                v = updated_ov.get(k)
+                if isinstance(v, (int, float)) and v > 0:
+                    if v >= 1.0:
+                        updated_ov[k] = float(v) / 100.0
+                        changed = True
+            if changed:
+                req["overrides"] = updated_ov
+
+        e["resolved_request"] = req
+        return e
+
+    def _backup_corrupt(self) -> Path | None:
+        """Preserve unparseable or corrupt source YAML before overwriting it."""
+        if not self._path.exists():
+            return None
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_path = self._path.with_suffix(f".bak.{stamp}-{uuid.uuid4().hex[:8]}.yaml")
+        shutil.copy(self._path, backup_path)
+        return backup_path
+
+    def _backup(self) -> None:
+        """Copy the file aside before a migration rewrites it (as
+        strategy_param_store.adopt() does)."""
+        self._backup_corrupt()
 
     def list(self) -> list[dict]:
         with self._lock:
@@ -55,20 +155,33 @@ class ScanScheduleStore:
     def upsert(self, entry: dict) -> None:
         """Create or full-replace by id, then persist."""
         with self._lock:
-            self._entries[entry["id"]] = entry
-            self._save_locked()
+            previous = self._entries
+            self._entries = {**previous, entry["id"]: entry}
+            try:
+                self._save_locked()
+            except Exception:
+                self._entries = previous
+                raise
 
     def delete(self, entry_id: str) -> None:
         with self._lock:
-            self._entries.pop(entry_id, None)
-            self._save_locked()
+            previous = self._entries
+            self._entries = {k: v for k, v in previous.items() if k != entry_id}
+            try:
+                self._save_locked()
+            except Exception:
+                self._entries = previous
+                raise
 
     def _save_locked(self) -> None:
         """Must be called with self._lock already held."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        if self._load_error and self._path.exists():
+            self._backup_corrupt()
+            self._load_error = None
         tmp = self._path.with_suffix(".yaml.tmp")
-        data = {"entries": list(self._entries.values())}
-        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+        data = {"version": _SCHEMA_VERSION, "entries": list(self._entries.values())}
+        tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
         os.replace(tmp, self._path)
 
 

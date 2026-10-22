@@ -33,7 +33,9 @@ export type StageId =
   | 'pre-screen'
   | 'chain-window'
   | 'contract-rules'
-  | 'direction-shortlist';
+  | 'direction-shortlist'
+  | 'stock-history' | 'stock-score' | 'stock-direction' | 'stock-regime'
+  | 'stock-signal' | 'stock-backtest' | 'stock-shortlist' | 'stock-other';
 
 export interface DiagnosticSubRule {
   id: string;

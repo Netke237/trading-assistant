@@ -200,3 +200,21 @@ describe('riskStore daily-recommendation-limit reset — local calendar day, not
     jest.useRealTimers();
   });
 });
+
+// NO-LIVE-QUOTE NLQ-1 (round-1 F2): RiskPanel's exposure must count a position
+// without a quote at its entry price (exposureMark), not at its $0 mark.
+describe('riskStore exposure of a position without a quote', () => {
+  it('computeMetrics includes the flagged row at entry', () => {
+    const { result } = renderHook(() => useRiskStore());
+    act(() => {
+      result.current.computeMetrics([
+        makePosition({ symbol: 'AAPL', currentPrice: 5, contracts: 2 }),
+        makePosition({ symbol: 'MSFT', recId: 'REC-NQ', entryPrice: 40, currentPrice: 0, contracts: 5,
+                       pnlDollar: 0, pnlPct: 0, quoteUnavailable: true }),
+      ]);
+    });
+    // 5 x 100 x 2 + 40 x 100 x 5 = 1,000 + 20,000
+    expect(result.current.metrics.totalExposurePct).toBeCloseTo(21000 / 100000, 10);
+    expect(result.current.metrics.largestConcentrationSymbol).toBe('MSFT');
+  });
+});

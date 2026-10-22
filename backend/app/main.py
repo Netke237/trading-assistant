@@ -16,7 +16,8 @@ from fastapi.responses import JSONResponse
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import cors_origins, get_settings
+from app.request_guards import NonFiniteJsonGuard
 from app.routers.health import router as health_router
 
 from app.routers.watchlist          import router as watchlist_router
@@ -52,6 +53,8 @@ from app.routers.symbols         import router as symbols_router
 from app.routers.symbol_notes    import router as symbol_notes_router
 from app.routers.scan_schedule   import router as scan_schedule_router
 from app.routers.journal         import router as journal_router
+from app.routers.backtest_artifacts import router as backtest_artifacts_router
+from app.routers.scan_reports    import router as scan_reports_router
 
 
 _portfolio_monitor_task: asyncio.Task | None = None
@@ -137,6 +140,13 @@ async def _migrate_continuous_scan_session_if_running(status: str | None) -> Non
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _portfolio_monitor_task, _regime_monitor_task, _chart_alert_scheduler_task
+    # SQLite development bootstraps new additive tables; PostgreSQL uses Alembic.
+    # A bootstrap failure aborts startup visibly, never advertises a working log.
+    from app.database import engine
+    if engine.dialect.name == 'sqlite':
+        from app.models.scan_report import ScanReportBase
+        async with engine.begin() as conn:
+            await conn.run_sync(ScanReportBase.metadata.create_all)
     # ── Startup ──────────────────────────────────────────────────────────
     _web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1"))
     if _web_concurrency > 1:
@@ -158,6 +168,9 @@ async def lifespan(app: FastAPI):
         )
     except Exception as _exc:
         logger.warning("settings.yaml migration failed: %s", _exc)
+
+    from app.services.scan_report_lifecycle import recover_interrupted
+    await recover_interrupted()
 
     from app.routers.scan import restore_from_db
     from app.routers.stock_scan import restore_stock_from_db
@@ -198,24 +211,8 @@ async def lifespan(app: FastAPI):
         logger.warning("ingestion_scheduler startup failed: %s", _exc)
     # ── Startup catch-up: ingest if DB is stale ───────────────────────────
     try:
-        from app.services.ingestion_job import _should_ingest, start_ingestion_task
-        from app.services.historical_store import _last_stored_date
-        from app.database import AsyncSessionLocal
-        async with AsyncSessionLocal() as _db:
-            _last = await _last_stored_date("SPY", _db)
-        if _should_ingest(_last):
-            try:
-                from app.data.universe_presets import expand_universe
-                _universe = list(dict.fromkeys(
-                    expand_universe(["SP500"]) + expand_universe(["NDX100"]) + expand_universe(["DOW30"])
-                ))
-            except Exception:
-                _universe = ["SPY"]
-            start_ingestion_task(_universe, years=6)
-            logger.info(
-                "startup: DB stale (last SPY date=%s), started ingestion for %d symbols",
-                _last, len(_universe),
-            )
+        from app.services.ingestion_job import startup_catch_up
+        await startup_catch_up()
     except Exception as _exc:
         logger.warning("startup catch-up failed: %s", _exc)
     # ── Fundamentals prefetch (background thread) ─────────────────────────
@@ -360,9 +357,17 @@ async def request_validation_handler(request: Request, exc: RequestValidationErr
     client as a 500. Same status, same `detail` list, same loc/msg/type
     (lib/api.ts apiError reads loc and msg); only a non-finite value becomes
     its string."""
+    # Other errors (such as missing fields) can retain the whole rejected body.
+    # Strip every input before normalization/encoding when depth was refused.
+    errors = exc.errors()
+    if any(error.get("type") == "payload_depth" for error in errors):
+        errors = [
+            {key: value for key, value in error.items() if key != "input"}
+            for error in errors
+        ]
     return JSONResponse(
         status_code=422,
-        content={"detail": jsonable_encoder(_finite_or_str(exc.errors()))},
+        content={"detail": jsonable_encoder(_finite_or_str(errors))},
     )
 
 
@@ -378,12 +383,19 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(RequestValidationError, request_validation_handler)
 
+    # NUMERIC-API-INPUTS T1: refuse NaN/Infinity/overflowing JSON numbers with a
+    # 422 before any endpoint runs. Added BEFORE CORSMiddleware on purpose:
+    # Starlette makes the last-added middleware outermost, so CORS wraps the
+    # guard and its 422 carries the CORS headers.
+    app.add_middleware(NonFiniteJsonGuard)
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3003"],
+        allow_origins=cors_origins(settings),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Scan-Report-Run-Id", "X-Scan-Report-Generation", "X-Scan-Report-Persistence"],
     )
 
     app.include_router(health_router)
@@ -423,6 +435,8 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(scan_schedule_router)
     app.include_router(journal_router)
+    app.include_router(scan_reports_router)
+    app.include_router(backtest_artifacts_router)
 
     return app
 

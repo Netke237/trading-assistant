@@ -29,7 +29,7 @@ describe('strategyWatchStore', () => {
     await act(async () => {
       await result.current.add('AAPL', 'pullback_ema');
     });
-    expect(mockAdd).toHaveBeenCalledWith('AAPL', 'pullback_ema', 'Bullish');
+    expect(mockAdd).toHaveBeenCalledWith('AAPL', 'pullback_ema', 'Bullish', null);
   });
 
   it('add() passes through an explicit Bearish direction', async () => {
@@ -37,7 +37,7 @@ describe('strategyWatchStore', () => {
     await act(async () => {
       await result.current.add('AAPL', 'pullback_ema', 'Bearish');
     });
-    expect(mockAdd).toHaveBeenCalledWith('AAPL', 'pullback_ema', 'Bearish');
+    expect(mockAdd).toHaveBeenCalledWith('AAPL', 'pullback_ema', 'Bearish', null);
   });
 
   it('addBulk() passes through direction', async () => {
@@ -45,6 +45,6 @@ describe('strategyWatchStore', () => {
     await act(async () => {
       await result.current.addBulk(['AAPL', 'MSFT'], 'breakout_base', 'Bearish');
     });
-    expect(mockAddBulk).toHaveBeenCalledWith(['AAPL', 'MSFT'], 'breakout_base', 'Bearish');
+    expect(mockAddBulk).toHaveBeenCalledWith(['AAPL', 'MSFT'], 'breakout_base', 'Bearish', null);
   });
 });

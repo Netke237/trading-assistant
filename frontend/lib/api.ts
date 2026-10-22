@@ -1,8 +1,10 @@
+import type { BacktestArtifact, OriginalBacktestUnavailableReason, FreshBacktestConfiguration, FreshBacktestRequest, FreshBacktestResponse } from '@/types/backtest';
+import { useScanReportUpdates, type LatestScanReport, type ScanReport, type ScanReportCategory, type ScanReportMetadata } from './scanReports';
 import type { WatchlistRow, PortfolioPosition, AlertItem, UpcomingEvent, TradeCardData,
               MarketRegime, SectorTile, IndexChangeTile, OptionContract, NewsItem, DteWindow, ExitPlan, BarrierRace, StopCostOut, FinalStop,
               PickedMethod, PickedStopBasis, Direction, TargetLevel, MaxLossOverride,
-              ContractGrading } from '@/types/domain';
-import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan } from '@/types/stockDomain';
+              ContractGrading, StockExplanation } from '@/types/domain';
+import type { StockScanResult, StockFirstPassageEstimate, StockExitPlan, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { OptionsPipeline, ScanResult, ScanSessionStatus } from '@/lib/scanStore';
 import type { Candle } from '@/types/chart';
 import { validationMessages } from '@/lib/pydanticError';
@@ -10,7 +12,7 @@ import type { AlertRule, AlertHistory } from '@/types/alerts';
 import type { JournalEntry, JournalEntryInput, JournalEntryFilters } from '@/types/journal';
 import type { OptionsScanRequestBody } from '@/lib/resolveOptionsScanRequest';
 import type { StockScanRequestBody } from '@/lib/resolveStockScanRequest';
-import type { ScoringHorizon } from '@/lib/horizonPresets';
+import type { ScoringHorizon, TunedHorizon } from '@/lib/horizonPresets';
 
 // ── Part 3: profile-based scan schedule entries ────────────────────────────
 // Mirrors backend/app/schemas/scan_schedule.py's ScanScheduleEntry.
@@ -125,15 +127,30 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function post<T>(path: string, body: unknown, signal?: AbortSignal, onReport?: (metadata: ScanReportMetadata) => void): Promise<T> {
+  const category: ScanReportCategory | null = path === '/api/scan' ? 'options' : path === '/api/stock-scan' ? ((body as {category?: 'stocks' | 'pullback'}).category ?? 'stocks') : path === '/api/scan/prebreakout' ? 'prebreakout' : path === '/api/scan/fib-pullback' ? 'fib' : null;
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
-  if (!res.ok) return apiError(path, res);
-  return res.json() as Promise<T>;
+  const runId = res.headers?.get('X-Scan-Report-Run-Id');
+  const generationHeader = res.headers?.get('X-Scan-Report-Generation');
+  const generation = generationHeader == null ? NaN : Number(generationHeader);
+  if (!res.ok) {
+    if (category && runId && Number.isSafeInteger(generation) && generation > 0) useScanReportUpdates.getState().record(category, {run_id:runId,generation,persistence:res.headers.get('X-Scan-Report-Persistence') ?? 'unavailable',failed:true});
+    return apiError(path, res);
+  }
+  const value = await res.json();
+  const id = value?.report_run_id ?? runId;
+  const gen = value?.report_generation ?? generation;
+  if (category && id && Number.isSafeInteger(gen) && gen > 0) {
+    const metadata = {run_id:id,generation:gen,persistence:value?.report_persistence ?? res.headers?.get('X-Scan-Report-Persistence') ?? 'unavailable',accepted_symbols:(Array.isArray(value) ? value : value?.candidates ?? []).map((row: {symbol?:unknown})=>row.symbol).filter((symbol:unknown): symbol is string => typeof symbol==='string' && /^[A-Z][A-Z0-9.\-]{0,10}$/.test(symbol)),pipeline_counts:value?.pipeline ? Object.fromEntries(Object.entries(value.pipeline).filter((entry): entry is [string,number] => ['scanned','candidates','failed_data','failed_pre_screen','no_chain','failed_score','failed_contracts','other_rejected','failed_direction','failed_shortlist','failed_direction_unmeasured','direction_min_trend','failed_history','failed_regime','failed_signal','failed_backtest'].includes(entry[0]) && typeof entry[1]==='number' && Number.isFinite(entry[1]))) : undefined};
+    useScanReportUpdates.getState().record(category, metadata);
+    onReport?.(metadata);
+  }
+  return value as T;
 }
 
 async function put<T>(path: string, body: unknown): Promise<T> {
@@ -181,7 +198,7 @@ export interface StrategyWatchState {
   entry_price: number | null;
   stop_price: number | null;
   target_price: number | null;
-  last_event: 'entry' | 'exit_stop' | 'exit_target' | 'reversal' | null;
+  last_event: 'entry' | 'time_stop' | 'exit_stop' | 'exit_target' | 'reversal' | null;
   last_event_at: string | null;
 }
 
@@ -191,6 +208,10 @@ export interface StrategyWatch {
   strategy_key: string;
   direction: 'Bullish' | 'Bearish';
   params_override: Record<string, unknown>;
+  /** STOCKS-HORIZON-T1 H7: the tuned horizon whose profile the watch reads and
+   *  whose hold time-stops it. Absent/null on a watch without a horizon. */
+  params_horizon?: TunedHorizon | null;
+  hold_max_days?: number | null;
   enabled: boolean;
   created_at: string;
   last_state: StrategyWatchState;
@@ -252,6 +273,8 @@ export interface AnalysisBacktest {
   confidence: number | null;
   passes_gate: boolean;
   summary_text: string;
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
 
 export interface AnalysisSentiment {
@@ -343,6 +366,7 @@ export interface StockAnalysis {
   price: number;
   direction: string;
   stock_score: number;
+  stock_explanation?: StockExplanation | null;
   stock_status: 'PASS' | 'CAUTION' | 'REJECT';
   is_index: boolean;
   strategy: AnalysisStrategySignal | null;
@@ -382,7 +406,34 @@ export interface LastStockScanRequest {
   request: StockScanRequestBody;
 }
 
+export class BacktestArtifactError extends Error {
+  constructor(public readonly reason: OriginalBacktestUnavailableReason, public readonly status: number) {
+    super(`Original backtest unavailable (${reason})`);
+    this.name = 'BacktestArtifactError';
+  }
+}
+
 export const api = {
+  getFreshBacktestConfiguration: (signal?: AbortSignal): Promise<FreshBacktestConfiguration> =>
+    fetch(`${BASE_URL}/api/backtest-artifacts/fresh/configuration`, {signal}).then(async res => {
+      if (!res.ok) throw new Error('Fresh configuration unavailable');
+      return res.json();
+    }),
+  runFreshBacktest: async (body: FreshBacktestRequest, signal?: AbortSignal): Promise<FreshBacktestResponse> => {
+    const res = await fetch(`${BASE_URL}/api/backtest-artifacts/fresh`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), signal,
+    });
+    if (!res.ok) throw new Error(res.status === 422 ? 'Configuration incomplete or invalid' : 'Fresh run failed');
+    return res.json();
+  },
+  getOriginalBacktest: async (artifactId: string, symbol: string, signal?: AbortSignal): Promise<BacktestArtifact> => {
+    const res = await fetch(`${BASE_URL}/api/backtest-artifacts/${encodeURIComponent(artifactId)}?symbol=${encodeURIComponent(symbol)}`, {signal});
+    if (!res.ok) {
+      const reason = res.status === 404 ? 'missing' : res.status === 410 ? 'expired' : res.status === 422 ? 'invalid_input' : res.status === 503 ? 'storage_unavailable' : 'failed';
+      throw new BacktestArtifactError(reason, res.status);
+    }
+    return res.json() as Promise<BacktestArtifact>;
+  },
   getWatchlist:  () => get<WatchlistRow[]>('/api/watchlist'),
   getPortfolio:  () => get<PortfolioPosition[]>('/api/portfolio'),
   /** Hard DELETE of one tracked row by rec_id (204; 404 when absent). A plain
@@ -436,7 +487,7 @@ export const api = {
   getContractQuote: (symbol: string, strike: number, expiry: string, right: 'C' | 'P', signal?: AbortSignal) =>
     // `ivRank` is a percentile and is null unless IBKR/tastytrade answered;
     // the absolute level rides in `iv`. Resolve via lib/ivBasis.ts.
-    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number }>(
+    get<{ price: number; delta: number; theta: number; ivRank: number | null; iv: number | null; spread: number; volume: number; quoteLive?: boolean | null; quoteState?: string | null }>(
       `/api/quote/option?symbol=${encodeURIComponent(symbol)}&strike=${strike}&expiry=${encodeURIComponent(expiry)}&right=${right}`,
       signal,
     ),
@@ -452,11 +503,15 @@ export const api = {
     premium: number;
     delta: number;
     spread: number;
+    quote_live?: boolean | null;
     rr_target_r_multiple?: number;
     target_stock_price?: number;
     target_source?: TradeCardData['exit']['targetSource'];
     rr_bullish_invalidation_pct?: number;
     rr_bearish_invalidation_pct?: number;
+    entry_spread_tolerance_pct?: number;
+    entry_max_slippage_pct?: number;
+    entry_min_premium?: number;
     /** Feed the reprice-horizon fallback behind the Fixed % Ladder. Same field,
      *  same meaning and the same "omitted means Swing" default as
      *  getFirstPassageEstimate's — a Step-6 contract override must not reprice
@@ -649,9 +704,13 @@ export const api = {
 
   postStockScan: (
     req: import('./resolveStockScanRequest').StockScanRequestBody & {
-      symbols?: string[]; risk_fixed_usd?: number; min_price?: number; max_price?: number;
+      category?: 'stocks' | 'pullback'; symbols?: string[]; risk_fixed_usd?: number; min_price?: number; max_price?: number;
     },
   ) => post<StockScanResult>('/api/stock-scan', req),
+
+  getLatestScanReport: (category: ScanReportCategory, signal?: AbortSignal) => get<LatestScanReport>(`/api/scan-reports/latest/${category}`, signal),
+  getScanReport: (runId: string, signal?: AbortSignal) => get<ScanReport>(`/api/scan-reports/runs/${encodeURIComponent(runId)}`, signal),
+  getLegacyScanReports: (signal?: AbortSignal) => get<Record<string, unknown>[]>('/api/scan-reports/legacy', signal),
 
   getLastScan: () => get<ScanResult | null>('/api/scan/last'),
   getLastStockScan: () => get<StockScanResult | null>('/api/stock-scan/last'),
@@ -828,10 +887,12 @@ export const api = {
 
   getStrategyWatches: () =>
     get<StrategyWatch[]>('/api/strategy-watch/'),
-  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction }),
-  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish') =>
-    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction }),
+  addStrategyWatch: (symbol: string, strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                     params_horizon: TunedHorizon | null = null) =>
+    post<StrategyWatch>('/api/strategy-watch/', { symbol, strategy_key, direction, params_horizon }),
+  addStrategyWatchesBulk: (symbols: string[], strategy_key: string, direction: 'Bullish' | 'Bearish' = 'Bullish',
+                           params_horizon: TunedHorizon | null = null) =>
+    post<{ added: number; watches: StrategyWatch[] }>('/api/strategy-watch/bulk', { symbols, strategy_key, direction, params_horizon }),
   removeStrategyWatch: (id: string) =>
     del(`/api/strategy-watch/${id}`),
   setStrategyWatchEnabled: (id: string, enabled: boolean) =>
@@ -882,10 +943,11 @@ export const api = {
     direction: string,
     paramsOverride?: Record<string, unknown>,
     universe?: string[],
+    onReport?: (metadata: ScanReportMetadata) => void,
   ) =>
-    post<Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>>(
+    post<PreBreakoutResultRow[]>(
       '/api/scan/prebreakout',
-      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }, undefined, onReport
     ),
 
   // ── Fibonacci pullback scan ──────────────────────────────────────────────────
@@ -894,17 +956,11 @@ export const api = {
     direction: string,
     paramsOverride?: { fib_swing_lookback?: number; fib_levels?: number[]; fib_tolerance_pct?: number; ema_filter_period?: number },
     universe?: string[],
+    onReport?: (metadata: ScanReportMetadata) => void,
   ) =>
-    post<Array<{
-      symbol: string;
-      direction: string;
-      fib_level_hit: string;
-      fib_dist_pct: number | null;
-      at_level: boolean;
-      confidence: number;
-    }>>(
+    post<FibPullbackResultRow[]>(
       '/api/scan/fib-pullback',
-      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }
+      { symbols, direction, params_override: paramsOverride ?? null, universe: universe ?? null }, undefined, onReport
     ),
 
   // ── Regime series (for chart overlay) ────────────────────────────────────────
@@ -931,6 +987,10 @@ export const api = {
     get<Record<string, { reject_days: number; caution_days: number }>>(
       '/api/config/event-thresholds'
     ),
+
+  // STOCKS-HORIZON-T1 H4/H5: per-horizon strategy parameter profiles.
+  // Untyped on purpose: lib/strategyProfilesStore.ts parseStrategyProfiles validates it.
+  getStrategyProfiles: () => get<unknown>('/api/config/strategy-profiles'),
 
   // DOCC-5: GET /api/config/health (DOCC-4). Always 200; parsed by lib/configHealth.ts.
   getConfigHealth: (signal?: AbortSignal) => get<unknown>('/api/config/health', signal),

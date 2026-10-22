@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from app.models.heston import HestonParams
 from app.scoring.exit_plan import BEARISH_MIN_TARGET_FRACTION
-from app.scoring.entry_quality import assess_entry, EntryAssessment
+from app.scoring.entry_quality import assess_entry, EntryAssessment, EntryConfig
 from app.scoring.reprice_horizon import display_reprice_years
 from app.scoring.reward_risk import estimate_rr, estimate_targets, captured_stock_risk
 
@@ -65,6 +65,8 @@ def build_trade_plan(
     hold_min: float | None = None,
     hold_max: float | None = None,
     reprice_cfg: dict | None = None,
+    quote_live: bool | None = None,
+    entry_cfg: EntryConfig | dict | None = None,
 ) -> TradePlan:
     """Compute the full trade plan for one contract.
 
@@ -105,6 +107,9 @@ def build_trade_plan(
                      a "Custom" that arrives on one path and not the other is
                      exactly how the two cards diverge.
         reprice_cfg: the reprice_horizon config block; None loads risk_rules.yaml.
+        quote_live:  passed to assess_entry (NO-LIVE-QUOTE plan 3e). False =
+                     the entry bid/ask/mid are not a live quote; None = not
+                     stated (the scan, whose contracts were live when graded).
     """
     is_call = direction == "Bullish"
     premium = max(float(premium), 0.01)
@@ -148,7 +153,10 @@ def build_trade_plan(
     # applies and rr_risk_basis is "full_premium".
     invalidation_price = max(float(final_stop_price), 0.01)
 
-    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid)
+    if entry_cfg is not None and not isinstance(entry_cfg, EntryConfig):
+        from app.services.config_loader import resolve_entry_config
+        entry_cfg = resolve_entry_config(entry_cfg)
+    entry = assess_entry(bid=entry_bid, ask=entry_ask, mid=entry_mid, config=entry_cfg, quote_live=quote_live)
     # Captured plans price the cents midpoint that is displayed and replayed.
     if captured_stock_risk(premium, stop_cost_fraction) is not None:
         premium = round(premium, 2)

@@ -10,6 +10,7 @@
 
 .topRow {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--space-3);
@@ -17,6 +18,9 @@
 
 .leftGroup {
   display: flex;
+  flex: 1 1 18rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
@@ -30,17 +34,26 @@
 }
 
 .metricsRow {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: var(--space-3);
 }
 
 .metric {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.metric > * {
+  min-width: 0;
 }
 
 .reason {
   font-style: italic;
+  overflow-wrap: anywhere;
 }

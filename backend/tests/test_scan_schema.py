@@ -52,10 +52,12 @@ def _base() -> dict:
 
 
 def test_new_fields_have_correct_defaults():
+    # STOCKS-HORIZON-T1 H4: omitted strategy fields are None (the backend
+    # profile applies), no longer the frozen 0.08 / 10 / 1.5 defaults.
     req = StockScanRequest(**_base())
-    assert req.pullback_tolerance_pct == 0.08
-    assert req.ma_crossover_lookback == 10
-    assert req.breakout_volume_mult == 1.5
+    assert req.pullback_tolerance_pct is None
+    assert req.ma_crossover_lookback is None
+    assert req.breakout_volume_mult is None
 
 
 def test_new_fields_accept_custom_values():

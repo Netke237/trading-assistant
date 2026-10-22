@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { emptyCardEdits } from '@/lib/cardEdits';
@@ -36,7 +36,7 @@ jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
     getContractQuote: jest.fn().mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     }),
     postOptionOrder: jest.fn().mockResolvedValue({ order_id: 'ORD-1' }),
     deletePortfolioPosition: jest.fn().mockResolvedValue(undefined),
@@ -91,6 +91,15 @@ function makeCard(symbol: string): TradeCardData {
 const originalFetch = global.fetch;
 
 describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', () => {
+  it('keeps one exit selector inline in Final Recommendation, outside broker execution', async () => {
+    render(<Step7TradeCardPage />);
+    const summary = await screen.findByRole('region', { name: 'Final Recommendation' });
+    expect(within(summary).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
+    const execution = screen.getByText('Decision and execution').parentElement!;
+    expect(within(execution).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     act(() => {
       useScanStore.setState({
@@ -116,7 +125,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     jest.clearAllMocks();
     (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
     (api.getContractQuote as jest.Mock).mockResolvedValue({
-      price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+      quoteLive: true, price: 2.5, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
     });
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1' });
     (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });

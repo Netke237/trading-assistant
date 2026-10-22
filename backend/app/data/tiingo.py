@@ -9,6 +9,8 @@ from email.utils import parsedate_to_datetime
 import httpx
 
 from app.data.governor import get_governor, RateLimited, ProviderUnavailable
+from app.data import tiingo_budget
+from app.data.provider_symbols import dash_class_ticker
 
 TIINGO_BASE_URL = "https://api.tiingo.com"
 TIINGO_TOKEN = os.getenv("TIINGO_API_TOKEN", "")
@@ -53,14 +55,18 @@ async def fetch_historical_candles(
     the fully-adjusted close price.
 
     Returns [] on invalid data or non-rate-limit HTTP errors. Governor pacing,
-    symbol-budget refusals and exhausted HTTP 429 retries remain observable.
+    symbol-budget refusals, usage-ledger refusals (`tiingo_budget`, raised as
+    ProviderUnavailable with no request sent) and exhausted HTTP 429 retries
+    remain observable.
     Strict mode also rejects the whole reply if any row lacks finite positive
     raw and adjusted closes; missing adjusted prices are never synthesized.
     """
-    symbol = symbol.strip().upper()
+    symbol = dash_class_ticker(symbol)   # BRK.B -> BRK-B: Tiingo's spelling
+    # Refuse before the governor's pacing when the ledger has no room.
+    await tiingo_budget.ensure_room(symbol)
 
-    async def request():
-        resp = await asyncio.to_thread(
+    async def send():
+        return await asyncio.to_thread(
             httpx.get,
             f"{TIINGO_BASE_URL}/tiingo/daily/{symbol}/prices",
             headers=_headers(),
@@ -68,6 +74,10 @@ async def fetch_historical_candles(
                     "resampleFreq": "daily"},
             timeout=15,
         )
+
+    async def request():
+        # Each attempt (429 retries included) is checked and recorded.
+        resp = await tiingo_budget.send_recorded(symbol, send)
         if resp.status_code == 429:
             raise RateLimited("429 from Tiingo", _retry_after(resp.headers.get("Retry-After")))
         resp.raise_for_status()
@@ -103,6 +113,8 @@ async def fetch_historical_candles(
                 "source":       "tiingo",
             })
         return rows
+    except tiingo_budget.BudgetRefused as exc:
+        raise ProviderUnavailable(str(exc)) from None
     except (RateLimited, ProviderUnavailable):
         raise
     except Exception:

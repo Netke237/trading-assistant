@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import { TableRow } from '@/components/molecules/TableRow';
+import { NoLiveQuoteTag } from '@/components/atoms/NoLiveQuoteTag';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { RankDelta } from '@/components/atoms/RankDelta';
 import { EventFlag } from '@/components/atoms/EventFlag';
@@ -525,6 +526,7 @@ function LiveContractRow({ contract: c, yamlGraded }: { contract: OptionContract
       <div className={styles.scoreCell}>
         <Data size={13} weight={500}>{c.score}</Data>
         <StatusBadge status={status} tooltip={contractScoreTooltip(c)} />
+                    <NoLiveQuoteTag noLiveQuote={c.noLiveQuote} quoteState={c.quoteState} />
       </div>
     </TableRow>
   );

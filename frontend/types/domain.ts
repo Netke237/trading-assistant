@@ -104,6 +104,7 @@ export interface SentimentData {
   stability: string;
   regime_age_days: number;
   avg_regime_duration: number;
+  duration_stride_bars?: number | null;
   conviction_pct: number;
   conviction_label: string;
   interpretation: string;
@@ -480,6 +481,11 @@ export interface PortfolioPosition {
   currentStockPrice?: number;
   pnlDollar:     number;
   pnlPct:        number;
+  /** True when the last GET /api/portfolio had no quote for this position
+   *  (NO-LIVE-QUOTE NLQ-1). `currentPrice`/`pnlDollar`/`pnlPct` then hold 0
+   *  defaults, not a price: the table shows "—" and the totals leave the row
+   *  out. Absent on a row that never synced. */
+  quoteUnavailable?: boolean;
   stop:          number | null;
   /** Structural (order-block/swing) stop level — set only when "Check structure"
    *  was run on the trade card before sending to broker. Optional/opt-in, unlike
@@ -541,6 +547,11 @@ export interface PortfolioPosition {
   /** ISO. The vintage of the numbers the pick was made against — see
    *  `MethodPick.pickedAt`'s own doc. */
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- the scan's hold in calendar days, written by the
+   *  stock sends (`ScanContext.holdMax` through `sanitizeHoldDays`). A stock
+   *  position raises TIME_STOP once held this many days. `null`/absent = no
+   *  hold (options rows, rows opened before H6), never a stock time stop. */
+  holdMaxDays?: number | null;
   /** Per-position alert-type overrides — absent key inherits the global
    *  `AlertConfig.enabledTypes` decision (Feature D). */
   alertOverrides?: AlertOverrides;
@@ -611,6 +622,7 @@ export interface UpcomingEvent {
 }
 
 export interface TradeCardData {
+  noLiveQuote?: boolean;
   symbol:        string;
   company:       string;
   price:         number;
@@ -636,6 +648,7 @@ export interface TradeCardData {
     strike: number;
     expiry: string;              // YYYY-MM-DD
     right:  'C' | 'P';
+    spread?: number;
     mid:    number;              // premium, $
     delta:  number;
     theta:  number;              // $/day
@@ -872,6 +885,8 @@ export interface StockExplanation {
 export type OptionRight = 'C' | 'P';
 
 export interface OptionContract {
+  noLiveQuote?: boolean;
+  quoteState?: string | null;
   id:           string;
   symbol:       string;
   strike:       number;
@@ -974,7 +989,8 @@ export interface OmmData {
   p_stay:               number;   // 0–1
   stability:            'Stable' | 'Fragile';
   regime_age_days:      number;
-  avg_regime_duration:  number;   // days
+  avg_regime_duration:  number;   // transition strides, not days
+  duration_stride_bars?: number | null;
   transition_row:       number[]; // [P(Bull), P(Bear), P(Choppy)]
   state_order:          string[]; // ['Bull', 'Bear', 'Choppy']
   conviction_pct?: number | null;
@@ -1039,6 +1055,8 @@ export interface NewsItem {
   source:    string;
   timestamp: string;
   sentiment: NewsSentiment;
+  /** Provider-supplied original article link (absolute http/https) or null when the provider gave none/an invalid one. Additive (#265). */
+  url?:      string | null;
 }
 
 // --- Alerting & monitoring ---

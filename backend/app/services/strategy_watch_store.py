@@ -12,6 +12,7 @@ import os
 import threading
 import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,7 +44,7 @@ def _fresh_state() -> dict:
         "entry_price": None,
         "stop_price": None,
         "target_price": None,
-        "last_event": None,       # entry | exit_target | exit_stop | reversal
+        "last_event": None,       # entry | exit_target | exit_stop | time_stop | reversal
         "last_event_at": None,
     }
 
@@ -160,6 +161,19 @@ class StrategyWatchStore:
             tmp.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
             os.replace(tmp, self._path)
 
+    @contextmanager
+    def _mutation(self):
+        """Keep rollback and persistence under the same writer lock."""
+        with self._lock:
+            watches = [dict(w) for w in self._watches]
+            schedule = dict(self._schedule)
+            try:
+                yield
+            except Exception:
+                self._watches = watches
+                self._schedule = schedule
+                raise
+
     # ── watches ──────────────────────────────────────────────────────────────
     def list_watches(self) -> list[dict]:
         with self._lock:
@@ -167,11 +181,19 @@ class StrategyWatchStore:
 
     def add_watch(self, symbol: str, strategy_key: str,
                   params_override: dict | None = None,
-                  direction: str = "Bullish") -> dict:
+                  direction: str = "Bullish",
+                  params_horizon: str | None = None) -> dict:
+        """``params_horizon`` (a tuned horizon, STOCKS-HORIZON-T1 H7) picks the
+        parameter profile the watch evaluates with and its hold: the watch
+        stores ``hold_max_days = HOLD_MAX_DAYS[params_horizon]`` (None without
+        a horizon) and time-stops once armed that many days."""
+        from app.services.horizon_profiles import HOLD_MAX_DAYS
         symbol = symbol.strip().upper()
         if strategy_key not in VALID_STRATEGIES:
             raise ValueError(f"unknown strategy: {strategy_key}")
-        with self._lock:
+        if params_horizon is not None and params_horizon not in HOLD_MAX_DAYS:
+            raise ValueError(f"unknown params horizon: {params_horizon}")
+        with self._mutation():
             for w in self._watches:
                 # Composites carry no strategy_key and can never duplicate a
                 # strategy watch; indexing one raised KeyError (a 500, and a
@@ -187,20 +209,24 @@ class StrategyWatchStore:
                 "strategy_key": strategy_key,
                 "direction": direction,
                 "params_override": dict(params_override or {}),
+                "params_horizon": params_horizon,
+                "hold_max_days": HOLD_MAX_DAYS[params_horizon] if params_horizon is not None else None,
                 "enabled": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_state": _fresh_state(),
             }
             self._watches.append(entry)
-        self.save()
+            self.save()
         return dict(entry)
 
     def add_watches_bulk(self, symbols: list[str], strategy_key: str,
-                         direction: str = "Bullish") -> list[dict]:
+                         direction: str = "Bullish",
+                         params_horizon: str | None = None) -> list[dict]:
         added: list[dict] = []
         for sym in symbols:
             try:
-                added.append(self.add_watch(sym, strategy_key, direction=direction))
+                added.append(self.add_watch(sym, strategy_key, direction=direction,
+                                            params_horizon=params_horizon))
             except ValueError:
                 continue  # skip duplicates / blanks
         return added
@@ -227,7 +253,7 @@ class StrategyWatchStore:
                     f"HMM_intraday needs an intraday interval (e.g. 5min, 15min, 1h), got {interval!r}"
                 )
         symbol = symbol.strip().upper()
-        with self._lock:
+        with self._mutation():
             entry = {
                 "id": f"cwch_{uuid.uuid4().hex[:12]}",
                 "watch_type": "composite",
@@ -240,16 +266,16 @@ class StrategyWatchStore:
                 "last_state": _fresh_state(),
             }
             self._watches.append(entry)
-        self.save()
+            self.save()
         return dict(entry)
 
     def remove_watch(self, watch_id: str) -> bool:
-        with self._lock:
+        with self._mutation():
             before = len(self._watches)
             self._watches = [w for w in self._watches if w["id"] != watch_id]
             removed = len(self._watches) < before
-        if removed:
-            self.save()
+            if removed:
+                self.save()
         return removed
 
     def set_enabled(self, watch_id: str, enabled: bool, *,
@@ -275,12 +301,12 @@ class StrategyWatchStore:
         return False
 
     def update_state(self, watch_id: str, new_state: dict) -> None:
-        with self._lock:
+        with self._mutation():
             for w in self._watches:
                 if w["id"] == watch_id:
                     w["last_state"] = {**_fresh_state(), **new_state}
                     break
-        self.save()
+            self.save()
 
     # ── schedule ───────────────────────────────────────────────────────────────
     def get_schedule(self) -> dict:
@@ -288,10 +314,10 @@ class StrategyWatchStore:
             return dict(self._schedule)
 
     def set_schedule(self, cfg: dict) -> dict:
-        with self._lock:
+        with self._mutation():
             self._schedule = {**_DEFAULT_SCHEDULE, **{k: cfg[k] for k in _DEFAULT_SCHEDULE if k in cfg}}
             result = dict(self._schedule)
-        self.save()
+            self.save()
         return result
 
 

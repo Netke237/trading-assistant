@@ -1,0 +1,18 @@
+{
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "contract": "Captured bodies are synthetic browser-intercepted fixtures. Inputs and harness bytes are separately hashed; no backend data execution.",
+  "fixture_inputs": {
+    "frontend/e2e/fixtures/api-mocks.ts": "403c44de4499c97875edbd07c934fb568ec6feae4156282c7eb3b9b23a73bad8",
+    "backend/tests/fixtures/AAPL_candles.json": "59d88b1635b5a6d118c6b33d2defcd4f8163e3c38b7dde6d140a8a890288ef28",
+    "backend/tests/fixtures/MSFT_candles.json": "940513c885b36e2fe7790b7e882e671532a03ca63daf7e138dc70c9eb9635bf7",
+    "backend/tests/fixtures/NVDA_candles.json": "dcd3309a1b1cc58f92282aff0f8531a503aec5cef74ba92548d27e6d445fb330",
+    "backend/tests/fixtures/SPY_candles.json": "7e7c2679ca71c33d2adb8eb1f54ebf6037cfafd381e61c1b6c7556810b2d38d4"
+  },
+  "harness_files": {
+    "runtime/integrated-probe.cjs": "1a835a849c75a69d84b95d95db919531189b7eb8dd0f04c551e09a8f9cd1beff",
+    "runtime/integrated-actions.cjs": "a152f6866a02709387a82c07e3498025d52dd542e74451dbfbae1c156d30c1c2",
+    "classify-source.cjs": "d02b6bcb11e0ed24c03027fb41f90723cb6c39f0981bfbf68d873a401a4059e3",
+    "reconcile-final.cjs": "efb220f692dee179a0f18fcf01213df1c976e22f6edd3ea1074f529d89740a52",
+    "verify-final.cjs": "3833a2e24d999927f0629c9bcbbfa7b05c6e26e105d99b3d0f9389c143460ed6"
+  }
+}

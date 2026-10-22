@@ -5,6 +5,7 @@ import { useStrategyWatchStore } from '@/lib/strategyWatchStore';
 import { api } from '@/lib/api';
 import type { StrategyWatchSchedule } from '@/lib/api';
 import { OpenChartButton } from '@/components/atoms/OpenChartButton';
+import { TUNED_HORIZONS, type TunedHorizon } from '@/lib/horizonPresets';
 import styles from './page.module.css';
 
 const STRATEGIES = [
@@ -14,6 +15,20 @@ const STRATEGIES = [
   { key: 'mean_reversion_rsi', label: 'Mean Reversion RSI' },
   { key: 'mean_reversion_bb',  label: 'Mean Reversion BB' },
 ] as const;
+
+/** STOCKS-HORIZON-T1 H7: '' = no horizon (direction baseline, no time stop). */
+function horizonOrNull(v: string): TunedHorizon | null {
+  return (TUNED_HORIZONS as readonly string[]).includes(v) ? (v as TunedHorizon) : null;
+}
+
+function HorizonOptions() {
+  return (
+    <>
+      <option value="">None</option>
+      {TUNED_HORIZONS.map((h) => <option key={h} value={h}>{h}</option>)}
+    </>
+  );
+}
 
 function phasePill(phase: string) {
   if (phase === 'armed') return <span className={`${styles.pill} ${styles.pillArmed}`}>In trade / setup live</span>;
@@ -31,6 +46,8 @@ export default function StrategyWatchPage() {
   const [evalMsg, setEvalMsg] = useState('');
   const [direction, setDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
   const [bulkDirection, setBulkDirection] = useState<'Bullish' | 'Bearish'>('Bullish');
+  const [horizon, setHorizon] = useState('');
+  const [bulkHorizon, setBulkHorizon] = useState('');
   const [names, setNames] = useState<Record<string, string>>({});
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -55,14 +72,14 @@ export default function StrategyWatchPage() {
 
   const onAdd = async () => {
     if (!symbol.trim()) return;
-    await add(symbol.trim(), strategyKey, direction);
+    await add(symbol.trim(), strategyKey, direction, horizonOrNull(horizon));
     setSymbol('');
   };
 
   const onBulkAdd = async () => {
     const syms = bulkSymbols.split(',').map((s) => s.trim()).filter(Boolean);
     if (syms.length === 0) return;
-    await addBulk(syms, bulkStrategy, bulkDirection);
+    await addBulk(syms, bulkStrategy, bulkDirection, horizonOrNull(bulkHorizon));
     setBulkSymbols('');
   };
 
@@ -96,6 +113,11 @@ export default function StrategyWatchPage() {
             <option value="Bullish">Bullish</option>
             <option value="Bearish">Bearish</option>
           </select>
+          <select className={styles.select} value={horizon} aria-label="Horizon"
+                  title="Tuned horizon: its parameters, and a time stop at its hold. None = no time stop."
+                  onChange={(e) => setHorizon(e.target.value)}>
+            <HorizonOptions />
+          </select>
           <button className={styles.btn} onClick={onAdd}>Add</button>
         </div>
         <div className={styles.row}>
@@ -109,6 +131,11 @@ export default function StrategyWatchPage() {
                   onChange={(e) => setBulkDirection(e.target.value as 'Bullish' | 'Bearish')}>
             <option value="Bullish">Bullish</option>
             <option value="Bearish">Bearish</option>
+          </select>
+          <select className={styles.select} value={bulkHorizon} aria-label="Bulk horizon"
+                  title="Tuned horizon: its parameters, and a time stop at its hold. None = no time stop."
+                  onChange={(e) => setBulkHorizon(e.target.value)}>
+            <HorizonOptions />
           </select>
           <button className={styles.btn} onClick={onBulkAdd}>Bulk add</button>
         </div>
@@ -148,7 +175,7 @@ export default function StrategyWatchPage() {
       <div className={styles.section}>
         <strong>Watched ({watches.length})</strong>
         <table className={styles.table}>
-          <thead><tr><th></th><th>Symbol</th><th>Name</th><th>Strategy</th><th>Direction</th><th>State</th><th>Enabled</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Symbol</th><th>Name</th><th>Strategy</th><th>Direction</th><th>Horizon</th><th>State</th><th>Enabled</th><th></th></tr></thead>
           <tbody>
             {watches.map((w) => (
               <tr key={w.id}>
@@ -161,6 +188,9 @@ export default function StrategyWatchPage() {
                     {w.direction === 'Bearish' ? 'Bearish' : 'Bullish'}
                   </span>
                 </td>
+                <td>{w.params_horizon
+                  ? `${w.params_horizon}${w.hold_max_days != null ? ` (${w.hold_max_days}d)` : ''}`
+                  : 'None'}</td>
                 <td>{phasePill(w.last_state.phase)}</td>
                 <td><input type="checkbox" checked={w.enabled}
                            onChange={(e) => setEnabled(w.id, e.target.checked)} /></td>

@@ -13,26 +13,33 @@ from app.data.universe_exclusions import (
 )
 
 SCAN_SYMBOLS = {
-    "CTVA", "AVB",
+    "AVB",
     "PXD", "SWN", "MRO", "CTLT", "PTVE", "JNPR", "HES", "WBA", "K", "HOLX", "CTRA", "EA", "EQR",
+    "FBHS", "PKI", "DFS", "IPG", "MMC", "DAY", "AXL",
+    "BCB",
     "ANSS", "SGEN",
 }
 EVIDENCE_SYMBOLS = {
-    "BIIB", "CNC", "DOC", "DXCM", "EPAM", "FI", "FMC", "LCID", "MRNA", "NWL", "PDD", "SIRI",
+    "BIIB", "CNC", "DXCM", "EPAM", "FI", "FMC", "LCID", "MRNA", "NWL", "PDD", "SIRI",
+    "MAA", "MU",
+    "DHR",
 }
 FEED_ENDED = {
     "PXD": "2024-05-03", "SWN": "2024-10-01", "MRO": "2024-11-22", "CTLT": "2024-12-18",
     "PTVE": "2025-04-01", "JNPR": "2025-07-02", "HES": "2025-07-18", "WBA": "2025-08-28",
     "K": "2025-12-11", "HOLX": "2026-04-07", "CTRA": "2026-05-06", "EA": "2026-08-10",
     "EQR": "2026-08-21",
+    "AVB": "2026-08-17", "FBHS": "2022-12-14", "PKI": "2023-05-15", "DFS": "2025-05-16",
+    "IPG": "2025-11-26", "MMC": "2026-01-13", "DAY": "2026-02-03", "AXL": "2026-02-04",
+    "BCB": "2019-06-07",
 }
 
 
 # ── 1. The shipped file ──────────────────────────────────────────────────────
 
-def test_shipped_file_has_exactly_the_29_symbols_and_scopes():
+def test_shipped_file_has_exactly_the_38_symbols_and_scopes():
     exclusions = load_exclusions()
-    assert len(exclusions) == 29
+    assert len(exclusions) == 38
     scan = {s for s, e in exclusions.items() if e.scope == "scan"}
     evidence = {s for s, e in exclusions.items() if e.scope == "evidence"}
     assert scan == SCAN_SYMBOLS
@@ -45,20 +52,22 @@ def test_shipped_file_has_exactly_the_29_symbols_and_scopes():
 
 def test_shipped_reasons_carry_the_evidence():
     exclusions = load_exclusions()
-    assert exclusions["CTVA"].reason == (
-        "2026-10-01 corporate action not adjusted by any provider (77.67 -> 12.57)"
-    )
-    assert exclusions["AVB"].reason == "price feed ended 2026-08-17; 2.793 split not adjusted"
+    # D3-EXCLUSIONS-2026-10-16: CTVA (now adjusted by the Tiingo rebuild) and DOC were removed.
+    assert "CTVA" not in exclusions
+    assert "DOC" not in exclusions
     for sym, last in FEED_ENDED.items():
         assert f"price feed ended {last}" in exclusions[sym].reason, sym
     assert "acquired" in exclusions["ANSS"].reason
     assert "acquired" in exclusions["SGEN"].reason
+    # DHR-EVIDENCE-EXCLUSION-2026-10-21: the yfinance rebuild's 2016 spin-off jump.
+    assert "2016-07-05" in exclusions["DHR"].reason
+    assert exclusions["DHR"].scope == "evidence"
     for sym in EVIDENCE_SYMBOLS:
         assert "bar-basis" in exclusions[sym].reason, sym
 
 
 def test_exclusion_is_frozen():
-    exc = load_exclusions()["CTVA"]
+    exc = load_exclusions()["PXD"]
     with pytest.raises(Exception):
         exc.scope = "evidence"  # type: ignore[misc]
 
@@ -82,28 +91,28 @@ def test_symbols_are_upper_cased(tmp_path: Path):
 # ── 2. filter_symbols ────────────────────────────────────────────────────────
 
 def test_filter_scan_removes_scan_scope_only():
-    kept, excluded = filter_symbols(["aapl", "CTVA", "BIIB"], purpose="scan")
+    kept, excluded = filter_symbols(["aapl", "PXD", "BIIB"], purpose="scan")
     assert kept == ["aapl", "BIIB"]
-    assert [e.symbol for e in excluded] == ["CTVA"]
-    assert excluded[0].reason == load_exclusions()["CTVA"].reason
+    assert [e.symbol for e in excluded] == ["PXD"]
+    assert excluded[0].reason == load_exclusions()["PXD"].reason
 
 
 def test_filter_evidence_removes_both_scopes():
-    kept, excluded = filter_symbols(["aapl", "CTVA", "BIIB"], purpose="evidence")
+    kept, excluded = filter_symbols(["aapl", "PXD", "BIIB"], purpose="evidence")
     assert kept == ["aapl"]
-    assert [e.symbol for e in excluded] == ["CTVA", "BIIB"]
+    assert [e.symbol for e in excluded] == ["PXD", "BIIB"]
 
 
 def test_filter_is_case_insensitive_and_keeps_input_order_and_spelling():
-    kept, excluded = filter_symbols(["msft", "biib", "ctva", "Aapl"], purpose="evidence")
+    kept, excluded = filter_symbols(["msft", "biib", "pxd", "Aapl"], purpose="evidence")
     assert kept == ["msft", "Aapl"]
-    assert [e.symbol for e in excluded] == ["BIIB", "CTVA"]
+    assert [e.symbol for e in excluded] == ["BIIB", "PXD"]
 
 
 def test_filter_duplicate_inputs_collapse_to_first():
-    kept, excluded = filter_symbols(["CTVA", "aapl", "ctva", "CTVA"], purpose="scan")
+    kept, excluded = filter_symbols(["PXD", "aapl", "pxd", "PXD"], purpose="scan")
     assert kept == ["aapl"]
-    assert [e.symbol for e in excluded] == ["CTVA"]
+    assert [e.symbol for e in excluded] == ["PXD"]
 
 
 # ── 3. Validation ────────────────────────────────────────────────────────────

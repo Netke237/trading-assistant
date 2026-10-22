@@ -1,0 +1,648 @@
+{
+  "runtime": "3.11.16",
+  "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "fixture": {
+    "path": "backend/tests/fixtures/SPY_candles.json",
+    "sha256": "ca4ff0112adc58bc5c77b8fe92f005597e81be143937e291127e693094e67161",
+    "first": "2024-04-30",
+    "last": "2025-04-30",
+    "bars": 251,
+    "provenance": "Committed SPY OHLCV fixture; provider/retrieval timestamp not recorded in the fixture. No new real-provider fetch."
+  },
+  "deterministic_fixture_sha256": "c3f76a7621edaf20d990aa26cd7b1b5d791cbc4d8d5c68fa6caeedbf5aa9a471",
+  "omm": {
+    "committed_spy": {
+      "params": {
+        "min_obs": 10
+      },
+      "expected": {
+        "state": "Choppy",
+        "p_stay": 0.0,
+        "transition_row": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "regime_age_days": 3,
+        "avg_regime_duration": 1.0,
+        "stability": "Fragile",
+        "conviction_pct": 100
+      },
+      "actual": {
+        "state": "Choppy",
+        "p_stay": 0.0,
+        "transition_row": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "regime_age_days": 3,
+        "avg_regime_duration": 1.0,
+        "stability": "Fragile",
+        "conviction_pct": 100
+      },
+      "passed": true
+    },
+    "synthetic_bullish": {
+      "params": {
+        "min_obs": 10,
+        "lookback": 5,
+        "window": 400
+      },
+      "expected": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": 91
+      },
+      "actual": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": 91
+      },
+      "passed": true
+    },
+    "synthetic_bearish": {
+      "params": {
+        "min_obs": 10,
+        "lookback": 5,
+        "window": 400,
+        "direction": "Bearish"
+      },
+      "expected": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": -91
+      },
+      "actual": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": -91
+      },
+      "passed": true
+    },
+    "synthetic_smoothing": {
+      "params": {
+        "min_obs": 10,
+        "lookback": 5,
+        "window": 400,
+        "smoothing": 0.2
+      },
+      "expected": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": 91
+      },
+      "actual": {
+        "state": "Bull",
+        "p_stay": 0.9091,
+        "transition_row": [
+          0.9091,
+          0.0,
+          0.0909
+        ],
+        "regime_age_days": 36,
+        "avg_regime_duration": 11.0,
+        "stability": "Stable",
+        "conviction_pct": 91
+      },
+      "passed": true
+    },
+    "short": {
+      "params": {},
+      "expected": null,
+      "actual": null,
+      "passed": true
+    },
+    "current_underobserved": {
+      "params": {
+        "min_obs": 100
+      },
+      "expected": null,
+      "actual": null,
+      "passed": true
+    },
+    "absorbing_duration_cap": {
+      "params": {},
+      "expected": {
+        "state": "Choppy",
+        "p_stay": 1.0,
+        "transition_row": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "regime_age_days": 300,
+        "avg_regime_duration": 9999,
+        "stability": "Stable",
+        "conviction_pct": 0
+      },
+      "actual": {
+        "state": "Choppy",
+        "p_stay": 1.0,
+        "transition_row": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "regime_age_days": 300,
+        "avg_regime_duration": 9999.0,
+        "stability": "Stable",
+        "conviction_pct": 0
+      },
+      "passed": true
+    }
+  },
+  "threshold_boundaries": {
+    "98": {
+      "expected": "Choppy",
+      "actual": "Choppy"
+    },
+    "102": {
+      "expected": "Choppy",
+      "actual": "Choppy"
+    }
+  },
+  "zero_observation_row": {
+    "expected": [
+      0.3333333333333333,
+      0.3333333333333333,
+      0.3333333333333333
+    ],
+    "actual": [
+      0.3333333333333333,
+      0.3333333333333333,
+      0.3333333333333333
+    ]
+  },
+  "transition_normalization": {
+    "expected": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "actual": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "hmm_supplied_model": {
+    "model": {
+      "start": [
+        0.2,
+        0.5,
+        0.3
+      ],
+      "trans": [
+        [
+          0.8,
+          0.15,
+          0.05
+        ],
+        [
+          0.2,
+          0.65,
+          0.15
+        ],
+        [
+          0.1,
+          0.2,
+          0.7
+        ]
+      ],
+      "means": [
+        0.004,
+        -0.003,
+        0.0
+      ],
+      "variances": [
+        4e-06,
+        9e-06,
+        1e-06
+      ]
+    },
+    "hmmlearn": "0.3.3",
+    "tail_returns": [
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018,
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018,
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018,
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018,
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018,
+      0.0029999999999998916,
+      -0.0020000000000000018,
+      9.999999999998899e-05,
+      -0.0010000000000000009,
+      0.0020000000000000018
+    ],
+    "expected_forward_probabilities": [
+      0.27774943760871745,
+      0.1782077461735084,
+      0.5440428162177743
+    ],
+    "actual_forward_probabilities": [
+      0.27774943760871657,
+      0.17820774617350804,
+      0.5440428162177797
+    ],
+    "forward_max_absolute_error": 5.440092820663267e-15,
+    "expected_intraday": {
+      "state": "Choppy",
+      "p_stay": 0.7,
+      "p_transition": [
+        {
+          "to": "Mean-reverting",
+          "prob": 0.2
+        },
+        {
+          "to": "Trending",
+          "prob": 0.1
+        }
+      ]
+    },
+    "actual_intraday": {
+      "state": "Choppy",
+      "p_stay": 0.7,
+      "p_transition": [
+        {
+          "to": "Mean-reverting",
+          "prob": 0.2
+        },
+        {
+          "to": "Trending",
+          "prob": 0.1
+        }
+      ]
+    },
+    "expected_directional": {
+      "state": "Sideways",
+      "p_stay": 0.7,
+      "transition_row": [
+        0.1,
+        0.2,
+        0.7
+      ]
+    },
+    "actual_directional": {
+      "state": "Sideways",
+      "p_stay": 0.7,
+      "transition_row": [
+        0.1,
+        0.2,
+        0.7
+      ]
+    },
+    "passed": true,
+    "scope": "Fixed emission/transition inference only; fit replaced. p_stay is a transition probability, not posterior confidence."
+  },
+  "hmm_real_fixture_fit": {
+    "cases": [
+      {
+        "kind": "intraday_algorithm_on_daily_fixture",
+        "model": {
+          "start": [
+            1.956541381270618e-06,
+            0.9999980434586188,
+            1.5660228917395772e-21
+          ],
+          "trans": [
+            [
+              2.5848933441099484e-07,
+              0.9999997401485645,
+              1.3621010974796628e-09
+            ],
+            [
+              0.9913460038229319,
+              3.043198884905185e-06,
+              0.008650952978183196
+            ],
+            [
+              0.16278959365493204,
+              0.00047862510482598415,
+              0.8367317812402421
+            ]
+          ],
+          "means": [
+            0.001100555162353685,
+            0.00045300748656957045,
+            -0.008892463725977361
+          ],
+          "variances": [
+            0.0001755222743547868,
+            0.0001564307731146245,
+            0.00444684178252423
+          ]
+        },
+        "expected_posterior": [
+          0.7475760817136692,
+          0.25102392008030633,
+          0.001399998206024439
+        ],
+        "expected": {
+          "state": "Mean-reverting",
+          "p_stay": 0.0,
+          "p_transition": [
+            {
+              "to": "Choppy",
+              "prob": 1.0
+            }
+          ]
+        },
+        "actual": {
+          "state": "Mean-reverting",
+          "p_stay": 0.0,
+          "p_transition": [
+            {
+              "to": "Choppy",
+              "prob": 1.0
+            }
+          ]
+        },
+        "passed": true
+      },
+      {
+        "kind": "directional_daily",
+        "model": {
+          "start": [
+            1.9565413812732875e-06,
+            0.9999980434586188,
+            1.5660228917397551e-21
+          ],
+          "trans": [
+            [
+              2.5848933441119484e-07,
+              0.9999997401485645,
+              1.3621010974801333e-09
+            ],
+            [
+              0.9913460038229301,
+              3.0431988849072957e-06,
+              0.008650952978184896
+            ],
+            [
+              0.16278959365492743,
+              0.0004786251048258614,
+              0.8367317812402467
+            ]
+          ],
+          "means": [
+            0.0011005551623536674,
+            0.00045300748656957023,
+            -0.00889246372597721
+          ],
+          "variances": [
+            0.00017552227435478697,
+            0.00015643077311462448,
+            0.004446841782524294
+          ]
+        },
+        "expected_posterior": [
+          0.7475760817136669,
+          0.2510239200803085,
+          0.001399998206024704
+        ],
+        "expected": {
+          "state": "Bull",
+          "p_stay": 0.0,
+          "transition_row": [
+            0.0,
+            1.0,
+            0.0
+          ]
+        },
+        "actual": {
+          "state": "Bull",
+          "p_stay": 0.0,
+          "transition_row": [
+            0.0,
+            1.0,
+            0.0
+          ]
+        },
+        "passed": true
+      }
+    ],
+    "scope": "Actual seed=42 hmmlearn fits on committed daily OHLCV, captured fitted parameters; independent scalar emission/forward/Viterbi evaluation reproduces returned state and probabilities. Optimizer correctness and calibration are not independently established. Intraday algorithm receives DAILY bars only as an algorithm smoke check; no real intraday provider fixture is available."
+  },
+  "hmm_insufficient": {
+    "expected": null,
+    "actual": null
+  },
+  "vix_ties_boundaries": [
+    {
+      "history": [],
+      "current": 20,
+      "expected": 50,
+      "actual": 50.0
+    },
+    {
+      "history": [
+        20,
+        20
+      ],
+      "current": 20,
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "history": [
+        10,
+        20,
+        20,
+        30
+      ],
+      "current": 20,
+      "expected": 25,
+      "actual": 25.0
+    },
+    {
+      "history": [
+        10,
+        20
+      ],
+      "current": 9,
+      "expected": 0,
+      "actual": 0.0
+    },
+    {
+      "history": [
+        10,
+        20
+      ],
+      "current": 21,
+      "expected": 100,
+      "actual": 100.0
+    }
+  ],
+  "vix_252_window": {
+    "input_prior_observations": 259,
+    "expected_window_bars": 252,
+    "actual_window_bars": 259,
+    "expected": 0.0,
+    "actual": 2.7,
+    "passed": false,
+    "explanation": "7 excluded-old closes=1; latest 252 prior closes=100; current=50. 252-day rank=0%; actual uses all 259 prior closes=7/259=2.7%."
+  },
+  "fallback": {
+    "no_bars_status": "unavailable",
+    "insufficient_status": "insufficient_data",
+    "insufficient_omm": {
+      "state": "Choppy",
+      "p_stay": 1.0,
+      "stability": "Stable",
+      "regime_age_days": 199,
+      "avg_regime_duration": 9999.0,
+      "duration_stride_bars": 26,
+      "transition_row": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "state_order": [
+        "Bull",
+        "Bear",
+        "Choppy"
+      ],
+      "conviction_pct": null,
+      "conviction_label": null
+    },
+    "missing_library_status": "unavailable",
+    "missing_library_omm": {
+      "state": "Choppy",
+      "p_stay": 1.0,
+      "stability": "Stable",
+      "regime_age_days": 220,
+      "avg_regime_duration": 9999.0,
+      "duration_stride_bars": 26,
+      "transition_row": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "state_order": [
+        "Bull",
+        "Bear",
+        "Choppy"
+      ],
+      "conviction_pct": null,
+      "conviction_label": null
+    }
+  },
+  "completed_15min": {
+    "now": 1000,
+    "bar_seconds": 900,
+    "feed_lag": 0,
+    "expected": [
+      {
+        "time": 99
+      },
+      {
+        "time": 100
+      }
+    ],
+    "actual": [
+      {
+        "time": 99
+      },
+      {
+        "time": 100
+      }
+    ]
+  },
+  "backend_gate_boundaries": [
+    {
+      "conviction": -40,
+      "stability": "Stable",
+      "expected": "REJECT",
+      "actual": "REJECT"
+    },
+    {
+      "conviction": -40,
+      "stability": "Fragile",
+      "expected": "CAUTION",
+      "actual": "CAUTION"
+    },
+    {
+      "conviction": -15,
+      "stability": "Stable",
+      "expected": "CAUTION",
+      "actual": "CAUTION"
+    },
+    {
+      "conviction": -14,
+      "stability": "Stable",
+      "expected": "PASS",
+      "actual": "PASS"
+    }
+  ],
+  "source_hashes": {
+    "backend/app/services/regime_omm.py": "52ea35ea18e54ebffd255e2d75d6e4bcebb14fd21f41dacb5107a758d66f07a6",
+    "backend/app/services/regime_hmm.py": "eb83eb5e517f06af9556dec6c2dddf753f54ce9bf6c875f4a269418fbfd6e830",
+    "backend/app/services/regime_hmm_daily.py": "5b4d342b6b60a802736238e2e61233c00b9dd4e79dfa55ad6493c0db6ee9f49d",
+    "backend/app/routers/regime.py": "67401b378945d0efb12b36c61f07f9843c25debb5a6db3c3431ac51608d25f25",
+    "backend/app/data/market.py": "2b4e4ea0ae2ea131ed93c487670494812111db0e7c192021f0e60635e4b40d1b",
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "frontend/lib/regimeDuration.ts": "0de1bbac9a2f168dcf44b6e2ad615704602bb4fb0c053282e521d12db58aa692",
+    "frontend/components/organisms/RunScanButton/index.tsx": "f565d929340a9d3be84e7dc116209e4ba55a842eadc70edcd5804f1c1501ffb8",
+    "frontend/components/organisms/StepNavBar/index.tsx": "1c551c09224a09743ac6cc43a4a23d92b371a073c28928ecf276820945c5c6a1"
+  }
+}

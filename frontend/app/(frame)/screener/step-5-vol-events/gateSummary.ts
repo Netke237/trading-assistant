@@ -178,7 +178,7 @@ export function causesSentence(causes: GateCause[], overlap: boolean): string {
   // to the non-PASS count. Said out loud, because on screen there was no cue at
   // all and "17 causes for 12 rows" reads as a bug.
   const cue = overlap ? ' (a row can have more than one)' : '';
-  return `Driven by${cue}: ${causes.map((c) => `${c.n} ${CAUSE_LABEL[c.key]}`).join('; ')}.`;
+  return `Driven by measured checks${cue}: ${causes.map((c) => `${c.n} ${CAUSE_LABEL[c.key]}`).join('; ')}.`;
 }
 
 /** The banner's second line, before it is words. `causes` and `missing` are

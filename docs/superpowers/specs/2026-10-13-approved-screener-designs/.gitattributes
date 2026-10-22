@@ -1,0 +1,3 @@
+# Preserve frozen reference/audit hashes byte-for-byte across executor OSes.
+# Scoped to this approved documentation package; no application files affected.
+* -text

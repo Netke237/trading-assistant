@@ -146,6 +146,66 @@ describe('sendStockSaveFirst', () => {
     expect(out.kind).toBe('unknown');
     expect(notes()).toEqual([expect.objectContaining({ kind: 'order-unknown' })]);
   });
+
+  function savedBodies(): Record<string, unknown>[] {
+    return (global.fetch as jest.Mock).mock.calls
+      .filter((call) => call[1]?.method === 'POST' && String(call[0]).includes('/api/portfolio'))
+      .map((call) => JSON.parse(String(call[1].body)) as Record<string, unknown>);
+  }
+
+  it('saves order type and limit before submission and sends one stable attempt id', async () => {
+    const p = pos();
+    await send(p);
+    expect(log[0]).toBe('save');
+    expect(savedBodies()[0]).toMatchObject({ orderType: 'LMT', orderLimitPrice: 200 });
+    expect((api.postStockOrder as jest.Mock).mock.calls[0][0]).toMatchObject({
+      attempt_id: `stk-${p.recId}`,
+      savedRecId: p.recId,
+      symbol: 'AAPL',
+      effect: 'OPEN',
+    });
+  });
+
+  it('a market save carries its order type and a null limit before the order', async () => {
+    const p = pos(12);
+    await send(p, 'alpaca_paper', 'MKT');
+    expect(savedBodies()[0]).toMatchObject({ orderType: 'MKT', orderLimitPrice: null });
+    expect((api.postStockOrder as jest.Mock).mock.calls[0][0]).toMatchObject({
+      attempt_id: `stk-${p.recId}`,
+      savedRecId: p.recId,
+      order_type: 'MKT',
+      limit_price: null,
+    });
+  });
+
+  it('an unknown remount of the same saved row repeats that attempt id', async () => {
+    const p = pos();
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error('API /broker/stock-order → 504: Gateway Timeout'));
+    const first = await send(p);
+    expect(first.kind).toBe('unknown');
+    expect((api.postStockOrder as jest.Mock).mock.calls[0][0].attempt_id).toBe(`stk-${p.recId}`);
+    act(() => {
+      usePortfolioStore.setState({ positions: [] });
+      useStockOrderOwnershipStore.setState({ bySymbol: {} });
+    });
+    await send(p);
+    expect((api.postStockOrder as jest.Mock).mock.calls.map((call) => call[0].attempt_id)).toEqual([
+      `stk-${p.recId}`, `stk-${p.recId}`,
+    ]);
+  });
+
+  it('a genuine refusal still removes the saved row when the order carries an attempt id', async () => {
+    const p = pos();
+    (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error('API /broker/stock-order → 422: bad qty'));
+    const out = await send(p);
+    expect((api.postStockOrder as jest.Mock).mock.calls[0][0]).toMatchObject({
+      attempt_id: `stk-${p.recId}`,
+      savedRecId: p.recId,
+    });
+    expect(out.kind).toBe('not-placed');
+    expect(api.deletePortfolioPosition).toHaveBeenCalledWith(p.recId);
+    expect(notes()).toEqual([]);
+  });
 });
 
 describe('brokerLabelFor (R1-1)', () => {
@@ -180,6 +240,27 @@ describe('DirectSendNotesPanel', () => {
     await removeNoteRow(notes()[0]);
     expect(api.deletePortfolioPosition).not.toHaveBeenCalled();
     expect(notes()).toHaveLength(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('SAVE-UNCONFIRMED: a 404 on Remove is final, deletes note and clears ownership (#171)', async () => {
+    act(() => {
+      useDirectSendNotesStore.getState().addNote({
+        recId: 'R-UNCONFIRMED',
+        kind: 'save-unconfirmed',
+        label: 'NVDA 10 sh',
+        brokerLabel: 'IBKR Paper',
+        orderId: null,
+      });
+      useStockOrderOwnershipStore.setState({
+        bySymbol: { NVDA: { status: 'unknown', recId: 'R-UNCONFIRMED', identity: 'NVDA', message: 'unconfirmed' } },
+      });
+    });
+    (api.deletePortfolioPosition as jest.Mock).mockRejectedValueOnce(new Error("API /api/portfolio/R-UNCONFIRMED → 404: Position not found."));
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    await removeNoteRow(notes()[0]);
+    expect(notes()).toHaveLength(0);
+    expect(useStockOrderOwnershipStore.getState().bySymbol['NVDA']).toBeUndefined();
     confirmSpy.mockRestore();
   });
 });

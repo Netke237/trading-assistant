@@ -1,0 +1,1227 @@
+{
+  "source": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "mocked": true,
+  "checks": [
+    {
+      "id": "same origin options profiles survive reload",
+      "status": "pass",
+      "expected": 19,
+      "actual": 19
+    },
+    {
+      "id": "stale tab preserves externally added profile",
+      "status": "fail",
+      "expected": true,
+      "actual": false
+    },
+    {
+      "id": "merge restores stable id",
+      "status": "pass",
+      "expected": "Intraday_Baseline_Bullish",
+      "actual": "Intraday_Baseline_Bullish"
+    },
+    {
+      "id": "merge keeps custom stocks",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "exact preimport backup",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "unreadable import recovers 18",
+      "status": "pass",
+      "expected": 18,
+      "actual": 18
+    },
+    {
+      "id": "unreadable backup retained",
+      "status": "pass",
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "malformed updatedAt profile UI survives",
+      "status": "fail",
+      "expected": true,
+      "actual": false
+    },
+    {
+      "id": "fresh browser process persistent profiles",
+      "status": "pass",
+      "expected": 19,
+      "actual": 19
+    },
+    {
+      "id": "second origin isolated",
+      "status": "pass",
+      "expected": null,
+      "actual": null
+    }
+  ],
+  "payloads": [],
+  "errors": [
+    "Failed to read the 'localStorage' property from 'Window': Access is denied for this document."
+  ],
+  "blocked": [],
+  "browser": "151.0.7922.173",
+  "reloadPage": "Skip to content\nBAMENDJOU\nOptions Screener\nLast stock scan: Oct 16 · 11:49 AM\nIDLE\nCAUTION\nPRE\n·\n1h 41m\nConfig unknown\nConfig health unknown: config health: expected an object. Retrying every 30 s.\nCollapse\n\nNothing could be checked.\n\nMarket Regime\nUniverse\n3\nDirection + Horizon\n4\nStock Ranking\n5\nVol + Events\n6\nContracts\n7\nTrade Card\n← Exit Workflow\nIDLE\nOptions\nStocks\nPre-Breakout\nSTEP 3 OF 7\nDirection + Horizon\nChoose your directional bias and holding horizon.\nSearch Profile\n— none —\nIntraday_Loose_Bullish\nIntraday_Loose_Bearish\nSwing_Loose_Bullish\nSwing_Loose_Bearish\nSemiAnnual_Loose_Bullish\nSemiAnnual_Loose_Bearish\nIntraday_Baseline_Bearish\nIntraday_Restrictive_Bearish\nSwing_Baseline_Bearish\nSwing_Restrictive_Bearish\nSemiAnnual_Baseline_Bullish\nSemiAnnual_Restrictive_Bullish\nSemiAnnual_Baseline_Bearish\nSemiAnnual_Restrictive_Bearish\nSwing_Restrictive_Bullish\nSwing_Baseline_Bullish\nIntraday_Restrictive_Bullish\nIntraday_Baseline_Bullish\nSave as new…\nDirectional bias\nBullish\nBearish\nHolding horizon\nIntraday\n0–2 days\nSwing\n5–15 days\nPosition\n15–45 days\nQuarterly\n45–60 days\nSemi-annual\n90–105 days\nAnnual\n165–200 days\nCustom\nSet range\nHolding period (days)\nto\nContracts will expire in 36–71 days (hold × 2).\nExecution Parameters\n▸ Expand\nSCAN LOG · CURRENT TABLE COUNTS\nSaved scan report\nReport category\nOptions\nStocks\nPre-Breakout\nPullback\nFib Pullback\nLegacy / unclassified\nRefresh report\n\nNo saved report available.\n\nRun Scan\n←\nBack: Universe\nSTEP 3 OF 7\nNext: Stock Ranking\n→\nWATCHLIST · TOP 5\nPORTFOLIO\nPositions\n0\nDeployed\n$0\nOpen P&L\n$0\nWinners\n0 / 0",
+  "finalStorage": {
+    "bamendjou:search-profiles": {
+      "state": {
+        "profiles": [
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {},
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6u2bxt11",
+            "name": "Intraday_Baseline_Bullish",
+            "createdAt": "2026-09-15T12:22:42.610Z",
+            "updatedAt": "2026-09-15T12:22:42.610Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 200,
+              "min_open_interest": 1000
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6u8qlkqx",
+            "name": "Intraday_Restrictive_Bullish",
+            "createdAt": "2026-09-15T12:22:42.842Z",
+            "updatedAt": "2026-09-15T12:22:42.842Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6uh2o5iy",
+            "name": "Intraday_Loose_Bullish",
+            "createdAt": "2026-09-15T12:22:43.142Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {},
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6us7zsyl",
+            "name": "Intraday_Baseline_Bearish",
+            "createdAt": "2026-09-15T12:22:43.543Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 200,
+              "min_open_interest": 1000
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6uz5ciqd",
+            "name": "Intraday_Restrictive_Bearish",
+            "createdAt": "2026-09-15T12:22:43.793Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Intraday",
+            "holdMin": 0,
+            "holdMax": 2,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6v7g9r4p",
+            "name": "Intraday_Loose_Bearish",
+            "createdAt": "2026-09-15T12:22:44.092Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {},
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6vi56pd4",
+            "name": "Swing_Baseline_Bullish",
+            "createdAt": "2026-09-15T12:22:44.476Z",
+            "updatedAt": "2026-09-15T12:22:44.476Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 200,
+              "min_open_interest": 1000
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6vokoroy",
+            "name": "Swing_Restrictive_Bullish",
+            "createdAt": "2026-09-15T12:22:44.708Z",
+            "updatedAt": "2026-09-15T12:22:44.708Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6vvzvia6",
+            "name": "Swing_Loose_Bullish",
+            "createdAt": "2026-09-15T12:22:44.975Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {},
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6w3ghw31",
+            "name": "Swing_Baseline_Bearish",
+            "createdAt": "2026-09-15T12:22:45.244Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 200,
+              "min_open_interest": 1000
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6wdkphqe",
+            "name": "Swing_Restrictive_Bearish",
+            "createdAt": "2026-09-15T12:22:45.608Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "Swing",
+            "holdMin": 5,
+            "holdMax": 15,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6wlgp0oc",
+            "name": "Swing_Loose_Bearish",
+            "createdAt": "2026-09-15T12:22:45.892Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6wtt37o9",
+            "name": "SemiAnnual_Baseline_Bullish",
+            "createdAt": "2026-09-15T12:22:46.193Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 50,
+              "min_open_interest": 1000,
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6x4w0gb9",
+            "name": "SemiAnnual_Restrictive_Bullish",
+            "createdAt": "2026-09-15T12:22:46.592Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bullish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75,
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 3
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6xcbasfh",
+            "name": "SemiAnnual_Loose_Bullish",
+            "createdAt": "2026-09-15T12:22:46.859Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6xjqcewd",
+            "name": "SemiAnnual_Baseline_Bearish",
+            "createdAt": "2026-09-15T12:22:47.126Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.08,
+              "min_volume": 50,
+              "min_open_interest": 1000,
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 10,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6xtffvnn",
+            "name": "SemiAnnual_Restrictive_Bearish",
+            "createdAt": "2026-09-15T12:22:47.475Z",
+            "updatedAt": "2026-09-29T13:00:00.000Z"
+          },
+          {
+            "mode": "options",
+            "universe": {
+              "pick": "SP500",
+              "customRaw": "",
+              "minPriceRaw": "",
+              "maxPriceRaw": "",
+              "minCapRaw": "",
+              "maxCapRaw": "",
+              "capUnit": "B"
+            },
+            "direction": "Bearish",
+            "horizonPreset": "SemiAnnual",
+            "holdMin": 90,
+            "holdMax": 105,
+            "scanOverrides": {
+              "max_bid_ask_spread_pct": 0.3,
+              "preferred_spread_pct_max": 0.3,
+              "min_volume": 0,
+              "preferred_volume_min": 20,
+              "min_open_interest": 75,
+              "preferred_oi_min": 75,
+              "event_reject_days": 7,
+              "event_caution_days": 30
+            },
+            "scanSettings": {
+              "confidenceGate": {
+                "enabled": true,
+                "cautionBelow": 50,
+                "rejectBelow": 35,
+                "atrMult": {
+                  "intraday": {
+                    "target": 2,
+                    "stop": 1.5
+                  },
+                  "swing": {
+                    "target": 3,
+                    "stop": 1.5
+                  },
+                  "position": {
+                    "target": 2.5,
+                    "stop": 1.5
+                  }
+                }
+              },
+              "fundamentalsGate": {
+                "enabled": true,
+                "cautionBelow": 45,
+                "rejectBelow": 30,
+                "deReject": 10
+              },
+              "shortlistMaxCandidates": 20,
+              "spreads": {
+                "shortLegDelta": 0.3,
+                "widthPoints": 5,
+                "ivRankThreshold": 50,
+                "ivAbsThreshold": 50,
+                "minCredit": 0.5,
+                "maxDebitPctOfWidth": 40
+              }
+            },
+            "id": "mu2n6y1r5fyf",
+            "name": "SemiAnnual_Loose_Bearish",
+            "createdAt": "2026-09-15T12:22:47.775Z",
+            "updatedAt": "2026-10-11T12:00:00.000Z"
+          }
+        ]
+      },
+      "version": 3
+    },
+    "bamendjou-scan-store": {
+      "state": {
+        "scanResult": null,
+        "previousRun": null,
+        "context": null,
+        "scanAt": null,
+        "scanDurationMs": null,
+        "pickedContracts": {},
+        "scanState": "IDLE",
+        "screenerMode": "options",
+        "activeStrategy": null,
+        "stockScanResult": [],
+        "stockScanRequest": null,
+        "previousStockScanResult": null,
+        "stockScanAt": "2026-10-16T11:49:03",
+        "optionsScanAt": null,
+        "stockBasket": [],
+        "lastOptionsScanUpdatedAt": null,
+        "lastStockScanUpdatedAt": null,
+        "lastStockScanStrategy": null,
+        "optionsCardEdits": {
+          "scanId": null,
+          "picks": {},
+          "invalidation": {},
+          "premiumStop": {},
+          "entryLimit": {},
+          "maxLossOverride": {}
+        },
+        "stocksCardEdits": {
+          "scanId": null,
+          "picks": {},
+          "invalidation": {},
+          "premiumStop": {},
+          "entryLimit": {},
+          "maxLossOverride": {}
+        }
+      },
+      "version": 19
+    }
+  }
+}

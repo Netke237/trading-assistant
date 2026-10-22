@@ -7,11 +7,11 @@ from typing import Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas import (
     OptionContract, RrModel, TradeEntry, TradeExit, ContractScoreBreakdown,
-    FinalStopOut,
+    FinalStopIn,
     DteDetail, DeltaDetail, IvRankDetail, LiquidityDetail, SpreadDetail,
     ContractExplanation,
 )
@@ -40,6 +40,7 @@ from app.services.config_loader import load_first_passage_cfg as _fp_cfg
 from app.services.config_loader import load_exit_plan_cfg as _ep_cfg
 from app.services.config_loader import resolve_target_r_multiple
 from app.services.config_loader import merge_reward_risk_overrides as _merge_rr_cfg
+from app.services.config_loader import resolve_entry_config
 
 router = APIRouter(prefix='/api', tags=['trading'])
 
@@ -56,6 +57,12 @@ class ContractQuoteResponse(BaseModel):
     iv: Optional[float] = None
     spread: float
     volume: int
+    # NO-LIVE-QUOTE (plan 3c), from the chain row: quoteLive True only for a
+    # two-sided quote, in session, no older than quote_liveness.max_age_minutes;
+    # quoteState 'live' | 'one_sided' | 'session_closed' | 'stale'. None means
+    # the row carried no state, which only a fixture produces.
+    quoteLive: Optional[bool] = None
+    quoteState: Optional[str] = None
 
 
 class StockQuoteResponse(BaseModel):
@@ -296,8 +303,12 @@ async def get_contracts(
             if ask > max_price:
                 continue
 
-        # 5. Score the contract
-        score_card = validate_contract(augmented, stock_score, overrides=contract_overrides)
+        # 5. Score the contract. Label mode (NO-LIVE-QUOTE plan 3c): a row
+        # whose quote is not live is graded as a live one, capped at CAUTION
+        # and flagged, so an off-hours Step 6 / Watchlist still lists it.
+        score_card = validate_contract(
+            augmented, stock_score, overrides=contract_overrides, quote_mode="label",
+        )
 
         # 6. Build OptionContract response, merging scored fields
         results.append(OptionContract(
@@ -340,6 +351,8 @@ async def get_contracts(
                 spreadDetail=   _safe_detail(SpreadDetail,    score_card.detail.get("spread")),
             ),
             explanation=ContractExplanation.model_validate(score_card.explanation) if score_card.explanation else None,
+            noLiveQuote=score_card.no_live_quote,
+            quoteState=score_card.quote_state,
         ))
 
     # 7. Sort by score descending (stable — preserves input order for ties)
@@ -387,6 +400,8 @@ async def get_option_quote(
         iv=opt_float(quote.get("iv")),
         spread=float(quote["spread"]),
         volume=int(quote["volume"]),
+        quoteLive=quote.get("quoteLive"),
+        quoteState=quote.get("quoteState"),
     )
 
 
@@ -402,6 +417,9 @@ async def get_stock_quote(
 
 
 class RecomputePlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol: str
     direction: Literal["Bullish", "Bearish"]
     stock_price: float = Field(..., gt=0)
@@ -423,6 +441,12 @@ class RecomputePlanRequest(BaseModel):
     target_source: Literal["structural_snap", "arithmetic", "flat_fallback", "capped"] | None = None
     rr_bullish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
     rr_bearish_invalidation_pct: float | None = Field(default=None, gt=0, le=1.0)
+    # Optional Entry Quality overrides — mirrors the same keys the scan endpoint
+    # accepts in ScanRequest.overrides, so a contract override recompute honors
+    # Step 3 Entry Quality parameters (APP-AUDIT-B-ENTRY-OVERRIDES).
+    entry_spread_tolerance_pct: float | None = Field(default=None, ge=0, le=1.0, allow_inf_nan=False)
+    entry_max_slippage_pct: float | None = Field(default=None, ge=0, le=1.0, allow_inf_nan=False)
+    entry_min_premium: float | None = Field(default=None, ge=0, le=100.0, allow_inf_nan=False)
     # The HOLDING preset key and typed hold range, feeding the repricing
     # horizon behind the Fixed % Ladder. Same names, same meaning and the same
     # "absent means Swing" default as FirstPassageRequest below — a Step-6
@@ -435,7 +459,13 @@ class RecomputePlanRequest(BaseModel):
     # round-tripped so a contract override cannot move it. See the endpoint
     # body for why this is echoed rather than re-derived. None = the card has
     # none, and the flat percentage applies.
-    final_stop: FinalStopOut | None = None
+    # FinalStopIn, the request-only subclass (NUMERIC-API-INPUTS T2): the
+    # response's TradeExit.finalStop stays FinalStopOut and serialises it as one.
+    final_stop: FinalStopIn | None = None
+    # NO-LIVE-QUOTE (plan 3e): False when the premium/spread above did not come
+    # from a live quote (the entry plan then reads CAUTION, "no live quote --
+    # entry priced off the last close"). None = not stated: today's behaviour.
+    quote_live: bool | None = None
 
 
 class RecomputePlanResponse(BaseModel):
@@ -479,8 +509,17 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
     # show "Heston repriced" on the initial scan card and "BS repriced (IV-derived)"
     # after a Step 6 override — see docs/superpowers/plans/
     # 2026-07-25-heston-pricing-in-trade-plan.md's "Out of scope" section.
+    _entry_overrides = {
+        k: v for k, v in {
+            "entry_spread_tolerance_pct": req.entry_spread_tolerance_pct,
+            "entry_max_slippage_pct": req.entry_max_slippage_pct,
+            "entry_min_premium": req.entry_min_premium,
+        }.items() if v is not None
+    }
+
     try:
         _rr_cfg_merged = _merge_rr_cfg(_rr_overrides)
+        _entry_cfg = resolve_entry_config(_entry_overrides) if _entry_overrides else None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -551,6 +590,8 @@ async def recompute_plan(req: RecomputePlanRequest) -> RecomputePlanResponse:
         target_price=_target,
         target_source=_source or "arithmetic",
         stop_cost_fraction=_cost_fraction,
+        quote_live=req.quote_live,
+        entry_cfg=_entry_cfg,
     )
 
     return RecomputePlanResponse(
@@ -621,6 +662,9 @@ def _stop_cost_out(cost) -> Optional[StopCostOut]:
 
 
 class StructuralStopRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     stock_price: float = Field(..., gt=0)
@@ -736,6 +780,9 @@ async def structural_stop(req: StructuralStopRequest) -> StructuralStopResponse:
 
 
 class FirstPassageRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:             str
     direction:          Literal["Bullish", "Bearish"]
     stock_price:        float = Field(..., gt=0)
@@ -1006,6 +1053,9 @@ def _race_out(race: Optional[BarrierRaceResult]) -> Optional[BarrierRaceOut]:
 
 
 class ExitPlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     target_r_multiple: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]

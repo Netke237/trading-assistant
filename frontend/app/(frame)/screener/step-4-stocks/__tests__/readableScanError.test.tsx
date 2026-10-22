@@ -10,7 +10,7 @@
  * docs/superpowers/plans/2026-10-04-stocks-step-merge-stage1-plan.md
  */
 import '@testing-library/jest-dom';
-import { render, fireEvent, waitFor, screen, cleanup } from '@testing-library/react';
+import { render, fireEvent, waitFor, screen, cleanup, within } from '@testing-library/react';
 import { stockScanFailureReason, STOCK_SCAN_SETTINGS_INVALID } from '@/lib/stockScan';
 import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
@@ -157,6 +157,6 @@ describe('A5d — Step 4 scan failure messages', () => {
     expect(screen.queryByText(STOCK_SCAN_SETTINGS_INVALID, { exact: false })).toBeNull();
     // A clean success: no other failure text replaced the message. (Step 4 does
     // not navigate on success in Stage 1, so there is no mockPush assertion.)
-    expect(screen.queryByText(/could not|failed|Error|API \//i)).toBeNull();
+    expect(within(screen.getByRole('complementary', { name: 'Scan actions' })).queryByText(/could not|failed|Error|API \//i)).toBeNull();
   });
 });

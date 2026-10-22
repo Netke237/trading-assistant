@@ -182,7 +182,7 @@ beforeEach(() => {
   getReplies = [];
   (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
   (api.getContractQuote as jest.Mock).mockResolvedValue({
-    price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
+    quoteLive: true, price: CARD_LIMIT, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100,
   });
   (api.postOptionOrder as jest.Mock).mockImplementation(async () => {
     callLog.push('order');
@@ -423,6 +423,7 @@ describe('P1b-i — everything else keeps the row, with an ORDER-UNKNOWN note', 
 });
 
 describe('P1b-i — the notes outlive the card', () => {
+  // Explicit timeout: this long multi-step test exceeds Jest's 5 s default under CPU load (ticket 26, FIX-26B).
   it('8. an ORDER-UNKNOWN note survives Next, Prev, a basket submit, a new send and a remount', async () => {
     (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('boom'));
     await renderPage();
@@ -453,7 +454,7 @@ describe('P1b-i — the notes outlive the card', () => {
     cleanup();
     await renderPage();
     expect(noteText(firstNote)).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('8b. two UNKNOWN sends leave two notes', async () => {
     (api.postOptionOrder as jest.Mock).mockRejectedValue(new Error('boom'));
@@ -502,6 +503,8 @@ describe('P1b-i — the green line and the entry price', () => {
     resetStores([makeCard('AAA', 0), makeCard('BBB')]);
     (api.getContractQuote as jest.Mock).mockRejectedValue(new Error('no quote'));
     await renderPage();
+    // NO-LIVE-QUOTE (plan 3e, Q-B (a)): a send with no live quote needs the tick.
+    fireEvent.click(await screen.findByLabelText('Confirm sending without a live quote'));
     await sendAndSettle();
     expect(persistBodies()[0]!.entryPrice).toBe(CARD_LIMIT);
 
@@ -563,19 +566,15 @@ describe('P1b-i — Remove (P1B1-MINIMAL-REMOVE-2026-09-25)', () => {
     expect(positions()).toHaveLength(0);
   });
 
-  it('18. SAVE-UNCONFIRMED: a 404 is NOT final; a later success removes the note', async () => {
+  it('18. SAVE-UNCONFIRMED: a 404 on Remove is final; dismisses note immediately (#171)', async () => {
     persistReply = () => Promise.reject(new TypeError('Failed to fetch'));
     await renderPage();
     await sendAndSettle();
     (api.deletePortfolioPosition as jest.Mock).mockRejectedValueOnce(deleteErr(404, 'Position not found'));
     fireEvent.click(removeBtn(AAA_LABEL));
     await settle();
-    expect(notes()).toHaveLength(1);
-    expect(screen.getByText(/Not found yet — the save may still be finishing/)).toBeInTheDocument();
-    await waitFor(() => expect(removeBtn(AAA_LABEL)).toBeEnabled());
-    fireEvent.click(removeBtn(AAA_LABEL));
-    await settle();
     expect(notes()).toHaveLength(0);
+    expect(screen.queryByText(/Not found yet/)).toBeNull();
   });
 
   it('19. NOT-REMOVED: a 404 on Remove is final', async () => {

@@ -67,6 +67,29 @@ export function resolveParamsHorizon(hz: HorizonKey, holdMax: number): HorizonKe
   return hz === 'Custom' ? scoringHorizonForHold(holdMax) : hz;
 }
 
+/** A holding period with its own backend strategy parameters (STOCKS-HORIZON-T1).
+ *  Same names and order as backend app/services/horizon_profiles.py TUNED_HORIZONS. */
+export type TunedHorizon = 'Swing' | 'Position' | 'Quarterly' | 'SemiAnnual' | 'Annual';
+export const TUNED_HORIZONS: readonly TunedHorizon[] = ['Swing', 'Position', 'Quarterly', 'SemiAnnual', 'Annual'];
+
+/**
+ * Which tuned horizon's strategy parameters a stock scan reads (the request's
+ * `params_horizon`). A tuned preset is itself; Intraday has none; Custom has
+ * none when its hold scores as Intraday, else the tuned horizon whose preset
+ * holdMax is nearest `holdMax` (a tie goes to the shorter horizon). Mirrors
+ * backend horizon_profiles.tuned_params_horizon. Deliberately separate from
+ * resolveParamsHorizon, which feeds the options parameter table.
+ */
+export function tunedParamsHorizon(hz: HorizonKey, holdMax: number): TunedHorizon | null {
+  if ((TUNED_HORIZONS as readonly string[]).includes(hz)) return hz as TunedHorizon;
+  if (hz !== 'Custom' || scoringHorizonForHold(holdMax) === 'Intraday') return null;
+  let best: TunedHorizon = TUNED_HORIZONS[0];
+  for (const h of TUNED_HORIZONS.slice(1)) {
+    if (Math.abs(holdMax - presetByKey(h).holdMax) < Math.abs(holdMax - presetByKey(best).holdMax)) best = h;
+  }
+  return best;
+}
+
 /**
  * Display-only preview of the window the backend will enforce.
  * Mirrors backend/app/scoring/dte_window.py exactly.

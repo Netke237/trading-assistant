@@ -213,3 +213,154 @@ def test_without_expiry_an_empty_chain_is_still_an_empty_200(client):
     r, _ = _get(client, [], "")
     assert r.status_code == 200
     assert r.json() == []
+
+
+# ── NO-LIVE-QUOTE NLQ-1 (plan 3a): the single-contract quote's expiry ────────
+#
+# fetch_contract_quote_async re-fetches the chain with `expiry=`; when that
+# expiry is not listed the chain builder falls back to another one. T4: that
+# row is not this contract's quote, so it returns None. T5: the quote's
+# consumers, given that None, take their existing "unavailable" path. Run
+# through the REAL fetch_contract_quote_async with only the chain fetch below
+# it stubbed, so the consumers see exactly what the shared function returns.
+
+import asyncio  # noqa: E402
+from copy import deepcopy  # noqa: E402
+from typing import AsyncGenerator  # noqa: E402
+
+import pytest_asyncio  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import select  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+
+import app.models  # noqa: E402,F401  (registers all tables on Base.metadata)
+from app.data.market import fetch_contract_quote_async  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app.models.portfolio import PortfolioPositionModel  # noqa: E402
+from app.schemas import PortfolioPositionCreate  # noqa: E402
+from app.services.position_writer import create_position  # noqa: E402
+
+_HELD = "ABT|97|2027-01-15|C"
+_FALLBACK = "2027-02-19"     # the expiry the chain builder fell back to
+
+
+def _abt_row(expiry, strike=97, price=55.0):
+    return {"id": f"ABT|{strike}|{expiry}|C", "symbol": "ABT", "strike": strike, "expiry": expiry,
+            "right": "C", "dte": 120, "dteTotal": 120, "price": price, "spread": 0.2,
+            "delta": 0.9, "theta": -0.01, "volume": 500, "open_interest": 900,
+            "quoteState": "live", "quoteLive": True, "quoteAgeS": 3.0}
+
+
+def _chain_patch(rows):
+    return patch("app.data.market.fetch_option_chain_async",
+                 AsyncMock(side_effect=lambda *a, **k: [dict(r) for r in rows]))
+
+
+def _quote(contract_id, rows):
+    with _chain_patch(rows) as m:
+        q = asyncio.run(fetch_contract_quote_async(object(), contract_id))
+    return q, m
+
+
+# T4
+
+def test_quote_is_none_when_the_chain_came_back_for_another_expiry():
+    q, m = _quote(_HELD, [_abt_row(_FALLBACK)])
+    assert m.call_args.kwargs["expiry"] == "2027-01-15"
+    assert q is None
+
+
+def test_quote_is_the_row_for_the_requested_strike_and_expiry():
+    rows = [_abt_row("2027-01-15", strike=95, price=7.0), _abt_row("2027-01-15", price=5.0)]
+    q, _ = _quote(_HELD, rows)
+    assert (q["strike"], q["expiry"], q["price"]) == (97, "2027-01-15", 5.0)
+
+
+def test_quote_is_none_when_the_strike_has_no_row():
+    # The builder drops a row whose ask is 0 (Q-C), so such a contract has no row.
+    assert _quote(_HELD, [_abt_row("2027-01-15", strike=95)])[0] is None
+    assert _quote(_HELD, [])[0] is None
+
+
+# T5
+
+@pytest_asyncio.fixture
+async def Session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:",
+                                 connect_args={"check_same_thread": False})
+    maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield maker
+    await engine.dispose()
+
+
+@pytest.fixture
+def _risk_ok(monkeypatch):
+    from app.services import portfolio_risk
+    config = deepcopy(portfolio_risk._load_config())
+    config.setdefault("portfolio", {})["portfolio_value"] = 1_000_000
+    monkeypatch.setattr(portfolio_risk, "_load_config", lambda: config)
+
+
+def _held_body(**overrides):
+    body = {"recId": "REC-NLQ1", "symbol": "ABT", "contract": _HELD, "direction": "Bullish",
+            "entryPrice": 10.45, "qty": 4, "entryDate": "2026-07-17", "stop": 89.89,
+            "targets": [], "dteTotal": 547, "portfolioValue": 1_000_000}
+    body.update(overrides)
+    return body
+
+
+@pytest.mark.asyncio
+async def test_position_writer_keeps_the_sent_entry_when_the_quote_is_another_expirys(Session, _risk_ok):
+    """position_writer's save-time refetch, through its default fetcher (the
+    real fetch_contract_quote_async): a None quote keeps the frontend's
+    entryPrice. Before the expiry check it stored the other expiry's 55.00."""
+    with _chain_patch([_abt_row(_FALLBACK)]):
+        async with Session() as db:
+            await create_position(PortfolioPositionCreate(**_held_body()), db)
+    async with Session() as db:
+        rows = (await db.execute(select(PortfolioPositionModel))).scalars().all()
+    assert [(r.contract, r.entry_price) for r in rows] == [(_HELD, 10.45)]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_positions_show_no_quote_when_the_quote_is_another_expirys(Session, _risk_ok):
+    """GET /api/portfolio enriches each row with fetch_contract_quote_async; a
+    None quote leaves the row exactly as the no-quote path leaves it, flagged
+    quoteUnavailable (round-1 F2)."""
+    from app.routers.portfolio import router as portfolio_router
+
+    with patch("app.services.position_writer.fetch_contract_quote_async", AsyncMock(return_value=None)):
+        async with Session() as db:
+            await create_position(PortfolioPositionCreate(**_held_body()), db)
+
+    async def _get_db() -> AsyncGenerator[AsyncSession, None]:
+        async with Session() as s:
+            yield s
+
+    test_app = FastAPI()
+    test_app.include_router(portfolio_router)
+    test_app.dependency_overrides[get_db] = _get_db
+
+    async def _positions(**patches):
+        with ExitStack() as stack:
+            stack.enter_context(patch("app.routers.portfolio.fetch_price_async", AsyncMock(return_value=None)))
+            for target, new in patches.items():
+                stack.enter_context(patch(target, new))
+            async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://t") as c:
+                r = await c.get("/api/portfolio")
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    with _chain_patch([_abt_row(_FALLBACK)]):
+        fell_back = await _positions()
+    unavailable = await _positions(**{
+        "app.routers.portfolio.fetch_contract_quote_async": AsyncMock(return_value=None)})
+
+    assert fell_back == unavailable
+    (row,) = fell_back
+    assert row["currentPrice"] != 55.0
+    assert row["delta"] is None
+    assert row["quoteUnavailable"] is True

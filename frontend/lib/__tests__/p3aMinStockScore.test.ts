@@ -18,7 +18,7 @@ function body(scanOverrides: Record<string, number | boolean | string>) {
     universe: ['SP500'], direction: 'Bullish', horizon: 'Swing', strategy: 'pullback_ema',
     params: useScanParamsStore.getState(), requireReversal: false, scanOverrides,
     confidenceGate: DEFAULT_CONFIDENCE_GATE, accountSize: 50_000, riskPct: 0.01,
-    holdMinDays: 5, holdMaxDays: 15,
+    holdMinDays: 5, holdMaxDays: 15, paramsHorizon: null,
   });
 }
 
@@ -45,5 +45,5 @@ it('is never posted by an options scan, so the contract floor stays contract_rul
   expect(b.overrides).not.toHaveProperty('min_stock_score');
   expect(b).not.toHaveProperty('min_stock_score');
   // Everything else still goes through.
-  expect(b.overrides.weight_trend).toBe(30);
+  expect(b.overrides.weight_trend).toBe(0.3);
 });

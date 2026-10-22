@@ -1,0 +1,97 @@
+[
+  {
+    "id": "hard:/screener",
+    "artifact": "evidence/observations.json",
+    "cause": "fixed900ms wait observed URL before server redirect settled",
+    "replacement_evidence": [
+      "interactive-evidence/observations.json#redirect:asserted:/screener"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "navigation:primary",
+    "artifact": "evidence/observations.json",
+    "cause": "fixed900ms wait before actual soft-navigation URL settled",
+    "replacement_evidence": [
+      "interactive-evidence/observations.json#slots:soft:/analysis",
+      "primary-link-evidence/observations.json"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "redirects:asserted",
+    "artifact": "interactive-attempt-1/observations.json",
+    "cause": "old mounted store could overwrite direct localStorage seed; next-document one-shot seed fixes race",
+    "replacement_evidence": [
+      "interactive-evidence/observations.json#redirect:asserted:/screener/step-5-strategy"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "alerts:builder",
+    "artifact": "interactive-attempt-1/observations.json",
+    "cause": "prototype asked for New Alert but real button is Create Alert",
+    "replacement_evidence": [
+      "interactive-evidence/observations.json#alerts:builder-n-of-m",
+      "interactive-evidence/observations.json#alerts:builder-regime-condition"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "options:populated-disclosures",
+    "artifact": "interactive-attempt-1/observations.json",
+    "cause": "actual accessible name is Explain score for contract; prototype searched exact Explain",
+    "replacement_evidence": [
+      "followup-evidence/observations.json#options:contract-explanation"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "options:populated-disclosures",
+    "artifact": "interactive-evidence/observations.json",
+    "cause": "old function still used prototype exact Explain selector during this run",
+    "replacement_evidence": [
+      "followup-evidence/observations.json#options:contract-explanation"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "boundary:frame-loading",
+    "artifact": "interactive-attempt-1/observations.json",
+    "cause": "prototype wrapper aborted delayed frontend continuation; safe exact-origin GET continuation corrects it",
+    "replacement_evidence": [
+      "interactive-evidence/observations.json#boundary:frame-loading-visible"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "chart:imperative-nested",
+    "artifact": "interactive-evidence/observations.json",
+    "cause": "unscoped down-arrow selected chart drawing toolbar rather than indicator accordion",
+    "replacement_evidence": [
+      "followup-evidence/observations.json#chart:indicator-params",
+      "followup-evidence/observations.json#chart:structure-panel",
+      "followup-evidence/observations.json#chart:alert-builder"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "setup:populated-row-disclosures",
+    "artifact": "interactive-evidence/observations.json",
+    "cause": "ephemeral setup rows seeded through persisted blob are cleared by page effects; use intercepted scan fixture response",
+    "replacement_evidence": [
+      "followup-evidence/observations.json#setup:two-fixture-rows",
+      "followup-evidence/observations.json#setup:composite-intraday"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  },
+  {
+    "id": "options:confirmed-nested-chain",
+    "artifact": "followup-attempt-1/observations.json",
+    "cause": "first chain is automatically expanded; prototype click collapsed it; final checks aria-expanded before toggle",
+    "replacement_evidence": [
+      "followup-evidence/observations.json#options:contract-explanation"
+    ],
+    "status": "superseded harness limitation; not application defect"
+  }
+]

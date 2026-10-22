@@ -35,6 +35,7 @@ import hashlib
 import logging
 import math
 import os
+from dataclasses import replace
 from functools import lru_cache
 from typing import Optional
 
@@ -485,7 +486,8 @@ def calibrate_cached(
     # scan. A synchronous caller of `calibrate_heston` outside the scan
     # pipeline has no ceiling at all -- it did not have one before either,
     # for the `shutdown(wait=True)` reason above.
-    return _run_calibration(iv_key, chain_repr, S, r)
+    result = _run_calibration(iv_key, chain_repr, S, r)
+    return replace(result, params=replace(result.params))
 
 
 def _thin_chain_params(chain: list[dict], S: float, r: float) -> HestonParams:

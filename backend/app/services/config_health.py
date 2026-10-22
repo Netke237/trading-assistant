@@ -194,6 +194,8 @@ CONTRACT_KEYS: dict = {
         "preferred_delta_min", "preferred_delta_max", "preferred_dte_min",
         "preferred_dte_max", "preferred_iv_abs_max", "preferred_iv_rank_max")},
     "weights": {k: None for k in ("liquidity", "spread", "delta", "dte", "iv_rank")},
+    # NO-LIVE-QUOTE: read by contract_validator.max_quote_age_seconds().
+    "quote_liveness": {"max_age_minutes": None},
 }
 
 CANONICAL_NODE_BUDGET = 100_000

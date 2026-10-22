@@ -279,3 +279,89 @@ async def test_get_portfolio_stock_leg_mirrors_current_price_not_fetched_separat
     assert call_count["n"] == 0  # not called for a stock-only portfolio
     assert open_positions[0]["currentPrice"] == 410.5
     assert open_positions[0]["currentStockPrice"] == 410.5
+
+
+# ── NO-LIVE-QUOTE NLQ-1 round-1 F2: a position with no quote ─────────────────
+#
+# fetch_contract_quote_async returns None for a failed fetch, an unlisted
+# expiry or an ask of 0. The row's 0.0 currentPrice/pnl are defaults, not a
+# price: the row says quoteUnavailable, and the request writes NO equity
+# snapshot (open_value would count the position at 0 and persist that).
+
+from datetime import date as _date  # noqa: E402
+
+from sqlalchemy import select  # noqa: E402
+
+from app.models.closed_position import EquitySnapshotModel  # noqa: E402
+
+
+async def _seed_two(Session):
+    async with Session() as s:
+        for rec, sym, contract in (("REC-O", "AAPL", "AAPL|185|2027-01-15|C"), ("REC-S", "MSFT", "MSFT|STOCK")):
+            s.add(PortfolioPositionModel(
+                rec_id=rec, symbol=sym, contract=contract, direction="Bullish",
+                entry_price=1.0, qty=1, entry_date="2026-05-01", stop=None, targets=[], dte_total=140,
+            ))
+        await s.commit()
+
+
+async def _snapshots(Session):
+    async with Session() as s:
+        rows = (await s.execute(select(EquitySnapshotModel))).scalars().all()
+    return [(r.snapshot_date, r.open_value, r.open_pnl, r.total_value) for r in rows]
+
+
+def _quotes(by_contract):
+    return AsyncMock(side_effect=lambda client, contract: by_contract.get(contract))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("missing", ["AAPL|185|2027-01-15|C", "MSFT|STOCK"], ids=["option-leg", "stock-leg"])
+async def test_get_portfolio_without_a_quote_flags_the_row_and_writes_no_snapshot(client_with_session, missing):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    quotes = {"AAPL|185|2027-01-15|C": {"price": 1.2, "delta": 0.5}, "MSFT|STOCK": {"price": 410.5}}
+    quotes[missing] = None
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async", new=_quotes(quotes)),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=175.0)),
+    ):
+        rows = {p["contract"]: p for p in (await client.get("/api/portfolio")).json()}
+
+    assert {c: p["quoteUnavailable"] for c, p in rows.items()} == {
+        c: c == missing for c in quotes}
+    assert (rows[missing]["currentPrice"], rows[missing]["pnlDollar"], rows[missing]["pnlPct"]) == (0.0, 0.0, 0.0)
+    assert await _snapshots(Session) == [], "no snapshot may be written while a position has no quote"
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_without_a_quote_leaves_todays_snapshot_as_last_written(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    today = _date.today().isoformat()
+    async with Session() as s:
+        s.add(EquitySnapshotModel(id="snap-1", snapshot_date=today, realized_cumulative=0.0,
+                                  open_value=41170.0, open_pnl=40.0, total_value=41170.0))
+        await s.commit()
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async",
+              new=_quotes({"AAPL|185|2027-01-15|C": None, "MSFT|STOCK": {"price": 410.5}})),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=175.0)),
+    ):
+        assert (await client.get("/api/portfolio")).status_code == 200
+    assert await _snapshots(Session) == [(today, 41170.0, 40.0, 41170.0)]
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_with_every_quote_writes_the_snapshot(client_with_session):
+    client, Session = client_with_session
+    await _seed_two(Session)
+    with (
+        patch("app.routers.portfolio.fetch_contract_quote_async",
+              new=_quotes({"AAPL|185|2027-01-15|C": {"price": 1.2}, "MSFT|STOCK": {"price": 410.5}})),
+        patch("app.routers.portfolio.fetch_price_async", new=AsyncMock(return_value=175.0)),
+    ):
+        rows = (await client.get("/api/portfolio")).json()
+    assert not any(p["quoteUnavailable"] for p in rows)
+    # open value 1.20 x 100 + 410.50 x 1; open P&L (1.20 - 1) x 100 + (410.50 - 1) x 1
+    assert await _snapshots(Session) == [(_date.today().isoformat(), 530.5, 429.5, 530.5)]

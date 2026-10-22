@@ -135,3 +135,131 @@ def test_store_load_drops_malformed_rows_not_fatal(tmp_path):
     path.write_text(yaml.dump({"entries": [{"no_id_field": True}, _entry()]}))
     store = ScanScheduleStore(path=path)
     assert store.list() == [_entry()]
+
+
+# ── NO-LIVE-QUOTE (plan 3f, test T10): the off-hours options run ─────────────
+#
+# Off hours every chain row is session_closed, the scan rejects every contract
+# for no_live_quote and each name's reason reads
+# "contracts rejected: no_live_quote(N)". The scan core counts those names into
+# ScanResult.noLiveQuoteNames; the scheduler reads that number (it parses no
+# reason) and adds a clause to the success notice.
+
+_NLQ_CLAUSE = "ran outside market hours — no live option quotes"
+
+
+def _rejected(symbol: str, reason: str):
+    from app.schemas import RejectedCandidate
+    return RejectedCandidate(symbol=symbol, reason=reason)
+
+
+@pytest.mark.asyncio
+async def test_execute_scan_core_counts_no_live_quote_names():
+    """Only a name whose EVERY contract was rejected for no_live_quote counts;
+    a mixed contract rejection, another reason or an exception does not."""
+    from contextlib import ExitStack
+    from unittest.mock import patch, AsyncMock
+    import app.routers.scan as scan_module
+    from tests.conftest import _TestSession
+
+    outcomes = {
+        "AAA": _rejected("AAA", "contracts rejected: no_live_quote(12)"),
+        "BBB": _rejected("BBB", "contracts rejected: no_live_quote(3)"),
+        "CCC": _rejected("CCC", "contracts rejected: no_live_quote(4), spread_too_wide(2)"),
+        "DDD": _rejected("DDD", "contracts rejected: no_live_quote(5); best contract score 40 < caution 45"),
+        "EEE": _rejected("EEE", "Pre-screen: score 20 rejected"),
+        "FFF": RuntimeError("boom"),
+    }
+
+    async def _fake_process(symbol, *_a, **_kw):
+        out = outcomes[symbol]
+        if isinstance(out, Exception):
+            raise out
+        return out
+
+    with ExitStack() as stack:
+        stack.enter_context(patch("app.routers.scan._process_symbol", _fake_process))
+        stack.enter_context(patch("app.routers.scan.get_tradier_creds",
+                                  return_value=("tok", "https://example.invalid")))
+        stack.enter_context(patch("app.routers.scan.fetch_quotes", return_value={}))
+        stack.enter_context(patch("app.services.historical_store.get_bars", AsyncMock(return_value=[])))
+        stack.enter_context(patch("app.routers.scan.get_fundamentals", AsyncMock(return_value=None)))
+        async with _TestSession() as db:
+            req = scan_module.ScanRequest(universe=list(outcomes), direction="Bullish",
+                                          horizon="Swing", overrides={})
+            result = await scan_module._execute_scan_core(req, db, previous_result=None)
+
+    assert len(result.rejected) == 6
+    assert result.noLiveQuoteNames == 2
+    # Still counted under failed_contracts: no new funnel row.
+    assert result.pipeline.failed_contracts == 4
+    # Persisted results from before the field read 0.
+    from app.schemas import ScanResult
+    assert ScanResult(scan_id="x", timestamp="t", candidates=[], rejected=[]).noLiveQuoteNames == 0
+
+
+def test_ran_without_live_quotes_rule():
+    from app.services.scan_schedule_scheduler import _ran_without_live_quotes
+    assert _ran_without_live_quotes(0, 3, 3) is True
+    assert _ran_without_live_quotes(0, 3, 2) is False   # one name failed for another reason
+    assert _ran_without_live_quotes(1, 3, 3) is False   # a candidate: a live quote existed
+    assert _ran_without_live_quotes(0, 0, 0) is False   # nothing rejected
+
+
+async def _run_options_entry(monkeypatch, entry_id, result):
+    """Run one options entry through _run_scheduled_entry with the core stubbed
+    to return `result`; returns the (plain, html) notice bodies sent."""
+    from app.services.scan_schedule_store import scan_schedule_store
+    from app.services import scan_schedule_scheduler as sss
+    from app.services.notifications import dispatch
+    from tests.conftest import _TestSession
+    import app.database as dbmod
+
+    scan_schedule_store.upsert(_entry(id=entry_id))
+    monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+
+    async def _fake_core(req, db, previous_result=None):
+        return result
+
+    sent = []
+
+    async def _fake_send(subject, plain, html_body):
+        sent.append((plain, html_body))
+
+    monkeypatch.setattr("app.routers.scan._execute_scan_core", _fake_core)
+    monkeypatch.setattr(dispatch, "notify_enabled_channels", _fake_send)
+    try:
+        await sss._run_scheduled_entry(entry_id)
+    finally:
+        scan_schedule_store.delete(entry_id)
+    assert len(sent) == 1
+    return sent[0]
+
+
+def _scan_result(rejected, no_live_quote_names, candidates=()):
+    from app.schemas import ScanResult
+    return ScanResult(scan_id="s1", timestamp="2026-10-09T22:00:00+00:00",
+                      candidates=list(candidates), rejected=rejected,
+                      noLiveQuoteNames=no_live_quote_names)
+
+
+@pytest.mark.asyncio
+async def test_all_no_live_quote_options_run_notice_carries_the_clause(monkeypatch):
+    result = _scan_result([
+        _rejected("AAA", "contracts rejected: no_live_quote(12)"),
+        _rejected("BBB", "contracts rejected: no_live_quote(3)"),
+    ], 2)
+    plain, html_body = await _run_options_entry(monkeypatch, "nlq-all", result)
+    assert plain == f"Scan entry 'Test entry': 0 candidate(s) found — {_NLQ_CLAUSE}"
+    assert html_body.endswith(f"0 candidate(s) found — {_NLQ_CLAUSE}")
+
+
+@pytest.mark.asyncio
+async def test_mixed_options_run_notice_has_no_clause(monkeypatch):
+    result = _scan_result([
+        _rejected("AAA", "contracts rejected: no_live_quote(12)"),
+        _rejected("BBB", "Pre-screen: score 20 rejected"),
+    ], 1)
+    plain, html_body = await _run_options_entry(monkeypatch, "nlq-mixed", result)
+    assert plain == "Scan entry 'Test entry': 0 candidate(s) found"
+    assert _NLQ_CLAUSE not in html_body

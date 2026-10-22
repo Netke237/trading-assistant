@@ -129,8 +129,7 @@ def test_zero_overrides_disable_soft_checks():
     spread = exp["components"]["spread"]
     assert liq["raw_score"] == 100
     assert liq["lost_points"] == 0.0
-    assert "low_volume" not in liq["flags"]
-    assert "low_open_interest" not in liq["flags"]
+    assert "thin_liquidity" not in liq["flags"]
     assert spread["raw_score"] == 100
     assert spread["lost_points"] == 0.0
     assert "spread_elevated" not in spread["flags"]
@@ -224,7 +223,9 @@ def test_multi_blocker_fixture_shows_all_causes():
         iv_rank=85.0,       # iv_rank_too_high (> 70)
         iv_basis="rank",
     )
-    card = validate_contract(c, stock_score=40)  # stock_score_below_threshold (< 55)
+    # stock_score_below_threshold (< 55); the volume floor is 0 (off) by
+    # default, so an explicit 50 keeps volume_too_low among the blockers.
+    card = validate_contract(c, stock_score=40, overrides={"min_volume": 50})
 
     assert card.status == "REJECT"
     assert card.score == 0
@@ -251,13 +252,15 @@ def test_multi_blocker_fixture_shows_all_causes():
 
 
 def test_volume_zero_with_adequate_oi_does_not_invent_volume_blocker():
-    """Tradier off-hours sentinel: volume=0 with open_interest >= 200 does NOT trigger volume_too_low."""
+    """With an explicit volume floor (the default is 0, off), volume=0 with
+    open_interest >= 200 does NOT trigger volume_too_low: a 0 cannot be told
+    apart from "no trades yet this session"."""
     c = _make_contract(
         days_out=35,
         volume=0,
         open_interest=500,  # >= min_open_interest 200
     )
-    card = validate_contract(c, stock_score=70)
+    card = validate_contract(c, stock_score=70, overrides={"min_volume": 50})
     assert "volume_too_low" not in card.reject_reasons
     exp = card.explanation
     assert exp is not None

@@ -1,0 +1,20 @@
+[
+  {
+    "mutation": "M4",
+    "test": "tests/test_contract_validator.py::test_quote_mode_defaults_to_reject",
+    "exit_code": 1,
+    "assertion_failure": true
+  },
+  {
+    "mutation": "M5",
+    "test": "tests/test_contract_validator.py::test_reject_mode_short_circuits_to_exactly_no_live_quote",
+    "exit_code": 1,
+    "assertion_failure": true
+  },
+  {
+    "mutation": "M6",
+    "test": "tests/test_contract_validator.py::test_label_mode_caps_pass_at_caution_and_flags_the_card",
+    "exit_code": 1,
+    "assertion_failure": true
+  }
+]

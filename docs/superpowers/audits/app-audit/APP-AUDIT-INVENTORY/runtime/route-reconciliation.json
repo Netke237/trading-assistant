@@ -1,0 +1,5122 @@
+[
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/alerts/default.tsx",
+    "classification": "parallel-slot-fallback",
+    "source": "frontend/app/(frame)/@contextRail/alerts/default.tsx",
+    "url": "/alerts",
+    "owners": {
+      "numeric": "G",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-n-of-m"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-regime-condition"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/analysis/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/analysis/page.tsx",
+    "url": "/analysis",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:back"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/chart/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/chart/page.tsx",
+    "url": "/chart",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-params"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:structure-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:alert-builder"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+    "url": "/dashboard",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "soft:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1279"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1280"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+    "classification": "parallel-slot-fallback",
+    "source": "frontend/app/(frame)/@contextRail/default.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/alerts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/analysis"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/calendar"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/journal"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/portfolio"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/settings"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/strategy-watch"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/validation"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/watchlist"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:theme"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:scan"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:brokers"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:risk"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:notifications"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:data"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:tuning"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "soft:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1279"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1280"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-n-of-m"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-regime-condition"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-loading-visible"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-params"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:structure-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:alert-builder"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/strategy-watch"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+    "url": "/portfolio",
+    "owners": {
+      "numeric": "F",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/screener/default.tsx",
+    "classification": "parallel-slot-fallback",
+    "source": "frontend/app/(frame)/@contextRail/screener/default.tsx",
+    "url": "/screener",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-1-regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-2-universe"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-3-direction"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-prebreakout"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-stocks"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-vol-events"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-backtest"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-position-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:chain-open-diagnostic"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:contract-explanation"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:reload-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:two-fixture-rows"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected-row"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-alert"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-intraday"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:4"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/screener"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+    "classification": "parallel-slot-fallback",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+    "url": "/screener/step-7-trade-card",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+    "url": "/screener/step-7-trade-card",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+    "classification": "parallel-slot-page",
+    "source": "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+    "url": "/watchlist",
+    "owners": {
+      "numeric": "G",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "rail-DOM-evidence-available",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      }
+    ],
+    "outstanding_check": "Slot contribution identified in slot-history.json where distinguishable; identical QuickLook fallbacks cannot be distinguished by DOM alone. Task3 reconciles source binding, retained origins and production behavior."
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/alerts/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/alerts/page.tsx",
+    "url": "/alerts",
+    "owners": {
+      "numeric": "G",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-n-of-m"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-regime-condition"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/analysis/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/analysis/page.tsx",
+    "url": "/analysis",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:back"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/calendar/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/calendar/page.tsx",
+    "url": "/calendar",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/chart/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/chart/page.tsx",
+    "url": "/chart",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-params"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:structure-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:alert-builder"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/dashboard/page.tsx",
+    "url": "/dashboard",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "soft:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1279"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1280"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/error.tsx",
+    "classification": "error-boundary",
+    "source": "frontend/app/(frame)/error.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed-error-and-reset",
+    "evidence": [
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-reset"
+      }
+    ],
+    "outstanding_check": "Fixture-induced wrong-shape render exception; never an application defect"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/journal/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/journal/page.tsx",
+    "url": "/journal",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/journal"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-loading-visible"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/layout.tsx",
+    "classification": "layout",
+    "source": "frontend/app/(frame)/layout.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "inherited-composition-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/alerts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/analysis"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/calendar"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/journal"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/portfolio"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-1-regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-2-universe"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-3-direction"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-prebreakout"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-stocks"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-vol-events"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-backtest"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-position-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/settings"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/strategy-watch"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/validation"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/watchlist"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/__test-crash"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart/standalone"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dev/components"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:theme"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:scan"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:brokers"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:risk"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:notifications"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:data"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:tuning"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "soft:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "boundary:notfound"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1279"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1280"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-n-of-m"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-regime-condition"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-loading-visible"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:chain-open-diagnostic"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:contract-explanation"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:reload-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-params"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:structure-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:alert-builder"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:two-fixture-rows"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected-row"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-alert"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-intraday"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:4"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/screener"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/strategy-watch"
+      }
+    ],
+    "outstanding_check": "Child DOM is runtime evidence for inherited layout; not proof every imported component renders"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/loading.tsx",
+    "classification": "loading-boundary",
+    "source": "frontend/app/(frame)/loading.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-loading-visible"
+      }
+    ],
+    "outstanding_check": "Observed fallback under isolated delayed frontend RSC request"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/portfolio/page.tsx",
+    "url": "/portfolio",
+    "owners": {
+      "numeric": "F",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/layout.tsx",
+    "classification": "layout",
+    "source": "frontend/app/(frame)/screener/layout.tsx",
+    "url": "/screener",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "inherited-composition-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-1-regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-2-universe"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-3-direction"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-prebreakout"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-stocks"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-vol-events"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-backtest"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-position-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:chain-open-diagnostic"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:contract-explanation"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:reload-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:two-fixture-rows"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected-row"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-alert"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-intraday"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:4"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/screener"
+      }
+    ],
+    "outstanding_check": "Child DOM is runtime evidence for inherited layout; not proof every imported component renders"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/page.tsx",
+    "classification": "redirect",
+    "source": "frontend/app/(frame)/screener/page.tsx",
+    "url": "/screener",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "url": "/screener/step-1-regime",
+    "owners": {
+      "numeric": "B",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/screener"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+    "url": "/screener/step-2-universe",
+    "owners": {
+      "numeric": "B",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-proceed"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "url": "/screener/step-3-direction",
+    "owners": {
+      "numeric": "B",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+    "url": "/screener/step-4-prebreakout",
+    "owners": {
+      "numeric": "E",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:two-fixture-rows"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected-row"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-alert"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-intraday"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:4"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+    "url": "/screener/step-4-ranking",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "url": "/screener/step-4-stocks",
+    "owners": {
+      "numeric": "D",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-stocks"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+    "classification": "redirect",
+    "source": "frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+    "url": "/screener/step-5-strategy",
+    "owners": {
+      "numeric": "D",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+    "url": "/screener/step-5-vol-events",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-vol-events"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+    "url": "/screener/step-6-backtest",
+    "owners": {
+      "numeric": "D",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-backtest"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+    "url": "/screener/step-6-contracts",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:chain-open-diagnostic"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:contract-explanation"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:reload-populated"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+    "url": "/screener/step-7-position-card",
+    "owners": {
+      "numeric": "D",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-position-card"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "url": "/screener/step-7-trade-card",
+    "owners": {
+      "numeric": "C",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/settings/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/settings/page.tsx",
+    "url": "/settings",
+    "owners": {
+      "numeric": "B",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/settings"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:theme"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:scan"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:brokers"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:risk"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:notifications"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:data"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:tuning"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+    "url": "/strategy-watch",
+    "owners": {
+      "numeric": "G",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/strategy-watch"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/validation/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/validation/page.tsx",
+    "url": "/validation",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/validation"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/validation"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/(frame)/watchlist/page.tsx",
+    "url": "/watchlist",
+    "owners": {
+      "numeric": "G",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/__test-crash/page.tsx",
+    "classification": "private-folder-source",
+    "source": "frontend/app/__test-crash/page.tsx",
+    "url": "/__test-crash",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/__test-crash"
+      }
+    ],
+    "outstanding_check": "Private source not routable in dev; production exclusion also source-backed, not production-runtime tested"
+  },
+  {
+    "route_entry_id": "route:frontend/app/chart/standalone/layout.tsx",
+    "classification": "layout",
+    "source": "frontend/app/chart/standalone/layout.tsx",
+    "url": "/chart/standalone",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "inherited-composition-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart/standalone"
+      }
+    ],
+    "outstanding_check": "Child DOM is runtime evidence for inherited layout; not proof every imported component renders"
+  },
+  {
+    "route_entry_id": "route:frontend/app/chart/standalone/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/chart/standalone/page.tsx",
+    "url": "/chart/standalone",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart/standalone"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/dev/components/page.tsx",
+    "classification": "url-page",
+    "source": "frontend/app/dev/components/page.tsx",
+    "url": "/dev/components",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dev/components"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  },
+  {
+    "route_entry_id": "route:frontend/app/layout.tsx",
+    "classification": "layout",
+    "source": "frontend/app/layout.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "inherited-composition-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/alerts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/analysis"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/calendar"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/journal"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/portfolio"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-1-regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-2-universe"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-3-direction"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-prebreakout"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-4-stocks"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-5-vol-events"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-backtest"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-position-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/screener/step-7-trade-card"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/settings"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/strategy-watch"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/validation"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/watchlist"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/__test-crash"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/chart/standalone"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/dev/components"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:theme"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:scan"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:strategy"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:brokers"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:risk"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:regime"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:notifications"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:data"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "settings:tuning"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "soft:/dashboard"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "boundary:notfound"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1279"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:default:1280"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1199"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "min-width:trade-card:1200"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/screener/step-5-strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/dashboard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/journal"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/strategy-watch"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/validation"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-1-regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-2-universe"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-3-direction"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-4-ranking"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "semantic:/screener/step-6-contracts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:options"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:stocks"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:button:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:next:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "mode:keyboard-back:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:prebreakout"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:prebreakout:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:pullback"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:pullback:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:submode:fib"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "setup:fib:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:theme"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:scan"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:strategy"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:brokers"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:risk"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:regime"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:notifications"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:data"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "settings:section:tuning"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-dialog"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-cancel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "shell:reject-proceed"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:two-rows"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "journal:edit-form"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:rules-tab"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-n-of-m"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "alerts:builder-regime-condition"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-error"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-reset"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "boundary:frame-loading-visible"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:dashboard-hard"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/portfolio"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/calendar"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/watchlist"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/settings"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/alerts"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/analysis"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:soft:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:hard:/chart"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:back"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "slots:forward"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-attempt-1/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:chain-open-diagnostic"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:contract-explanation"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:reload-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "options:trade-card-fixture"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-populated"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:position-next-candidate"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:How this page works"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "stocks:disclosure:Auto-trade execution"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tuning:expanded-two-folds"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:canvas-click-crosshair"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-added"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:indicator-params"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:structure-panel"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "chart:alert-builder"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "tooltip:css-hover"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:two-fixture-rows"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected-row"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:selected:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-alert"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "setup:composite-intraday"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:filter-breakdown"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:0"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:1"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:2"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:3"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:4"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:fixture:details:5"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "report:legacy-empty"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1199"
+      },
+      {
+        "artifact": "followup-evidence/observations.json",
+        "observation_id": "min-width:position-card:1200"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/screener"
+      },
+      {
+        "artifact": "primary-link-evidence/observations.json",
+        "observation_id": "primary-link:/strategy-watch"
+      }
+    ],
+    "outstanding_check": "Child DOM is runtime evidence for inherited layout; not proof every imported component renders"
+  },
+  {
+    "route_entry_id": "route:frontend/app/not-found.tsx",
+    "classification": "not-found-boundary",
+    "source": "frontend/app/not-found.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "boundary:notfound"
+      },
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "hard:/__test-crash"
+      }
+    ],
+    "outstanding_check": "Unknown and private routes tested in development; production server not launched"
+  },
+  {
+    "route_entry_id": "route:frontend/app/page.tsx",
+    "classification": "redirect",
+    "source": "frontend/app/page.tsx",
+    "url": "/",
+    "owners": {
+      "numeric": "H",
+      "persistence": "I",
+      "presentation": "J",
+      "navigation": "A"
+    },
+    "disposition": "runtime-observed",
+    "evidence": [
+      {
+        "artifact": "evidence/observations.json",
+        "observation_id": "route:/"
+      },
+      {
+        "artifact": "interactive-attempt-1/observations.json",
+        "observation_id": "redirect:asserted:/"
+      },
+      {
+        "artifact": "interactive-evidence/observations.json",
+        "observation_id": "redirect:asserted:/"
+      }
+    ],
+    "outstanding_check": "Domain state matrices/fixture adequacy remain with B-I and presentation J; no arithmetic certification"
+  }
+]

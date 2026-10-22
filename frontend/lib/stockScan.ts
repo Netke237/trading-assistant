@@ -4,10 +4,15 @@ import type { Direction } from '@/types/domain';
 import { stockExecutionBlock } from './stockExecutionSession';
 import { api, API_BASE_URL } from '@/lib/api';
 import { useScanStore, toLocalWallClock } from '@/lib/scanStore';
-import { useScanParamsStore } from '@/lib/scanParamsStore';
+import { useScanParamsStore, type ScanParams } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { StrategyScanValidationError } from './strategyScanValidation';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { useRiskStore } from '@/lib/riskStore';
+import { useUniverseStore } from '@/lib/universeStore';
+import { useWatchlistStore } from './watchlistStore';
+import { resolveUniverseSymbols, universeEmptyReason } from '@/lib/universeResolution';
 import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
 
 /**
@@ -271,24 +276,10 @@ function refreshLastStockScanMeta(token: number): void {
   } catch { /* not callable (a test double, a partially-mocked api) — ignore */ }
 }
 
-/** Optional per-run param overrides (the page passes its locally-edited params). */
-export interface StockScanParamOverrides {
-  pullbackTolerancePct?: number;
-  pullbackEmaPeriod?: number;
-  pullbackTrendEma?: number;
-  pullbackMaType?: 'EMA' | 'SMA';
-  maCrossoverFast?: number;
-  maCrossoverSlow?: number;
-  maCrossoverLookback?: number;
-  breakoutVolumeMult?: number;
-  rsiPeriod?: number;
-  rsiOversold?: number;
-  rsiTrendSma?: number;
-  requireChoppyRegime?: boolean;
-  btMinTrades?: number;
-  btMinWinRate?: number;
-  stockShortlistMax?: number;
-}
+/** Optional per-run param overrides (the page passes its locally-edited
+ *  params). A `null` strategy field means "follow the backend profile" and
+ *  wins over a saved override, as the panel shows it (STOCKS-HORIZON-T1 H5). */
+export type StockScanParamOverrides = Partial<ScanParams>;
 
 /**
  * Run a stock scan with `strategy`, reading universe/direction/horizon from
@@ -346,12 +337,27 @@ export async function runStockScanWithContinuation(
     // The user's sizing from Settings → Risk, read now (P3a). Throws
     // ScanSizingError on a 0% max loss; the catch shows its message.
     const sizing = scanSizingFromRisk();
+    const uStore = useUniverseStore.getState();
+    const watch = useWatchlistStore.getState();
+    const activePick = context?.universe ?? uStore.pick;
+    const universeSymbols = resolveUniverseSymbols(activePick, uStore.customRaw, watch.added);
+
+    if (universeSymbols.length === 0) {
+      building = false;
+      const reason = universeEmptyReason(activePick);
+      store.setStockScanError(reason);
+      store.setScanState('FAILED');
+      return { kind: 'failure', reason, token };
+    }
+
     const requestBody = buildStockScanRequestBody({
-      universe: context?.universe ? [context.universe] : ['SP500'],
+      universe: universeSymbols,
       direction: context?.direction ?? 'Bullish',
       horizon: (context?.horizon ?? 'Swing (5–15d)').split(' ')[0],
       strategy,
       params: p,
+      // STOCKS-HORIZON-T1 H5: the backend profile the strategy fields follow.
+      paramsHorizon: context ? tunedParamsHorizon(context.horizonPreset, context.holdMax) : null,
       requireReversal,
       scanOverrides: rawOverrides,
       confidenceGate,
@@ -361,6 +367,11 @@ export async function runStockScanWithContinuation(
       // veto window is max(reject_days, hold_max_days).
       holdMinDays: context?.holdMin,
       holdMaxDays: context?.holdMax,
+      minPriceRaw: uStore.minPriceRaw,
+      maxPriceRaw: uStore.maxPriceRaw,
+      minCapRaw: uStore.minCapRaw,
+      maxCapRaw: uStore.maxCapRaw,
+      capUnit: uStore.capUnit,
     });
     building = false;
 
@@ -446,17 +457,22 @@ export async function runStockScanWithContinuation(
     // and then writes storage, so a QuotaExceededError out of the first write
     // would skip the second — and the one that must not be skipped is FAILED,
     // which is what re-enables the Run button.
-    const settingsUnreadable = building && !(err instanceof ScanSizingError);
+    const isValidationError = err instanceof StrategyScanValidationError;
+    const settingsUnreadable = building && !(err instanceof ScanSizingError) && !isValidationError;
     if (settingsUnreadable) console.error('runStockScan: building the stock-scan request failed', err);
     try {
       store.setStockScanError(
-        settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
+        isValidationError
+          ? err.message
+          : settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest),
       );
     } catch { /* see above — the null return is the signal that survives */ }
     try {
       if (current()) store.setScanState('FAILED');
     } catch { /* ditto */ }
-    const reason = settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest);
+    const reason = isValidationError
+      ? err.message
+      : settingsUnreadable ? STOCK_SCAN_SETTINGS_INVALID : stockScanFailureReason(err, reachedRequest);
     store.setStockScanFeedback(token, { error: `Scan failed — ${reason}`, notice: null });
     return { kind: 'failure', token, reason };
   } finally {

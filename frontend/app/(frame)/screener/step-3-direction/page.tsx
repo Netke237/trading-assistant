@@ -13,11 +13,12 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Title, Text, Data } from '@/components/primitives';
 import type { Direction } from '@/types/domain';
 import { useScanStore } from '@/lib/scanStore';
+import { useUniverseStore } from '@/lib/universeStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
-import { api } from '@/lib/api';
 import { alignmentVerdict, descriptorFromState, type RegimeDescriptor } from '@/lib/regimeAlignment';
+import { applyRegimeResponse, beginRegimeFetch, fetchGateRegime } from '@/lib/regimeFetchOrder';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
-import { PipelineInspector } from '@/components/organisms/PipelineInspector';
+import { SavedScanReportInspector } from '@/components/organisms/SavedScanReportInspector';
 import { scanLogTotals } from './scanLogTotals';
 import { SearchProfileBar } from '@/components/organisms/SearchProfileBar';
 import styles from '../screener.module.css';
@@ -47,6 +48,7 @@ interface ParamDef {
   redundant?: true;
   deprecated?: true;
   visibleFor?: string[];   // if set, only show when scanOverrides.trend_method (or default) is in this list
+  scale?: number;          // scale factor between stored representation and UI representation (e.g. 100 for percentage fraction)
 }
 
 const PARAM_DEFS: ParamDef[] = [
@@ -160,10 +162,10 @@ const PARAM_DEFS: ParamDef[] = [
     hint: 'Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)' },
   { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Max spread as a fraction of mid price. ↑ Higher → illiquid contracts included (more, but costly) · ↓ Lower → tight spread required (fewer, cheaper to trade)' },
-  { key: 'min_volume',             label: 'Min option volume',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
-    hint: 'Minimum daily contracts traded. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (each Preferred floor it misses counts as one), so lower those too.' },
+  { key: 'min_volume',             label: 'Min option volume (0 = off)', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
+    hint: 'Optional hard floor on contracts traded, off (0) by default because volume is scored softly under Preferred Liquidity below. The figure is session-to-date volume, so with a floor set, results change with the time of day. ↑ Higher → better liquidity required (fewer) · ↓ Lower → thin markets allowed (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too.' },
   { key: 'min_open_interest',      label: 'Min open interest',      type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 10000, step: 10,
-    hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (each Preferred floor it misses counts as one), so lower those too.' },
+    hint: 'Minimum outstanding contracts. ↑ Higher → requires an established market (fewer) · ↓ Lower → new or low-traffic strikes included (more). Hard floor only: a thinner contract still misses Preferred min volume / open interest below, and can still be rejected for a contract score below the caution band or for too many soft misses (the two Preferred liquidity floors together count as at most one), so lower those too.' },
   { key: 'min_delta',              label: 'Min delta (far OTM)',    type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Rejects contracts too far out of the money. ↑ Higher → keeps contracts closer to the money · ↓ Lower → very cheap deep-OTM contracts included' },
   { key: 'min_dte', label: 'Min DTE', type: 'display', section: 'options', subGroup: 'Contract', unit: 'days',
@@ -173,16 +175,18 @@ const PARAM_DEFS: ParamDef[] = [
   // OPTIONS — Preferred Liquidity. SOFT-RANK counterparts of the three
   // Contract fields above (max_bid_ask_spread_pct / min_volume /
   // min_open_interest): those REJECT a contract outright; these three only
-  // dock its score, but three or more soft misses on ANY axis (these three,
-  // plus delta/DTE/IV) reject it too, via the fixed max_soft_fail_count. A
+  // dock its score, but three or more soft misses on ANY axis reject it too,
+  // via the fixed max_soft_fail_count. Volume and open interest together count
+  // as at most one soft miss (the single thin_liquidity flag); the spread is
+  // its own; delta/DTE/IV add the rest. A
   // contract that only clears the hard Contract floor above but stays under
   // these can still be rejected on liquidity/spread grounds it looks like it
   // passed — move both together for a change to actually admit or exclude
   // more contracts, not just relabel the ones that already would have.
   { key: 'preferred_volume_min', label: 'Preferred min volume', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
-    hint: 'Daily contract volume below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, which rejects outright rather than scoring.' },
+    hint: 'Daily contract volume below this docks the liquidity score and together with Preferred min open interest counts as at most one soft miss. ↑ Higher → more contracts soft-flagged (fewer survive 3 misses) · ↓ Lower → fewer soft-flagged. Default: 200. Independent of the hard "Min option volume" floor above, an optional floor (off, 0, by default) which rejects outright rather than scoring.' },
   { key: 'preferred_oi_min', label: 'Preferred min open interest', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 10000, step: 10,
-    hint: 'Open interest below this docks the liquidity score and counts as one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
+    hint: 'Open interest below this docks the liquidity score and together with Preferred min volume counts as at most one soft miss. ↑ Higher → more contracts soft-flagged · ↓ Lower → fewer soft-flagged. Default: 1000. Independent of the hard "Min open interest" floor above.' },
   { key: 'preferred_spread_pct_max', label: 'Preferred spread ceiling', type: 'number', section: 'options', subGroup: 'Preferred Liquidity', min: 0, max: 1, step: 0.01,
     hint: 'Spread (as a fraction of mid) above this docks the spread score and counts as one soft miss. ↑ Higher → wider spreads tolerated before scoring/rejecting on this axis · ↓ Lower → stricter. Default: 0.08. Independent of the hard "Bid-ask spread ceiling" above, which is far looser (0.20) by default — this preferred ceiling is usually the tighter, binding constraint in practice.' },
   // ALL — Regime Gate
@@ -205,9 +209,9 @@ const PARAM_DEFS: ParamDef[] = [
   // ALL — Reward/Risk
   { key: 'rr_target_r_multiple', label: 'Target (R-multiple)', type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 10, step: 0.25, unit: 'R',
     hint: 'First target distance in multiples of the stock-stop distance, with nearby structure preferred. Default: 2R' },
-  { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+  { key: 'rr_bullish_invalidation_pct', label: 'Bullish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 100, step: 0.5, unit: '%', scale: 100,
     hint: 'Stop-loss distance for bullish trades. ↑ Higher → wider stop (more room, worse R/R) · ↓ Lower → tighter stop (better R/R but more stop-outs). Default: 3%' },
-  { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.005, max: 1.0, step: 0.005, unit: '%',
+  { key: 'rr_bearish_invalidation_pct', label: 'Bearish stop %',         type: 'number', section: 'all', subGroup: 'Reward/Risk', min: 0.5, max: 100, step: 0.5, unit: '%', scale: 100,
     hint: 'Stop-loss distance for bearish trades. ↑ Higher → wider stop · ↓ Lower → tighter stop. Default: 3%' },
 ];
 
@@ -232,10 +236,14 @@ const SECTION_DESCRIPTIONS: Record<string, string> = {
   'options': 'Options contract filtering. Applied after a stock qualifies — determines which expiries and strikes are shown for that stock.',
 };
 
-function formatDefault(val: number | boolean | string | null): string {
+function formatDefault(val: number | boolean | string | null, def?: ParamDef): string {
   if (val === null) return 'N/A';
   if (typeof val === 'boolean') return val ? 'On' : 'Off';
   if (typeof val === 'string') return val;
+  if (typeof val === 'number') {
+    const scaled = def?.scale ? val * def.scale : val;
+    return String(Number(scaled.toFixed(4)));
+  }
   return String(val);
 }
 
@@ -244,6 +252,9 @@ function countActiveOverrides(defs: ParamDef[], overrides: Record<string, number
     if (d.redundant || d.deprecated || d.type === 'display') return false;
     const ov = overrides[d.key];
     if (ov === undefined) return false;
+    if (d.scale && typeof ov === 'number' && typeof defaults[d.key] === 'number') {
+      return Math.abs(ov - (defaults[d.key] as number)) >= 1e-6;
+    }
     return ov !== defaults[d.key];
   }).length;
 }
@@ -270,7 +281,7 @@ function ParamRow({
           <Text size={12} tone="dim">{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <span className={formStyles.redundantNote}>(redundant)</span>
@@ -287,7 +298,7 @@ function ParamRow({
           <Text size={12} tone="dim">{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal)}</Data>
+          <Data size={11}>{isNa ? 'N/A' : formatDefault(defaultVal, def)}</Data>
           {!isNa && def.unit && <Text size={11} tone="dim">{def.unit}</Text>}
         </div>
         <div className={formStyles.paramsInput}>
@@ -341,7 +352,7 @@ function ParamRow({
           <Text size={12}>{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <div className={formStyles.segmentedTiny}>
@@ -380,7 +391,7 @@ function ParamRow({
           <Text size={12}>{def.label}</Text>
         </div>
         <div className={formStyles.paramsValue}>
-          <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+          <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
         </div>
         <div className={formStyles.paramsInput}>
           <button
@@ -400,9 +411,15 @@ function ParamRow({
   }
 
   // Number input
+  const formatNumberValue = (val: number | undefined): string => {
+    if (val === undefined) return '';
+    const scaled = def.scale ? val * def.scale : val;
+    return String(Number(scaled.toFixed(4)));
+  };
+
   const inputValue = currentOverride !== undefined
-    ? String(currentOverride)
-    : String(defaultVal);
+    ? (typeof currentOverride === 'number' ? formatNumberValue(currentOverride) : String(currentOverride))
+    : (typeof defaultVal === 'number' ? formatNumberValue(defaultVal) : String(defaultVal));
 
   return (
     <div className={formStyles.paramsRow} data-param-key={def.key}>
@@ -410,7 +427,7 @@ function ParamRow({
         <Text size={12}>{def.label}</Text>
       </div>
       <div className={formStyles.paramsValue}>
-        <Data size={11} tone="dim">{formatDefault(defaultVal)}</Data>
+        <Data size={11} tone="dim">{formatDefault(defaultVal, def)}</Data>
       </div>
       <div className={formStyles.paramsInput}>
         <input
@@ -423,25 +440,62 @@ function ParamRow({
           aria-label={def.label}
           onChange={(e) => {
             const raw = e.target.value;
-            if (raw === '' || raw === String(defaultVal)) {
+            if (raw === '') {
               const next = { ...scanOverrides };
               delete next[def.key];
               useScanStore.getState().setScanOverrides(next);
             } else {
               const num = Number(raw);
               if (!Number.isNaN(num)) {
-                useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
+                if (def.scale) {
+                  const storedVal = Number((num / def.scale).toFixed(6));
+                  const isDefault = typeof defaultVal === 'number' && Math.abs(storedVal - defaultVal) < 1e-6;
+                  if (isDefault) {
+                    const next = { ...scanOverrides };
+                    delete next[def.key];
+                    useScanStore.getState().setScanOverrides(next);
+                  } else {
+                    useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: storedVal });
+                  }
+                } else {
+                  if (raw === String(defaultVal)) {
+                    const next = { ...scanOverrides };
+                    delete next[def.key];
+                    useScanStore.getState().setScanOverrides(next);
+                  } else {
+                    useScanStore.getState().setScanOverrides({ ...scanOverrides, [def.key]: num });
+                  }
+                }
               }
             }
           }}
           onBlur={() => {
             const current = useScanStore.getState().scanOverrides[def.key];
             if (typeof current !== 'number') return;
-            let clamped = current;
-            if (def.min !== undefined) clamped = Math.max(clamped, def.min);
-            if (def.max !== undefined) clamped = Math.min(clamped, def.max);
-            if (clamped !== current) {
-              useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
+            if (def.scale) {
+              const minStored = def.min !== undefined ? def.min / def.scale : undefined;
+              const maxStored = def.max !== undefined ? def.max / def.scale : undefined;
+              let clamped = current;
+              if (minStored !== undefined) clamped = Math.max(clamped, minStored);
+              if (maxStored !== undefined) clamped = Math.min(clamped, maxStored);
+              clamped = Number(clamped.toFixed(6));
+              if (clamped !== current) {
+                const isDefault = typeof defaultVal === 'number' && Math.abs(clamped - defaultVal) < 1e-6;
+                const next = { ...useScanStore.getState().scanOverrides };
+                if (isDefault) {
+                  delete next[def.key];
+                } else {
+                  next[def.key] = clamped;
+                }
+                useScanStore.getState().setScanOverrides(next);
+              }
+            } else {
+              let clamped = current;
+              if (def.min !== undefined) clamped = Math.max(clamped, def.min);
+              if (def.max !== undefined) clamped = Math.min(clamped, def.max);
+              if (clamped !== current) {
+                useScanStore.getState().setScanOverrides({ ...useScanStore.getState().scanOverrides, [def.key]: clamped });
+              }
             }
           }}
         />
@@ -620,13 +674,15 @@ export default function Step3Page() {
   const descriptorRef = useRef<RegimeDescriptor>('Choppy');
   const regimeLoadedRef = useRef(false);
 
+  // Same request and the same ordering as Steps 1 and 2: an older answer
+  // never replaces a newer one that already landed on the shared gate, and
+  // this page keeps the descriptor only of a response that was applied.
   useEffect(() => {
-    api.getRegime().then((r) => {
-      useScanStore.getState().setRegime(r.overall);
+    const ticket = beginRegimeFetch();
+    fetchGateRegime().then((r) => {
+      if (!applyRegimeResponse(ticket, r)) return;
       descriptorRef.current = descriptorFromState(r.omm?.state ?? '');
       regimeLoadedRef.current = true;
-      const dir = useScanStore.getState().context?.direction ?? 'Bullish';
-      useScanStore.getState().setCombinedRegime(alignmentVerdict(dir, descriptorRef.current));
     }).catch(() => {});
   }, []);
 
@@ -639,7 +695,7 @@ export default function Step3Page() {
     // resolves Custom dynamically and passes every other key through unchanged.
     const scoringHz = presetByKey(resolveParamsHorizon(newHz, newMax)).scoringHorizon;
     setContext({
-      universe:      context?.universe ?? 'SP500',
+      universe:      context?.universe ?? useUniverseStore.getState().pick ?? 'SP500',
       direction:     newDir,
       horizon:       horizonDisplayString(scoringHz, newMin, newMax),
       horizonPreset: newHz,
@@ -927,12 +983,12 @@ export default function Step3Page() {
         )}
       </div>
 
-      {screenerMode !== 'stocks' && (totalScanned > 0 || rejectedLog.length > 0) && (
+      {(
         <div className={formStyles.logSection}>
           <div className={formStyles.logHeader}>
-            <Text size={11} tone="dim" weight={500}>SCAN LOG</Text>
+            <Text size={11} tone="dim" weight={500}>SCAN LOG · CURRENT TABLE COUNTS</Text>
             <div className={formStyles.logStats}>
-              {totalScanned > 0 && (
+              {screenerMode === 'options' && totalScanned > 0 && (
                 <>
                   <span className={formStyles.logStat}>
                     <Text size={11} tone="dim">Scanned</Text>
@@ -962,15 +1018,7 @@ export default function Step3Page() {
               )}
             </div>
           </div>
-          <PipelineInspector
-            isDrawer={false}
-            isOpen={true}
-            pipeline={shownResult?.pipeline}
-            rejected={rejectedLog}
-            survivors={shownResult?.candidates?.map((c) => c.symbol) ?? []}
-            contractRules={shownResult?.contract_rules}
-            dteWindow={shownResult?.dte_window}
-          />
+          <SavedScanReportInspector category={screenerMode} tableRunId={screenerMode === 'options' ? shownResult?.report_run_id : undefined} />
         </div>
       )}
 

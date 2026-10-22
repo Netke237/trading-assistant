@@ -1,5 +1,7 @@
+import type { BacktestArtifactReference } from './backtest';
 import type { Status } from '@/lib/status';
 import type { SentimentData, FundamentalsOut } from '@/types/domain';
+import type { StockExplanation } from './domain';
 
 export interface StrategySignalData {
   strategy: string; entry_price: number; stop_price: number;
@@ -17,8 +19,14 @@ export interface BacktestData {
   n_trades: number; win_rate: number; total_return_pct: number;
   max_drawdown_pct: number; expectancy: number; sharpe: number;
   confidence: number | null; passes_gate: boolean; summary_text: string;
+  /** STOCKS-T1-FOLLOWUPS F2: trades the backtest closed on time (held the
+   *  hold, neither stop nor target), and the hold it ran with. n_time_exits
+   *  null or absent = unknown (a result saved before the field); a number with
+   *  hold_max_days null = no hold (Intraday horizon or an intraday strategy). */
+  n_time_exits?: number | null;
+  hold_max_days?: number | null;
 }
-export interface PositionCardData {
+export interface PositionCardData extends BacktestArtifactReference {
   symbol: string; company: string; price: number; direction: string;
   strategy: StrategySignalData; backtest: BacktestData;
   stock_score: number; stock_status: Status;
@@ -36,6 +44,12 @@ export interface PositionCardData {
   earnings_veto?: boolean;
   sentiment?: SentimentData | null;
   fundamentals?: FundamentalsOut | null;
+  /** STOCK-PRES-P1: the scorer's evidence for stock_score — exactly the
+   *  backend StockScoreCard.explanation. Its `status` is the SCORER's verdict
+   *  before the scan's later caps; the verdict to show is `stock_status`.
+   *  Absent on results persisted before P1; null if the backend could not
+   *  validate it. */
+  stock_explanation?: StockExplanation | null;
 }
 export interface StockPipeline {
   scanned:         number;
@@ -56,6 +70,9 @@ export interface StockPipeline {
 }
 
 export interface StockScanResult {
+  report_run_id?: string | null;
+  report_generation?: number | null;
+  report_persistence?: 'saved' | 'unavailable' | null;
   scan_id: string; timestamp: string;
   candidates: PositionCardData[]; rejected: Array<{symbol: string; reason: string}>;
   pipeline?: StockPipeline;
@@ -65,6 +82,32 @@ export interface StockScanResult {
   /** STOCKS-HORIZON-P0B B6: the earnings veto window this scan applied,
    *  max(reject_days, hold_max_days). Absent on a result from before B6. */
   veto_days?: number | null;
+}
+
+/** STOCK-PRES-P1: one weighted input to the Pre-Breakout `confidence`. */
+export interface PreBreakoutConfidenceComponent { score: number; weight: number; contribution: number; }
+/** STOCK-PRES-P1: the evidence behind a Pre-Breakout row's `confidence`
+ *  (backend `breakout_setup_signal`); no formula change. */
+export interface PreBreakoutConfidenceBreakdown {
+  fib_used: boolean;
+  weights: Record<string, number>;
+  components: Record<string, PreBreakoutConfidenceComponent>; // atr, vol, proximity (+ fib)
+  unrounded: number;
+  confidence: number;
+}
+export interface FibSwing { low: number | null; high: number | null; }
+export interface PreBreakoutResultRow {
+  symbol: string; confidence: number; direction: string; metrics: Record<string, number>;
+  /** STOCK-PRES-P1. Absent on rows persisted before P1. */
+  confidence_breakdown?: PreBreakoutConfidenceBreakdown | null;
+  /** Swing low/high the Fib levels were measured from; null when Fib was not used. */
+  fib_swing?: FibSwing | null;
+}
+export interface FibPullbackResultRow {
+  symbol: string; direction: string; fib_level_hit: string; fib_dist_pct: number | null;
+  at_level: boolean; confidence: number;
+  /** STOCK-PRES-P1. Absent on rows persisted before P1. */
+  fib_swing?: FibSwing | null;
 }
 
 export interface StockFirstPassageTarget {

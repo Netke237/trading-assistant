@@ -142,6 +142,92 @@ a green "No drift".
   scoping boundary to that commit — rounds before it stop counting. Don't do
   any of the three to a piece whose rounds are still running.
 
+### Explicitly authorized additional plan stages
+
+The additive `plan_stages` field supports another plan stage only when an
+existing recorded decision explicitly authorizes it. Targets without this field
+keep the existing behavior, including singular `plan_stage` validation, warnings,
+subject inference and accepted holes above. Do not add both fields: plural
+metadata never falls back to the singular path when invalid.
+
+`plan_stages` is a nonempty ordered array of objects. Each `rounds` is the
+number actually run in that stage: an integer 1–3, excluding booleans, floats
+and numeric strings. The cumulative sum defines continuous endpoints and must
+not exceed valid `audit_rounds`. Do not record zero-round future stages or edit
+old counts to buy headroom. For example, stages of three and two rounds cover
+plan rounds 1–3 and 4–5; the authorized second interval remains 4–6.
+
+Every stage after the first needs `opened_by`, the unique ID of a root
+`decisions[]` entry naming the target as a whole token. Its answer `a` must
+contain exactly one affirmative, unnegated, bounded declaration in this order:
+`open`/`opens`/`opened`, `new plan stage`, `plan rounds START-END`. Hyphen and
+en dash ranges are accepted, case-insensitively. START must be the preceding
+cumulative endpoint plus one; END must be START+2. Canonical future wording is
+`Open one new plan stage: plan rounds START-END`, with the target named in the
+decision. A question in `q`, conditional or interrogative wording, mere target
+mention, duplicate ID, negated declaration or wrong range cannot authorize it.
+This recognizer checks recorded authorization; it cannot grant permission.
+
+All earlier stages must close with `closed_by: "clean"` or the verified
+`opened_by` decision of the immediately following stage. Clean closure requires
+positive canonical branch-subject proof `plan round CONTINUOUS-END clean`,
+using the cumulative endpoint, with no subject-wide clean negation. Contradictory
+negative clean evidence at that endpoint invalidates closure. A local stage
+number or extra clean boolean is insufficient. The final stage may remain open
+by omitting `closed_by`, or close clean; an unpaired decision acknowledgment
+cannot close it. An open final stage trips the cap at its third non-clean round,
+even if overall `audit_clean` is true.
+
+After every plan stage closes, code starts after their sum. For six plan rounds,
+`round 7 (code round 1)` and `code round 1` identify code round 1; untagged
+continuous `round 7` also subtracts six. Existing stage-word and paired-number
+inference still applies. Code round 3 requires overall `audit_clean` to be the
+JSON value `true`; code round 4 is always drift in the plural path. While the
+final plan stage is open, explicit code evidence and untagged continuous rounds
+beyond its endpoint are invalid. Explicit plan rounds outside the recorded
+intervals are invalid, rather than being reclassified as code.
+
+Malformed plural metadata, missing authorization, invalid closure and cap
+breaches produce visible drift (CLI exit 1), never a convenient legacy fallback.
+Undercount, target ownership, introduction boundary and base resolution remain
+unchanged. This validation runs when the resolved target has branch round
+evidence; no evidence does not certify metadata, and unavailable git/base still
+reports `COULD NOT RUN`. It does not certify independent reviewer verdicts or
+repair the accepted identity/scoping holes above.
+
+#### Historical decision and normalized example
+
+The following is the immutable recorded TRADIER opening decision, followed by a
+normalized **example** for six actual plan rounds whose final subject is
+`docs(state): TRADIER-GOVERNOR plan round 6 clean`. It illustrates the schema;
+it does not change the historical target, decision, audit status or shipping
+status. Preserve the original decision text and recorded rounds.
+
+```json
+{
+  "id": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10",
+  "q": "TRADIER-GOVERNOR's plan stage hit its 3-round cap without a clean round (R3-G1: a deadline-bound fire-path regime fetch can miss its rate-limit slot during a stock scan, fall back to yfinance and size the order differently). Q1 open a new plan stage for the overdraft redesign? Q2 if not, shrink to bulk traffic only? Q3 accept a short burst above the limit while the overdraft is used (at most 15 extra requests, then repaid)?",
+  "a": "Kenneth, 2026-10-10 (chat): 'i agree' to the coordinator's recommendation -- Q1 YES: open ONE new plan stage (up to 3 rounds, plan rounds 4-6 overall) for the overdraft redesign: deadline-bound auto-trade fire-path Tradier calls (regime fetch incl. intraday, earnings veto, market-open price check) never wait and never fail on the limiter -- they take a slot if free, otherwise go anyway and book an overdraft (bucket negative, floored at -capacity 15); bulk traffic (scans, prewarm, monitors, probes) waits until it is repaid, so the average stays 120/min; the stock scan's earnings lookup waits for its slot BEFORE its 5 s deadline starts. Q3 YES: a burst of at most 15 extra requests is accepted. Q2 not needed. No counter reset: plan rounds 1-3 stay recorded; the scan-slowdown merge question stays pre-accepted ('ok Go ahead', 2026-10-10). Not a merge approval.",
+  "by": "Kenneth 2026-10-10 (chat)"
+}
+```
+
+```json
+{
+  "id": "TRADIER-GOVERNOR",
+  "audit_rounds": 6,
+  "audit_clean": false,
+  "plan_stages": [
+    {"rounds": 3, "closed_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10"},
+    {"rounds": 3, "opened_by": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10", "closed_by": "clean"}
+  ]
+}
+```
+
+The clean plan close moves this example to code round zero. It does not assert
+a clean integrated code audit. If only plan rounds 4 and 5 have run, the second
+object instead has `rounds: 2` and omits `closed_by`; keep the total truthful.
+
 ## The trigger
 
 **`.claude/hooks/session-start.sh`**, registered in `.claude/settings.json`. On

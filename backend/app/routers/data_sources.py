@@ -3,11 +3,13 @@ call and return reliable availability. Results cached briefly; the Governor's
 live circuit state can override a probe to 'degraded'."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
 from typing import Literal
 
+import anyio
 import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -35,20 +37,32 @@ class DataSourceStatus(BaseModel):
 
 # ── Probe helpers ───────────────────────────────────────────────────────────
 
+def _probe_admit_timeout() -> float:
+    """The probes' admission budget: their HTTP timeout as a plain float."""
+    return float(_PROBE_TIMEOUT) if isinstance(_PROBE_TIMEOUT, (int, float)) else 2.0
+
+
 def _probe_tradier() -> tuple[str, str | None]:
+    from app.data import market
+    from app.data.governor import ProviderUnavailable
     from app.data.market import get_tradier_creds
     token, base = get_tradier_creds()
     if not token:
         return "unconfigured", "No Tradier token — add one in Settings → Brokers or set TRADIER_API_TOKEN in .env"
     try:
-        resp = httpx.get(
+        # Admitted on the governor's `tradier` bucket within a finite budget
+        # (TRADIER-GOVERNOR D4); not admitted -> the probe is skipped.
+        resp = market._tradier_get(
             f"{base}/v1/markets/clock",
             headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
             timeout=_PROBE_TIMEOUT,
+            admit_timeout=_probe_admit_timeout(),
         )
         if resp.status_code == 200:
             return "connected", None
         return "down", f"Tradier returned HTTP {resp.status_code}"
+    except ProviderUnavailable:
+        return "degraded", "Tradier rate-limit budget busy; probe skipped"
     except Exception as exc:
         return "down", str(exc)
 
@@ -60,6 +74,9 @@ def _probe_tradier_paper() -> tuple[str, str | None]:
     account_id = creds.get("account_id") or os.environ.get("TRADIER_PAPER_ACCOUNT_ID", "").strip()
     if not token or not account_id:
         return "unconfigured", "Add Tradier paper token + account ID in Settings → Brokers"
+    # The sandbox account has its own budget, `tradier_paper` (TRADIER-GOVERNOR D4).
+    if not get_governor().admit_sync("tradier_paper", admit_timeout=_probe_admit_timeout()):
+        return "degraded", "Tradier paper rate-limit budget busy; probe skipped"
     try:
         resp = httpx.get(
             "https://sandbox.tradier.com/v1/markets/clock",
@@ -95,20 +112,33 @@ def _probe_alpaca(slot: str) -> tuple[str, str | None]:
 
 
 def _probe_tiingo() -> tuple[str, str | None]:
+    """Runs in the route's worker thread; the usage ledger (caller "probe")
+    runs on the event loop. An exhausted Tiingo limit reports degraded with
+    that limit in the detail; a refused probe sends nothing."""
+    from app.data import tiingo_budget
     token = os.environ.get("TIINGO_API_TOKEN", "").strip()
     if not token:
         return "unconfigured", "TIINGO_API_TOKEN not set in .env"
-    try:
-        resp = httpx.get(
+
+    async def send():
+        return await asyncio.to_thread(
+            httpx.get,
             "https://api.tiingo.com/api/test/",
             headers={"Authorization": f"Token {token}", "Content-Type": "application/json"},
             timeout=_PROBE_TIMEOUT,
         )
-        if resp.status_code == 200:
-            return "connected", None
-        return "down", f"Tiingo returned HTTP {resp.status_code}"
+
+    try:
+        resp, exhausted = anyio.from_thread.run(tiingo_budget.probe, send)
     except Exception as exc:
         return "down", str(exc)
+    if resp is None:
+        return "degraded", exhausted
+    if resp.status_code != 200:
+        return "down", f"Tiingo returned HTTP {resp.status_code}"
+    if exhausted:
+        return "degraded", exhausted
+    return "connected", None
 
 
 def _probe_ibkr_gateway(port: int) -> tuple[str, str | None]:

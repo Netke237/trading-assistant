@@ -27,6 +27,7 @@ import { usePerformanceStore } from '@/lib/performanceStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { EarningsChart } from '@/components/organisms/EarningsChart';
 import { scanPortfolio } from '@/lib/alertEngine';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 import { api } from '@/lib/api';
 import { RunScanButton } from '@/components/organisms/RunScanButton';
 import { ToastContainer } from '@/components/organisms/ToastContainer';
@@ -145,9 +146,10 @@ export default function DashboardPage() {
 
   const top5 = watchlist.slice(0, 5);
 
-  const deployed = portfolio.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = portfolio.reduce((s, p) => s + p.pnlDollar, 0);
-  const openPnLPct = deployed > 0 ? (openPnL / deployed) * 100 : 0;
+  // Positions without a quote are left out of the totals and their rows show
+  // "—" rather than a $0 that is not a price (NO-LIVE-QUOTE NLQ-1).
+  const { deployed, openPnL, openPnLPct, unquoted } = openTotals(portfolio);
+  const portfolioNote = unquotedNote(unquoted);
 
   return (
     <div className={styles.main}>
@@ -265,15 +267,20 @@ export default function DashboardPage() {
             />
             <Stat label="Positions" value={`${portfolio.length}`} />
           </div>
+          {portfolioNote && <Text size={11} tone="caution">{portfolioNote}</Text>}
           <div className={styles.divider} />
           <div className={styles.positions}>
             {portfolio.slice(0, 3).map((p) => (
               <div key={p.recId} className={styles.posRow}>
                 <Data size={12} weight={500}>{p.symbol}</Data>
                 <Text size={11} tone="secondary">{p.contract}</Text>
-                <Data size={12} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                  {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
-                </Data>
+                {p.quoteUnavailable ? (
+                  <Data size={12} weight={500} title="Quote unavailable">—</Data>
+                ) : (
+                  <Data size={12} weight={500} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                    {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                  </Data>
+                )}
               </div>
             ))}
           </div>
@@ -364,10 +371,19 @@ export default function DashboardPage() {
                     );
                   })()}
                 </div>
-                <Data size={12} className={styles.contractRight}>${p.currentPrice.toFixed(2)}</Data>
-                <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
-                  {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
-                </Data>
+                {p.quoteUnavailable ? (
+                  <>
+                    <Data size={12} className={styles.contractRight} title="Quote unavailable">—</Data>
+                    <Data size={12} weight={500} className={styles.contractRight} title="Quote unavailable">—</Data>
+                  </>
+                ) : (
+                  <>
+                    <Data size={12} className={styles.contractRight}>${p.currentPrice.toFixed(2)}</Data>
+                    <Data size={12} weight={500} className={styles.contractRight} tone={p.pnlDollar > 0 ? 'pass' : p.pnlDollar < 0 ? 'reject' : undefined}>
+                      {p.pnlDollar > 0 ? '+' : ''}${Math.round(p.pnlDollar)}
+                    </Data>
+                  </>
+                )}
               </div>
             ))}
           </div>

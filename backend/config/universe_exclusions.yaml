@@ -4,12 +4,19 @@
 # Edit by hand; read fresh on every scan (no restart needed). Decision STOCKS-PARAMS-PER-HORIZON-2026-10-05.
 # Evidence: docs/superpowers/measurements/2026-10-05-phase-c-evidence/bar_basis.md (the 29 symbols
 # stale_reasons flags) plus each symbol's last stored bar in ohlcv_daily, read 2026-10-05 (data end 2026-10-02).
+# 2026-10-16 update (decision D3-EXCLUSIONS-2026-10-16: proposal on #114, approved by Kenneth in chat 2026-10-16): evidence
+# docs/superpowers/measurements/2026-10-15-d3-history-recovery/ (single-provider rebuild + full-span
+# bar-basis check, data end 2026-10-15). CTVA and DOC removed; 7 ended feeds, BCB, MAA and MU added.
+# 2026-10-21 (decision DHR-EVIDENCE-EXCLUSION-2026-10-21, Kenneth in chat): DHR added as evidence after the yfinance
+# stop-gap rebuild of the Tiingo-only symbols. Live scans, confidence backtests, watches and alerts look back at most
+# 5 years and never reach the 2016-07-05 jump. NOT covered by any scope: an explicit fresh backtest
+# (POST /api/backtest-artifacts/fresh) reads bars 1000 days before its chosen start, so a DHR window starting
+# before about 2019-04 still uses the jump. Removing it needs a Tiingo rebuild of DHR.
 # Quote any ticker YAML would read as a boolean (ON, NO, Y, ...).
 version: 1
 symbols:
-  # scope: scan — corporate action not adjusted
-  CTVA: {scope: scan, reason: "2026-10-01 corporate action not adjusted by any provider (77.67 -> 12.57)", added: 2026-10-05}
-  AVB:  {scope: scan, reason: "price feed ended 2026-08-17; 2.793 split not adjusted", added: 2026-10-05}
+  # scope: scan — price feed ended; the Tiingo single-provider rebuild (2026-10-15) also ends there
+  AVB:  {scope: scan, reason: "price feed ended 2026-08-17 (Tiingo rebuild 2026-10-15 ends there too); likely delisted", added: 2026-10-05}
 
   # scope: scan — price feed ended (no bars in the 30+ days before 2026-10-02); likely delisted
   PXD:  {scope: scan, reason: "price feed ended 2024-05-03 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
@@ -26,6 +33,18 @@ symbols:
   EA:   {scope: scan, reason: "price feed ended 2026-08-10 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
   EQR:  {scope: scan, reason: "price feed ended 2026-08-21 (no bars in the 30+ days before 2026-10-02); likely delisted", added: 2026-10-05}
 
+  # scope: scan — price feed ended (last stored bar 30+ days before 2026-10-15; FBHS, PKI, MMC, AXL: the 2026-10-15 rebuild found no later bars at Tiingo or yfinance)
+  FBHS: {scope: scan, reason: "price feed ended 2022-12-14 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
+  PKI:  {scope: scan, reason: "price feed ended 2023-05-15 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
+  DFS:  {scope: scan, reason: "price feed ended 2025-05-16 (no bars in the 30+ days before 2026-10-15); likely delisted", added: 2026-10-16}
+  IPG:  {scope: scan, reason: "price feed ended 2025-11-26 (no bars in the 30+ days before 2026-10-15); likely delisted", added: 2026-10-16}
+  MMC:  {scope: scan, reason: "price feed ended 2026-01-13 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
+  DAY:  {scope: scan, reason: "price feed ended 2026-02-03 (no bars in the 30+ days before 2026-10-15); likely delisted", added: 2026-10-16}
+  AXL:  {scope: scan, reason: "price feed ended 2026-02-04 (no bars in the 30+ days before 2026-10-15); likely delisted or renamed", added: 2026-10-16}
+
+  # scope: scan — broken series
+  BCB:  {scope: scan, reason: "price feed ended 2019-06-07; 4 OHLC range violations and 594 close-to-close jumps > 40% (full-span bar-basis check 2026-10-15)", added: 2026-10-16}
+
   # scope: scan — acquired; stored bars after the acquisition are another company
   ANSS: {scope: scan, reason: "acquired (ANSS by SNPS 2025-07); stored bars after that date are not this company (mixed basis)", added: 2026-10-05}
   SGEN: {scope: scan, reason: "acquired (SGEN by PFE 2023-12); stored bars after that date are not this company (mixed basis)", added: 2026-10-05}
@@ -33,7 +52,6 @@ symbols:
   # scope: evidence — excluded from the evidence harness and tuning, still scanned live
   BIIB: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   CNC:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
-  DOC:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   DXCM: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   EPAM: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   FI:   {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
@@ -43,3 +61,6 @@ symbols:
   NWL:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   PDD:  {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
   SIRI: {scope: evidence, reason: "bar-basis check flags a close-to-close jump > 40% or mixed basis (`bar_basis.md`); excluded from evidence, still scanned", added: 2026-10-05}
+  MAA:  {scope: evidence, reason: "full-span bar-basis check (2026-10-15) flags batch_step (provider basis step); excluded from evidence, still scanned", added: 2026-10-16}
+  MU:   {scope: evidence, reason: "full-span bar-basis check (2026-10-15) flags batch_step (provider basis step); excluded from evidence, still scanned", added: 2026-10-16}
+  DHR:  {scope: evidence, reason: "bar-basis jump > 40%: yfinance single-provider rebuild (2026-10-21, Tiingo refusing on the free tier) has a +61% adjusted-close jump on 2016-07-05 (Fortive spin-off not adjusted); remove after a Tiingo rebuild of DHR", added: 2026-10-21}

@@ -98,3 +98,39 @@
   background: color-mix(in srgb, var(--pass) 12%, var(--bg-surface));
   color: var(--text-primary);
 }
+
+/* STOCKS-HORIZON-T1 H5: backend horizon profile tags and per-field reset. */
+.profileNote,
+.sectionNote {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sourceTag {
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.fieldReset {
+  padding: 1px 6px;
+  font-size: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fieldReset:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}

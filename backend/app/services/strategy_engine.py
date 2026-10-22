@@ -4,6 +4,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal
 
+# STOCKS-HORIZON-T1 H1: every caller of a DAILY-bar strategy signal function
+# (live scan single + multi, Analysis, strategy watch entry and reversal, daily
+# composite confirmations, the backtest's per-bar slice, the tuner) hands it at
+# most the last SIGNAL_WINDOW_BARS bars ending at the evaluated bar. One number,
+# so a live signal and the backtest that validates it read the same window
+# (`_ema` seeds and `_rsi` smooths from the window start, so the window length
+# moves their values). Intraday paths keep their own windows. Every current
+# search-grid combination needs at most this many bars (`bars_needed`).
+SIGNAL_WINDOW_BARS = 400
+
 # ── Helpers (reuse same helpers as stock_scorer to avoid duplication) ─────────
 
 def _ema(values: list[float], period: int) -> list[float]:
@@ -105,7 +115,7 @@ _FIB_RATIOS: dict[float, float] = {
 }
 
 
-def _fibonacci_pullback_signal(
+def _fibonacci_pullback_detail(
     bars: list[dict],
     direction: Literal["Bullish", "Bearish"],
     *,
@@ -115,7 +125,7 @@ def _fibonacci_pullback_signal(
     fib_tolerance_pct: float = 0.015,
     impulse_min_pct: float = 0.0,
     retracement_recency_bars: int = 0,
-) -> tuple[bool, float | None, str | None]:
+) -> dict:
     """Check if close is near a Fibonacci retracement level of the dominant swing move.
 
     For Bullish: swing low → swing high within fib_swing_lookback bars.
@@ -127,28 +137,40 @@ def _fibonacci_pullback_signal(
     retracement_recency_bars: for Bullish, the swing high must fall within the most
                               recent N bars; for Bearish, the swing low. 0 disables.
 
-    Returns:
-        (at_level: bool, nearest_pct: float|None, level_label: str|None)
-        nearest_pct is expressed as a percentage (e.g. 1.5 means 1.5% away).
-        Returns (False, None, None) when impulse/recency checks fail.
+    Returns a dict:
+        at_level:   bool
+        dist_pct:   float|None — nearest level distance as a percentage
+                    (e.g. 1.5 means 1.5% away)
+        label:      str|None — nearest level label
+        swing_low / swing_high: float|None — the window low/high the levels are
+                    measured from; None only when the window has < 10 bars.
+        at_level/dist_pct/label are (False, None, None) when impulse/recency
+        checks fail. ``_fibonacci_pullback_signal`` returns the first three as
+        the historical tuple.
     """
     if fib_levels is None:
         fib_levels = [23.6, 38.2, 50.0, 61.8]
     window = bars[-fib_swing_lookback:] if len(bars) >= fib_swing_lookback else bars
     if len(window) < 10:
-        return False, None, None
+        return {"at_level": False, "dist_pct": None, "label": None,
+                "swing_low": None, "swing_high": None}
 
     swing_high = max(b["high"] for b in window)
     swing_low  = min(b["low"]  for b in window)
+
+    def _out(at_level: bool, dist_pct: float | None, label: str | None) -> dict:
+        return {"at_level": at_level, "dist_pct": dist_pct, "label": label,
+                "swing_low": swing_low, "swing_high": swing_high}
+
     move = swing_high - swing_low
     if move <= 0:
-        return False, None, None
+        return _out(False, None, None)
 
     # Impulse size gate: skip trivial drifts that just cross a fib line.
     # Guard swing_low > 0 before division to avoid ZeroDivisionError on bad data.
     if impulse_min_pct > 0:
         if swing_low <= 0 or (move / swing_low) < impulse_min_pct:
-            return False, None, None
+            return _out(False, None, None)
 
     # Recency gate: the swing extreme (peak for bullish, trough for bearish) must
     # have occurred within the most recent N bars, confirming an active retracement.
@@ -158,11 +180,11 @@ def _fibonacci_pullback_signal(
             recent_high = max(b["high"] for b in recent)
             # Allow 0.5% slop: the peak may not be at exactly the lookback max
             if swing_high > 0 and abs(recent_high - swing_high) / swing_high > 0.005:
-                return False, None, None
+                return _out(False, None, None)
         else:
             recent_low = min(b["low"] for b in recent)
             if swing_low > 0 and abs(recent_low - swing_low) / swing_low > 0.005:
-                return False, None, None
+                return _out(False, None, None)
 
     close = (current_price if current_price is not None and current_price > 0
              else bars[-1]["close"])
@@ -194,14 +216,43 @@ def _fibonacci_pullback_signal(
             best_label = str(label)
 
     if best_label is None:
-        return False, None, None
+        return _out(False, None, None)
 
     at_level = best_dist_pct <= fib_tolerance_pct
-    return at_level, round(best_dist_pct * 100, 2), best_label
+    return _out(at_level, round(best_dist_pct * 100, 2), best_label)
 
 
-# Public alias so routers can import without depending on the private name
+def _fibonacci_pullback_signal(
+    bars: list[dict],
+    direction: Literal["Bullish", "Bearish"],
+    *,
+    current_price: float | None = None,
+    fib_swing_lookback: int = 100,
+    fib_levels: list[float] | None = None,
+    fib_tolerance_pct: float = 0.015,
+    impulse_min_pct: float = 0.0,
+    retracement_recency_bars: int = 0,
+) -> tuple[bool, float | None, str | None]:
+    """Tuple form of ``_fibonacci_pullback_detail``:
+    (at_level: bool, nearest_pct: float|None, level_label: str|None).
+    Returns (False, None, None) when impulse/recency checks fail.
+    """
+    d = _fibonacci_pullback_detail(
+        bars,
+        direction,
+        current_price=current_price,
+        fib_swing_lookback=fib_swing_lookback,
+        fib_levels=fib_levels,
+        fib_tolerance_pct=fib_tolerance_pct,
+        impulse_min_pct=impulse_min_pct,
+        retracement_recency_bars=retracement_recency_bars,
+    )
+    return d["at_level"], d["dist_pct"], d["label"]
+
+
+# Public aliases so routers can import without depending on the private names
 fibonacci_pullback_signal = _fibonacci_pullback_signal
+fibonacci_pullback_detail = _fibonacci_pullback_detail
 
 
 # ── Exit-target ladder ────────────────────────────────────────────────────────
@@ -396,6 +447,11 @@ class SetupSignal:
     symbol:     str
     confidence: int   # 0–100
     metrics:    dict  # atr_ratio, range_ratio, vol_ratio, proximity_pct, swing_level
+    # STOCK-PRES-P1: evidence behind `confidence` (sub-scores, weights,
+    # contributions, unrounded sum) and the Fib swing low/high the Fib levels
+    # were measured from (None when Fib was not used). Send-only.
+    confidence_breakdown: dict | None = None
+    fib_swing:            dict | None = None
 
 
 # ── Strategy 1: Pullback to 20-EMA ───────────────────────────────────────────
@@ -1225,13 +1281,11 @@ def resolve_multi_signal(
     many times wider, so a 0.6R target can become a 0.06R target that no variant
     ever proposed. Half an R is the floor for a rung to survive that transplant.
 
-    KNOWN LIMITATION, recorded rather than hidden: nothing backtests this
-    resolution. ``stock_scan.py`` deliberately uses ``mean_reversion_rsi`` as the
-    canonical backtest proxy for ``mean_reversion_multi`` (so the gate is
-    order-independent), which means the RSI variant's own ladder is what the
-    Step-6 win rate measures, not the resolved one. That predates this change and
-    is unchanged by it; it is why the resolution rule is chosen to be
-    conservative rather than optimised.
+    The backtest measures this resolution (STOCKS-HORIZON-T1 H3): it runs
+    ``multi_signal`` per bar, so the Step-6 win rate is the vote's own trades at
+    these combined levels. Before H3 it used ``mean_reversion_rsi`` as a stand-in,
+    so the RSI variant's own ladder was what the gate measured; that limitation
+    is closed. The rule stays conservative rather than optimised.
 
     Returns None when ``fired`` is empty or the resolved risk is non-positive.
     """
@@ -1296,6 +1350,167 @@ def resolve_multi_signal(
         targets=targets,
         detail=detail,
     )
+
+
+# ── mean_reversion_multi: one params shape (STOCKS-HORIZON-T1 H3) ────────────
+# {"variants": [...], "min_confirmations": n, "variant_params": {"<variant>": {...}}}
+# — the same object for the live loop, the backtest, the profile and the tuner.
+
+def _multi_variant_fns() -> dict:
+    """The daily signal functions a multi variant can name, looked up at call
+    time (the same set the scan's _SIGNAL_FNS names)."""
+    return {
+        "pullback_ema":              pullback_ema_signal,
+        "breakout_base":             breakout_base_signal,
+        "ma_crossover":              ma_crossover_signal,
+        "mean_reversion_rsi":        mean_reversion_rsi_signal,
+        "mean_reversion_bb":         mean_reversion_bb_signal,
+        "mean_reversion_vwap":       mean_reversion_vwap_signal,
+        "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
+    }
+
+
+def merge_multi_params(direction: str, profile: dict | None, request_overrides: dict | None) -> dict:
+    """The effective multi params shape. ``variants`` / ``min_confirmations``:
+    the request's when set, else the profile's. ``variant_params[v]`` = the
+    variant's ``exit:`` block, then its DIRECTION BASELINE ``active:`` params,
+    then the multi profile's ``variant_params[v]``, then the request's
+    (``None`` = not set). The variant base is always the direction baseline,
+    never a tuned profile of the standalone strategy. Inputs are not mutated.
+    """
+    from app.services import strategy_param_store as store
+    profile = profile or {}
+    req = request_overrides or {}
+    out: dict = {}
+    for key in ("variants", "min_confirmations"):
+        value = req.get(key) if req.get(key) is not None else profile.get(key)
+        if value is not None:
+            out[key] = list(value) if key == "variants" else value
+    prof_vp = profile.get("variant_params") or {}
+    req_vp = req.get("variant_params") or {}
+    variant_params: dict = {}
+    for v in out.get("variants") or []:
+        merged = store.get_exit(v)
+        merged.update(store.get_active(v, direction))
+        merged.update(prof_vp.get(v) or {})
+        merged.update({k: val for k, val in (req_vp.get(v) or {}).items() if val is not None})
+        variant_params[v] = merged
+    out["variant_params"] = variant_params
+    return out
+
+
+def multi_signal(
+    bars: list[dict],
+    *,
+    direction: Literal["Bullish", "Bearish"],
+    params: dict,
+    signal_fns: dict | None = None,
+    fired_out: list | None = None,
+) -> StrategySignal | None:
+    """mean_reversion_multi's vote over the (already merged) params shape: each
+    variant runs on ``bars`` with ``variant_params[v]``; when at least
+    ``min_confirmations`` fire, ``resolve_multi_signal`` combines them.
+
+    A variant that raises counts as not fired; a name with no signal function
+    is skipped. ``mean_reversion_vwap`` (intraday) raises ``ValueError``: the
+    loop only evaluates daily bars. ``signal_fns`` overrides the name -> function
+    map (the scan passes its own); ``fired_out`` receives the fired signals.
+    """
+    variants = list(params["variants"])
+    if "mean_reversion_vwap" in variants:
+        raise ValueError("mean_reversion_vwap (intraday) is not supported in mean_reversion_multi")
+    fns = signal_fns if signal_fns is not None else _multi_variant_fns()
+    vparams = params.get("variant_params") or {}
+    fired: list[StrategySignal] = []
+    for v in variants:
+        fn = fns.get(v)
+        if fn is None:
+            continue
+        try:
+            sig = fn(bars, direction=direction, **(vparams.get(v) or {}))
+        except Exception:
+            sig = None
+        if sig is not None:
+            fired.append(sig)
+    if fired_out is not None:
+        fired_out.extend(fired)
+    if len(fired) < params["min_confirmations"]:
+        return None
+    return resolve_multi_signal(fired, strategy="mean_reversion_multi")
+
+
+# ── Bars needed (STOCKS-HORIZON-T1 H1) ───────────────────────────────────────
+
+# mean_reversion_multi's variants when params name none (the request default).
+_MULTI_DEFAULT_VARIANTS = ("mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap_daily")
+
+
+def _param(fn, params: dict, name: str):
+    """params[name], else the signal function's own default for it."""
+    if name in params and params[name] is not None:
+        return params[name]
+    import inspect
+    return inspect.signature(fn).parameters[name].default
+
+
+def _omm_bars_needed() -> int:
+    """compute_omm (require_choppy_regime) at its defaults: `len(closes) <
+    lookback + 2` returns None, and the current state ('Choppy', the only one
+    that passes) must have at least min_obs labels."""
+    from app.services.regime_omm import MIN_OBS, RETURN_LOOKBACK
+    return max(RETURN_LOOKBACK + 2, MIN_OBS)
+
+
+def bars_needed(strategy: str, params: dict | None = None) -> int:
+    """The smallest bar count at which EVERY length guard of ``strategy``'s
+    signal function can pass with ``params`` (missing keys = the function's
+    defaults). One bar fewer and the signal is always None. Read from the
+    guards themselves:
+
+    * pullback_ema: ``len(bars) < trend_ema + 10``; both MAs need their period.
+    * breakout_base: ``len(bars) < base_lookback + 5``.
+    * ma_crossover: ``len(bars) < slow + 5``, and each SMA series needs
+      ``lookback + 1`` values (``n - period + 1 >= lookback + 1``).
+    * mean_reversion_rsi: ``len(bars) < trend_sma + rsi_period + 5`` (the RSI
+      series' own ``>= 2`` values need only ``rsi_period + 3``).
+    * mean_reversion_bb: ``len(bars) < trend_sma + bb_period + 5``.
+    * mean_reversion_vwap_daily: ``len(bars) < vwap_lookback + 2``.
+    * mean_reversion_vwap (intraday): ``len(bars) < 30``.
+    * rsi / bb with ``require_choppy_regime``: also compute_omm's floor.
+    * mean_reversion_multi: the max over its variants (``params["variants"]``,
+      default the request's three), each with ``params["variant_params"][v]``.
+    """
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_entries import setup_bars_needed
+        return setup_bars_needed(strategy, params)
+    p = dict(params or {})
+    if strategy == "pullback_ema":
+        fn = pullback_ema_signal
+        return max(_param(fn, p, "trend_ema") + 10, _param(fn, p, "ema_period"))
+    if strategy == "breakout_base":
+        return _param(breakout_base_signal, p, "base_lookback") + 5
+    if strategy == "ma_crossover":
+        fn = ma_crossover_signal
+        slow, fast, lookback = (_param(fn, p, k) for k in ("slow", "fast", "lookback"))
+        return max(slow + 5, fast + lookback, slow + lookback)
+    if strategy == "mean_reversion_rsi":
+        fn = mean_reversion_rsi_signal
+        rsi_period = _param(fn, p, "rsi_period")
+        need = max(_param(fn, p, "trend_sma") + rsi_period + 5, rsi_period + 3)
+        return max(need, _omm_bars_needed()) if _param(fn, p, "require_choppy_regime") else need
+    if strategy == "mean_reversion_bb":
+        fn = mean_reversion_bb_signal
+        need = _param(fn, p, "trend_sma") + _param(fn, p, "bb_period") + 5
+        return max(need, _omm_bars_needed()) if _param(fn, p, "require_choppy_regime") else need
+    if strategy == "mean_reversion_vwap_daily":
+        return _param(mean_reversion_vwap_daily_signal, p, "vwap_lookback") + 2
+    if strategy == "mean_reversion_vwap":
+        return 30
+    if strategy == "mean_reversion_multi":
+        variants = p.get("variants") or _MULTI_DEFAULT_VARIANTS
+        vparams = p.get("variant_params") or {}
+        return max(bars_needed(v, vparams.get(v) or {}) for v in variants)
+    raise ValueError(f"bars_needed: unknown strategy {strategy!r}")
 
 
 # ── Strategy 7: Pre-breakout setup scanner ────────────────────────────────────
@@ -1393,6 +1608,8 @@ def breakout_setup_signal(
     fib_at_level: bool = False
     fib_dist_pct: float | None = None
     fib_label: str | None = None
+    fib_swing_low: float | None = None
+    fib_swing_high: float | None = None
 
     if fib_enabled:
         # Guard: if no valid fib levels are provided fall back to non-fib scoring
@@ -1405,13 +1622,15 @@ def breakout_setup_signal(
             fib_label = None
 
     if fib_enabled:
-        fib_at_level, fib_dist_pct, fib_label = _fibonacci_pullback_signal(
+        _fib = _fibonacci_pullback_detail(
             bars,
             direction,
             fib_swing_lookback=fib_swing_lookback,
             fib_levels=fib_levels,
             fib_tolerance_pct=fib_tolerance_pct,
         )
+        fib_at_level, fib_dist_pct, fib_label = _fib["at_level"], _fib["dist_pct"], _fib["label"]
+        fib_swing_low, fib_swing_high = _fib["swing_low"], _fib["swing_high"]
         # If fib helper returned None distance (insufficient bars), fall back to non-fib
         # rather than penalising the confidence score with a 0 fib_score.
         if fib_dist_pct is None and not fib_at_level:
@@ -1421,10 +1640,29 @@ def breakout_setup_signal(
             # Normalise against 2× tolerance expressed in the same percent scale.
             _tol_pct = fib_tolerance_pct * 100
             fib_score = 100 if fib_at_level else max(0, 100 * (1 - (fib_dist_pct or 100) / (_tol_pct * 2)))
-            confidence = int(atr_score * 0.24 + vol_score * 0.20 + prox_score * 0.36 + fib_score * 0.20)
+            unrounded = atr_score * 0.24 + vol_score * 0.20 + prox_score * 0.36 + fib_score * 0.20
+            confidence = int(unrounded)
+            weights = {"atr": 0.24, "vol": 0.20, "proximity": 0.36, "fib": 0.20}
+            scores = {"atr": atr_score, "vol": vol_score, "proximity": prox_score, "fib": fib_score}
 
     if not fib_enabled:
-        confidence = int(atr_score * 0.30 + vol_score * 0.25 + prox_score * 0.45)
+        unrounded = atr_score * 0.30 + vol_score * 0.25 + prox_score * 0.45
+        confidence = int(unrounded)
+        weights = {"atr": 0.30, "vol": 0.25, "proximity": 0.45}
+        scores = {"atr": atr_score, "vol": vol_score, "proximity": prox_score}
+
+    # STOCK-PRES-P1: send the evidence behind `confidence` (no formula change).
+    confidence_breakdown: dict = {
+        "fib_used":   fib_enabled,
+        "weights":    weights,
+        "components": {
+            name: {"score": scores[name], "weight": w, "contribution": scores[name] * w}
+            for name, w in weights.items()
+        },
+        "unrounded":  unrounded,
+        "confidence": min(100, max(0, confidence)),
+    }
+    fib_swing = {"low": fib_swing_low, "high": fib_swing_high} if fib_enabled else None
 
     metrics: dict = {
         "atr_ratio":     round(atr_ratio, 3),
@@ -1445,4 +1683,6 @@ def breakout_setup_signal(
         symbol=symbol,
         confidence=min(100, max(0, confidence)),
         metrics=metrics,
+        confidence_breakdown=confidence_breakdown,
+        fib_swing=fib_swing,
     )

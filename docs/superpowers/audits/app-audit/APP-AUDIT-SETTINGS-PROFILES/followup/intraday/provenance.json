@@ -1,0 +1,22 @@
+{
+  "provider": "Tradier",
+  "endpoint": "https://api.tradier.com/v1/markets/timesales",
+  "query": {
+    "symbol": "SPY",
+    "interval": "15min",
+    "start": "2026-09-01",
+    "end": "2026-10-15",
+    "session_filter": "all"
+  },
+  "requested_at_utc": "2026-10-16T20:29:52.648999+00:00",
+  "kind": "read-only market data; no app backend, account, order or notification call",
+  "http_status": 200,
+  "response_date": "Fri, 16 Oct 2026 20:29:54 GMT",
+  "content_type": "application/json;charset=UTF-8",
+  "received_at_utc": "2026-10-16T20:29:54.556538+00:00",
+  "bar_count": 2480,
+  "response_sha256": "cc5f42354095d7f5374a1ab6a1c8206376ab25d084287ffe0bed36216732d709",
+  "first_time": "2026-09-01T00:00:00",
+  "last_time": "2026-10-15T00:00:00",
+  "status": "captured"
+}

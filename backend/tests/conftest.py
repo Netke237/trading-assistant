@@ -406,11 +406,13 @@ async def _create_app_db_tables() -> None:
     from app.models.scan_session import ScanSessionBase
     from app.models.ohlcv_daily import OhlcvBase
     from app.models.scheduled_scan_run import ScheduledScanRunBase
+    from app.models.scan_report import ScanReportBase
     async with engine.begin() as conn:
         await conn.run_sync(AppBase.metadata.create_all)
         await conn.run_sync(ScanSessionBase.metadata.create_all)
         await conn.run_sync(OhlcvBase.metadata.create_all)
         await conn.run_sync(ScheduledScanRunBase.metadata.create_all)
+        await conn.run_sync(ScanReportBase.metadata.create_all)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -621,3 +623,10 @@ def _explicit_legacy_daily_risk_hooks(request, monkeypatch):
     async def record_loss(*args, **kwargs):
         pass
     monkeypatch.setattr(daily_risk, 'record_realized_loss', record_loss)
+
+
+@pytest.fixture(autouse=True)
+def _legacy_option_quote_gate(request, monkeypatch):
+    """Legacy fire tests isolate their original gates; dedicated tests opt in."""
+    if request.node.get_closest_marker("real_quote_gate") is None:
+        monkeypatch.setattr("app.services.auto_trader._option_quote_state", lambda _: "live")

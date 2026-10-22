@@ -6,6 +6,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { useSettingsStore, DEFAULT_CONFIDENCE_GATE } from '@/lib/settingsStore';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
+import { useScanParamsStore, NO_OVERRIDES } from '@/lib/scanParamsStore';
 import type { PositionCardData } from '@/types/stockDomain';
 
 jest.mock('@/lib/api', () => ({
@@ -231,6 +232,12 @@ describe('runStockScan', () => {
   it('forwards mean-reversion-multi params only when that strategy is selected (H4)', async () => {
     const fake = { scan_id: 'S-1', timestamp: 't', rejected: [], candidates: [] };
     (api.postStockScan as jest.Mock).mockResolvedValue(fake);
+    // STOCKS-HORIZON-T1 H5: the multi fields are overrides (null = follow the
+    // backend profile, not sent); set them so the forwarding is observable.
+    useScanParamsStore.setState({
+      meanReversionVariants: ['mean_reversion_rsi', 'mean_reversion_bb', 'mean_reversion_vwap_daily'],
+      meanReversionMinConfirm: 2, vwapLookback: 20, vwapDeviationPct: 0.02,
+    });
 
     await runStockScan('mean_reversion_multi');
     const multiArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
@@ -246,6 +253,7 @@ describe('runStockScan', () => {
     const singleArg = (api.postStockScan as jest.Mock).mock.calls[0][0];
     expect(singleArg.mean_reversion_variants).toBeUndefined();
     expect(singleArg.mean_reversion_min_confirmations).toBeUndefined();
+    useScanParamsStore.setState({ ...NO_OVERRIDES });
   });
 
   describe('a throw while building the request (moved from Step 5, A5d)', () => {
@@ -294,6 +302,13 @@ describe('runStockScan', () => {
       } finally {
         useScanStore.setState({ setStockScanResult: original } as never);
       }
+    });
+
+    it('an invalid strategy override reports the specific validation message instead of broad reset guidance', async () => {
+      useScanParamsStore.setState({ pullbackTolerancePct: 0 });
+      await runStockScan('pullback_ema');
+      expect(useScanStore.getState().stockScanError).toContain('Pullback tolerance must be greater than 0%');
+      expect(consoleError).not.toHaveBeenCalled();
     });
   });
 });

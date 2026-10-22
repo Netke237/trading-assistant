@@ -42,7 +42,16 @@ class OhlcvDailyModel(OhlcvBase):
 
 
 class OhlcvHistoryStateModel(OhlcvBase):
-    """Observed provider floor and exact seam verification, committed with daily bars."""
+    """Observed provider floor and exact seam verification, committed with daily bars.
+
+    basis_provider set ('tiingo' / 'yfinance') = the symbol's whole retained series comes
+    from that one provider and is routed away from the Alpaca seam path; NULL = normal path.
+
+    window_verified_through / window_verified_at = the nightly window anchor: the newest date
+    the last nightly single-provider write fetched and verified together with the rows before
+    it, and when that write committed. Written only by the single-provider writer (nightly and
+    ``rebuild_single_provider``), never by on-demand ``get_bars``; NULL = no anchor.
+    """
     __tablename__ = "ohlcv_history_state"
 
     symbol = Column(String(10), primary_key=True)
@@ -53,6 +62,10 @@ class OhlcvHistoryStateModel(OhlcvBase):
     seam_date = Column(Date, nullable=True)
     old_source = Column(String(20), nullable=True)
     seam_signature = Column(String(64), nullable=True)
+    basis_provider = Column(String(20), nullable=True)
+    basis_rebuilt_at = Column(DateTime(timezone=True), nullable=True)
+    window_verified_through = Column(Date, nullable=True)
+    window_verified_at = Column(DateTime(timezone=True), nullable=True)
 
     def verified_seam(self) -> dict:
         return {"seam_date": self.seam_date, "old_source": self.old_source,

@@ -3,13 +3,14 @@
 import React, { useState, useMemo, useEffect, useRef, useId } from 'react';
 import Link from 'next/link';
 import type { OptionsPipeline, RejectedEntry } from '@/lib/scanStore';
+import type { StockPipeline } from '@/types/stockDomain';
 import type { DteWindow } from '@/types/domain';
 import { parsePipelineDiagnostics, type DiagnosticStage } from '@/lib/parsePipelineDiagnostics';
+import { parseStockPipelineDiagnostics } from '@/lib/parseStockPipelineDiagnostics';
 import { Text, Data } from '@/components/primitives';
 import styles from './PipelineInspector.module.css';
 
-interface PipelineInspectorProps {
-  pipeline?: OptionsPipeline;
+interface PipelineInspectorCommonProps {
   rejected?: RejectedEntry[];
   survivors?: string[];
   /** `ScanResult.contract_rules` — labels show a threshold only when the scan recorded it. */
@@ -20,6 +21,11 @@ interface PipelineInspectorProps {
   isDrawer?: boolean;
   defaultSearch?: string;
 }
+
+type PipelineInspectorProps = PipelineInspectorCommonProps & (
+  | { mode?: 'options'; pipeline?: OptionsPipeline }
+  | { mode: 'stock'; pipeline?: StockPipeline }
+);
 
 type CopyState = 'idle' | 'copied' | 'failed';
 
@@ -33,6 +39,7 @@ function initialExpanded(stages: DiagnosticStage[]): Record<string, boolean> {
 }
 
 export function PipelineInspector({
+  mode = 'options',
   pipeline,
   rejected = EMPTY_REJECTED,
   survivors = EMPTY_SURVIVORS,
@@ -57,8 +64,10 @@ export function PipelineInspector({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableSurvivors = useMemo(() => survivors, [survivorsKey]);
   const report = useMemo(
-    () => parsePipelineDiagnostics(pipeline, rejected, stableSurvivors, { contractRules, dteWindow }),
-    [pipeline, rejected, stableSurvivors, contractRules, dteWindow],
+    () => mode === 'stock'
+      ? parseStockPipelineDiagnostics(pipeline as StockPipeline | undefined, rejected, stableSurvivors)
+      : parsePipelineDiagnostics(pipeline as OptionsPipeline | undefined, rejected, stableSurvivors, { contractRules, dteWindow }),
+    [mode, pipeline, rejected, stableSurvivors, contractRules, dteWindow],
   );
 
   // Re-derived whenever a new report arrives, so a re-run scan does not keep

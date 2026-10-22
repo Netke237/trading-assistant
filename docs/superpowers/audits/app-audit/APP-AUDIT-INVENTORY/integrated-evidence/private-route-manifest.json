@@ -1,0 +1,10 @@
+{
+  "source_baseline": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "environment": "isolated Next development; not production deployment",
+  "manifest_sha256": "58a8492287df13f76de527d67b7d14b9e563112809b8d47de77d54212d4f537d",
+  "crash_entries": [],
+  "route_keys": [
+    "/(frame)/dashboard/page",
+    "/(frame)/screener/step-4-prebreakout/page"
+  ]
+}

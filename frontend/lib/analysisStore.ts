@@ -4,7 +4,9 @@ import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { buildStockScanRequestBody, type StockScanRequestBody } from '@/lib/resolveStockScanRequest';
+import { tunedParamsHorizon } from '@/lib/horizonPresets';
 import { scanSizingFromRisk } from '@/lib/stockScan';
+import { useUniverseStore } from '@/lib/universeStore';
 
 export type HorizonEnum = 'Intraday' | 'Swing' | 'Position';
 
@@ -41,6 +43,7 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     };
   }
   const ctx = scan.context;
+  const u = useUniverseStore.getState();
   // The user's sizing (P3a); throws ScanSizingError on 0%, which `analyze`
   // shows as its error.
   const sizing = scanSizingFromRisk();
@@ -50,6 +53,8 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     horizon: (ctx?.horizon ?? 'Swing (5–15d)').split(' ')[0],
     strategy: scan.activeStrategy ?? 'pullback_ema',
     params: useScanParamsStore.getState(),
+    // The params horizon runStockScan would send (STOCKS-HORIZON-T1 H5).
+    paramsHorizon: ctx ? tunedParamsHorizon(ctx.horizonPreset, ctx.holdMax) : null,
     requireReversal: (scan.scanOverrides.pullback_require_reversal as boolean | undefined) ?? false,
     scanOverrides: scan.scanOverrides,
     confidenceGate: useSettingsStore.getState().confidenceGate,
@@ -58,6 +63,11 @@ export function analysisRequestFor(symbol: string): { req: AnalyzeStockRequest; 
     // The scan context's hold, as runStockScan sends it (B6).
     holdMinDays: ctx?.holdMin,
     holdMaxDays: ctx?.holdMax,
+    minPriceRaw: u.minPriceRaw,
+    maxPriceRaw: u.maxPriceRaw,
+    minCapRaw: u.minCapRaw,
+    maxCapRaw: u.maxCapRaw,
+    capUnit: u.capUnit,
   });
   return { req: { ...rest, symbol, horizon: _horizonEnum(ctx?.horizon) }, basis: 'current-settings' };
 }

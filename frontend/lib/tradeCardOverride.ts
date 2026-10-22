@@ -50,10 +50,12 @@ export function scoreEvidenceFor(card: TradeCardData): {
  *  are recomputed asynchronously (a network round-trip) and merged in
  *  separately. Returns `card` unchanged when there's no override. */
 export function applyPickedContract(card: TradeCardData, picked: OptionContract | undefined): OverriddenCard {
-  if (!picked || picked.id === card.contract) return card;
+  if (!picked) return card;
+  if (picked.id === card.contract) return { ...card, noLiveQuote: picked.noLiveQuote ?? false };
   return {
     ...card,
     contract: picked.id,
+    noLiveQuote: picked.noLiveQuote ?? false,
     contractScore: picked.score,
     contractConfidence: picked.contractConfidence,
     // ROUND 6 finding 8. The breakdown has to move with the contract. Without
@@ -77,6 +79,7 @@ export function applyPickedContract(card: TradeCardData, picked: OptionContract 
       expiry:       picked.expiry,
       right:        picked.right,
       mid:          picked.price,
+      spread:       picked.spread,
       delta:        picked.delta,
       theta:        picked.theta,
       // Carry BOTH quantities across the override — `ivRank` is null on any
@@ -210,6 +213,39 @@ export function rrOverridesForPlan(
 ): Partial<Record<typeof RR_OVERRIDE_KEYS[number], number>> {
   const recorded = scanResult?.rr_overrides;
   return rrOverridesFrom(recorded != null ? recorded : scanOverrides);
+}
+
+export const ENTRY_OVERRIDE_KEYS = [
+  'entry_spread_tolerance_pct',
+  'entry_max_slippage_pct',
+  'entry_min_premium',
+] as const;
+
+/** Pull just the Entry Quality override keys out of scanOverrides, dropping
+ *  any that aren't set (so recomputePlan's optional fields stay optional).
+ *  Zero (0 / 0.0) is a valid override value and is preserved. */
+export function entryOverridesFrom(
+  scanOverrides: Record<string, number | boolean | string>,
+): Partial<Record<typeof ENTRY_OVERRIDE_KEYS[number], number>> {
+  const out: Partial<Record<typeof ENTRY_OVERRIDE_KEYS[number], number>> = {};
+  for (const key of ENTRY_OVERRIDE_KEYS) {
+    const v = scanOverrides[key];
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v;
+  }
+  return out;
+}
+
+/** The Entry Quality overrides Step 7's recompute-plan sends: the ones the scan
+ *  priced its plans with (ScanResult.entry_overrides), so a Step-3 value edited
+ *  after the scan cannot reprice the card's entry plan on different rules from
+ *  the card the scan built (APP-AUDIT-B-ENTRY-OVERRIDES). A result from before
+ *  the scan recorded them (absent or null) falls back to live scanOverrides. */
+export function entryOverridesForPlan(
+  scanResult: { entry_overrides?: Record<string, number> | null } | null | undefined,
+  scanOverrides: Record<string, number | boolean | string>,
+): Partial<Record<typeof ENTRY_OVERRIDE_KEYS[number], number>> {
+  const recorded = scanResult?.entry_overrides;
+  return entryOverridesFrom(recorded != null ? recorded : scanOverrides);
 }
 
 /** The repricing-horizon fields every trade-card backend call must carry.

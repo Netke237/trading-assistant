@@ -1,0 +1,245 @@
+diff --git a/backend/app/data/governor.py b/backend/app/data/governor.py
+index 69806d1e..182b470c 100644
+--- a/backend/app/data/governor.py
++++ b/backend/app/data/governor.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import time
++import threading
+ 
+ 
+ class TokenBucket:
+@@ -19,23 +20,31 @@ class TokenBucket:
+         self.capacity = float(capacity) if capacity is not None else float(rate)
+         self._tokens = self.capacity
+         self._updated = time.monotonic()
+-        self._lock = asyncio.Lock()
++        self._lock = threading.Lock()
++
++    def _refill(self) -> None:
++        now = time.monotonic()
++        self._tokens = min(self.capacity, self._tokens + (now - self._updated) * (self.rate / self.per))
++        self._updated = now
++
++    def try_acquire(self, tokens: float = 1.0) -> bool:
++        """Non-blocking admission sharing the async callers' token budget."""
++        with self._lock:
++            self._refill()
++            if self._tokens < tokens:
++                return False
++            self._tokens -= tokens
++            return True
+ 
+     async def acquire(self, tokens: float = 1.0) -> None:
+-        async with self._lock:
+-            while True:
+-                now = time.monotonic()
+-                elapsed = now - self._updated
+-                self._tokens = min(
+-                    self.capacity,
+-                    self._tokens + elapsed * (self.rate / self.per),
+-                )
+-                self._updated = now
++        while True:
++            with self._lock:
++                self._refill()
+                 if self._tokens >= tokens:
+                     self._tokens -= tokens
+                     return
+-                deficit = tokens - self._tokens
+-                await asyncio.sleep(deficit * (self.per / self.rate))
++                delay = (tokens - self._tokens) * (self.per / self.rate)
++            await asyncio.sleep(delay)
+ 
+ 
+ class CircuitBreaker:
+@@ -48,23 +57,23 @@ class CircuitBreaker:
+         self.cooldown = cooldown
+         self._failures = 0
+         self._opened_at: float | None = None
++        self._lock = threading.RLock()
+ 
+     @property
+     def is_open(self) -> bool:
+-        if self._opened_at is None:
+-            return False
+-        if time.monotonic() - self._opened_at >= self.cooldown:
+-            return False  # half-open: allow a trial call through
+-        return True
++        with self._lock:
++            return self._opened_at is not None and time.monotonic() - self._opened_at < self.cooldown
+ 
+     def record_success(self) -> None:
+-        self._failures = 0
+-        self._opened_at = None
++        with self._lock:
++            self._failures = 0
++            self._opened_at = None
+ 
+     def record_failure(self) -> None:
+-        self._failures += 1
+-        if self._failures >= self.fail_threshold:
+-            self._opened_at = time.monotonic()
++        with self._lock:
++            self._failures += 1
++            if self._failures >= self.fail_threshold:
++                self._opened_at = time.monotonic()
+ 
+ 
+ class SymbolBudget:
+@@ -173,6 +182,24 @@ class Governor:
+             return True
+         return ps.budget.try_consume(symbol)
+ 
++    def try_acquire(self, provider: str) -> bool:
++        """Refuse immediately on an open circuit or exhausted shared bucket."""
++        ps = self._providers.get(provider)
++        if ps is None:
++            return False
++        with ps.breaker._lock:
++            return not ps.breaker.is_open and ps.bucket.try_acquire()
++
++    def record_success(self, provider: str) -> None:
++        ps = self._providers[provider]
++        ps.breaker.record_success()
++        ps.status = "connected"
++
++    def record_failure(self, provider: str) -> None:
++        ps = self._providers[provider]
++        ps.breaker.record_failure()
++        ps.status = "degraded"
++
+     async def call(
+         self,
+         provider: str,
+diff --git a/backend/app/services/auto_trader.py b/backend/app/services/auto_trader.py
+index 63388439..46a06f2e 100644
+--- a/backend/app/services/auto_trader.py
++++ b/backend/app/services/auto_trader.py
+@@ -682,6 +682,68 @@ def _market_is_open(symbol: str) -> bool:
+         return False
+ 
+ 
++def _option_quote_state(option_symbol: str) -> str:
++    """Probe one exact OCC row, outside the state lock, on a bounded deadline."""
++    import concurrent.futures
++    import time
++    import httpx
++    from app.data.option_symbol import to_occ
++    from app.data.governor import get_governor
++    from app.data.market import get_tradier_creds, _headers, intraday_feed_lag_seconds
++    from app.data.quote_liveness import classify_quote
++    from app.scoring.contract_validator import max_quote_age_seconds
++    from app.services.market_session import MARKET_TZ, _market_session_open
++
++    try:
++        occ = to_occ(option_symbol)
++        expiry = datetime.strptime(occ[-15:-9], "%y%m%d").date().isoformat()
++    except (ValueError, TypeError):
++        return "invalid_symbol"
++    if not _market_session_open(datetime.now(MARKET_TZ)):
++        return "session_closed"
++
++    governor = get_governor()
++    def probe() -> str:
++        token, base = get_tradier_creds()
++        if not token or not governor.try_acquire("tradier"):
++            return "unavailable"
++        try:
++            response = httpx.get(
++                f"{base.rstrip('/')}/v1/markets/options/chains",
++                params={"symbol": occ[:-15], "expiration": expiry, "greeks": "false"},
++                headers=_headers(token), timeout=2.5,
++            )
++            response.raise_for_status()
++            rows = response.json().get("options", {}).get("option", [])
++            if isinstance(rows, dict):
++                rows = [rows]
++            row = next((r for r in rows if r.get("symbol") == occ), None)
++            governor.record_success("tradier")
++            if row is None:
++                return "unavailable"
++            bid, ask = float(row.get("bid") or 0), float(row.get("ask") or 0)
++            if not math.isfinite(bid) or not math.isfinite(ask):
++                return "unavailable"
++            if ask <= 0:
++                return "one_sided"
++            return classify_quote(
++                bid, ask, row.get("bid_date"), row.get("ask_date"), now_s=time.time(),
++                session_open=True, feed_lag_s=intraday_feed_lag_seconds(),
++                max_age_s=max_quote_age_seconds(),
++            )[0]
++        except Exception:
++            governor.record_failure("tradier")
++            return "unavailable"
++
++    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
++    try:
++        return executor.submit(probe).result(timeout=3.0)
++    except Exception:
++        return "unavailable"
++    finally:
++        executor.shutdown(wait=False)
++
++
+ _SCORING_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
+ 
+ 
+@@ -2607,6 +2669,8 @@ class AutoTradeService:
+                     "— armed state preserved for the next trigger"
+                 )
+             _symbol = self._state.strategy.symbol
++            _option_symbol = self._state.strategy.option_symbol
++            _probed_strategy = self._state.strategy
+             # An unsupported arm is consumed even outside market hours. Take it
+             # under the same lock as the identity check; record outside the lock.
+             unvalidated = self._state.strategy.direction == "Bearish"
+@@ -2627,6 +2691,14 @@ class AutoTradeService:
+                 f"— armed state preserved for retry"
+             )
+ 
++        _qs = _option_quote_state(_option_symbol)
++        if _qs != "live":
++            logger.warning("No live option quote for %s (%s) — armed state preserved", _option_symbol, _qs)
++            raise ArmPreservedError(
++                f"No live option quote for {_option_symbol} ({_qs}) "
++                "— armed state preserved for retry"
++            )
++
+         with self._lock:
+             # Re-check: another thread may have disarmed while we checked market.
+             if not self._state.armed or self._state.strategy is None:
+@@ -2641,6 +2713,8 @@ class AutoTradeService:
+                     "AutoTrader re-armed since this attempt read it "
+                     "— armed state preserved for the next trigger"
+                 )
++            if self._state.strategy is not _probed_strategy or self._state.strategy.option_symbol != _option_symbol:
++                raise ArmPreservedError("AutoTrader re-armed during quote probe — armed state preserved for retry")
+             strategy = self._state.strategy
+             self._state.armed = False
+             self._state.strategy = None
+diff --git a/backend/pytest.ini b/backend/pytest.ini
+index 2f4c80e3..a3dab571 100644
+--- a/backend/pytest.ini
++++ b/backend/pytest.ini
+@@ -1,2 +1,4 @@
+ [pytest]
+ asyncio_mode = auto
++markers =
++    real_quote_gate: exercise the real option quote fire gate
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+index 6186fb8d..7b4b02a0 100644
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -621,3 +621,10 @@ def _explicit_legacy_daily_risk_hooks(request, monkeypatch):
+     async def record_loss(*args, **kwargs):
+         pass
+     monkeypatch.setattr(daily_risk, 'record_realized_loss', record_loss)
++
++
++@pytest.fixture(autouse=True)
++def _legacy_option_quote_gate(request, monkeypatch):
++    """Legacy fire tests isolate their original gates; dedicated tests opt in."""
++    if request.node.get_closest_marker("real_quote_gate") is None:
++        monkeypatch.setattr("app.services.auto_trader._option_quote_state", lambda _: "live")

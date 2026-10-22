@@ -83,16 +83,19 @@ export async function removeNoteRow(note: DirectSendNote, confirm: (text: string
   const { patchNote, removeNote } = useDirectSendNotesStore.getState();
   patchNote(note.recId, { removing: true, status: null });
   try {
-    // A 404 is final only when the server had already answered this send's save
-    // before the note existed. On SAVE-UNCONFIRMED the create may still be in flight.
-    await removeTrackedRow(note.recId, note.kind !== 'save-unconfirmed');
+    // A 404 is final across all note kinds (including SAVE-UNCONFIRMED: Kenneth 2026-10-15 decision, #171).
+    await removeTrackedRow(note.recId, true);
     removeNote(note.recId);
+    const ownership = useStockOrderOwnershipStore.getState();
+    for (const [sym, record] of Object.entries(ownership.bySymbol)) {
+      if (record.recId === note.recId && record.status === 'unknown') {
+        ownership.finish(sym, note.recId, null, '');
+      }
+    }
   } catch (e) {
     patchNote(note.recId, {
       removing: false,
-      status: note.kind === 'save-unconfirmed' && isNotFound(e)
-        ? 'Not found yet — the save may still be finishing. Press Remove again in a few seconds.'
-        : `Remove failed: ${whyOf(e)}. Try again.`,
+      status: `Remove failed: ${whyOf(e)}. Try again.`,
     });
   }
 }
@@ -157,7 +160,7 @@ async function performStockSaveFirst(args: StockSendArgs, identity: string | nul
     };
   }
 
-  const saved = await persistPosition(pos);
+  const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
   // Unconfirmed: offline; a bare gateway 5xx (the create may still be running);
   // or a 2xx whose body did not parse. No order is sent.
   const bare5xx = !saved.ok && !saved.offline && /^HTTP 5\d\d$/.test(saved.detail ?? '');
@@ -215,16 +218,19 @@ async function performStockSaveFirst(args: StockSendArgs, identity: string | nul
         catch { addNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null }); }
         return { kind: 'not-placed', message: validationBlock };
       }
-      const res = await api.postStockOrder({
+      const orderRequest = {
         broker,
         symbol: pos.symbol,
         action,
-        effect: 'OPEN',
+        effect: 'OPEN' as const,
         quantity: orderQty,
         order_type: orderType,
         limit_price: limitPrice,
-        tif: 'DAY',
-      });
+        tif: 'DAY' as const,
+        attempt_id: `stk-${recId}`,
+        savedRecId: recId,
+      };
+      const res = await api.postStockOrder(orderRequest);
       outcome = classifyDirectFailure({ response: res });
     } catch (e) {
       outcome = classifyDirectFailure({ thrown: e });

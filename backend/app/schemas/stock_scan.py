@@ -1,32 +1,48 @@
 from __future__ import annotations
+
+from app.schemas.payload_depth import validate_payload_depth
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from app.schemas import SentimentData, FundamentalsOut
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.schemas import SentimentData, FundamentalsOut, StockExplanation
+from app.services.horizon_profiles import TunedHorizon
 
 
 Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_multi"]
 
 
 class StockScanRequest(BaseModel):
+    category: Literal["stocks", "pullback"] = "stocks"
+    # NUMERIC-API-INPUTS T2: every float is finite or a 422. Inherited by
+    # StockAnalysisRequest (pydantic merges a parent's config into a subclass).
+    model_config = ConfigDict(allow_inf_nan=False)
+
     universe:    list[str]
     symbols:     Optional[list[str]] = None   # when set, scan only these tickers
     direction:   Literal["Bullish", "Bearish"]
     horizon:     Literal["Intraday", "Swing", "Position"]
     strategy:    Strategy
-    pullback_tolerance_pct:     float = Field(0.08, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
-    pullback_ema_period:        int   = Field(50,   gt=0)           # EMA to pull back to
-    pullback_trend_ema:         int   = Field(100,  gt=0)           # trend-confirmation EMA
-    pullback_ma_type:           Literal["EMA", "SMA"] = "EMA"
-    pullback_require_reversal:  bool  = False                        # require green candle on signal bar
-    ma_crossover_fast:      int   = Field(20,   gt=0)           # fast MA period
-    ma_crossover_slow:      int   = Field(50,   gt=0)           # slow MA period
-    ma_crossover_lookback:  int   = Field(10,   gt=0)           # lookback ≥ 1
-    breakout_volume_mult:   float = Field(1.5,  gt=1.0)         # must exceed 1× (volume expansion)
-    rsi_period:             int   = Field(14,   gt=0)           # RSI look-back period
-    rsi_oversold:           float = Field(30.0, gt=0, le=100)   # RSI oversold threshold
-    rsi_overbought:         float = Field(70.0, gt=0, le=100)   # RSI overbought threshold (bearish)
-    rsi_trend_sma:          int   = Field(200,  gt=0)           # trend-confirmation SMA
-    require_choppy_regime:  bool  = False                        # live filter: only fire when OMM state is Choppy
+    # Strategy fields (STOCKS-HORIZON-T1 H4): Optional, default None. An
+    # omitted field takes the backend profile for direction x params horizon
+    # (strategy_param_store.get_profile); a value is an explicit override.
+    # They used to carry non-None defaults, so the YAML `active:` value of any
+    # field the request carries never reached a live scan.
+    pullback_tolerance_pct:     Optional[float] = Field(None, gt=0, le=1.0)  # 0 < tolerance ≤ 100%
+    pullback_ema_period:        Optional[int]   = Field(None, gt=0)           # EMA to pull back to
+    pullback_trend_ema:         Optional[int]   = Field(None, gt=0)           # trend-confirmation EMA
+    pullback_ma_type:           Optional[Literal["EMA", "SMA"]] = None
+    pullback_require_reversal:  bool  = False                        # require green candle on signal bar (UI toggle, not tuned)
+    ma_crossover_fast:      Optional[int]   = Field(None, gt=0)           # fast MA period
+    ma_crossover_slow:      Optional[int]   = Field(None, gt=0)           # slow MA period
+    ma_crossover_lookback:  Optional[int]   = Field(None, gt=0)           # lookback ≥ 1
+    breakout_volume_mult:   Optional[float] = Field(None, gt=1.0)         # must exceed 1× (volume expansion)
+    rsi_period:             Optional[int]   = Field(None, gt=0)           # RSI look-back period
+    rsi_oversold:           Optional[float] = Field(None, gt=0, le=100)   # RSI oversold threshold
+    rsi_overbought:         Optional[float] = Field(None, gt=0, le=100)   # RSI overbought threshold (bearish)
+    rsi_trend_sma:          Optional[int]   = Field(None, gt=0)           # trend-confirmation SMA
+    require_choppy_regime:  Optional[bool]  = None                        # live filter: only fire when OMM state is Choppy
+    # Which tuned horizon's parameters this scan reads. None + a hold (and a
+    # non-Intraday scoring horizon) -> horizon_profiles.tuned_params_horizon.
+    params_horizon: Optional[TunedHorizon] = None
     min_price:   Optional[float] = None
     max_price:   Optional[float] = None
     min_cap_usd: Optional[float] = None
@@ -95,23 +111,17 @@ class StockScanRequest(BaseModel):
     # Per-scan fundamentals bearish overrides — applied only on Bearish scans.
     fundamentals_caution_above:  Optional[float] = None
     fundamentals_reject_above:   Optional[float] = None
-    # Mean reversion multi-signal params
-    mean_reversion_variants: list[str] = Field(default_factory=lambda: ["mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap_daily"])
-    mean_reversion_min_confirmations: int = Field(2, ge=1, le=3)
-    vwap_lookback:       int   = Field(20,   gt=0)
-    vwap_deviation_pct:  float = Field(0.02, gt=0)
+    # Mean reversion multi-signal params. Optional (H4): None takes the multi
+    # profile. min_confirmations > variants and the intraday variant are
+    # refused on the MERGED shape (stock_scan._reject_unsupported_multi_variants),
+    # so a request with 2 variants against a profile min_confirmations 3 is a
+    # 422, not a silently dead scan.
+    mean_reversion_variants: Optional[list[str]] = None
+    mean_reversion_min_confirmations: Optional[int] = Field(None, ge=1, le=3)
+    vwap_lookback:       Optional[int]   = Field(None, gt=0)
+    vwap_deviation_pct:  Optional[float] = Field(None, gt=0)
 
-    @model_validator(mode='after')
-    def check_min_confirmations(self) -> 'StockScanRequest':
-        if (
-            self.strategy == 'mean_reversion_multi'
-            and self.mean_reversion_min_confirmations > len(self.mean_reversion_variants)
-        ):
-            raise ValueError(
-                f"mean_reversion_min_confirmations ({self.mean_reversion_min_confirmations}) "
-                f"cannot exceed the number of selected variants ({len(self.mean_reversion_variants)})"
-            )
-        return self
+    _validate_payload_depth = field_validator('overrides', mode="before")(validate_payload_depth)
 
 
 class StrategySignalOut(BaseModel):
@@ -140,9 +150,17 @@ class BacktestOut(BaseModel):
     confidence:       Optional[int]
     passes_gate:      bool
     summary_text:     str
+    # STOCKS-T1-FOLLOWUPS F2: trades the backtest closed on time (held the
+    # hold, neither stop nor target), and the hold it ran with. A new result
+    # always carries n_time_exits as an int; None = unknown (a row saved
+    # before these fields). hold_max_days None with an int count = no hold.
+    n_time_exits:     Optional[int] = None
+    hold_max_days:    Optional[int] = None
 
 
 class PositionCardOut(BaseModel):
+    backtest_artifact_id: str | None = None
+    backtest_artifact_status: Literal["available", "unsupported", "insufficient_history", "invalid_input", "failed", "invalid_evidence", "storage_unavailable", "capture_unavailable", "original_unavailable"] | None = None
     model_config = ConfigDict(populate_by_name=True)
     symbol:       str
     company:      str
@@ -172,6 +190,18 @@ class PositionCardOut(BaseModel):
     earnings_veto: bool = False
     sentiment: Optional[SentimentData] = None
     fundamentals: Optional[FundamentalsOut] = None
+    # Which tuned horizon's parameters the signal used (None = the direction
+    # baseline, no params horizon) and whether a tuned profile existed for it
+    # (STOCKS-HORIZON-T1 H4). Defaults so a persisted older result validates.
+    params_horizon: Optional[str] = None
+    params_source: Literal["tuned", "baseline"] = "baseline"
+    # STOCK-PRES-P1: the scorer's own evidence for stock_score (weights, factor
+    # components, scorer caps), exactly StockScoreCard.explanation. Scorer-time:
+    # its `status` is the SCORER's verdict, before the scan's later caps
+    # (missing/low confidence, Bearish, earnings veto). The verdict is
+    # stock_status. None on results persisted before P1, or if the evidence
+    # failed validation (logged; the candidate is kept).
+    stock_explanation: Optional[StockExplanation] = None
 
 
 class GateFlag(BaseModel):
@@ -251,6 +281,7 @@ class StockAnalysisOut(BaseModel):
     direction: str
     stock_score: int
     stock_status: str
+    stock_explanation: Optional[StockExplanation] = None
     is_index: bool = False
     # Signal-dependent payloads — None when no strategy setup exists (bypass path)
     strategy: Optional[StrategySignalOut] = None
@@ -299,6 +330,9 @@ class StockPipeline(BaseModel):
 
 
 class StockScanResult(BaseModel):
+    report_run_id: Optional[str] = None
+    report_generation: Optional[int] = None
+    report_persistence: Optional[Literal["saved", "unavailable"]] = None
     scan_id:              str
     timestamp:            str
     candidates:           list[PositionCardOut]

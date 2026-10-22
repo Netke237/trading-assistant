@@ -15,7 +15,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, Data } from '@/components/primitives';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
-import { flushPendingPositionPatches, useIsSymbolHeld } from '@/lib/portfolioStore';
+import { flushPendingPositionPatches, useIsSymbolHeld, usePortfolioStore } from '@/lib/portfolioStore';
+import { rejectionMessage } from '@/lib/portfolioRejection';
 import { useWatchlistStore } from '@/lib/watchlistStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { maxLossAtStop, resolveMaxLossLimitDollar, recommendedContractSize, formatRecommendedContractSizeRaw } from '@/lib/risk';
@@ -40,6 +41,14 @@ import { TIME_STOP_DTE } from '@/lib/alertEngine';
  *  feature shipped — so this is used strictly as the FALLBACK for
  *  pre-existing positions that predate the snapshot, never preferred over
  *  it. Callers must try `tradeCardSnapshot.strike` first. */
+/** A complete positive price. A trailing dot is an unfinished number, not a price. */
+function parsePositivePrice(raw: string): number | null {
+  const t = raw.trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function optionStrikeFromContract(contract: string): number | null {
   const parts = contract.split('|');
   if (parts.length !== 4) return null;
@@ -117,39 +126,23 @@ export function EditDrawer({
   // "(global)".
   const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
-  // Mirrors backend/app/routers/stock_scan.py's own directional validation for
-  // /api/stocks/first-passage (the stop must be on the correct side of the
-  // current price for the trade's direction) — a stop on the wrong side is a
-  // genuine data problem (the position should have been stopped out already),
-  // unlike a crossed target above, which is filtered out rather than treated
-  // as invalid.
-  const stockDirectionValid = isStock && position.stop
-    ? position.direction === 'Bullish'
-      ? position.stop < position.currentPrice
-      : position.stop > position.currentPrice
-    : true;
+  // Match scanPortfolio's underlying-price comparisons, independently of
+  // notification enable overrides. An option premium is never a reference
+  // price for either underlying stop; a missing quote cannot breach a level.
+  const referencePrice = isStock ? position.currentPrice : position.currentStockPrice;
+  const hasReferencePrice = referencePrice != null && referencePrice > 0;
+  const hasStop = position.stop != null && position.stop > 0;
+  const isBreached = (stop: number | null | undefined) =>
+    hasReferencePrice && stop != null && stop > 0 &&
+    (position.direction === 'Bearish' ? referencePrice! >= stop : referencePrice! <= stop);
+  const stopBreached = isBreached(position.stop);
+  const structuralStopBreached = isBreached(position.structuralStop);
 
-  // The explicit `> 0` checks below (stock: currentPrice, the underlying
-  // price; option: currentPrice, the premium, AND currentStockPrice, the
-  // underlying) mirror the backend's own `Field(..., gt=0)` on
-  // `stock_price`/`premium` in the first-passage request schemas. A live
-  // quote with no price sets the field to `0.0`, not null — `currentPrice`
-  // via `quote.get("price") or 0.0` (portfolio.py), `currentStockPrice` via
-  // `stock_prices.get(schema.symbol)` landing on a `0.0` from
-  // `fetch_price_async` for a bad/halted quote — both real states for
-  // illiquid/deep-OTM contracts, not hypotheticals, and both would otherwise
-  // reach the backend as a raw 422 instead of the button going disabled.
-  // `currentStockPrice`'s existing `== null` check alone let a `0` value
-  // straight through, since `0 != null`. On the stock side this is mostly
-  // "belt and suspenders": `stockDirectionValid` already rejects
-  // `currentPrice = 0` for a Bullish position incidentally (a 0 price can
-  // never be above a positive stop), and a Bearish position instead falls
-  // through the empty-`stockTargetPrices` branch — but neither of those is
-  // an intentional guard against this specific case, so it's checked
-  // explicitly here too rather than relying on the incidental backstop.
-  const estimateDisabled = isStock
-    ? stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)
-    : optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0);
+  // Keep the existing request-schema guards: stocks need a remaining target
+  // and live stock price; options need a strike, live underlying and premium.
+  const estimateDisabled = !hasStop || stopBreached || structuralStopBreached || (isStock
+    ? stockTargetPrices.length === 0 || !(position.currentPrice > 0)
+    : optionStrike == null || !hasReferencePrice || !(position.currentPrice > 0));
 
   // Same AbortController pattern as StockPositionCard's onEstimate/estimateReq
   // (the template this section mirrors): abort a still-in-flight request when
@@ -183,6 +176,27 @@ export function EditDrawer({
   // "the user changed something," firing a false "stale" caution roughly
   // every poll cycle during market hours even when nobody touched anything.
   const [priceEditedSinceEstimate, setPriceEditedSinceEstimate] = useState(false);
+  // An increase stays a draft until the fill price is confirmed. `heldTotal`
+  // is that draft; the saved quantity on `position` does not move with it.
+  const [heldTotal, setHeldTotal] = useState<number | null>(null);
+  const [fillPrice, setFillPrice] = useState('');
+  const [priceRejected, setPriceRejected] = useState<string | null>(null);
+  const confirmingFill = useRef(false);
+  const fillErrorAt = usePortfolioStore((s) => {
+    const err = s.lastSyncError;
+    if (!err || err.contract !== position.contract) return 0;
+    if (/stale_expected_qty|added_fill_price_required|expected_qty_required/.test(err.detail)) return err.at;
+    return 0;
+  });
+  const exposureBreach = usePortfolioStore((s) =>
+    s.lastExposureBreach?.contract === position.contract ? s.lastExposureBreach.detail : null);
+  const seenFillError = useRef(0);
+  if (fillErrorAt !== seenFillError.current) {
+    seenFillError.current = fillErrorAt;
+    if (fillErrorAt !== 0 && heldTotal != null) setHeldTotal(null);
+  }
+  const savedQty = position.contracts ?? 1;
+  const pendingIncrease = heldTotal != null && heldTotal > savedQty ? heldTotal : null;
 
   // Clear a stale Monte Carlo result — and abort an in-flight request — when
   // the user edits stop/targets in this same open drawer (EditDrawer doesn't
@@ -259,7 +273,7 @@ export function EditDrawer({
     setPriceEditedSinceEstimate(false);
     try {
       if (isStock) {
-        if (stockTargetPrices.length === 0 || !position.stop || !stockDirectionValid || !(position.currentPrice > 0)) throw new Error('missing target/stop');
+        if (estimateDisabled || !position.stop) throw new Error('missing target/stop');
         // A position minted with no snapshot (the after-scan auto-execute path
         // deliberately omits one — see paperTrade.ts/step-4-stocks's own
         // comment) has no real strategy name to send. An empty string just
@@ -291,7 +305,7 @@ export function EditDrawer({
         });
         restampIfActive('monte_carlo', mcRung(targets, stampedLabel)?.price ?? null);
       } else {
-        if (optionStrike == null || !(position.currentStockPrice != null && position.currentStockPrice > 0) || !position.stop || !(position.currentPrice > 0)) {
+        if (estimateDisabled || optionStrike == null || position.currentStockPrice == null || !position.stop) {
           throw new Error('missing option context');
         }
         const res = await api.getFirstPassageEstimate({
@@ -373,6 +387,30 @@ export function EditDrawer({
         }
       : null;
 
+  const confirmFill = async () => {
+    if (confirmingFill.current || pendingIncrease == null) return;
+    const price = parsePositivePrice(fillPrice);
+    if (price == null) {
+      setPriceRejected('Fill price must be a positive number — the quantity increase was not saved.');
+      return;
+    }
+    setPriceRejected(null);
+    confirmingFill.current = true;
+    try {
+      await usePortfolioStore.getState().confirmAddedFill(position.contract, pendingIncrease, price);
+    } finally {
+      confirmingFill.current = false;
+    }
+    // A newer quantity typed while this request was in flight keeps its draft.
+    // The saved row already moved; this only closes the form when it still
+    // describes that same total.
+    const savedNow = usePortfolioStore.getState().positions
+      .find((p) => p.contract === position.contract)?.contracts ?? savedQty;
+    if (pendingIncrease > savedNow) return;
+    setHeldTotal(null);
+    setFillPrice('');
+  };
+
   return (
     <div className={styles.editDrawer}>
       <div className={styles.editHeader}>
@@ -428,20 +466,65 @@ export function EditDrawer({
           onChange={onChange}
         />
         <AlertOverridesEditor position={position} onChange={onChange} />
-        <EditField
-          label="Contracts"
-          hint="Number of option contracts held."
-          value={position.contracts ?? 1}
-          // A quantity, not a level: 0 contracts is not "no override", it is a
-          // position that does not exist. Closing one is the row's Close
-          // button, not a 0 typed here.
-          zeroClears={false}
-          onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
-        />
+        <div className={styles.addedFill}>
+          <EditField
+            label="Contracts"
+            hint="Number of option contracts held."
+            value={savedQty}
+            // A quantity, not a level: 0 contracts is not "no override", it is a
+            // position that does not exist. Closing one is the row's Close
+            // button, not a 0 typed here.
+            zeroClears={false}
+            draftEpoch={fillErrorAt}
+            // An increase is an added fill. Hold it and ask for the price.
+            // A decrease still commits on blur, as it always has.
+            onCommit={(n) => {
+              const next = Math.max(1, Math.round(n));
+              if (next > savedQty) {
+                setHeldTotal(next);
+                setPriceRejected(null);
+                return false;
+              }
+              setHeldTotal(null);
+              return true;
+            }}
+            onChange={(n) => onChange({ contracts: Math.max(1, Math.round(n)) })}
+          />
+          <Text size={10} tone="dim">{`Average entry $${position.entryPrice.toFixed(2)}`}</Text>
+          {pendingIncrease != null && (
+            <div className={styles.addedFillRow}>
+              <label className={styles.editField}>
+                <Text size={11} tone="secondary">Added fill price</Text>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={styles.editInput}
+                  value={fillPrice}
+                  aria-label="Added fill price"
+                  onChange={(e) => { setPriceRejected(null); setFillPrice(e.target.value); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void confirmFill(); } }}
+                />
+              </label>
+              <button type="button" className={styles.mcBtn} onClick={() => { void confirmFill(); }}>
+                Confirm added fill
+              </button>
+            </div>
+          )}
+          {priceRejected && <Text size={10} tone="caution">{priceRejected}</Text>}
+          {exposureBreach && <Text size={10} tone="caution">{rejectionMessage(exposureBreach)}</Text>}
+        </div>
         <EditField
           label="Current price"
-          hint="Manual override — will refresh from broker in live mode."
+          // NO-LIVE-QUOTE NLQ-1 (round-2 G1): a row GET /api/portfolio got no
+          // quote for carries a 0 currentPrice that is not a price. The field
+          // shows it as unknown -- empty, with a placeholder -- exactly as the
+          // table shows "—", never as 0.
+          hint={position.quoteUnavailable
+            ? 'Quote unavailable'
+            : 'Manual override — will refresh from broker in live mode.'}
           value={position.currentPrice}
+          unknown={position.quoteUnavailable === true}
+          placeholder="— (no quote)"
           // 0 is refused here (decision Q6): it would write `currentPrice: 0`
           // and a -100% P&L onto the row. The way to mark a position worthless
           // is to CLOSE it at $0, which the close path supports end to end.
@@ -457,7 +540,11 @@ export function EditDrawer({
             const mult = position.contract.endsWith('|STOCK') ? 1 : 100;
             const pnlDollar = (n - position.entryPrice) * mult * (position.contracts ?? 1);
             const pnlPct    = ((n - position.entryPrice) / position.entryPrice) * 100;
-            onChange({ currentPrice: n, pnlDollar, pnlPct });
+            // A typed price IS a mark: the row is no longer "no quote" until the
+            // next sync says otherwise (fromBackend rewrites the flag). Without
+            // this the override would be written while the field, the table and
+            // the totals all kept showing it as unknown.
+            onChange({ currentPrice: n, pnlDollar, pnlPct, quoteUnavailable: false });
             setPriceEditedSinceEstimate(true);
           }}
         />
@@ -476,12 +563,18 @@ export function EditDrawer({
             No live current price yet — can&apos;t estimate until a price is available.
           </Text>
         )}
-        {isStock && position.currentPrice > 0 && !stockDirectionValid && (
+        {!hasStop && <Text size={11} tone="dim">No stop set</Text>}
+        {stopBreached && (
           <Text size={11} tone="dim">
             The stop is already on the wrong side of the current price — sync the position&apos;s stop before estimating.
           </Text>
         )}
-        {isStock && position.currentPrice > 0 && stockDirectionValid && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
+        {structuralStopBreached && (
+          <Text size={11} tone="dim">
+            The structural stop is already on the wrong side of the current price — sync the position&apos;s structural stop before estimating.
+          </Text>
+        )}
+        {isStock && position.currentPrice > 0 && !stopBreached && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
           <Text size={11} tone="dim">
             Every target has already been reached — add a new target to estimate further upside.
           </Text>
@@ -520,7 +613,7 @@ export function EditDrawer({
 
       <div className={styles.editFooter}>
         <Text size={11} tone="secondary">
-          Stop, structural stop, targets, and contract count save to your account automatically.
+          Stop, structural stop, and targets save automatically. A larger quantity is saved only with its fill price.
         </Text>
         <button type="button" className={styles.editRemove} onClick={onRemove}>
           Close position
@@ -918,6 +1011,16 @@ function EditField({
   /** P2-01 -- the message a refused 0 shows when `zeroClears` is off. Current
    *  price uses it to point at the real gesture (close the position at $0). */
   zeroMessage = 'Must be greater than 0 — kept the previous value.',
+  /** NO-LIVE-QUOTE NLQ-1 (round-2 G1) -- `value` is not a real value (Current
+   *  price on a row with no quote). The field then holds an EMPTY draft and
+   *  shows `placeholder`; an empty commit reverts to empty and writes nothing,
+   *  silently, since there is no previous value to "keep". */
+  unknown = false,
+  placeholder,
+  /** Return false to keep the typed draft and skip `onChange`. */
+  onCommit,
+  /** Bump to drop a held draft and show `value` again (a rejected fill). */
+  draftEpoch = 0,
 }: {
   label: string;
   hint?: string;
@@ -926,6 +1029,10 @@ function EditField({
   range?: { min: number; max: number } | null;
   zeroClears?: boolean;
   zeroMessage?: string;
+  unknown?: boolean;
+  placeholder?: string;
+  onCommit?: (n: number) => boolean;
+  draftEpoch?: number;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -965,13 +1072,19 @@ function EditField({
   // and an empty draft REVERTS rather than clearing. Typing an explicit 0 is
   // still the way to clear -- it is what the hints already document, and it is
   // the one gesture that cannot be confused with a half-finished number.
-  const stored = String(value);
+  const stored = unknown ? '' : String(value);
   const [draft, setDraft] = useState(stored);
   const [rejected, setRejected] = useState<string | null>(null);
   // A BLUR IS NOT AN EDIT -- the same lesson as PremiumStopEditor below, which
   // learned it across rounds 4 and 5. Clicking into a field to read it and
   // clicking away must not write.
   const dirtyRef = useRef(false);
+  const epochRef = useRef(draftEpoch);
+  if (epochRef.current !== draftEpoch) {
+    epochRef.current = draftEpoch;
+    dirtyRef.current = false;
+    if (draft !== stored) setDraft(stored);
+  }
   // Follow the stored value when it changes from outside (a different position,
   // the 30s sync) but never while the user is mid-edit on this one.
   const lastStoredRef = useRef(stored);
@@ -1025,9 +1138,11 @@ function EditField({
     const raw = draft.trim();
     if (raw === '') {
       revert(
-        zeroClears
-          ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
-          : 'Empty is not a value — kept the previous one.',
+        unknown
+          ? null
+          : zeroClears
+            ? 'Enter 0 to clear this level — an empty field keeps the previous value.'
+            : 'Empty is not a value — kept the previous one.',
       );
       return;
     }
@@ -1058,6 +1173,13 @@ function EditField({
       );
       return;
     }
+    if (onCommit && !onCommit(n)) {
+      // Held, not written. A later refresh must not snap this draft away.
+      setRejected(null);
+      dirtyRef.current = true;
+      setDraft(String(n));
+      return;
+    }
     setRejected(null);
     dirtyRef.current = false;
     committedRef.current = true;
@@ -1073,6 +1195,7 @@ function EditField({
         inputMode="decimal"
         className={styles.editInput}
         value={draft}
+        placeholder={placeholder}
         onChange={(e) => { dirtyRef.current = true; setRejected(null); setDraft(e.target.value); }}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } }}
@@ -1703,10 +1826,12 @@ function alertFiresAgainst(
           ).toFixed(2)}`
         : null;
     case 'TIME_STOP':
-      // Stock positions carry no expiry and (per alertEngine.ts's isStock
-      // guard) can never fire this type — "not set" rather than a threshold
-      // that looks armed but isn't.
-      return isStock ? null : `${TIME_STOP_DTE} DTE or less`;
+      // Stock positions carry no expiry. STOCKS-HORIZON-T1 H6: one sent with
+      // the scan's hold fires once held that many days (alertEngine.ts's
+      // stock rule); without a hold it never fires — "not set" rather than a
+      // threshold that looks armed but isn't.
+      if (isStock) return position.holdMaxDays != null ? `held ≥ ${position.holdMaxDays} days` : null;
+      return `${TIME_STOP_DTE} DTE or less`;
     case 'EVENT_RISK':
       return 'event within 3 days';
   }

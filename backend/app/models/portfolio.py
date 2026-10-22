@@ -58,6 +58,15 @@ class PortfolioPositionModel(Base):
     picked_row_option_price = Column(Float, nullable=True)
     picked_stop_basis = Column(String, nullable=True)
     picked_at = Column(String, nullable=True)
+    # STOCKS-HORIZON-T1 H6 -- the scan's hold (calendar days) a STOCK position
+    # was sent with. Set => alert_generator raises TIME_STOP once the position
+    # has been held this many days. NULL (options rows, rows opened before H6,
+    # paths with no scan) => no hold, never a time stop.
+    hold_max_days = Column(Integer, nullable=True)
+    # Save-before-order marker and its attempt owner. Both stay NULL on rows
+    # that were not server-prepared for one order; migration does not backfill.
+    prepared_order = Column(JSON, nullable=True)
+    order_attempt_id = Column(String, nullable=True, index=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import copy
+from collections import OrderedDict
 import dataclasses
 import functools
 import hashlib
+import json
 import logging
 import math
 import os
@@ -18,10 +21,12 @@ from typing import Any, Literal, Optional
 import httpx
 import yaml as _yaml
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.scan_report_lifecycle import (run_reported_scan, current_collector, observe_resolution, observe_configuration, observe_data_failure, observe_no_data, observe_evaluation, observe_terminal)
+from fastapi import Response
 from app.services.config_health import config_health
 from app.database import AsyncSessionLocal, get_db
 from app.models.scan_session import ScanSession
@@ -41,7 +46,7 @@ from app.schemas.stock_scan import (
 )
 from app.data.sector_map import sector_for_symbol
 from app.routers.regime import _ema as _regime_ema, compute_overall_regime
-from app.schemas import SentimentData, ScanSessionStatus
+from app.schemas import SentimentData, ScanSessionStatus, StockExplanation
 from app.data.market import (
     fetch_company_name_async, fetch_price_async, fetch_quotes, fetch_intraday_candles,
     completed_intraday_bars,
@@ -62,10 +67,16 @@ from app.services.strategy_engine import (
     mean_reversion_vwap_signal,
     mean_reversion_vwap_daily_signal,
     breakout_setup_signal,
-    resolve_multi_signal,
+    merge_multi_params,
+    multi_signal,
+    SIGNAL_WINDOW_BARS,
 )
 from app.services.strategy_backtest import run_strategy_backtest
-from app.services.strategy_param_store import get_active, get_costs, get_exit
+from app.services.strategy_backtest_details import ENGINE_CONTRACT_VERSION
+from app.services.horizon_profiles import (
+    hold_for_backtest, migrate_saved_stock_request, resolve_params_horizon,
+)
+from app.services.strategy_param_store import get_active, get_costs, get_exit, get_profile
 from app.services.walk_forward import commission_for
 from app.data.confidence_cache import BARS_BASIS_VERSION, cache_key as conf_cache_key, get_cached, set_cached
 from app.data.confidence_cache import generation as conf_generation
@@ -118,6 +129,10 @@ class PreBreakoutResult(BaseModel):
     confidence: int
     direction: str
     metrics: dict
+    # STOCK-PRES-P1: evidence behind `confidence` and the Fib swing low/high
+    # (None when Fib was not used). Send-only, mirrors the route's row dict.
+    confidence_breakdown: dict | None = None
+    fib_swing: dict | None = None
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -217,21 +232,38 @@ def _backtest_commission() -> float:
     return commission_for(get_costs())
 
 
-def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) -> dict:
-    """Exit policy, then adopted defaults for this direction, then per-request kwargs.
+def _params_horizon(req: StockScanRequest) -> str | None:
+    """The tuned horizon whose parameters this request reads (STOCKS-HORIZON-T1
+    H4): ``req.params_horizon``, else the tuned horizon nearest the request's
+    hold when the scoring horizon is not Intraday, else None (baseline)."""
+    return resolve_params_horizon(req.params_horizon, req.horizon, req.hold_max_days)
 
-    Precedence is deliberately exit < active < request: the exit block is a
+
+def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict,
+                           params_horizon: str | None = None) -> dict:
+    """Exit policy, then the profile for direction x params horizon, then
+    per-request kwargs.
+
+    Precedence is deliberately exit < profile < request: the exit block is a
     baseline the tuner may later override into `active:` (WFO's adopt() writes
-    there), and an explicit per-scan override always wins over both.
+    there), the profile (``get_profile``: the direction baseline, overlaid by
+    the tuned horizon's profile when one exists) is the adopted value, and an
+    explicit per-scan override (any non-None request field) wins over both.
 
     Note this widens `_backtest_key`'s inputs — `_bt_params` is part of the
     backtest cache key — so every cached BacktestResult is invalidated the first
     time this ships. That is correct: the exits genuinely changed.
     """
     merged = get_exit(strategy)
-    merged.update(get_active(strategy, direction))
+    merged.update(get_profile(strategy, direction, params_horizon)[0])
     merged.update({k: v for k, v in request_kwargs.items() if v is not None})
     return merged
+
+
+def _params_source(req: StockScanRequest) -> str:
+    """The card's params_source: "tuned" when a tuned profile exists for the
+    request's strategy x direction x params horizon, else "baseline"."""
+    return get_profile(req.strategy, req.direction, _params_horizon(req))[1]
 
 
 # ── A5c: scan-drop filters shared by _process_stock and _analyze_core ────────
@@ -246,15 +278,29 @@ def _merge_strategy_params(strategy: str, direction: str, request_kwargs: dict) 
 
 _SCAN_DROP_PREFIX = "the scan would drop this: "
 _MIN_INTRADAY_BARS = 30
-# mean_reversion_multi is backtested through the RSI variant — a deterministic
-# proxy regardless of which variants fired.
-_MULTI_BT_STRATEGY = "mean_reversion_rsi"
 
 
 def _scan_drop_flag(gate: str, drop: dict) -> dict:
     """The Analysis gate flag for a filter the scan drops on: REJECT, the
     scan's own reason behind a fixed prefix."""
     return {"gate": gate, "status": "REJECT", "detail": f"{_SCAN_DROP_PREFIX}{drop['reason']}"}
+
+
+def _stock_explanation_out(symbol: str, card) -> StockExplanation | None:
+    """STOCK-PRES-P1: the scorer's own evidence, validated for the wire. A
+    failed validation is logged and sent as None -- never drops the candidate.
+    getattr: a card without the attribute (a test double) is "no evidence",
+    not an exception that would drop the symbol from the scan."""
+    explanation = getattr(card, "explanation", None)
+    if explanation is not None:
+        observe_configuration("stocks.scorer_explanation", explanation, symbol=symbol)
+    if explanation is None:
+        return None
+    try:
+        return StockExplanation.model_validate(explanation)
+    except ValidationError:
+        logger.warning("stock scan: %s score evidence failed validation; sent without it", symbol)
+        return None
 
 
 def _intraday_history_drop(symbol: str, strategy: str, intraday_bars: list[dict]) -> dict | None:
@@ -322,10 +368,12 @@ def _direction_conviction_drop(symbol: str, card, min_trend: float | None,
     # post-gather floor then reads `stockBreakdown.trend` as a real reading.
     _trend = next((r for r in card.rules if r.name == "trend"), None)
     if _trend is None or not getattr(_trend, "measured", True):
+        observe_terminal(symbol, "no_data", "trend_unmeasured", observations={"direction": direction}, thresholds={"min_trend": min_trend})
         return {"symbol": symbol,
                 "reason": f"direction_conviction_unmeasured: no trend measurement for {direction} {horizon}"}
     _trend_score = _trend.score
     if _trend_score < min_trend:
+        observe_terminal(symbol, "filtered", "direction_conviction", observations={"trend_score": _trend_score, "direction": direction}, thresholds={"min_trend": min_trend})
         return {"symbol": symbol, "reason": f"direction_conviction: trend {_trend_score} < {min_trend:g} for {direction} {horizon}"}
     return None
 
@@ -461,43 +509,48 @@ def _aligned_benchmark(benchmark: list[dict] | None, stock_bars: list[dict]) -> 
     return trimmed
 
 
-def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict]) -> tuple[object | None, dict | None]:
-    """mean_reversion_multi's variant loop. Returns (signal, None) on a
-    confirmed setup, else (None, the scan's rejection dict)."""
-    valid_variants = [v for v in req.mean_reversion_variants if v in _SIGNAL_FNS]
-    fired: list = []
-    for variant in valid_variants:
-        fn = _SIGNAL_FNS[variant]
+def _multi_params(req: StockScanRequest) -> dict:
+    """mean_reversion_multi's effective params shape for this request
+    (STOCKS-HORIZON-T1 H3/H4): the multi profile for direction x params horizon
+    under the request's variants, min_confirmations and per-variant fields
+    (None = not set). The live loop and the backtest are handed this same
+    object."""
+    profile = get_profile("mean_reversion_multi", req.direction, _params_horizon(req))[0]
+    variants = (req.mean_reversion_variants if req.mean_reversion_variants is not None
+                else profile.get("variants") or [])
+    variant_params: dict = {}
+    for variant in variants:
+        kw = dict(_SIGNAL_KWARGS.get(variant, lambda r: {})(req))
         if variant == "mean_reversion_vwap_daily":
-            extra_kw = {"vwap_lookback": req.vwap_lookback, "vwap_deviation_pct": req.vwap_deviation_pct}
-        else:
-            extra_kw = {}
-        variant_kwargs = _merge_strategy_params(
-            variant, req.direction,
-            {**_SIGNAL_KWARGS.get(variant, lambda r: {})(req), **extra_kw},
-        )
-        try:
-            sig = fn(bars[-120:], direction=req.direction, **variant_kwargs)
-        except Exception:
-            sig = None
-        if sig is not None:
-            fired.append(sig)
-    if len(fired) < req.mean_reversion_min_confirmations:
+            kw.update(vwap_lookback=req.vwap_lookback, vwap_deviation_pct=req.vwap_deviation_pct)
+        variant_params[variant] = kw
+    return merge_multi_params(
+        req.direction,
+        profile,
+        {"variants": req.mean_reversion_variants,
+         "min_confirmations": req.mean_reversion_min_confirmations,
+         "variant_params": variant_params},
+    )
+
+
+def _multi_signal(symbol: str, req: StockScanRequest, bars: list[dict],
+                  params: dict | None = None) -> tuple[object | None, dict | None]:
+    """mean_reversion_multi's vote (strategy_engine.multi_signal) over
+    ``params`` (default ``_multi_params(req)``). Returns (signal, None) on a
+    confirmed setup, else (None, the scan's rejection dict)."""
+    if params is None:
+        params = _multi_params(req)
+    valid_variants = [v for v in params["variants"] if v in _SIGNAL_FNS]
+    fired: list = []
+    # Order-independent resolution (resolve_multi_signal): widest stop,
+    # tightest target, pooled ladder.
+    signal = multi_signal(bars[-SIGNAL_WINDOW_BARS:], direction=req.direction, params=params,
+                          signal_fns=_SIGNAL_FNS, fired_out=fired)
+    if len(fired) < params["min_confirmations"]:
         return None, {"symbol": symbol, "reason": f"no mean_reversion_multi: {len(fired)}/{len(valid_variants)} signals fired"}
-    # Order-independent resolution: widest stop, tightest target,
-    # pooled ladder. Previously this took fired[0]'s levels verbatim,
-    # so reordering the variant checkboxes changed every level.
-    signal = resolve_multi_signal(fired, strategy="mean_reversion_multi")
     if signal is None:
         return None, {"symbol": symbol, "reason": "mean_reversion_multi: variants produced no valid combined levels"}
     return signal, None
-
-
-def _multi_bt_params(req: StockScanRequest) -> dict:
-    return _merge_strategy_params(
-        _MULTI_BT_STRATEGY, req.direction,
-        _SIGNAL_KWARGS.get(_MULTI_BT_STRATEGY, lambda r: {})(req),
-    )
 
 
 def _backtest_drop(symbol: str, bt_result) -> dict | None:
@@ -520,11 +573,27 @@ def _reject_unsupported_multi_variants(req: StockScanRequest) -> None:
     # rejected here rather than left as a live API footgun for the next
     # caller (a future feature, a test, a script) that adds it. Called by
     # both run_stock_scan and analyze_stock (A5c: Analysis runs the loop too).
-    if req.strategy == "mean_reversion_multi" and "mean_reversion_vwap" in req.mean_reversion_variants:
+    #
+    # STOCKS-HORIZON-T1 H4: both checks run on the MERGED shape (profile +
+    # request), since the request's multi fields are Optional. A request with
+    # 2 variants against a profile min_confirmations 3 is refused here rather
+    # than silently never firing.
+    if req.strategy != "mean_reversion_multi":
+        return
+    shape = _multi_params(req)
+    variants = shape.get("variants") or []
+    if "mean_reversion_vwap" in variants:
         raise HTTPException(
             status_code=422,
             detail="mean_reversion_vwap (intraday) is not supported in mean_reversion_multi — "
                    "its variant loop only evaluates daily bars. Use mean_reversion_vwap_daily instead.",
+        )
+    min_conf = shape.get("min_confirmations")
+    if min_conf is None or min_conf > len(variants):
+        raise HTTPException(
+            status_code=422,
+            detail=f"mean_reversion_min_confirmations ({min_conf}) cannot exceed the number "
+                   f"of selected variants ({len(variants)})",
         )
 
 
@@ -616,7 +685,9 @@ def _drop_excluded_symbols(symbols: list[str], label: str) -> tuple[list[str], l
     broken list is a named 500, logged once here: it must not silently scan
     everything."""
     try:
-        return filter_symbols(symbols, purpose="scan")
+        kept, excluded = filter_symbols(symbols, purpose="scan")
+        observe_resolution(symbols, kept, excluded)
+        return kept, excluded
     except ExclusionListError as e:
         logger.error("%s aborted: universe exclusion list unusable: %s", label, e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -686,8 +757,13 @@ async def restore_stock_from_db() -> None:
             # now refuse is worse than offering no replay. The result still
             # loads.
             try:
-                _last_stock_request = StockScanRequest.model_validate_json(row.last_request_json)
-            except ValidationError as exc:
+                # STOCKS-HORIZON-T1 H4: a request saved before the strategy
+                # fields became Optional carries their frozen defaults; drop
+                # them so a replay follows the profile (idempotent; the row
+                # itself is rewritten by the next scan).
+                _last_stock_request = StockScanRequest.model_validate(
+                    migrate_saved_stock_request(json.loads(row.last_request_json)))
+            except (ValidationError, ValueError) as exc:
                 logger.warning(
                     "restore_stock_from_db: saved stock-scan request no longer "
                     "validates and was dropped (no Analysis replay until the "
@@ -705,11 +781,16 @@ async def restore_stock_from_db() -> None:
 
 def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], params: dict | None = None,
                    commission: float = 0.0, min_trades: int | None = None,
-                   min_win_rate: float | None = None) -> str:
+                   min_win_rate: float | None = None, hold_max_days: int | None = None) -> str:
     bars_hash = hashlib.md5(
         str([(b["time"], b["close"]) for b in bars[-20:]]).encode()
     ).hexdigest()[:8]
-    params_hash = hashlib.md5(str(sorted((params or {}).items())).encode()).hexdigest()[:8]
+    # Canonical JSON with sorted keys at every depth (STOCKS-HORIZON-T1 H3):
+    # mean_reversion_multi's params are nested, and a nested value or key
+    # order must change, or not change, the key the same way a flat one does.
+    params_hash = hashlib.md5(
+        json.dumps(params or {}, sort_keys=True, default=str).encode()
+    ).hexdigest()[:8]
     # commission is folded into the key (not just the run_strategy_backtest call)
     # so that editing strategy_params.yaml's costs.fee_pct/slippage_pct doesn't
     # leave a stale pre-edit BacktestResult (including passes_gate) served out of
@@ -720,8 +801,9 @@ def _backtest_key(symbol: str, strategy: str, direction: str, bars: list[dict], 
     # its verdict to a later run at 10 for up to _BACKTEST_TTL.
     # TRADING-REVIEW-PHASE-C T2: the bar basis version too, right after the bars
     # hash (a hash of closes alone does not see a basis change in open/high/low).
+    # STOCKS-HORIZON-T1 H2: the time-exit hold too; it changes every trade's exit.
     return (f"{symbol.upper()}|{strategy}|{direction.lower()}|{bars_hash}|{BARS_BASIS_VERSION}"
-            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}")
+            f"|{params_hash}|{commission:.6f}|{min_trades}|{min_win_rate!r}|hold={hold_max_days}")
 
 
 def _get_backtest_cached(key: str):
@@ -729,6 +811,68 @@ def _get_backtest_cached(key: str):
     if entry and time.time() < entry[1]:
         return entry[0]
     return None
+
+
+# Exact inputs AND the legacy cached summary object's identity are required.
+# Legacy aggregate entries cannot be upgraded by another backtest invocation.
+_BACKTEST_DETAILS: OrderedDict[str, tuple] = OrderedDict()
+
+
+def _detail_key(symbol, bars, inputs):
+    payload = json.dumps(dict(bars=bars, inputs=inputs, bars_basis=BARS_BASIS_VERSION,
+                              engine=ENGINE_CONTRACT_VERSION), sort_keys=True,
+                         separators=(',', ':'), allow_nan=False, default=str)
+    return symbol.upper() + '|' + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _run_backtest_with_details(bars, **kwargs):
+    """Picklable ProcessPool entry; summary and evidence share one engine run."""
+    details = []
+    summary = run_strategy_backtest(bars, **kwargs, detail_collector=details)
+    return summary, details[0] if len(details) == 1 else None
+
+
+def _remember_detail(key, summary, detail):
+    _BACKTEST_DETAILS[key] = (summary, copy.deepcopy(detail), time.time() + _BACKTEST_TTL)
+    _BACKTEST_DETAILS.move_to_end(key)
+    while len(_BACKTEST_DETAILS) > 128:
+        _BACKTEST_DETAILS.popitem(last=False)
+
+
+def _cached_detail(key, summary):
+    entry = _BACKTEST_DETAILS.get(key)
+    if entry is None:
+        return None
+    if time.time() >= entry[2]:
+        _BACKTEST_DETAILS.pop(key, None)
+        return None
+    if entry[0] is not summary:
+        return None
+    _BACKTEST_DETAILS.move_to_end(key)
+    return copy.deepcopy(entry[1])
+
+
+async def _original_artifact(detail, *, scan_id, symbol, strategy, direction, horizon,
+                             interval, detail_key):
+    """Optional persistence must never perturb numeric/trading scan behavior."""
+    if detail is None:
+        return dict(backtest_artifact_status='original_unavailable')
+    if detail.status != 'success':
+        return dict(backtest_artifact_status=detail.status)
+    collector = current_collector()
+    identity = dict(scan_id=scan_id, report_run_id=collector.report_run_id if collector else None,
+                    symbol=symbol, strategy=strategy, direction=direction, horizon=horizon,
+                    interval=interval, bars_basis_version=BARS_BASIS_VERSION,
+                    input_hash=detail_key.split('|', 1)[1],
+                    engine_contract_version=detail.engine_contract_version)
+    try:
+        from app.services.backtest_artifacts import save_artifact
+        async with AsyncSessionLocal() as db:
+            saved = await save_artifact(db, detail=detail, identity=identity)
+        return dict(backtest_artifact_id=saved['artifact_id'], backtest_artifact_status='available')
+    except Exception:
+        # Never log provider/configuration text or let optional storage drop a row.
+        return dict(backtest_artifact_status='storage_unavailable')
 
 
 def evict_backtest_cache(symbols: Iterable[str]) -> int:
@@ -747,6 +891,9 @@ def evict_backtest_cache(symbols: Iterable[str]) -> int:
     keys = [k for k in list(_BACKTEST_CACHE) if k.startswith(prefixes)]
     for k in keys:
         _BACKTEST_CACHE.pop(k, None)
+    for k in list(_BACKTEST_DETAILS):
+        if k.startswith(prefixes):
+            _BACKTEST_DETAILS.pop(k, None)
     return len(keys)
 
 
@@ -781,6 +928,8 @@ class _AnalyzeCore:
     gate_flags: list[dict]
     earnings_days: int | None = None
     earnings_veto: bool = False
+    # The hold passed to bt_result's backtest (hold_for_backtest; None = no hold).
+    bt_hold: int | None = None
 
 
 async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCore | None":
@@ -917,16 +1066,19 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
     signal = None
     _bt_strategy = _bt_bars = _bt_params = None
     if req.strategy == "mean_reversion_multi":
-        signal, _drop = _multi_signal(symbol, req, bars)
+        _multi_shape = _multi_params(req)
+        signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
         if signal is not None:
-            _bt_strategy, _bt_bars, _bt_params = _MULTI_BT_STRATEGY, bars, _multi_bt_params(req)
+            # The backtest runs the same vote on the same shape object.
+            _bt_strategy, _bt_bars, _bt_params = "mean_reversion_multi", bars, _multi_shape
     else:
         signal_fn = _SIGNAL_FNS.get(req.strategy)
         if signal_fn:
             signal_kwargs = _merge_strategy_params(
-                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req))
+                req.strategy, req.direction, _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                _params_horizon(req))
             _sig_bars = (_intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES
-                         else bars[-120:])
+                         else bars[-SIGNAL_WINDOW_BARS:])
             # Pass live price so signal uses current price, not yesterday's close.
             _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
             try:
@@ -945,12 +1097,14 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
 
     # Backtest + confidence
     bt_result = None
+    _bt_hold = None
     conf_val = conf_txt = None
     if signal is not None:
         _bt_commission = _backtest_commission()
+        _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
         _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, _bt_bars, _bt_params,
                                  commission=_bt_commission, min_trades=req.bt_min_trades,
-                                 min_win_rate=req.bt_min_win_rate)
+                                 min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
         bt_result = _get_backtest_cached(_bt_key)
         if bt_result is None:
             bt_result = await asyncio.get_running_loop().run_in_executor(
@@ -958,7 +1112,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
                 functools.partial(run_strategy_backtest, _bt_bars, strategy=_bt_strategy,
                                   direction=req.direction, min_trades=req.bt_min_trades,
                                   min_win_rate=req.bt_min_win_rate, params=_bt_params,
-                                  commission=_bt_commission))
+                                  commission=_bt_commission, hold_max_days=_bt_hold))
             # A refresh that landed after this request read its bars has already
             # evicted the symbol: storing now would put the pre-refresh result back
             # for _BACKTEST_TTL. It is still this request's result (T6, HYG-P1-F2).
@@ -1041,6 +1195,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
         daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
         earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
+        bt_hold=_bt_hold,
     )
 
 
@@ -1196,7 +1351,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
             total_return_pct=round(bt.total_return_pct, 2),
             max_drawdown_pct=round(bt.max_drawdown_pct, 2), expectancy=bt.expectancy,
             sharpe=bt.sharpe, confidence=getattr(bt, 'confidence', None), passes_gate=bt.passes_gate,
-            summary_text=bt.summary_text)
+            summary_text=bt.summary_text, n_time_exits=bt.n_time_exits, hold_max_days=core.bt_hold)
 
     fundamentals_out = None
     if core.fundamentals is not None and not is_index:
@@ -1209,6 +1364,7 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     return StockAnalysisOut(
         symbol=symbol, company=core.company, price=core.price, direction=req.direction,
         stock_score=card.score, stock_status=card.status, is_index=is_index,
+        stock_explanation=_stock_explanation_out(symbol, card),
         strategy=strategy_out, backtest=backtest_out,
         confidence=core.conf_val, confidence_text=core.conf_txt,
         sentiment=SentimentData(**core.regime_signal) if core.regime_signal else None,
@@ -1241,6 +1397,11 @@ def _position_size(account: float, risk_pct: float | None, risk_fixed: float | N
     return shares, round(dollar_risk, 2)
 
 
+def _unique_setup_symbols(symbols):
+    """Normalize before exclusions/evaluation, preserving first-occurrence tie order."""
+    return list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
+
+
 async def _process_stock(
     symbol: str,
     req: StockScanRequest,
@@ -1259,11 +1420,13 @@ async def _process_stock(
     # before the first symbol is touched; the call is kept here so that direct
     # callers (the test suite) screen on the real gate rather than silently
     # running with it disabled.
+    observe_evaluation(symbol)
     _min_trend = load_direction_conviction_min_trend(req.direction, req.horizon)
     # The scan resolves the earnings veto window once and passes it in; a
     # direct caller (the test suite) gets the same resolution here.
     if veto_days is None:
         veto_days = _resolve_stock_veto_days(req)
+    observe_configuration("stocks.earnings_veto", {"veto_days": veto_days})
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -1275,6 +1438,7 @@ async def _process_stock(
             _bars_gen = conf_generation()
             bars = await get_historical_bars(symbol, start, end)
             if not bars or len(bars) < 60:
+                observe_terminal(symbol, "no_data", "insufficient_history")
                 return {"symbol": symbol, "reason": "insufficient history"}
 
             # ONE 15-min fetch, when either consumer needs it (P3a item 12, plan
@@ -1285,7 +1449,9 @@ async def _process_stock(
             # default of a fetch that never ran. The exception is kept for the
             # item-12 drop below, which is decided only from a fetch that ran.
             full_cfg = _load_full_scoring_cfg()
+            observe_configuration("stocks.worker.scoring", full_cfg, symbol=symbol)
             rcfg = _load_regime_cfg(req.horizon)
+            observe_configuration("stocks.worker.regime", rcfg, symbol=symbol)
             intraday_bars: list[dict] = []
             _intraday_fetch_exc: Exception | None = None
             if req.strategy in _INTRADAY_STRATEGIES or rcfg["timeframe"] == "15min":
@@ -1297,6 +1463,7 @@ async def _process_stock(
                     logger.warning("fetch_intraday_candles failed for %s: %s", symbol, exc)
                     _intraday_fetch_exc = exc
                 if (_drop := _intraday_history_drop(symbol, req.strategy, intraday_bars)):
+                    observe_terminal(symbol, "no_data", "insufficient_intraday_history")
                     return _drop
 
             # Price fallback chain mirrors the options scan: Tradier batch quote →
@@ -1311,12 +1478,15 @@ async def _process_stock(
                 if not price:
                     price = await fetch_price_async(client, symbol)
                 if not price:
+                    observe_terminal(symbol, "no_data", "missing_price")
                     return {"symbol": symbol, "reason": "no price data"}
                 company = await fetch_company_name_async(client, symbol)
 
             if req.min_price is not None and price < req.min_price:
+                observe_terminal(symbol, "filtered", "price_min", observations={"price": price}, thresholds={"min_price": req.min_price})
                 return {"symbol": symbol, "reason": f"price ${price:.2f} < min"}
             if req.max_price is not None and price > req.max_price:
+                observe_terminal(symbol, "filtered", "price_max", observations={"price": price}, thresholds={"max_price": req.max_price})
                 return {"symbol": symbol, "reason": f"price ${price:.2f} > max"}
 
             # --- regime sentiment ---
@@ -1376,10 +1546,12 @@ async def _process_stock(
                 req.regime_headwind_caution_pct,
                 req.regime_headwind_reject_pct,
             )
+            observe_configuration("stocks.regime_gate", _regime_gate, symbol=symbol)
 
             # P3a item 12: drop where the auto-trader's fire would refuse.
             if (_drop := _regime_data_drop(symbol, req, full_cfg, _regime_gate, rcfg,
                                            regime_bars, _intraday_fetch_exc)):
+                observe_terminal(symbol, "error" if _intraday_fetch_exc is not None else "no_data", "regime_fetch_failed" if _intraday_fetch_exc is not None else "regime_data_unavailable")
                 return _drop
 
             card = score_stock(
@@ -1396,8 +1568,10 @@ async def _process_stock(
                 benchmark_candles=_aligned_benchmark(rs_benchmark_candles, bars[-120:]),
             )
             if card.status == "REJECT":
+                observe_terminal(symbol, "filtered", "score_status", observations={"score": card.score, "status": card.status})
                 return {"symbol": symbol, "reason": f"REJECT score={card.score}"}
             if (_drop := _min_score_drop(symbol, card, req.min_stock_score)):
+                observe_terminal(symbol, "filtered", "score_min", observations={"score": card.score}, thresholds={"min_stock_score": req.min_stock_score})
                 return _drop
 
             # Direction-conviction floor (shared with _analyze_core — A5c).
@@ -1406,54 +1580,74 @@ async def _process_stock(
                 return _drop
 
             if req.regime_filter and _regime_headwind(regime_signal, _regime_gate):
+                observe_terminal(symbol, "filtered", "regime_headwind")
                 return {"symbol": symbol, "reason": "regime headwind"}
 
             if req.strategy == "mean_reversion_multi":
-                signal, _drop = _multi_signal(symbol, req, bars)
+                _multi_shape = _multi_params(req)
+                observe_configuration("stocks.multi_params", _multi_shape, symbol=symbol)
+                signal, _drop = _multi_signal(symbol, req, bars, _multi_shape)
                 if _drop:
+                    observe_terminal(symbol, "no_setup", "setup_not_returned", observations={"strategy": req.strategy})
                     return _drop
-                _bt_strategy = _MULTI_BT_STRATEGY
+                # The backtest runs the same vote on the same shape object.
+                _bt_strategy = "mean_reversion_multi"
                 bt_bars = bars
-                _bt_params = _multi_bt_params(req)
+                _bt_params = _multi_shape
             else:
                 signal_fn = _SIGNAL_FNS.get(req.strategy)
                 if not signal_fn:
+                    observe_terminal(symbol, "error", "unsupported_strategy")
                     return {"symbol": symbol, "reason": f"unknown strategy {req.strategy}"}
                 signal_kwargs = _merge_strategy_params(
                     req.strategy, req.direction,
                     _SIGNAL_KWARGS.get(req.strategy, lambda r: {})(req),
+                    _params_horizon(req),
                 )
+                observe_configuration("stocks.strategy_params", signal_kwargs, symbol=symbol)
                 # Intraday strategies use intraday bars for both signal and backtest.
-                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-120:]
+                signal_bars = intraday_bars[-300:] if req.strategy in _INTRADAY_STRATEGIES else bars[-SIGNAL_WINDOW_BARS:]
                 _live_price = price if req.strategy not in _INTRADAY_STRATEGIES else None
                 signal = signal_fn(signal_bars, direction=req.direction,
                                    current_price=_live_price, **signal_kwargs)
                 if signal is None:
+                    observe_terminal(symbol, "no_setup", "setup_not_returned", observations={"strategy": req.strategy})
                     return _no_setup_drop(symbol, req.strategy)
                 _bt_strategy = req.strategy
                 bt_bars = intraday_bars if req.strategy in _INTRADAY_STRATEGIES else bars
                 _bt_params = signal_kwargs
 
             _bt_commission = _backtest_commission()
+            _bt_hold = hold_for_backtest(req.horizon, _bt_strategy, req.hold_max_days)
             _bt_key = _backtest_key(symbol, _bt_strategy, req.direction, bt_bars, _bt_params,
                                      commission=_bt_commission, min_trades=req.bt_min_trades,
-                                     min_win_rate=req.bt_min_win_rate)
+                                     min_win_rate=req.bt_min_win_rate, hold_max_days=_bt_hold)
+            _detail_inputs = dict(strategy=_bt_strategy, direction=req.direction,
+                                  min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
+                                  params=_bt_params, commission=_bt_commission, hold_max_days=_bt_hold)
+            try:
+                _detail_identity = _detail_key(symbol, bt_bars, _detail_inputs)
+            except (ValueError, TypeError):
+                _detail_identity = None
             bt_result = _get_backtest_cached(_bt_key)
+            try:
+                _detail = _cached_detail(_detail_identity, bt_result) if _detail_identity else None
+            except Exception:
+                _detail = None
             if bt_result is None:
-                bt_result = await asyncio.get_running_loop().run_in_executor(
+                bt_result, _detail = await asyncio.get_running_loop().run_in_executor(
                     _BACKTEST_POOL,
-                    functools.partial(
-                        run_strategy_backtest, bt_bars,
-                        strategy=_bt_strategy, direction=req.direction,
-                        min_trades=req.bt_min_trades, min_win_rate=req.bt_min_win_rate,
-                        params=_bt_params, commission=_bt_commission,
-                    ),
+                    functools.partial(_run_backtest_with_details, bt_bars, **_detail_inputs),
                 )
-                # Same in-flight guard as _analyze_core's store (T6, HYG-P1-F2): not
-                # stored when a refresh invalidated the symbol after the bars read.
                 if not conf_invalidated_since(symbol, _bars_gen):
                     _BACKTEST_CACHE[_bt_key] = (bt_result, time.time() + _BACKTEST_TTL)
+                    if _detail_identity:
+                        try:
+                            _remember_detail(_detail_identity, bt_result, _detail)
+                        except Exception:
+                            pass
             if (_drop := _backtest_drop(symbol, bt_result)):
+                observe_terminal(symbol, "filtered", "backtest_gate", observations={"passes_gate": bt_result.passes_gate, "win_rate": getattr(bt_result, "win_rate", None), "n_trades": getattr(bt_result, "n_trades", None)}, thresholds={"min_trades": req.bt_min_trades, "min_win_rate": req.bt_min_win_rate})
                 return _drop
 
             # Asymmetric ATR override — a lone target or stop is ignored (both or neither).
@@ -1483,6 +1677,7 @@ async def _process_stock(
 
             if conf_val is not None and req.confidence_reject_below is not None:
                 if conf_val < req.confidence_reject_below:
+                    observe_terminal(symbol, "filtered", "confidence_gate", observations={"confidence": conf_val}, thresholds={"confidence_reject_below": req.confidence_reject_below})
                     return {
                         "symbol": symbol,
                         "reason": (
@@ -1564,7 +1759,14 @@ async def _process_stock(
             if _earn_flag is not None:
                 gate_flags.append(GateFlag(**_earn_flag))
 
+            _artifact = await _original_artifact(
+                _detail, scan_id=scan_id, symbol=symbol, strategy=_bt_strategy,
+                direction=req.direction, horizon=req.horizon,
+                interval='15m' if _bt_strategy in _INTRADAY_STRATEGIES else '1d',
+                detail_key=_detail_identity,
+            ) if _detail_identity else dict(backtest_artifact_status='capture_unavailable')
             return PositionCardOut(
+                **_artifact,
                 symbol=symbol, company=company or symbol, price=price, direction=req.direction,
                 strategy=StrategySignalOut(
                     strategy=signal.strategy, entry_price=signal.entry_price,
@@ -1579,6 +1781,7 @@ async def _process_stock(
                     expectancy=bt_result.expectancy, sharpe=bt_result.sharpe,
                     confidence=bt_result.confidence, passes_gate=bt_result.passes_gate,
                     summary_text=bt_result.summary_text,
+                    n_time_exits=bt_result.n_time_exits, hold_max_days=_bt_hold,
                 ),
                 stock_score=card.score, stock_status=card.status, gate_flags=gate_flags,
                 shares=shares, dollar_risk=dollar_risk,
@@ -1594,8 +1797,13 @@ async def _process_stock(
                     growth_score=_fh.growth_score, quality_score=_fh.quality_score,
                     risk_score=_fh.risk_score, safety_flags=_fh.safety_flags, detail=_fh.detail,
                 ) if _fh else None,
+                params_horizon=_params_horizon(req),
+                params_source=_params_source(req),
+                stock_explanation=_stock_explanation_out(symbol, card),
             )
         except Exception as exc:
+            observe_terminal(symbol, "error", "data_processing_failed")
+            observe_data_failure(symbol)
             logger.exception("Error processing %s", symbol)
             return {"symbol": symbol, "reason": str(exc)}
 
@@ -1650,7 +1858,8 @@ async def run_stock_scan(req: StockScanRequest, db: AsyncSession = Depends(get_d
     await _upsert_stock_session(db, req=req, result=_prev_result, status="running")
 
     try:
-        result = await _execute_stock_scan_core(req, db, previous_result=_prev_result)
+        result = await run_reported_scan(req, category=req.category, trigger="manual",
+            callback=lambda: _execute_stock_scan_core(req, db, previous_result=_prev_result))
         await _upsert_stock_session(db, req, result, status="complete")
         return result
     except Exception:
@@ -1681,6 +1890,13 @@ async def _execute_stock_scan_core(
     today: unlike options mode, stock-mode scans compute no rank/score
     deltas (StockScanResult carries no `deltas` field), so there is nothing
     here to compute against it yet."""
+    # STOCKS-HORIZON-T1 F1: the scheduled runner reaches this core without
+    # run_stock_scan's check, and a stored schedule can turn invalid later (a
+    # profile change raising min_confirmations past its variants). Refuse it
+    # here so the run is recorded as an error with the reason, not as a
+    # 0-candidate success. For run_stock_scan this repeats a check that has
+    # already passed, so its HTTP behaviour is unchanged.
+    _reject_unsupported_multi_variants(req)
     scan_id = new_rec_id()
     # Deliberately NOT hoisted to the module-level import at line 57 — tests
     # patch `app.data.universe_presets.expand_universe` (not
@@ -1697,6 +1913,8 @@ async def _execute_stock_scan_core(
             raise HTTPException(status_code=400, detail=str(e))
     # Excluded symbols go into `rejected` below and count in `scanned` and
     # `failed_history`, so scanned == sum of buckets still holds.
+    if req.category == "pullback":
+        symbols = _unique_setup_symbols(symbols)
     symbols, _excluded = _drop_excluded_symbols(symbols, f"STOCK SCAN {scan_id}")
     _scanned = len(symbols) + len(_excluded)
 
@@ -1739,6 +1957,7 @@ async def _execute_stock_scan_core(
     # `except SizingConfigError` as a bare 500 with no detail and no log line.
     try:
         _cfg_doc = _load_full_scoring_cfg()
+        observe_configuration("stocks.scoring", _cfg_doc)
     except (OSError, _yaml.YAMLError) as e:
         logger.error("STOCK SCAN %s aborted: scoring_rules.yaml unreadable: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=f"scoring_rules.yaml unreadable: {e}")
@@ -1784,11 +2003,13 @@ async def _execute_stock_scan_core(
         pass   # RS column shows None — non-fatal
 
     fund_gate = _resolve_fundamentals_gate(req)
+    observe_configuration("stocks.fundamentals_gate", fund_gate)
     # Fetched once for the whole universe; None unless the trend method is
     # relative_strength (see _rs_benchmark_candles).
     rs_benchmark_candles = await _rs_benchmark_candles(req)
     # Earnings veto window, max(reject_days, hold), resolved once (B6).
     veto_days = _resolve_stock_veto_days(req)
+    observe_configuration("stocks.earnings_veto", {"veto_days": veto_days})
     tasks = [_process_stock(s, req, scan_id, price_map, benchmark_closes, fund_gate=fund_gate,
                             rs_benchmark_candles=rs_benchmark_candles, veto_days=veto_days)
              for s in symbols]
@@ -1800,6 +2021,8 @@ async def _execute_stock_scan_core(
     # gather keeps input order, so each raised exception is named by its symbol.
     for sym, r in zip(symbols, results):
         if isinstance(r, Exception):
+            observe_terminal(sym, "error", "data_processing_failed")
+            observe_data_failure(sym)
             rejected.append({"symbol": sym, "reason": str(r)})
         elif isinstance(r, PositionCardOut):
             candidates.append(r)
@@ -1823,12 +2046,14 @@ async def _execute_stock_scan_core(
     # clamping would silently override an explicit request or a saved schedule.
     original_count = len(candidates)
     _cap = req.shortlist_max_candidates
+    observe_configuration("stocks.shortlist", {"max_candidates": _cap})
     shortlist_truncated = original_count > _cap
     # A trimmed name is recorded, not dropped on the floor: it goes into
     # `rejected` so the user can see what the cap cost them. The literal prefix
     # (not an f-string on _SHORTLIST_REASON_PREFIX) keeps it visible to
     # test_every_stock_reason_producer_is_classified's source scan.
     for _k, _c in enumerate(candidates[_cap:], start=_cap + 1):
+        observe_terminal(_c.symbol, "filtered", "shortlist_cap", observations={"rank": _k, "original_count": original_count}, thresholds={"cap": _cap})
         _conf = f"{_c.confidence}%" if _c.confidence is not None else "n/a"
         rejected.append({
             "symbol": _c.symbol,
@@ -1836,6 +2061,8 @@ async def _execute_stock_scan_core(
                       f"confidence {_conf} ranked {_k} of {original_count} (cap {_cap})",
         })
     candidates = candidates[:_cap]
+    for candidate in candidates:
+        observe_terminal(candidate.symbol, "accepted", "candidate_returned")
 
     _direction_banner: str | None = None
     # The pipeline's `failed_direction`: a measured trend below the floor only
@@ -1930,9 +2157,14 @@ class FibPullbackScanRequest(BaseModel):
 
 
 @router.post("/scan/fib-pullback")
-async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
-    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_signal."""
-    from app.services.strategy_engine import fibonacci_pullback_signal
+async def fib_pullback_scan(body: FibPullbackScanRequest, response: Response = None) -> list[dict]:
+    return await run_reported_scan(body, category="fib", trigger="manual",
+        callback=lambda: _fib_pullback_scan_core(body), response=response)
+
+
+async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
+    """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_detail."""
+    from app.services.strategy_engine import fibonacci_pullback_detail
 
     end = date.today()
     start = end - timedelta(days=365)
@@ -1945,7 +2177,9 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
     else:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
+    symbols_to_scan = _unique_setup_symbols(symbols_to_scan)
     if not symbols_to_scan:
+        observe_resolution([], [], [])
         return []
 
     # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
@@ -1994,20 +2228,27 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                     raise HTTPException(status_code=422, detail="impulse_min_pct must be between 0 and 0.50")
         scan_params.update(coerced)
 
+    observe_configuration("fib.params", scan_params)
     results: list[dict] = []
+    missing_data_count = 0
     for sym in symbols_to_scan:
         sym = sym.strip().upper()
         if not sym:
             continue
+        observe_evaluation(sym)
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_terminal(sym, "error", "history_fetch_failed")
+            observe_data_failure(sym)
             logger.warning("fib-pullback scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            observe_terminal(sym, "no_data", "missing_history")
+            missing_data_count += 1
             continue
         try:
-            at_level, dist_pct, level_hit = fibonacci_pullback_signal(
+            fib = fibonacci_pullback_detail(
                 bars,
                 body.direction,
                 fib_swing_lookback=scan_params["fib_swing_lookback"],
@@ -2016,10 +2257,14 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                 impulse_min_pct=scan_params["impulse_min_pct"],
                 retracement_recency_bars=scan_params["retracement_recency_bars"],
             )
+            at_level, dist_pct, level_hit = fib["at_level"], fib["dist_pct"], fib["label"]
         except Exception as exc:
+            observe_terminal(sym, "error", "signal_processing_failed")
+            observe_data_failure(sym)
             logger.warning("fib-pullback scan: signal failed for %s — %s", sym, exc)
             continue
         if level_hit is None:
+            observe_terminal(sym, "no_setup", "fib_level_not_returned")
             # Insufficient bars or no swing found — skip
             continue
 
@@ -2034,8 +2279,10 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
                 ema_val = c * k + ema_val * (1 - k)
             current_close = closes[-1]
             if body.direction == "Bullish" and current_close < ema_val:
+                observe_terminal(sym, "filtered", "ema_side", observations={"current_close": current_close, "ema_value": ema_val, "direction": body.direction}, thresholds={"ema_period": ema_period})
                 continue
             if body.direction == "Bearish" and current_close > ema_val:
+                observe_terminal(sym, "filtered", "ema_side", observations={"current_close": current_close, "ema_value": ema_val, "direction": body.direction}, thresholds={"ema_period": ema_period})
                 continue
 
         # Confidence: 100 if at level, scaled by proximity otherwise
@@ -2053,6 +2300,8 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
             "fib_dist_pct": dist_pct,
             "at_level": at_level,
             "confidence": confidence,
+            # STOCK-PRES-P1: the swing low/high the Fib levels were measured from.
+            "fib_swing": {"low": fib["swing_low"], "high": fib["swing_high"]},
         })
 
     # Sort: at-level hits first, then by proximity ascending (closer = better rank).
@@ -2060,11 +2309,20 @@ async def fib_pullback_scan(body: FibPullbackScanRequest) -> list[dict]:
         not r["at_level"],  # False (0) = at-level → sorts first
         r["fib_dist_pct"] if r["fib_dist_pct"] is not None else float("inf"),
     ))
+    if symbols_to_scan and missing_data_count == len(symbols_to_scan):
+        observe_no_data()
+    for row in results:
+        observe_terminal(row["symbol"], "accepted", "candidate_returned")
     return results
 
 
 @router.post("/scan/prebreakout")
-async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
+async def prebreakout_scan(body: PreBreakoutScanRequest, response: Response = None) -> list[dict]:
+    return await run_reported_scan(body, category="prebreakout", trigger="manual",
+        callback=lambda: _prebreakout_scan_core(body), response=response)
+
+
+async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
     """Scan symbols for pre-breakout consolidation setups using breakout_setup_signal."""
     end = date.today()
     start = end - timedelta(days=365)
@@ -2078,7 +2336,9 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
     else:
         symbols_to_scan = [s.strip().upper() for s in body.symbols if s.strip()]
 
+    symbols_to_scan = _unique_setup_symbols(symbols_to_scan)
     if not symbols_to_scan:
+        observe_resolution([], [], [])
         return []
 
     # STOCKS-HORIZON-P0A A2: no `rejected` list here, so excluded symbols are
@@ -2111,39 +2371,59 @@ async def prebreakout_scan(body: PreBreakoutScanRequest) -> list[dict]:
                 coerced[k] = float(v) if isinstance(v, (int, float)) else v
         base_params.update(coerced)
 
+    observe_configuration("prebreakout.params", base_params)
     results: list[dict] = []
+    missing_data_count = 0
     for sym in symbols_to_scan:
         sym = sym.strip().upper()
         if not sym:
             continue
+        observe_evaluation(sym)
         try:
             bars = await get_historical_bars(sym, start, end)
         except Exception as exc:
+            observe_terminal(sym, "error", "history_fetch_failed")
+            observe_data_failure(sym)
             logger.warning("prebreakout scan: get_bars failed for %s — %s", sym, exc)
             continue
         if not bars:
+            observe_terminal(sym, "no_data", "missing_history")
+            missing_data_count += 1
             continue
         try:
             signal = breakout_setup_signal(bars, sym, direction=body.direction, **base_params)
         except Exception as exc:
+            observe_terminal(sym, "error", "signal_processing_failed")
+            observe_data_failure(sym)
             logger.warning("prebreakout scan: signal failed for %s — %s", sym, exc)
             continue
         if signal is None:
+            observe_terminal(sym, "no_setup", "setup_not_returned")
             continue
         results.append({
             "symbol": sym,
             "confidence": signal.confidence,
             "direction": signal.direction,
             "metrics": signal.metrics,
+            # STOCK-PRES-P1: evidence behind `confidence` + Fib swing low/high.
+            "confidence_breakdown": signal.confidence_breakdown,
+            "fib_swing": signal.fib_swing,
         })
 
     results.sort(key=lambda r: r["confidence"], reverse=True)
+    if symbols_to_scan and missing_data_count == len(symbols_to_scan):
+        observe_no_data()
+    for row in results:
+        observe_terminal(row["symbol"], "accepted", "candidate_returned")
     return results
 
 
 # ── Stock first-passage (Approach B) ──────────────────────────────────────────
 
 class StockFirstPassageRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:       str
     direction:    Literal["Bullish", "Bearish"]
     horizon:      Literal["Intraday", "Swing", "Position"]
@@ -2327,6 +2607,9 @@ async def stock_first_passage(req: StockFirstPassageRequest) -> StockFirstPassag
 
 
 class StockExitPlanRequest(BaseModel):
+    # NUMERIC-API-INPUTS T2: every float on this body is finite or a 422.
+    model_config = ConfigDict(allow_inf_nan=False)
+
     symbol:      str
     direction:   Literal["Bullish", "Bearish"]
     entry_price: float = Field(..., gt=0)

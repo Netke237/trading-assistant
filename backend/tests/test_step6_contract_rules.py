@@ -22,7 +22,8 @@ _LOOSE = {"min_volume": 20, "min_open_interest": 75, "max_bid_ask_spread_pct": 0
 
 _EXPIRY = (date.today() + timedelta(days=45)).isoformat()
 
-# Thin but inside the Loose rules; below the YAML floor on volume AND OI.
+# Thin but inside the Loose rules; below the YAML OI floor (and below the
+# former volume floor of 50).
 _THIN = {
     "id": f"XOM|190|{_EXPIRY}|C", "symbol": "XOM", "strike": 190, "expiry": _EXPIRY,
     "right": "C", "dte": 45, "dteTotal": 45, "price": 2.50, "spread": 0.10,
@@ -266,8 +267,10 @@ def _scan(client, overrides, hold=None):
 
 
 def test_zero_liquidity_floors_reach_the_validator(client, monkeypatch):
+    """A non-zero floor rejects, zero floors do not. The YAML volume floor is
+    0 (off), so the non-zero baseline sets an explicit min_volume of 50."""
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [_DUST])
-    default = _scan(client, {})
+    default = _scan(client, {"min_volume": 50})
     assert default["rejected"][0]["reason"] == (
         "contracts rejected: volume_too_low(1), open_interest_too_low(1)")
     zeroed = _scan(client, _ZERO_FLOORS)
@@ -300,7 +303,8 @@ def test_a_mixed_chain_names_both_the_hard_and_the_score_rejects(client, monkeyp
 def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeypatch):
     """The UI always sends hold days, so the DTE-widened overrides are the real path."""
     monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "expiry": (date.today()+timedelta(days=68)).isoformat(), "dte":68, "dteTotal":68}])
-    default = _scan(client, {}, hold=(20, 25))
+    # Explicit floor: the YAML volume floor is 0 (off).
+    default = _scan(client, {"min_volume": 50}, hold=(20, 25))
     assert "volume_too_low(1)" in default["rejected"][0]["reason"]
     zeroed = _scan(client, _ZERO_FLOORS, hold=(20, 25))
     assert zeroed["contract_rules"] == _ZERO_FLOORS
@@ -308,9 +312,12 @@ def test_zero_floors_reach_the_validator_on_the_hold_window_path(client, monkeyp
 
 
 def test_a_thin_contract_with_one_more_soft_miss_is_too_many_soft_failures(client, monkeypatch):
-    """The second route the Step-3 hint names: the two Preferred-floor misses
-    plus one more (a wide-ish spread) reach max_soft_fail_count."""
-    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "spread": 0.30}])
+    """The second route the Step-3 hint names: the Preferred liquidity floors
+    take one slot together (thin_liquidity), so the liquidity miss plus two
+    others -- a wide-ish spread (0.30 on 2.50 = 12%, spread_elevated) and a
+    delta below the Preferred band (delta_outside_preferred) -- reach
+    max_soft_fail_count."""
+    monkeypatch.setitem(globals(), "_CURRENT_CHAIN", [{**_DUST, "spread": 0.30, "delta": 0.25}])
     reason = _scan(client, _ZERO_FLOORS)["rejected"][0]["reason"]
     assert reason == "contracts rejected: too_many_soft_failures(1)", reason
 

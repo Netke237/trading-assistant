@@ -19,6 +19,10 @@ router = APIRouter(prefix='/api', tags=['trading'])
 
 _PRIORITY = {"REJECT": 0, "CAUTION": 1, "PENDING": 2, "NO_DATA": 2, "PASS": 3}
 
+# One full session of 15-minute bars (6.5 h × 4 bars/h). The intraday
+# compute_omm lookback and the echoed stride size are this same value.
+_INTRADAY_OMM_STRIDE_BARS = 26
+
 
 def _ema(closes: list[float], period: int) -> float | None:
     if len(closes) < period:
@@ -180,7 +184,7 @@ async def get_regime(
             vix_closes = [c['close'] for c in vix_history]
             if len(vix_closes) >= 2:
                 vix_pct_30d = _vix_percentile(vix_closes[-31:-1], vix)
-                vix_pct_252d = _vix_percentile(vix_closes[:-1], vix)
+                vix_pct_252d = _vix_percentile(vix_closes[-253:-1], vix)
         except Exception:
             pass
 
@@ -206,6 +210,7 @@ async def get_regime(
                     stability=result.stability,
                     regime_age_days=result.regime_age_days,
                     avg_regime_duration=result.avg_regime_duration,
+                    duration_stride_bars=lookback,
                     transition_row=result.transition_row,
                     state_order=result.state_order,
                     conviction_pct=result.conviction_pct,
@@ -275,8 +280,9 @@ async def get_regime(
     if not intraday_hmm_out and intra_bars:
         try:
             closes_15m = [b['close'] for b in intra_bars]
-            # lookback=26: one full trading session (6.5 h × 4 bars/h ≈ 26 bars)
-            result_intra = compute_omm(closes_15m, lookback=26, threshold=0.002, smoothing=0.2)
+            result_intra = compute_omm(
+                closes_15m, lookback=_INTRADAY_OMM_STRIDE_BARS, threshold=0.002, smoothing=0.2,
+            )
             if result_intra:
                 intraday_omm_out = OmmData(
                     state=result_intra.state,
@@ -284,6 +290,7 @@ async def get_regime(
                     stability=result_intra.stability,
                     regime_age_days=result_intra.regime_age_days,
                     avg_regime_duration=result_intra.avg_regime_duration,
+                    duration_stride_bars=_INTRADAY_OMM_STRIDE_BARS,
                     transition_row=result_intra.transition_row,
                     state_order=result_intra.state_order,
                 )

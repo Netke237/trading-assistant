@@ -2,8 +2,12 @@
 """CRUD endpoints for composite (Markov + N-of-M) watch entries."""
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
+import asyncio
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import field_validator, BaseModel, Field
 
 from app.schemas import Direction
 from app.services.strategy_watch_store import strategy_watch_store
@@ -18,6 +22,8 @@ class CompositeWatchCreate(BaseModel):
     trigger_def: dict
     direction: Direction = "Bullish"
     interval: str = "1D"
+
+    _validate_payload_depth = field_validator('trigger_def', mode="before")(validate_payload_depth)
 
 
 class EnabledPatch(BaseModel):
@@ -89,8 +95,12 @@ async def get_regime_snapshot(
             # P4b (D4): the same series and history (4h: 180 days) the composite
             # watch evaluator fetches; W2-INTERVAL: both use the chart spelling.
             iv = interval
+            # Off the event loop (TRADIER-GOVERNOR T3): a sync Tradier fetch.
             hmm_bars = completed_bars_for_interval(
-                fetch_intraday_candles(symbol, interval=iv, days=intraday_history_days(iv)), iv,
+                await asyncio.to_thread(
+                    fetch_intraday_candles, symbol, interval=iv, days=intraday_history_days(iv),
+                ),
+                iv,
             )
         else:
             hmm_bars = bars

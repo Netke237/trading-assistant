@@ -11,6 +11,7 @@ import { RailSection } from '@/components/organisms/ContextRail';
 import { RailQuickLook } from '@/components/organisms/ContextRail/QuickLook';
 import { SymbolNotes } from '@/components/molecules/SymbolNotes';
 import { Text, Data } from '@/components/primitives';
+import { openTotals, unquotedNote } from '@/lib/portfolioTotals';
 import styles from './page.module.css';
 
 export default function PortfolioContextRail() {
@@ -25,8 +26,9 @@ export default function PortfolioContextRail() {
   // Chart sidebar and EditDrawer.
   const isHeld = useIsSymbolHeld(selectedSymbol ?? '');
   const isWatched = useWatchlistStore((s) => (selectedSymbol ? s.isWatched(selectedSymbol) : false));
-  const deployed = positions.reduce((s, p) => s + p.currentPrice * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0);
-  const openPnL  = positions.reduce((s, p) => s + p.pnlDollar, 0);
+  // Positions without a quote are left out of the totals (NO-LIVE-QUOTE NLQ-1).
+  const { deployed, openPnL, unquoted } = openTotals(positions);
+  const note = unquotedNote(unquoted);
   const hasGreeks = positions.some((p) => p.delta != null || p.theta != null);
   const aggDelta = hasGreeks
     ? positions.reduce((s, p) => s + (p.delta ?? 0) * (p.contract.endsWith('|STOCK') ? 1 : 100) * (p.contracts ?? 1), 0).toFixed(2)
@@ -47,6 +49,7 @@ export default function PortfolioContextRail() {
             </Data>
           </Row>
           <Row><Text size={12} tone="secondary">Positions</Text><Data size={12}>{positions.length}</Data></Row>
+          {note && <Text size={11} tone="caution">{note}</Text>}
         </div>
       </RailSection>
 

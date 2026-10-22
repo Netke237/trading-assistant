@@ -148,7 +148,8 @@ async def test_run_scheduled_entry_options_dispatches_to_core_and_records_succes
 
         with_patch_notify = []
 
-        async def _fake_notify(label, count):
+        # no_live_quotes: the NO-LIVE-QUOTE notice clause flag (plan 3f).
+        async def _fake_notify(label, count, *, no_live_quotes=False):
             with_patch_notify.append((label, count))
 
         monkeypatch.setattr(sss, "_notify_scan_schedule_success", _fake_notify)
@@ -259,8 +260,8 @@ async def test_run_scheduled_entry_error_records_error_row(monkeypatch):
             runs = await list_scheduled_scan_runs(db, "err-1")
         assert len(runs) == 1
         assert runs[0].status == "error"
-        assert "boom" in runs[0].error
-        assert notified and "boom" in notified[0][1]
+        assert runs[0].error == "scan_failed"
+        assert notified and notified[0][1] == "scan_failed"
     finally:
         scan_schedule_store.delete("err-1")
 
@@ -542,3 +543,134 @@ async def test_prune_scheduled_scan_runs_disabled_when_non_positive():
         from sqlalchemy import select
         result = await db.execute(select(ScheduledScanRunModel.id).where(ScheduledScanRunModel.id == row_id))
         assert result.scalar_one_or_none() == row_id
+
+
+# ── STOCKS-HORIZON-T1 F1: a multi schedule whose confirmations exceed its variants ──
+
+_RSI, _BB = "mean_reversion_rsi", "mean_reversion_bb"
+
+
+def _multi_stock_request(**overrides) -> dict:
+    base = {"universe": [], "symbols": [], "direction": "Bullish", "horizon": "Swing",
+            "strategy": "mean_reversion_multi", "mean_reversion_variants": [_RSI, _BB]}
+    base.update(overrides)
+    return base
+
+
+def _profile_min_confirmations(monkeypatch, value: int) -> None:
+    """Patch the multi PROFILE (what strategy_params.yaml supplies through
+    get_profile) to carry min_confirmations=value; the request leaves it None."""
+    import app.routers.stock_scan as ss
+    real = ss.get_profile
+
+    def _fake(strategy, direction, horizon):
+        params, source = real(strategy, direction, horizon)
+        if strategy == "mean_reversion_multi":
+            params = {**params, "min_confirmations": value}
+        return params, source
+
+    monkeypatch.setattr(ss, "get_profile", _fake)
+
+
+def _quiet_core_io(monkeypatch) -> None:
+    import app.routers.stock_scan as ss
+
+    async def _no_bars(*a, **k):
+        return []
+
+    monkeypatch.setattr(ss, "fetch_quotes", lambda symbols: {})
+    monkeypatch.setattr(ss, "get_historical_bars", _no_bars)
+
+
+def test_create_stocks_multi_entry_confirmations_above_variants_rejected(client):
+    body = _options_entry_body(mode="stocks", resolved_request=_multi_stock_request(
+        mean_reversion_min_confirmations=3))
+    r = client.post("/api/scan-schedule", json=body)
+    assert r.status_code == 422
+    assert "cannot exceed the number of selected variants (2)" in r.json()["detail"]
+
+
+def test_update_stocks_multi_entry_confirmations_above_variants_rejected(client):
+    good = _options_entry_body(mode="stocks", resolved_request=_multi_stock_request(
+        mean_reversion_min_confirmations=2))
+    r = client.post("/api/scan-schedule", json=good)
+    assert r.status_code == 200
+    entry_id = r.json()["id"]
+    try:
+        bad = _options_entry_body(mode="stocks", resolved_request=_multi_stock_request(
+            mean_reversion_min_confirmations=3))
+        r = client.put(f"/api/scan-schedule/{entry_id}", json=bad)
+        assert r.status_code == 422
+        assert "cannot exceed the number of selected variants (2)" in r.json()["detail"]
+    finally:
+        client.delete(f"/api/scan-schedule/{entry_id}")
+
+
+@pytest.mark.asyncio
+async def test_run_scheduled_stocks_multi_entry_profile_confirmations_above_variants_records_error(monkeypatch):
+    """A stored 2-variant multi schedule meets a profile min_confirmations 3
+    (profile changed after the save): the fire records an error naming the
+    reason, not a 0-candidate success."""
+    from app.services.scan_schedule_store import scan_schedule_store, list_scheduled_scan_runs
+    from app.services import scan_schedule_scheduler as sss
+    from tests.conftest import _TestSession
+    import app.database as dbmod
+
+    entry = _options_entry_body(mode="stocks", resolved_request=_multi_stock_request())
+    entry["id"] = "multi-err-1"
+    scan_schedule_store.upsert(entry)
+    monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+    _quiet_core_io(monkeypatch)
+    _profile_min_confirmations(monkeypatch, 3)
+
+    errors, successes = [], []
+
+    async def _err(label, error):
+        errors.append(error)
+
+    async def _ok(label, count):
+        successes.append(count)
+
+    monkeypatch.setattr(sss, "_notify_scan_schedule_error", _err)
+    monkeypatch.setattr(sss, "_notify_scan_schedule_success", _ok)
+    try:
+        await sss._run_scheduled_entry("multi-err-1")
+        async with _TestSession() as db:
+            runs = await list_scheduled_scan_runs(db, "multi-err-1")
+        assert len(runs) == 1
+        assert runs[0].status == "error"
+        assert runs[0].error == "scan_failed"
+        assert errors and not successes
+    finally:
+        scan_schedule_store.delete("multi-err-1")
+
+
+def test_valid_stocks_multi_entry_saves_and_fires(client, monkeypatch):
+    from app.services.scan_schedule_store import scan_schedule_store
+    from app.services import scan_schedule_scheduler as sss
+    from tests.conftest import _TestSession
+    import app.database as dbmod
+
+    monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+    _quiet_core_io(monkeypatch)
+
+    async def _quiet(*a, **k):
+        return None
+
+    monkeypatch.setattr(sss, "_notify_scan_schedule_success", _quiet)
+    monkeypatch.setattr(sss, "_notify_scan_schedule_error", _quiet)
+
+    body = _options_entry_body(mode="stocks", resolved_request=_multi_stock_request(
+        mean_reversion_min_confirmations=2))
+    r = client.post("/api/scan-schedule", json=body)
+    assert r.status_code == 200
+    entry_id = r.json()["id"]
+    try:
+        r = client.post(f"/api/scan-schedule/{entry_id}/run-now")
+        assert r.status_code == 200
+        runs = client.get(f"/api/scan-schedule/{entry_id}/runs").json()
+        assert len(runs) == 1
+        assert runs[0]["status"] == "success", runs[0]["error"]
+    finally:
+        client.delete(f"/api/scan-schedule/{entry_id}")
+        scan_schedule_store.delete(entry_id)

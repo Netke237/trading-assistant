@@ -93,7 +93,10 @@ async def test_fib_pullback_universe_expansion():
 async def test_fib_pullback_skips_when_no_swing_found():
     """Symbols where fibonacci_pullback_signal returns level_hit=None must be excluded."""
     with patch("app.routers.stock_scan.get_historical_bars", new_callable=AsyncMock) as mock_bars, \
-         patch("app.services.strategy_engine.fibonacci_pullback_signal", return_value=(False, None, None)) as mock_sig:
+         patch("app.services.strategy_engine.fibonacci_pullback_detail", return_value={
+             "at_level": False, "dist_pct": None, "label": None,
+             "swing_low": None, "swing_high": None,
+         }) as mock_sig:
         mock_bars.return_value = [{"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1_000_000}] * 15
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/fib-pullback", json={
@@ -161,8 +164,10 @@ async def test_fib_pullback_rejects_zero_tolerance():
 @pytest.mark.asyncio
 async def test_fib_pullback_sort_order_at_level_first():
     """At-level hits must rank before non-at-level results."""
-    at_level_result = (True, 0.5, "61.8")
-    not_at_level_result = (False, 3.0, "38.2")
+    at_level_result = {"at_level": True, "dist_pct": 0.5, "label": "61.8",
+                       "swing_low": None, "swing_high": None}
+    not_at_level_result = {"at_level": False, "dist_pct": 3.0, "label": "38.2",
+                           "swing_low": None, "swing_high": None}
     call_count = {"n": 0}
 
     async def fake_bars(sym, *_a, **_kw):
@@ -174,7 +179,7 @@ async def test_fib_pullback_sort_order_at_level_first():
         return at_level_result if call_count["n"] == 1 else not_at_level_result
 
     with patch("app.routers.stock_scan.get_historical_bars", side_effect=fake_bars), \
-         patch("app.services.strategy_engine.fibonacci_pullback_signal", side_effect=fake_signal):
+         patch("app.services.strategy_engine.fibonacci_pullback_detail", side_effect=fake_signal):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/fib-pullback", json={
                 "symbols": ["AAPL", "MSFT"],
@@ -203,7 +208,7 @@ async def test_fib_pullback_rejects_lookback_below_minimum():
 #
 # Fib pullback returns a bare list of setups and has no `rejected` list, so a
 # `scope: scan` symbol is skipped and named in one INFO log line. The shipped
-# config/universe_exclusions.yaml lists CTVA with scope scan.
+# config/universe_exclusions.yaml lists PXD with scope scan.
 
 
 @pytest.mark.asyncio
@@ -215,13 +220,13 @@ async def test_fib_pullback_skips_a_typed_excluded_symbol(caplog):
         mock_bars.return_value = []
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/api/scan/fib-pullback", json={
-                "symbols": ["AAPL", "ctva"],
+                "symbols": ["AAPL", "pxd"],
                 "direction": "Bullish",
             })
     assert resp.status_code == 200, resp.text
-    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "CTVA was processed"
+    assert [c.args[0] for c in mock_bars.call_args_list] == ["AAPL"], "PXD was processed"
     skipped = [r for r in caplog.records
-               if r.levelno == logging.INFO and "CTVA" in r.getMessage()]
+               if r.levelno == logging.INFO and "PXD" in r.getMessage()]
     assert len(skipped) == 1, [r.getMessage() for r in caplog.records]
 
 

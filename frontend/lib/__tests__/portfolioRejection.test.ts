@@ -32,6 +32,16 @@ describe('rejectionMessage', () => {
       `${REJECTION_LABELS.single_trade_exposure_too_high} ${REJECTION_LABELS.total_exposure_limit_reached}`);
     expect(rejectionMessage('qty must be an integer of at least 1.')).toBe('qty must be an integer of at least 1.');
   });
+
+  it('renders an exposure breach as a kept full fill, not a resized quantity', () => {
+    const text = rejectionMessage(
+      'exposure_breach: single_trade_exposure_too_high; combined exposure 8000.00',
+    );
+    expect(text).toContain(REJECTION_LABELS.single_trade_exposure_too_high);
+    expect(text).toContain('8000.00');
+    expect(text).toMatch(/full fill/i);
+    expect(text).not.toMatch(/Quantity saved as/);
+  });
 });
 
 describe('isPartialSave', () => {

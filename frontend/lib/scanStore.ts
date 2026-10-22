@@ -5,8 +5,8 @@ import { defaultStockOverlay, stockExecutionIdentity, type StockExecutionRecord,
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Status } from './status';
-import type { Direction, OptionContract, TradeCardData, DteWindow } from '@/types/domain';
-import type { StockScanResult, PositionCardData } from '@/types/stockDomain';
+import type { Direction, OptionContract, TradeCardData, DteWindow, SentimentData } from '@/types/domain';
+import type { StockScanResult, PositionCardData, PreBreakoutResultRow, FibPullbackResultRow } from '@/types/stockDomain';
 import type { StockScanRequestBody } from './resolveStockScanRequest';
 import type { HorizonKey } from './horizonPresets';
 import { migrateLegacyHorizon, presetByKey, horizonDisplayString, resolveParamsHorizon } from './horizonPresets';
@@ -111,6 +111,9 @@ export interface OptionsPipeline {
 }
 
 export interface ScanResult {
+  report_run_id?: string | null;
+  report_generation?: number | null;
+  report_persistence?: 'saved' | 'unavailable' | null;
   scan_id: string;
   timestamp: string;
   candidates: TradeCardData[];
@@ -133,6 +136,11 @@ export interface ScanResult {
    *  2026-10-02. Step 7's recompute-plan sends these, not live scanOverrides
    *  (STEP3-PARAM-REACH) -- see rrOverridesForPlan. */
   rr_overrides?: Record<string, number> | null;
+  /** The Entry Quality overrides (entry_* keys) the scan priced its plans with;
+   *  `{}` when it overrode none. Absent, or null, on results from before
+   *  2026-10-21. Step 7's recompute-plan sends these (APP-AUDIT-B-ENTRY-OVERRIDES)
+   *  -- see entryOverridesForPlan. */
+  entry_overrides?: Record<string, number> | null;
   /** The request fields the result was produced from. Absent, or null, on
    *  results from before 2026-10-02. A result restored into an empty browser
    *  rebuilds its ScanContext from this (contextFromScanRequest). */
@@ -431,6 +439,8 @@ interface ScanStoreState {
   addToStockBasket:      (card: PositionCardData) => void;
   removeFromStockBasket: (symbol: string) => void;
   clearStockBasket:      () => void;
+  /** Explicitly wipe obsolete scan results and candidate artifacts when scan scope changes (e.g. custom tickers edited). */
+  clearScanResults:      () => void;
   activeStrategy:      string | null;
   setActiveStrategy:   (s: string | null) => void;
   /** Last-run status for the options-mode scan session, as reported by the
@@ -450,24 +460,18 @@ interface ScanStoreState {
   /** Session-only — not persisted; cleared on page load. */
   regimeDirection:    'BULL' | 'BEAR' | 'MIXED' | null;
   setRegimeDirection: (d: 'BULL' | 'BEAR' | 'MIXED' | null) => void;
-  preBreakoutResults: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>;
-  setPreBreakoutResults: (results: Array<{ symbol: string; confidence: number; direction: string; metrics: Record<string, number> }>) => void;
-  fibPullbackResults: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>;
-  setFibPullbackResults: (results: Array<{
-    symbol: string;
-    direction: string;
-    fib_level_hit: string;
-    fib_dist_pct: number | null;
-    at_level: boolean;
-    confidence: number;
-  }>) => void;
+  /** Market sentiment built from the regime response Step 1 already fetched.
+   *  Written only by Step 1 (`fetchRegime`: null when a fetch starts, the
+   *  reading when it answers, null when it fails); read by the Stocks Strategy
+   *  page's Market Sentiment strip. Deliberately NOT in `partialize`: a stored
+   *  sentiment would show stale numbers after a reload — the strip then shows
+   *  "loads on Step 1" instead. */
+  regimeSentiment:    SentimentData | null;
+  setRegimeSentiment: (s: SentimentData | null) => void;
+  preBreakoutResults: PreBreakoutResultRow[];
+  setPreBreakoutResults: (results: PreBreakoutResultRow[]) => void;
+  fibPullbackResults: FibPullbackResultRow[];
+  setFibPullbackResults: (results: FibPullbackResultRow[]) => void;
 }
 
 export const useScanStore = create<ScanStoreState>()(
@@ -517,6 +521,8 @@ export const useScanStore = create<ScanStoreState>()(
       setCombinedRegime: (r) => set({ combinedRegime: r }),
       regimeDirection:    null,
       setRegimeDirection: (d) => set({ regimeDirection: d }),
+      regimeSentiment:    null,
+      setRegimeSentiment: (s) => set({ regimeSentiment: s }),
       preBreakoutResults: [],
       setPreBreakoutResults: (results) => set({ preBreakoutResults: results }),
       fibPullbackResults: [],
@@ -698,6 +704,17 @@ export const useScanStore = create<ScanStoreState>()(
         stockBasketSources: Object.fromEntries(Object.entries(s.stockBasketSources).filter(([key]) => key !== symbol)),
       })),
       clearStockBasket:      () => set({ stockBasket: [], stockBasketSources: {} }),
+      clearScanResults:      () => set({
+        previousRun:             null,
+        previousStockScanResult: null,
+        scanResult:              null,
+        stockScanResult:         null,
+        stockScanRequest:        null,
+        stockScanAt:             null,
+        optionsScanAt:           null,
+        rejectedLog:             [],
+        conflictedSymbols:       [],
+      }),
       setStockScanError:   (message) => set({ stockScanError: message }),
       setActiveStrategy:   (s) => set({ activeStrategy: s }),
       setLastOptionsScanMeta: (status, updatedAt) => set({
@@ -714,7 +731,7 @@ export const useScanStore = create<ScanStoreState>()(
         return quotaSafeLocalStorage();
       }),
       skipHydration: true,
-       version: 18,
+       version: 19,
       migrate: (persistedState, version) => {
         // Branches must accumulate — no early returns — so a store at any old
         // version receives ALL intermediate field additions in one migration pass.
@@ -876,6 +893,16 @@ export const useScanStore = create<ScanStoreState>()(
             scanResult: discardPreFullPremiumScanResult(s.scanResult),
             previousRun: discardPreFullPremiumScanResult(s.previousRun),
           };
+        }
+        if (version < 19) {
+          // Durable report linkage is additive. Preserve legacy evidence and
+          // mark unknown identities explicitly; never infer one from scan_id.
+          const withReportIdentity = (result: unknown): unknown => {
+            if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+            const value = result as Record<string, unknown>;
+            return {...value,report_run_id:value.report_run_id??null,report_generation:value.report_generation??null,report_persistence:value.report_persistence??null};
+          };
+          s = {...s,scanResult:withReportIdentity(s.scanResult),previousRun:withReportIdentity(s.previousRun),stockScanResult:withReportIdentity(s.stockScanResult),previousStockScanResult:withReportIdentity(s.previousStockScanResult)};
         }
         return s;
       },

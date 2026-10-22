@@ -79,6 +79,7 @@ def _make_fake_bt():
     bt.sharpe = 1.5
     bt.confidence = 65
     bt.summary_text = "ok"
+    bt.n_time_exits = 0     # a real int: BacktestOut reads it (F2)
     return bt
 
 

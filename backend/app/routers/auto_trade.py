@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.schemas.payload_depth import validate_payload_depth
+
 import asyncio
 import concurrent.futures
 import functools
@@ -7,7 +9,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import field_validator, BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -73,7 +75,11 @@ class ArmRequest(BaseModel):
     # the product's client sends (AutoTradeArm/index.tsx) is a declared field;
     # a stale bundle sending anything else now fails at ARM, before anything is
     # armed -- the same rollout cost `direction` and `horizon` below accepted.
-    model_config = ConfigDict(extra='forbid')
+    #
+    # allow_inf_nan=False (NUMERIC-API-INPUTS T2): every float on this body is
+    # finite or a 422 -- including the strings "NaN" / "1e999" pydantic would
+    # otherwise coerce. The fields' own bounds below are unchanged.
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
 
     broker:          Literal["ibkr_paper", "tradier_paper", "alpaca_paper", "tastytrade_paper"]
     symbol:          str
@@ -233,8 +239,8 @@ class ArmRequest(BaseModel):
     # schema on these bounds. A client must send null, never 0, for an absent
     # price, and [] (not null) for no targets.
     #
-    # The four dicts are untyped and uncapped, exactly as on the create path:
-    # the card path is the reference and step 3 does not tighten it.
+    # Free-form containers share the create path's 32-level bound at arm
+    # time: booking validation happens after the broker has filled the order.
     stop:                Optional[float] = Field(default=None, gt=0)
     stop_is_user_set:    Optional[bool]  = None
     scan_stock_price:    Optional[float] = Field(default=None, gt=0)
@@ -245,6 +251,8 @@ class ArmRequest(BaseModel):
     premium_stop_dollar: Optional[float] = Field(default=None, gt=0)
     max_loss_override:   Optional[dict]  = None
     trade_card_snapshot: Optional[dict]  = None
+
+    _validate_payload_depth = field_validator('exit_plan', 'targets', 'max_loss_override', 'trade_card_snapshot', mode="before")(validate_payload_depth)
 
 
 @router.post("/arm")
@@ -279,13 +287,19 @@ async def fire_now(db: AsyncSession = Depends(get_db)) -> dict:
     # written. Release it so a /fire queued behind the one worker (market-open
     # check + regime deadline + broker call) does not pin a connection;
     # `book_fired_order` checks one out again.
+    from app.services.portfolio_exposure_hooks import capture_exposure_hooks, sessions_for
+    exposure_sessions = sessions_for(db)
     await db.rollback()
     from app.services.daily_risk_hooks import capture_daily_risk_hooks
     hooks = capture_daily_risk_hooks()
+    # No engine (a test double) keeps the caller's snapshot. A real session
+    # admits on its own engine after this transaction is released.
+    exposure_hooks = capture_exposure_hooks(exposure_sessions) if exposure_sessions is not None else None
     cf = _FIRE_EXECUTOR.submit(
         auto_trader.fire,
         portfolio_snapshot=portfolio_snapshot,
         daily_risk_hooks=hooks,
+        exposure_hooks=exposure_hooks,
         portfolio_value=None,  # fire() resolves the server account configuration at dispatch
         # FIRE THE ORDER THIS REQUEST CHECKED, OR NOTHING — the same contract
         # `maybe_fire_on_scan` passes, and for the same reason. This handler

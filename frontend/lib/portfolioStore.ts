@@ -43,6 +43,8 @@ type BackendPosition = {
   pickedRowOptionPrice?: number | null;
   pickedStopBasis?: PickedStopBasis | null;
   pickedAt?: string | null;
+  /** STOCKS-HORIZON-T1 H6 -- null = no hold. */
+  holdMaxDays?: number | null;
   alertOverrides?: AlertOverrides | null;
   targets: TargetLevel[];
   dteTotal: number | null;
@@ -52,6 +54,7 @@ type BackendPosition = {
   currentStockPrice?: number | null;
   pnlDollar?: number;
   pnlPct?: number;
+  quoteUnavailable?: boolean;
   dteRemaining?: number;
   delta?: number | null;
   theta?: number | null;
@@ -93,6 +96,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    holdMaxDays: p.holdMaxDays ?? null,
     alertOverrides: p.alertOverrides ?? {},
     targets:      p.targets ?? [],
     dteTotal:     p.dteTotal ?? 0,
@@ -103,6 +107,7 @@ function fromBackend(p: BackendPosition): PortfolioPosition {
     currentStockPrice: p.currentStockPrice ?? undefined,
     pnlDollar:    p.pnlDollar ?? 0,
     pnlPct:       p.pnlPct ?? 0,
+    quoteUnavailable: p.quoteUnavailable ?? false,
     delta:        p.delta ?? undefined,
     theta:        p.theta ?? undefined,
     // Two quantities, kept apart (PHASE-A-NULL-IVRANK-2026-09-06):
@@ -189,6 +194,9 @@ interface PortfolioStoreState {
   positions: PortfolioPosition[];
   /** Last backend rejection of a save, for the UI to surface. Null when clean. */
   lastSyncError: { symbol: string; contract: string; detail: string; at: number } | null;
+  /** A reported fill the server stored in full even though it is over the cap.
+   *  Not a rejection: the quantity was not cut. */
+  lastExposureBreach: { symbol: string; contract: string; detail: string; at: number } | null;
   /** ROUND 9 -- the OFFLINE RETRY's version of the "premium stop could not be
    *  applied" notice. That path re-POSTs a queued row from a background sync
    *  with no UI callback in scope, so it could not use the two the order paths
@@ -225,6 +233,10 @@ interface PortfolioStoreState {
    *  -- see the note in step-7-trade-card's handleSubmit. */
   addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason; premiumStopKeptPct?: number }>;
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
+  /** Record an added fill. Sends the total, the fill price, and the saved
+   *  base together. Does not change quantity or entry until the server
+   *  confirms them, and does not debounce a quantity that has no price. */
+  confirmAddedFill: (contract: string, totalQty: number, fillPrice: number) => Promise<{ ok: boolean; detail?: string }>;
   closePosition:  (contract: string) => void;
   closePositionRemote: (
     recId: string,
@@ -362,6 +374,8 @@ function toBackendPayload(p: PortfolioPosition, portfolioValue = 100_000) {
     pickedRowOptionPrice: p.pickedRowOptionPrice ?? null,
     pickedStopBasis: p.pickedStopBasis ?? null,
     pickedAt: p.pickedAt ?? null,
+    // STOCKS-HORIZON-T1 H6 -- the scan's hold (stock sends only); null = none.
+    holdMaxDays: p.holdMaxDays ?? null,
   };
 }
 
@@ -647,7 +661,15 @@ function toUpdatePayload(patch: Partial<PortfolioPosition>): Record<string, unkn
 async function patchPosition(
   recId: string,
   payload: Record<string, unknown>,
-): Promise<{ ok: boolean; detail?: string; adjustedQty?: number; targets?: TargetLevel[]; contracts?: number }> {
+): Promise<{
+  ok: boolean;
+  detail?: string;
+  adjustedQty?: number;
+  targets?: TargetLevel[];
+  contracts?: number;
+  entryPrice?: number;
+  exposureBreach?: string;
+}> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio/${recId}`, {
       method: 'PATCH',
@@ -657,12 +679,16 @@ async function patchPosition(
     if (res.ok) {
       const body = await res.json().catch(() => ({}));
       // `qty` is the size the server stores (PortfolioPositionSchema.qty).
-      const { adjustedQty, targets, qty } = body as { adjustedQty?: number; targets?: unknown; qty?: unknown };
+      const { adjustedQty, targets, qty, entryPrice, exposureBreach } = body as {
+        adjustedQty?: number; targets?: unknown; qty?: unknown; entryPrice?: unknown; exposureBreach?: unknown;
+      };
       return {
         ok: true,
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         ...(Array.isArray(targets) ? { targets: targets as TargetLevel[] } : {}),
         ...(typeof qty === 'number' ? { contracts: qty } : {}),
+        ...(typeof entryPrice === 'number' && Number.isFinite(entryPrice) ? { entryPrice } : {}),
+        ...(typeof exposureBreach === 'string' && exposureBreach ? { exposureBreach } : {}),
       };
     }
     const body = await res.json().catch(() => ({}));
@@ -705,6 +731,45 @@ const _rungEditSeq = new Map<string, number>();
 //     without it, the poll's stale-value protection ends the instant the
 //     debounce timer fires, not once the request actually completes.
 const _inFlightPatches = new Map<string, Promise<void>>();
+
+// A rejected added fill must show the server row. The in-flight guard would
+// otherwise keep the pre-fill quantity and hide a base that moved.
+const _fillRejectionResync = new Set<string>();
+
+/** Recompute mark P&L the same way the drawer's current-price edit does.
+ *  A missing quote stays a missing quote: 0 is not a price. */
+function withFillEconomics(row: PortfolioPosition, entry: number, qty: number): PortfolioPosition {
+  const next: PortfolioPosition = { ...row, entryPrice: entry, contracts: qty };
+  if (row.quoteUnavailable || !(row.currentPrice > 0) || !(entry > 0)) {
+    return { ...next, pnlDollar: 0, pnlPct: 0 };
+  }
+  const mult = row.contract.endsWith('|STOCK') ? 1 : 100;
+  const pnlDollar = (row.currentPrice - entry) * mult * qty;
+  const pnlPct = ((row.currentPrice - entry) / entry) * 100;
+  return { ...next, pnlDollar, pnlPct };
+}
+
+/** Keep fields a newer unsent edit already changed; the rejected fill's
+ *  quantity and entry come from the server. */
+function overlayPendingDraft(
+  server: PortfolioPosition,
+  local: PortfolioPosition,
+  payload: Record<string, unknown>,
+): PortfolioPosition {
+  const next: PortfolioPosition = { ...server };
+  if ('stop' in payload) next.stop = local.stop;
+  if ('structuralStop' in payload) next.structuralStop = local.structuralStop;
+  if ('exitPlan' in payload) next.exitPlan = local.exitPlan;
+  if ('maxLossOverride' in payload) next.maxLossOverride = local.maxLossOverride;
+  if ('premiumStopPct' in payload) next.premiumStopPct = local.premiumStopPct;
+  if ('activeTpMethod' in payload) next.activeTpMethod = local.activeTpMethod;
+  if ('resolvedTpPrice' in payload) next.resolvedTpPrice = local.resolvedTpPrice;
+  if ('resolvedTpUpdatedAt' in payload) next.resolvedTpUpdatedAt = local.resolvedTpUpdatedAt;
+  if ('alertOverrides' in payload) next.alertOverrides = local.alertOverrides;
+  if ('targets' in payload) next.targets = local.targets;
+  if ('qty' in payload) next.contracts = local.contracts;
+  return next;
+}
 
 async function _flushOne(recId: string): Promise<void> {
   const entry = _pendingPatches.get(recId);
@@ -829,6 +894,91 @@ export function flushPendingPositionPatches(recId?: string): void {
   }
 }
 
+/** Send one added fill now. A queued companion edit (a stop, a decrease)
+ *  lands first, then `expectedQty` is the base that edit left behind. */
+async function sendAddedFill(
+  contract: string,
+  totalQty: number,
+  fillPrice: number,
+): Promise<{ ok: boolean; detail?: string }> {
+  if (!Number.isInteger(totalQty) || totalQty < 1 || !(Number.isFinite(fillPrice) && fillPrice > 0)) {
+    return { ok: false, detail: 'added_fill_price_required' };
+  }
+  const initial = usePortfolioStore.getState().positions.find((p) => p.contract === contract);
+  if (!initial?.recId) return { ok: false, detail: 'Position is not open.' };
+  const recId = initial.recId;
+
+  const queued = _pendingPatches.get(recId);
+  if (queued) {
+    clearTimeout(queued.timer);
+    await _flushOne(recId);
+  }
+
+  const previous = _inFlightPatches.get(recId);
+  let outcome: { ok: boolean; detail?: string } = { ok: false, detail: 'Edit could not be saved' };
+  const run = async (): Promise<void> => {
+    if (previous) await previous.catch(() => {});
+    const latest = usePortfolioStore.getState().positions.find((p) => p.recId === recId);
+    if (!latest) { outcome = { ok: false, detail: 'Position is not open.' }; return; }
+    const expectedQty = latest.contracts ?? 1;
+    if (totalQty <= expectedQty) { outcome = { ok: false, detail: 'not_an_increase' }; return; }
+
+    _rungEditSeq.set(recId, (_rungEditSeq.get(recId) ?? 0) + 1);
+    const rungSeq = _rungEditSeq.get(recId) ?? 0;
+    const payload: Record<string, unknown> = {
+      qty: totalQty,
+      addedFillPrice: fillPrice,
+      expectedQty,
+      portfolioValue: accountValue(),
+      ...(Array.isArray(latest.targets) ? { targets: latest.targets } : {}),
+    };
+    const result = await patchPosition(recId, payload);
+    const stillOpen = usePortfolioStore.getState().positions.some((p) => p.recId === recId);
+    if (!stillOpen) { outcome = { ok: false, detail: 'Position is not open.' }; return; }
+    if (!result.ok) {
+      usePortfolioStore.setState((s) => ({
+        lastSyncError: {
+          symbol: latest.symbol,
+          contract: latest.contract,
+          detail: result.detail ?? 'Edit could not be saved',
+          at: Date.now(),
+        },
+        lastExposureBreach: s.lastExposureBreach?.contract === latest.contract ? null : s.lastExposureBreach,
+      }));
+      _fillRejectionResync.add(recId);
+      try {
+        await usePortfolioStore.getState().syncFromBackend(true);
+      } finally {
+        _fillRejectionResync.delete(recId);
+      }
+      outcome = { ok: false, detail: result.detail ?? 'Edit could not be saved' };
+      return;
+    }
+    const qty = typeof result.contracts === 'number' ? result.contracts : totalQty;
+    const adoptRungs = (_rungEditSeq.get(recId) ?? 0) === rungSeq ? result.targets : undefined;
+    usePortfolioStore.setState((s) => ({
+      positions: s.positions.map((p) => {
+        if (p.recId !== recId) return p;
+        const priced = typeof result.entryPrice === 'number'
+          ? withFillEconomics(p, result.entryPrice, qty)
+          : { ...p, contracts: qty };
+        return adoptRungs ? { ...priced, targets: adoptRungs } : priced;
+      }),
+      lastExposureBreach: result.exposureBreach
+        ? { symbol: latest.symbol, contract: latest.contract, detail: result.exposureBreach, at: Date.now() }
+        : (s.lastExposureBreach?.contract === latest.contract ? null : s.lastExposureBreach),
+    }));
+    outcome = { ok: true };
+  };
+
+  const promise = run().finally(() => {
+    if (_inFlightPatches.get(recId) === promise) _inFlightPatches.delete(recId);
+  });
+  _inFlightPatches.set(recId, promise);
+  await promise;
+  return outcome;
+}
+
 /** Drops a pending debounced edit without sending it — used when the position
  *  is being deleted (closePosition/closePositionRemote), so a stale PATCH
  *  never races a DELETE for the same recId. */
@@ -945,6 +1095,10 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // ok path) kept `premiumStopDollar` on the row, and a v5 store never ran
       // the old unconditional clean-up again. Idempotent.
       if (version < 6 && ivClean.syncStatus === 'synced') delete ivClean.premiumStopDollar;
+      // v6 -> v7, STOCKS-HORIZON-T1 H6. `holdMaxDays` joins the persisted
+      // shape; a stored row predates the hold, so it has none (null = never a
+      // stock time stop) until the next sync reads the backend's value.
+      if (version < 7 && ivClean.holdMaxDays === undefined) ivClean.holdMaxDays = null;
       return ivClean;
     }),
   };
@@ -967,6 +1121,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     (set) => ({
       positions: [],
       lastSyncError: null,
+      lastExposureBreach: null,
       lastPremiumStopDropped: null,
       premiumStopDropQueue: [],
       // ROUND 10 finding 14 -- these clear SEPARATELY. One action wiping both
@@ -1185,6 +1340,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           if (payload) scheduleRemotePositionPatch(target.recId, target.symbol, target.contract, payload);
         }
       },
+      confirmAddedFill: (contract, totalQty, fillPrice) => sendAddedFill(contract, totalQty, fillPrice),
       closePosition: (contract) => {
         let closedRecId: string | undefined;
         set((s) => {
@@ -1319,12 +1475,20 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             const remote: BackendPosition[] = await res.json();
             const localForPending = usePortfolioStore.getState().positions;
             const remotePositions = remote.map(fromBackend).map((rp) => {
-              if (!_pendingPatches.has(rp.recId) && !_inFlightPatches.has(rp.recId)) return rp;
+              const pending = _pendingPatches.get(rp.recId);
+              const inFlight = _inFlightPatches.has(rp.recId);
+              if (!pending && !inFlight) return rp;
+              const local = localForPending.find((p) => p.recId === rp.recId) ?? rp;
+              // A rejected added fill has no saved quantity to protect. A
+              // newer companion edit still waiting in `pending` is kept.
+              if (_fillRejectionResync.has(rp.recId)) {
+                return pending ? overlayPendingDraft(rp, local, pending.payload) : rp;
+              }
               // An edit for this row is debounced, or its PATCH is still in
               // flight, and hasn't been confirmed by the backend yet — keep
               // the local value instead of snapping a focused input back to
               // what the server still has.
-              return localForPending.find((p) => p.recId === rp.recId) ?? rp;
+              return local;
             });
             const remoteContracts = new Set(remotePositions.map((p) => p.contract));
 
@@ -1470,7 +1634,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 6,
+      version: 7,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),

@@ -36,7 +36,7 @@ it('retains the Step 7 guard below1200 with its actual minimum in the explanatio
   expect(screen.getByRole('dialog', { name: 'Desktop required' })).toHaveTextContent('1200 pixels wide');
 });
 
-it.each(['/settings', '/dashboard', '/screener/step-6-contracts', '/screener/step-7-position-card'])('keeps1280 on %s', (path) => {
+it.each(['/settings', '/dashboard', '/screener/step-6-contracts'])('keeps1280 on %s', (path) => {
   mockPathname = path;
   render(<MinWidthGate><div>Other route</div></MinWidthGate>);
   expect(screen.getByRole('dialog', { name: 'Desktop required' })).toHaveTextContent('1280 pixels wide');
@@ -66,5 +66,32 @@ it('rebinds the route-specific boundary and preserves one stateful child across 
   expect(screen.queryByRole('dialog', { name: 'Desktop required' })).not.toBeInTheDocument();
   expect(screen.getByRole('textbox', { name: 'Retained control' })).toBe(input);
   unmount();
+  expect(queries.every(q => q.listeners.size === 0)).toBe(true);
+});
+
+it('allows Position at 1200 and keeps its edited child mounted across resize and route changes', () => {
+  mockPathname = '/screener/step-7-position-card';
+  const child = <input aria-label="Position shares" defaultValue="30" />;
+  const view = render(<MinWidthGate>{child}</MinWidthGate>);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 1199px)');
+  const control = screen.getByRole('textbox', { name: 'Position shares' });
+  fireEvent.change(control, { target: { value: '50' } });
+  act(() => { width = 1199; queries[0].listeners.forEach(fn => fn()); });
+  expect(screen.getByRole('dialog')).toHaveTextContent('1200 pixels wide');
+  expect(control).toHaveValue('50');
+  act(() => { width = 1200; queries[0].listeners.forEach(fn => fn()); });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  mockPathname = '/dashboard';
+  view.rerender(<MinWidthGate>{child}</MinWidthGate>);
+  expect(screen.getByRole('dialog')).toHaveTextContent('1280 pixels wide');
+  expect(queries[0].listeners.size).toBe(0);
+  mockPathname = '/screener/step-7-position-card';
+  view.rerender(<MinWidthGate>{child}</MinWidthGate>);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toBe(control);
+  expect(control).toHaveValue('50');
+  expect(queries[1].listeners.size).toBe(0);
+  view.unmount();
   expect(queries.every(q => q.listeners.size === 0)).toBe(true);
 });

@@ -1,8 +1,8 @@
 'use client';
 
 /*
- * MinWidthGate — default desktop minimum1280px; the audited Options Trade
- * Card alone supports1200px.
+ * MinWidthGate — default desktop minimum1280px; the Options Trade Card and
+ * Stocks Position workspace support1200px.
  * Rather than adding responsive breakpoints, block the app under the threshold
  * with a friendly explainer. Uses matchMedia so it responds to window resizes.
  */
@@ -17,9 +17,10 @@ const TRADE_CARD_MIN_WIDTH = 1200;
 
 export function MinWidthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // Step 7's audited presentation supports1200px. Keep the original desktop
+  // The two Step 7 presentation workspaces support1200px. Keep the original desktop
   // minimum on every other route; children remain mounted behind this overlay.
   const minWidth = pathname === '/screener/step-7-trade-card'
+    || pathname === '/screener/step-7-position-card'
     ? TRADE_CARD_MIN_WIDTH : MIN_WIDTH;
   const [tooNarrow, setTooNarrow] = useState(false);
 

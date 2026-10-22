@@ -8,9 +8,13 @@ from typing import Literal
 
 import pandas as pd
 
+from app.services.strategy_backtest_details import (
+    DetailedBacktestResult, DetailStatus, collect_details, source_frame,
+)
+
 logger = logging.getLogger(__name__)
 
-Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily"]
+Strategy = Literal["pullback_ema", "breakout_base", "ma_crossover", "mean_reversion_rsi", "mean_reversion_bb", "mean_reversion_vwap", "mean_reversion_vwap_daily", "mean_reversion_multi"]
 
 
 def normalize_direction(direction: str | None) -> Literal["Bullish", "Bearish"]:
@@ -39,6 +43,10 @@ def _entry_side(direction: str, *, entry: float, sl: float, tp: float) -> str | 
     return "sell" if tp < entry < sl else None
 
 _MIN_TRADES = 10
+# The intraday mean_reversion_vwap backtest's per-bar window, unchanged by
+# STOCKS-HORIZON-T1 H1: intraday paths keep their windows (its anchored VWAP
+# is computed over the whole window, so the length moves its levels).
+_INTRADAY_SIGNAL_WINDOW = 350
 _MIN_WIN_RATE = 0.45
 _MIN_EXPECTANCY = 0.0
 
@@ -56,6 +64,28 @@ class BacktestResult:
     confidence:        int | None
     passes_gate:       bool
     summary_text:      str
+    # Trades closed by the hold_max_days time exit (STOCKS-HORIZON-T1 H2).
+    n_time_exits:      int = 0
+
+
+ExitReason = Literal["stop", "target", "time"]
+
+
+@dataclass(frozen=True)
+class TradeRecord:
+    """One closed backtest trade (STOCKS-HORIZON-T1 H2).
+
+    ``net_return_pct`` is backtesting.py's ``Trade.pl_pct`` x 100, net of the
+    per-leg ``commission``. ``exit_reason`` is ``"time"`` when the hold_max_days
+    time exit closed it; else read from the fill price against the trade's
+    stop (so a gap fill through the stop at the open is a stop).
+    """
+    entry_date:     date
+    exit_date:      date
+    entry_price:    float
+    exit_price:     float
+    net_return_pct: float
+    exit_reason:    ExitReason
 
 
 def _bars_to_df(bars: list[dict]) -> pd.DataFrame:
@@ -82,6 +112,9 @@ def run_strategy_backtest(
     params: dict | None = None,
     commission: float = 0.0,
     entry_start: date | None = None,
+    hold_max_days: int | None = None,
+    entry_end: date | None = None,
+    detail_collector: list[DetailedBacktestResult] | None = None,
 ) -> BacktestResult:
     """Run a full entry+stop+target backtest using backtesting.py.
 
@@ -89,14 +122,131 @@ def run_strategy_backtest(
     indicators — no entry is placed on them — and the return / drawdown /
     Sharpe are computed over the equity curve from ``entry_start`` onward, so a
     warm-up prefix neither trades nor dilutes the window's statistics.
+
+    ``hold_max_days`` (STOCKS-HORIZON-T1 H2): a trade filled on bar e is closed
+    with a market order at the close of the first bar t dated at least
+    ``hold_max_days`` calendar days after bar e. backtesting.py queues that
+    close order ahead of the trade's stop and target, so it fills at bar t+1's
+    open before either is checked. ``None`` = no time exit.
+
+    ``entry_end``: no new entry on a bar dated on or after it; a trade already
+    open still runs to its stop, target or time exit.
+
+    ``detail_collector``: optionally append detached chart evidence from this
+    same invocation. Evidence extraction failure preserves this aggregate.
     """
+    return _run_backtest(
+        bars, strategy=strategy, direction=direction, min_trades=min_trades,
+        min_win_rate=min_win_rate, params=params, commission=commission,
+        entry_start=entry_start, hold_max_days=hold_max_days, entry_end=entry_end,
+        collect_trades=False,
+        detail_collector=detail_collector,
+    )[0]
+
+
+def run_strategy_backtest_detailed(
+    bars: list[dict],
+    *,
+    strategy: str,
+    direction: str,
+    min_trades: int = _MIN_TRADES,
+    min_win_rate: float = _MIN_WIN_RATE,
+    params: dict | None = None,
+    commission: float = 0.0,
+    entry_start: date | None = None,
+    hold_max_days: int | None = None,
+    entry_end: date | None = None,
+) -> DetailedBacktestResult:
+    """One engine invocation with precise, detached chart evidence.
+
+    Unlike legacy aggregate APIs, malformed input is an explicit non-success.
+    Existing aggregate callers may pass ``detail_collector=[]`` to capture the
+    same evidence without changing their return type or invoking the engine twice.
+    """
+    try:
+        direction = normalize_direction(direction)
+        if len(bars) < 100:
+            reason = "Insufficient history (< 100 bars)"
+            return DetailedBacktestResult(_empty_result(strategy, direction, reason), "insufficient_history", reason)
+        source_frame(bars)
+        if not math.isfinite(commission):
+            raise ValueError("nonfinite commission")
+    except Exception as exc:
+        return DetailedBacktestResult(_empty_result(strategy, direction, str(exc)), "invalid_input", str(exc))
+    details: list[DetailedBacktestResult] = []
+    try:
+        run_strategy_backtest(
+            bars, strategy=strategy, direction=direction, min_trades=min_trades,
+            min_win_rate=min_win_rate, params=params, commission=commission,
+            entry_start=entry_start, hold_max_days=hold_max_days, entry_end=entry_end,
+            detail_collector=details)
+    except Exception as exc:
+        return DetailedBacktestResult(_empty_result(strategy, direction, str(exc)), "failed", str(exc))
+    return details[0]
+
+
+def run_strategy_backtest_trades(
+    bars: list[dict],
+    *,
+    strategy: str,
+    direction: str,
+    min_trades: int = _MIN_TRADES,
+    min_win_rate: float = _MIN_WIN_RATE,
+    params: dict | None = None,
+    commission: float = 0.0,
+    entry_start: date | None = None,
+    hold_max_days: int | None = None,
+    entry_end: date | None = None,
+) -> tuple[BacktestResult, list[TradeRecord]]:
+    """``run_strategy_backtest`` plus its closed trades, in entry order.
+
+    Trade records carry dates, so the bars must be dated (a ``time`` key).
+    """
+    result, trades = _run_backtest(
+        bars, strategy=strategy, direction=direction, min_trades=min_trades,
+        min_win_rate=min_win_rate, params=params, commission=commission,
+        entry_start=entry_start, hold_max_days=hold_max_days, entry_end=entry_end,
+        collect_trades=True,
+    )
+    return result, trades or []
+
+
+def _run_backtest(
+    bars: list[dict],
+    *,
+    strategy: str,
+    direction: str,
+    min_trades: int,
+    min_win_rate: float,
+    params: dict | None,
+    commission: float,
+    entry_start: date | None,
+    hold_max_days: int | None,
+    entry_end: date | None,
+    collect_trades: bool,
+    detail_collector: list[DetailedBacktestResult] | None = None,
+) -> tuple[BacktestResult, list[TradeRecord] | None]:
+    if strategy in ("breakout_setup", "fibonacci_pullback"):
+        from app.services.setup_backtest import run_setup_backtest
+        result, records = run_setup_backtest(
+            bars, strategy=strategy, direction=direction, min_trades=min_trades,
+            min_win_rate=min_win_rate, params=params, commission=commission,
+            entry_start=entry_start, entry_end=entry_end, hold_max_days=hold_max_days,
+        )
+        return result, records if collect_trades else None
     direction = normalize_direction(direction)
+
+    def _empty(reason: str, status: DetailStatus = "failed") -> tuple[BacktestResult, list[TradeRecord]]:
+        result = _empty_result(strategy, direction, reason)
+        if detail_collector is not None:
+            detail_collector.append(DetailedBacktestResult(result, status, reason))
+        return result, []
     from backtesting import Backtest, Strategy as BtStrategy
     from app.services.strategy_engine import (
         pullback_ema_signal, breakout_base_signal,
         ma_crossover_signal, mean_reversion_rsi_signal,
         mean_reversion_bb_signal, mean_reversion_vwap_signal,
-        mean_reversion_vwap_daily_signal,
+        mean_reversion_vwap_daily_signal, SIGNAL_WINDOW_BARS, multi_signal, _multi_variant_fns,
     )
     from app.services.strategy_param_store import get_exit
 
@@ -108,18 +258,28 @@ def run_strategy_backtest(
         "mean_reversion_bb":     mean_reversion_bb_signal,
         "mean_reversion_vwap":   mean_reversion_vwap_signal,
         "mean_reversion_vwap_daily": mean_reversion_vwap_daily_signal,
+        # STOCKS-HORIZON-T1 H3: multi backtests its own vote at the combined
+        # levels; `params` is the merged multi params shape.
+        "mean_reversion_multi":
+            lambda bars, *, direction, **shape: multi_signal(bars, direction=direction, params=shape),
     }.get(strategy)
 
     if not _signal_fn:
-        return _empty_result(strategy, direction, f"Unknown strategy '{strategy}'")
+        return _empty(f"Unknown strategy '{strategy}'", "unsupported")
 
     if len(bars) < 100:
-        return _empty_result(strategy, direction, "Insufficient history (< 100 bars)")
+        return _empty("Insufficient history (< 100 bars)", "insufficient_history")
 
     df = _bars_to_df(bars)
-    if entry_start is not None and not isinstance(df.index, pd.DatetimeIndex):
-        return _empty_result(strategy, direction, "entry_start needs dated bars")
+    if not isinstance(df.index, pd.DatetimeIndex):
+        for name, value in (("entry_start", entry_start), ("hold_max_days", hold_max_days),
+                            ("entry_end", entry_end)):
+            if value is not None:
+                return _empty(f"{name} needs dated bars")
+        if collect_trades:
+            return _empty("trade records need dated bars")
     fn = _signal_fn
+    _window = _INTRADAY_SIGNAL_WINDOW if strategy == "mean_reversion_vwap" else SIGNAL_WINDOW_BARS
 
     # WFO's train_fold (walk_forward.py:212) passes ONLY the search-grid combo as
     # `params` — never the `active:` block — so any exit parameter absent from the
@@ -130,7 +290,17 @@ def run_strategy_backtest(
     #
     # The live scan already merges `exit:` via _merge_strategy_params, so for that
     # caller this is a no-op re-application of identical values.
-    effective_params = {**get_exit(strategy), **(params or {})}
+    #
+    # mean_reversion_multi: `params` is already the effective multi shape
+    # (merge_multi_params put each variant's exit block in), so no merge.
+    effective_params = (dict(params or {}) if strategy == "mean_reversion_multi"
+                        else {**get_exit(strategy), **(params or {})})
+
+    # Entry bar of every trade the time exit closed; and the stop of the entry
+    # placed on bar i-1, keyed by its only possible fill bar i (DAY orders: the
+    # limit lives one bar).
+    time_closed: set[int] = set()
+    stops: dict[int, float] = {}
 
     class _Strategy(BtStrategy):
         def init(self):
@@ -144,13 +314,27 @@ def run_strategy_backtest(
             n = len(self.data.Close)
             if n < 60:
                 return
+            if hold_max_days is not None:
+                # Time exit (STOCKS-HORIZON-T1 H2), before the warm-up and
+                # entry_end returns so an open trade always exits. Trade.close()
+                # queues a market order at the front: it fills at the next bar's
+                # open before the trade's stop and target are checked.
+                bar_date = self.data.index[-1].date()
+                for trade in list(self.trades):
+                    if (trade.entry_bar not in time_closed
+                            and (bar_date - trade.entry_time.date()).days >= hold_max_days):
+                        time_closed.add(trade.entry_bar)
+                        trade.close()
             if entry_start is not None and self.data.index[-1].date() < entry_start:
                 return  # warm-up bar: indicators prime, no entry (fix #2)
-            # Only the trailing window is needed (mean_reversion_bb needs ~225+ bars
-            # with trend_sma:200 headroom — the largest of the five strategies).
-            # Capping at 350 avoids rebuilding the full history every bar (was O(n²)
-            # over a 5-year scan per symbol).
-            start = max(0, n - 350)
+            if entry_end is not None and self.data.index[-1].date() >= entry_end:
+                return  # past the window: open trades run on, no new entry
+            # A daily signal gets exactly the window the live scan, Analysis and
+            # the watches give it: SIGNAL_WINDOW_BARS (STOCKS-HORIZON-T1 H1; was
+            # 350 here and 120 live). The cap also avoids rebuilding the full
+            # history every bar (was O(n²) over a 5-year scan per symbol); under
+            # it the slice starts at bar 0, never a negative index.
+            start = max(0, n - _window)
             slice_bars = [
                 {"open": float(self.data.Open[i]), "high": float(self.data.High[i]),
                  "low": float(self.data.Low[i]),   "close": float(self.data.Close[i]),
@@ -166,13 +350,15 @@ def run_strategy_backtest(
                         self.buy(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
                     elif side == "sell":
                         self.sell(limit=sig.entry_price, sl=sig.stop_price, tp=sig.target_price)
+                    if side is not None:
+                        stops[n] = float(sig.stop_price)
 
     try:
         bt = Backtest(df, _Strategy, cash=100_000, commission=commission, exclusive_orders=True)
         stats = bt.run()
     except Exception as exc:
         logger.warning("Backtest failed for %s: %s", strategy, exc)
-        return _empty_result(strategy, direction, str(exc))
+        return _empty(str(exc))
 
     n_trades = int(stats.get("# Trades", 0))
 
@@ -209,6 +395,8 @@ def run_strategy_backtest(
     # actual trade P&L, and can yield negative expectancy for a net-profitable, high-win-rate
     # strategy.
     trades_df = stats["_trades"]
+    n_time_exits = int(trades_df["EntryBar"].isin(time_closed).sum()) if time_closed else 0
+    records = _trade_records(trades_df, direction, time_closed, stops) if collect_trades else None
     per_trade_pct = trades_df["ReturnPct"].to_numpy() * 100.0  # decimal → percent
     wins_pct  = per_trade_pct[per_trade_pct > 0]
     losses_pct = per_trade_pct[per_trade_pct <= 0]
@@ -234,13 +422,59 @@ def run_strategy_backtest(
             f"{n_trades} trades · Win {win_rate:.0%} · "
             f"Return {total_ret:.1f}% · MaxDD {max_dd:.1f}% · Sharpe {sharpe:.2f} · Expectancy ${expectancy:.2f}"
         )
-    return BacktestResult(
+    result = BacktestResult(
         strategy=strategy, direction=direction,
         n_trades=n_trades, win_rate=win_rate,
         total_return_pct=total_ret, max_drawdown_pct=max_dd,
         expectancy=round(expectancy, 3), sharpe=round(sharpe, 3),
         confidence=confidence, passes_gate=passes, summary_text=summary,
+        n_time_exits=n_time_exits,
     )
+    if detail_collector is not None:
+        try:
+            detail = collect_details(result, stats, df, source_bars=bars, entry_start=entry_start,
+                                     entry_end=entry_end, hold_max_days=hold_max_days,
+                                     commission=commission, effective_params=effective_params,
+                                     time_closed=time_closed, signal_fn=fn,
+                                     variant_fns=(_multi_variant_fns() if strategy == "mean_reversion_multi" else None),
+                                     min_trades=min_trades, min_win_rate=min_win_rate,
+                                     min_expectancy=_MIN_EXPECTANCY, signal_window_bars=_window)
+        except Exception as exc:
+            # Optional evidence must never change ranking/gates/aggregate results.
+            detail = DetailedBacktestResult(result, "invalid_evidence", str(exc))
+        detail_collector.append(detail)
+    return result, records
+
+
+def _trade_records(
+    trades_df: pd.DataFrame,
+    direction: str,
+    time_closed: set[int],
+    stops: dict[int, float],
+) -> list[TradeRecord]:
+    """Closed trades as TradeRecords. A trade the time exit closed is "time";
+    otherwise its fill against its stop decides (Bullish: at or below the stop
+    is a stop; Bearish mirrored), which also classifies a gap fill at the open."""
+    out: list[TradeRecord] = []
+    for row in trades_df.itertuples(index=False):
+        entry_bar = int(row.EntryBar)
+        exit_price = float(row.ExitPrice)
+        reason: ExitReason
+        if entry_bar in time_closed:
+            reason = "time"
+        else:
+            sl = stops[entry_bar]
+            hit_stop = exit_price <= sl if direction == "Bullish" else exit_price >= sl
+            reason = "stop" if hit_stop else "target"
+        out.append(TradeRecord(
+            entry_date=pd.Timestamp(row.EntryTime).date(),
+            exit_date=pd.Timestamp(row.ExitTime).date(),
+            entry_price=float(row.EntryPrice),
+            exit_price=exit_price,
+            net_return_pct=float(row.ReturnPct) * 100.0,
+            exit_reason=reason,
+        ))
+    return out
 
 
 def _window_stats(equity: pd.Series) -> tuple[float, float, float]:

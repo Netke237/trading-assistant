@@ -4,13 +4,25 @@ title Bamendjou - Backend
 set "ROOT=%~dp0"
 cd /d "%ROOT%backend"
 
+rem Bind address. Default 127.0.0.1 = this PC only. To open the app from
+rem another PC on the LAN, set BAMENDJOU_BACKEND_BIND=0.0.0.0 in the root .env
+rem (local, gitignored) together with CORS_EXTRA_ORIGINS - see .env.example.
+rem The API has no authentication, so LAN binding is opt-in, never the default.
+rem %%~B drops surrounding quotes, so BAMENDJOU_BACKEND_BIND="0.0.0.0" also works.
+set "BIND_HOST=127.0.0.1"
+if exist "%ROOT%.env" (
+    for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%ROOT%.env") do (
+        if /i "%%A"=="BAMENDJOU_BACKEND_BIND" if not "%%~B"=="" set "BIND_HOST=%%~B"
+    )
+)
+
 :kill_8000
-for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /L "127.0.0.1:8000" ^| findstr /L "LISTENING"') do (
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr /L /C:"127.0.0.1:8000 " /C:"0.0.0.0:8000 " /C:"%BIND_HOST%:8000 " ^| findstr /L "LISTENING"') do (
     echo Killing PID %%P on port 8000...
     taskkill /F /PID %%P /T >nul 2>&1
 )
 timeout /t 1 /nobreak >nul 2>&1
-netstat -ano 2>nul | findstr /L "127.0.0.1:8000" | findstr /L "LISTENING" >nul 2>&1
+netstat -ano 2>nul | findstr /L /C:"127.0.0.1:8000 " /C:"0.0.0.0:8000 " /C:"%BIND_HOST%:8000 " | findstr /L "LISTENING" >nul 2>&1
 if not errorlevel 1 goto kill_8000
 
 rem docker-compose.yml interpolates bare ${POSTGRES_USER}/${POSTGRES_PASSWORD}/
@@ -52,5 +64,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-call .venv\Scripts\python.exe -m uvicorn app.main:app --ws websockets-sansio --host 127.0.0.1 --port 8000
+call .venv\Scripts\python.exe -m uvicorn app.main:app --ws websockets-sansio --host %BIND_HOST% --port 8000
 pause

@@ -1,0 +1,470 @@
+symbol,sector,source,as_of
+A,Health Care,wikipedia-gics,2026-10-09
+AAPL,Technology,wikipedia-gics,2026-10-09
+ABBV,Health Care,wikipedia-gics,2026-10-09
+ABNB,Consumer Discretionary,wikipedia-gics,2026-10-09
+ABT,Health Care,wikipedia-gics,2026-10-09
+ACGL,Financials,wikipedia-gics,2026-10-09
+ACN,Technology,wikipedia-gics,2026-10-09
+ADBE,Technology,wikipedia-gics,2026-10-09
+ADI,Technology,wikipedia-gics,2026-10-09
+ADM,Consumer Staples,wikipedia-gics,2026-10-09
+ADP,Industrials,wikipedia-gics,2026-10-09
+ADSK,Technology,wikipedia-gics,2026-10-09
+AEE,Utilities,wikipedia-gics,2026-10-09
+AEP,Utilities,wikipedia-gics,2026-10-09
+AES,Utilities,wikipedia-gics,2026-10-09
+AFL,Financials,wikipedia-gics,2026-10-09
+AIG,Financials,wikipedia-gics,2026-10-09
+AIZ,Financials,wikipedia-gics,2026-10-09
+AJG,Financials,wikipedia-gics,2026-10-09
+AKAM,Technology,wikipedia-gics,2026-10-09
+ALB,Materials,wikipedia-gics,2026-10-09
+ALGN,Health Care,wikipedia-gics,2026-10-09
+ALL,Financials,wikipedia-gics,2026-10-09
+ALLE,Industrials,wikipedia-gics,2026-10-09
+AMAT,Technology,wikipedia-gics,2026-10-09
+AMCR,Materials,wikipedia-gics,2026-10-09
+AMD,Technology,wikipedia-gics,2026-10-09
+AME,Industrials,wikipedia-gics,2026-10-09
+AMGN,Health Care,wikipedia-gics,2026-10-09
+AMP,Financials,wikipedia-gics,2026-10-09
+AMT,Real Estate,wikipedia-gics,2026-10-09
+AMZN,Consumer Discretionary,wikipedia-gics,2026-10-09
+ANET,Technology,wikipedia-gics,2026-10-09
+AON,Financials,wikipedia-gics,2026-10-09
+AOS,Industrials,wikipedia-gics,2026-10-09
+APA,Energy,wikipedia-gics,2026-10-09
+APD,Materials,wikipedia-gics,2026-10-09
+APH,Technology,wikipedia-gics,2026-10-09
+APO,Financials,wikipedia-gics,2026-10-09
+APTV,Consumer Discretionary,wikipedia-gics,2026-10-09
+ARE,Real Estate,wikipedia-gics,2026-10-09
+ASML,Technology,yfinance,2026-10-09
+ATO,Utilities,wikipedia-gics,2026-10-09
+AVGO,Technology,wikipedia-gics,2026-10-09
+AVY,Materials,wikipedia-gics,2026-10-09
+AWK,Utilities,wikipedia-gics,2026-10-09
+AXON,Industrials,wikipedia-gics,2026-10-09
+AXP,Financials,wikipedia-gics,2026-10-09
+AZN,Health Care,yfinance,2026-10-09
+AZO,Consumer Discretionary,wikipedia-gics,2026-10-09
+BA,Industrials,wikipedia-gics,2026-10-09
+BAC,Financials,wikipedia-gics,2026-10-09
+BALL,Materials,wikipedia-gics,2026-10-09
+BAX,Health Care,wikipedia-gics,2026-10-09
+BBY,Consumer Discretionary,wikipedia-gics,2026-10-09
+BDX,Health Care,wikipedia-gics,2026-10-09
+BEN,Financials,wikipedia-gics,2026-10-09
+BF.B,Consumer Staples,wikipedia-gics,2026-10-09
+BG,Consumer Staples,wikipedia-gics,2026-10-09
+BIIB,Health Care,wikipedia-gics,2026-10-09
+BKNG,Consumer Discretionary,wikipedia-gics,2026-10-09
+BKR,Energy,wikipedia-gics,2026-10-09
+BLK,Financials,wikipedia-gics,2026-10-09
+BMY,Health Care,wikipedia-gics,2026-10-09
+BR,Industrials,wikipedia-gics,2026-10-09
+BRK.B,Financials,wikipedia-gics,2026-10-09
+BSX,Health Care,wikipedia-gics,2026-10-09
+BX,Financials,wikipedia-gics,2026-10-09
+C,Financials,wikipedia-gics,2026-10-09
+CAH,Health Care,wikipedia-gics,2026-10-09
+CARR,Industrials,wikipedia-gics,2026-10-09
+CAT,Industrials,wikipedia-gics,2026-10-09
+CB,Financials,wikipedia-gics,2026-10-09
+CBOE,Financials,wikipedia-gics,2026-10-09
+CBRE,Real Estate,wikipedia-gics,2026-10-09
+CCI,Real Estate,wikipedia-gics,2026-10-09
+CCL,Consumer Discretionary,wikipedia-gics,2026-10-09
+CDNS,Technology,wikipedia-gics,2026-10-09
+CDW,Technology,wikipedia-gics,2026-10-09
+CEG,Utilities,wikipedia-gics,2026-10-09
+CF,Materials,wikipedia-gics,2026-10-09
+CFG,Financials,wikipedia-gics,2026-10-09
+CHD,Consumer Staples,wikipedia-gics,2026-10-09
+CHRW,Industrials,wikipedia-gics,2026-10-09
+CHTR,Comm. Services,wikipedia-gics,2026-10-09
+CI,Health Care,wikipedia-gics,2026-10-09
+CINF,Financials,wikipedia-gics,2026-10-09
+CL,Consumer Staples,wikipedia-gics,2026-10-09
+CLX,Consumer Staples,wikipedia-gics,2026-10-09
+CMCSA,Comm. Services,wikipedia-gics,2026-10-09
+CME,Financials,wikipedia-gics,2026-10-09
+CMG,Consumer Discretionary,wikipedia-gics,2026-10-09
+CMI,Industrials,wikipedia-gics,2026-10-09
+CMS,Utilities,wikipedia-gics,2026-10-09
+CNC,Health Care,wikipedia-gics,2026-10-09
+CNP,Utilities,wikipedia-gics,2026-10-09
+COF,Financials,wikipedia-gics,2026-10-09
+COO,Health Care,wikipedia-gics,2026-10-09
+COP,Energy,wikipedia-gics,2026-10-09
+COR,Health Care,wikipedia-gics,2026-10-09
+COST,Consumer Staples,wikipedia-gics,2026-10-09
+CPAY,Financials,wikipedia-gics,2026-10-09
+CPRT,Industrials,wikipedia-gics,2026-10-09
+CPT,Real Estate,wikipedia-gics,2026-10-09
+CRL,Health Care,wikipedia-gics,2026-10-09
+CRM,Technology,wikipedia-gics,2026-10-09
+CRWD,Technology,wikipedia-gics,2026-10-09
+CSCO,Technology,wikipedia-gics,2026-10-09
+CSGP,Real Estate,wikipedia-gics,2026-10-09
+CSX,Industrials,wikipedia-gics,2026-10-09
+CTAS,Industrials,wikipedia-gics,2026-10-09
+CTSH,Technology,wikipedia-gics,2026-10-09
+CVS,Health Care,wikipedia-gics,2026-10-09
+CVX,Energy,wikipedia-gics,2026-10-09
+D,Utilities,wikipedia-gics,2026-10-09
+DAL,Industrials,wikipedia-gics,2026-10-09
+DD,Industrials,wikipedia-gics,2026-10-09
+DDOG,Technology,wikipedia-gics,2026-10-09
+DE,Industrials,wikipedia-gics,2026-10-09
+DECK,Consumer Discretionary,wikipedia-gics,2026-10-09
+DELL,Technology,wikipedia-gics,2026-10-09
+DG,Consumer Staples,wikipedia-gics,2026-10-09
+DGX,Health Care,wikipedia-gics,2026-10-09
+DHI,Consumer Discretionary,wikipedia-gics,2026-10-09
+DHR,Health Care,wikipedia-gics,2026-10-09
+DLR,Real Estate,wikipedia-gics,2026-10-09
+DLTR,Consumer Staples,wikipedia-gics,2026-10-09
+DOC,Real Estate,wikipedia-gics,2026-10-09
+DOV,Industrials,wikipedia-gics,2026-10-09
+DOW,Materials,wikipedia-gics,2026-10-09
+DPZ,Consumer Discretionary,wikipedia-gics,2026-10-09
+DRI,Consumer Discretionary,wikipedia-gics,2026-10-09
+DTE,Utilities,wikipedia-gics,2026-10-09
+DUK,Utilities,wikipedia-gics,2026-10-09
+DVA,Health Care,wikipedia-gics,2026-10-09
+DVN,Energy,wikipedia-gics,2026-10-09
+DXCM,Health Care,wikipedia-gics,2026-10-09
+EA,Comm. Services,yfinance,2026-10-09
+EBAY,Consumer Discretionary,wikipedia-gics,2026-10-09
+ECL,Materials,wikipedia-gics,2026-10-09
+ED,Utilities,wikipedia-gics,2026-10-09
+EFX,Industrials,wikipedia-gics,2026-10-09
+EG,Financials,wikipedia-gics,2026-10-09
+EIX,Utilities,wikipedia-gics,2026-10-09
+EL,Consumer Staples,wikipedia-gics,2026-10-09
+ELV,Health Care,wikipedia-gics,2026-10-09
+EMR,Industrials,wikipedia-gics,2026-10-09
+ENPH,Technology,yfinance,2026-10-09
+EOG,Energy,wikipedia-gics,2026-10-09
+EQIX,Real Estate,wikipedia-gics,2026-10-09
+EQT,Energy,wikipedia-gics,2026-10-09
+ES,Utilities,wikipedia-gics,2026-10-09
+ESS,Real Estate,wikipedia-gics,2026-10-09
+ETN,Industrials,wikipedia-gics,2026-10-09
+ETR,Utilities,wikipedia-gics,2026-10-09
+EVRG,Utilities,wikipedia-gics,2026-10-09
+EW,Health Care,wikipedia-gics,2026-10-09
+EXC,Utilities,wikipedia-gics,2026-10-09
+EXPD,Industrials,wikipedia-gics,2026-10-09
+EXPE,Consumer Discretionary,wikipedia-gics,2026-10-09
+EXR,Real Estate,wikipedia-gics,2026-10-09
+F,Consumer Discretionary,wikipedia-gics,2026-10-09
+FANG,Energy,wikipedia-gics,2026-10-09
+FAST,Industrials,wikipedia-gics,2026-10-09
+FCX,Materials,wikipedia-gics,2026-10-09
+FDS,Financials,wikipedia-gics,2026-10-09
+FDX,Industrials,wikipedia-gics,2026-10-09
+FE,Utilities,wikipedia-gics,2026-10-09
+FFIV,Technology,wikipedia-gics,2026-10-09
+FICO,Technology,wikipedia-gics,2026-10-09
+FIS,Financials,wikipedia-gics,2026-10-09
+FITB,Financials,wikipedia-gics,2026-10-09
+FOX,Comm. Services,wikipedia-gics,2026-10-09
+FOXA,Comm. Services,wikipedia-gics,2026-10-09
+FRT,Real Estate,wikipedia-gics,2026-10-09
+FSLR,Technology,wikipedia-gics,2026-10-09
+FTNT,Technology,wikipedia-gics,2026-10-09
+FTV,Industrials,wikipedia-gics,2026-10-09
+GD,Industrials,wikipedia-gics,2026-10-09
+GE,Industrials,wikipedia-gics,2026-10-09
+GEHC,Health Care,wikipedia-gics,2026-10-09
+GEN,Technology,wikipedia-gics,2026-10-09
+GFS,Technology,yfinance,2026-10-09
+GILD,Health Care,wikipedia-gics,2026-10-09
+GIS,Consumer Staples,wikipedia-gics,2026-10-09
+GLW,Technology,wikipedia-gics,2026-10-09
+GM,Consumer Discretionary,wikipedia-gics,2026-10-09
+GNRC,Industrials,wikipedia-gics,2026-10-09
+GOOG,Comm. Services,wikipedia-gics,2026-10-09
+GOOGL,Comm. Services,wikipedia-gics,2026-10-09
+GPC,Consumer Discretionary,wikipedia-gics,2026-10-09
+GPN,Financials,wikipedia-gics,2026-10-09
+GRMN,Consumer Discretionary,wikipedia-gics,2026-10-09
+GS,Financials,wikipedia-gics,2026-10-09
+GWW,Industrials,wikipedia-gics,2026-10-09
+HAL,Energy,wikipedia-gics,2026-10-09
+HAS,Consumer Discretionary,wikipedia-gics,2026-10-09
+HBAN,Financials,wikipedia-gics,2026-10-09
+HCA,Health Care,wikipedia-gics,2026-10-09
+HD,Consumer Discretionary,wikipedia-gics,2026-10-09
+HIG,Financials,wikipedia-gics,2026-10-09
+HII,Industrials,wikipedia-gics,2026-10-09
+HLT,Consumer Discretionary,wikipedia-gics,2026-10-09
+HON,Industrials,wikipedia-gics,2026-10-09
+HPE,Technology,wikipedia-gics,2026-10-09
+HPQ,Technology,wikipedia-gics,2026-10-09
+HRL,Consumer Staples,wikipedia-gics,2026-10-09
+HSIC,Health Care,wikipedia-gics,2026-10-09
+HST,Real Estate,wikipedia-gics,2026-10-09
+HSY,Consumer Staples,wikipedia-gics,2026-10-09
+HUM,Health Care,wikipedia-gics,2026-10-09
+HWM,Industrials,wikipedia-gics,2026-10-09
+IBM,Technology,wikipedia-gics,2026-10-09
+ICE,Financials,wikipedia-gics,2026-10-09
+IDXX,Health Care,wikipedia-gics,2026-10-09
+IEX,Industrials,wikipedia-gics,2026-10-09
+IFF,Materials,wikipedia-gics,2026-10-09
+ILMN,Health Care,wikipedia-gics,2026-10-09
+INCY,Health Care,wikipedia-gics,2026-10-09
+INTC,Technology,wikipedia-gics,2026-10-09
+INTU,Technology,wikipedia-gics,2026-10-09
+INVH,Real Estate,wikipedia-gics,2026-10-09
+IP,Materials,wikipedia-gics,2026-10-09
+IQV,Health Care,wikipedia-gics,2026-10-09
+IR,Industrials,wikipedia-gics,2026-10-09
+IRM,Real Estate,wikipedia-gics,2026-10-09
+ISRG,Health Care,wikipedia-gics,2026-10-09
+IT,Technology,wikipedia-gics,2026-10-09
+ITW,Industrials,wikipedia-gics,2026-10-09
+IVZ,Financials,wikipedia-gics,2026-10-09
+J,Industrials,wikipedia-gics,2026-10-09
+JBHT,Industrials,wikipedia-gics,2026-10-09
+JBL,Technology,wikipedia-gics,2026-10-09
+JCI,Industrials,wikipedia-gics,2026-10-09
+JD,Consumer Discretionary,yfinance,2026-10-09
+JKHY,Financials,wikipedia-gics,2026-10-09
+JNJ,Health Care,wikipedia-gics,2026-10-09
+JPM,Financials,wikipedia-gics,2026-10-09
+KDP,Consumer Staples,wikipedia-gics,2026-10-09
+KEY,Financials,wikipedia-gics,2026-10-09
+KEYS,Technology,wikipedia-gics,2026-10-09
+KHC,Consumer Staples,wikipedia-gics,2026-10-09
+KIM,Real Estate,wikipedia-gics,2026-10-09
+KLAC,Technology,wikipedia-gics,2026-10-09
+KMB,Consumer Staples,wikipedia-gics,2026-10-09
+KMI,Energy,wikipedia-gics,2026-10-09
+KO,Consumer Staples,wikipedia-gics,2026-10-09
+KR,Consumer Staples,wikipedia-gics,2026-10-09
+KVUE,Consumer Staples,wikipedia-gics,2026-10-09
+L,Financials,wikipedia-gics,2026-10-09
+LCID,Consumer Discretionary,yfinance,2026-10-09
+LDOS,Industrials,wikipedia-gics,2026-10-09
+LEN,Consumer Discretionary,wikipedia-gics,2026-10-09
+LH,Health Care,wikipedia-gics,2026-10-09
+LHX,Industrials,wikipedia-gics,2026-10-09
+LIN,Materials,wikipedia-gics,2026-10-09
+LLY,Health Care,wikipedia-gics,2026-10-09
+LMT,Industrials,wikipedia-gics,2026-10-09
+LNT,Utilities,wikipedia-gics,2026-10-09
+LOW,Consumer Discretionary,wikipedia-gics,2026-10-09
+LRCX,Technology,wikipedia-gics,2026-10-09
+LULU,Consumer Discretionary,wikipedia-gics,2026-10-09
+LUV,Industrials,wikipedia-gics,2026-10-09
+LVS,Consumer Discretionary,wikipedia-gics,2026-10-09
+LYB,Materials,wikipedia-gics,2026-10-09
+LYV,Comm. Services,wikipedia-gics,2026-10-09
+MA,Financials,wikipedia-gics,2026-10-09
+MAA,Real Estate,wikipedia-gics,2026-10-09
+MAR,Consumer Discretionary,wikipedia-gics,2026-10-09
+MAS,Industrials,wikipedia-gics,2026-10-09
+MCD,Consumer Discretionary,wikipedia-gics,2026-10-09
+MCHP,Technology,wikipedia-gics,2026-10-09
+MCK,Health Care,wikipedia-gics,2026-10-09
+MCO,Financials,wikipedia-gics,2026-10-09
+MDLZ,Consumer Staples,wikipedia-gics,2026-10-09
+MDT,Health Care,wikipedia-gics,2026-10-09
+MELI,Consumer Discretionary,yfinance,2026-10-09
+MET,Financials,wikipedia-gics,2026-10-09
+META,Comm. Services,wikipedia-gics,2026-10-09
+MGM,Consumer Discretionary,wikipedia-gics,2026-10-09
+MKC,Consumer Staples,wikipedia-gics,2026-10-09
+MLM,Materials,wikipedia-gics,2026-10-09
+MMM,Industrials,wikipedia-gics,2026-10-09
+MNST,Consumer Staples,wikipedia-gics,2026-10-09
+MO,Consumer Staples,wikipedia-gics,2026-10-09
+MOS,Materials,wikipedia-gics,2026-10-09
+MPC,Energy,wikipedia-gics,2026-10-09
+MPWR,Technology,wikipedia-gics,2026-10-09
+MRK,Health Care,wikipedia-gics,2026-10-09
+MRNA,Health Care,wikipedia-gics,2026-10-09
+MRVL,Technology,wikipedia-gics,2026-10-09
+MS,Financials,wikipedia-gics,2026-10-09
+MSCI,Financials,wikipedia-gics,2026-10-09
+MSFT,Technology,wikipedia-gics,2026-10-09
+MSI,Technology,wikipedia-gics,2026-10-09
+MTB,Financials,wikipedia-gics,2026-10-09
+MTCH,Comm. Services,yfinance,2026-10-09
+MTD,Health Care,wikipedia-gics,2026-10-09
+MU,Technology,wikipedia-gics,2026-10-09
+NCLH,Consumer Discretionary,wikipedia-gics,2026-10-09
+NDAQ,Financials,wikipedia-gics,2026-10-09
+NDSN,Industrials,wikipedia-gics,2026-10-09
+NEE,Utilities,wikipedia-gics,2026-10-09
+NEM,Materials,wikipedia-gics,2026-10-09
+NFLX,Comm. Services,wikipedia-gics,2026-10-09
+NI,Utilities,wikipedia-gics,2026-10-09
+NKE,Consumer Discretionary,wikipedia-gics,2026-10-09
+NOC,Industrials,wikipedia-gics,2026-10-09
+NOW,Technology,wikipedia-gics,2026-10-09
+NRG,Utilities,wikipedia-gics,2026-10-09
+NSC,Industrials,wikipedia-gics,2026-10-09
+NTAP,Technology,wikipedia-gics,2026-10-09
+NTES,Comm. Services,yfinance,2026-10-09
+NTRS,Financials,wikipedia-gics,2026-10-09
+NUE,Materials,wikipedia-gics,2026-10-09
+NVDA,Technology,wikipedia-gics,2026-10-09
+NVR,Consumer Discretionary,wikipedia-gics,2026-10-09
+NWS,Comm. Services,wikipedia-gics,2026-10-09
+NWSA,Comm. Services,wikipedia-gics,2026-10-09
+NXPI,Technology,wikipedia-gics,2026-10-09
+O,Real Estate,wikipedia-gics,2026-10-09
+ODFL,Industrials,wikipedia-gics,2026-10-09
+OKE,Energy,wikipedia-gics,2026-10-09
+OKTA,Technology,yfinance,2026-10-09
+OMC,Comm. Services,wikipedia-gics,2026-10-09
+ON,Technology,wikipedia-gics,2026-10-09
+ORCL,Technology,wikipedia-gics,2026-10-09
+ORLY,Consumer Discretionary,wikipedia-gics,2026-10-09
+OTIS,Industrials,wikipedia-gics,2026-10-09
+OXY,Energy,wikipedia-gics,2026-10-09
+PANW,Technology,wikipedia-gics,2026-10-09
+PAYX,Industrials,wikipedia-gics,2026-10-09
+PCAR,Industrials,wikipedia-gics,2026-10-09
+PCG,Utilities,wikipedia-gics,2026-10-09
+PDD,Consumer Discretionary,yfinance,2026-10-09
+PEG,Utilities,wikipedia-gics,2026-10-09
+PEP,Consumer Staples,wikipedia-gics,2026-10-09
+PFE,Health Care,wikipedia-gics,2026-10-09
+PFG,Financials,wikipedia-gics,2026-10-09
+PG,Consumer Staples,wikipedia-gics,2026-10-09
+PGR,Financials,wikipedia-gics,2026-10-09
+PH,Industrials,wikipedia-gics,2026-10-09
+PHM,Consumer Discretionary,wikipedia-gics,2026-10-09
+PKG,Materials,wikipedia-gics,2026-10-09
+PLD,Real Estate,wikipedia-gics,2026-10-09
+PM,Consumer Staples,wikipedia-gics,2026-10-09
+PNC,Financials,wikipedia-gics,2026-10-09
+PNR,Industrials,wikipedia-gics,2026-10-09
+PNW,Utilities,wikipedia-gics,2026-10-09
+PODD,Health Care,wikipedia-gics,2026-10-09
+PPG,Materials,wikipedia-gics,2026-10-09
+PPL,Utilities,wikipedia-gics,2026-10-09
+PRU,Financials,wikipedia-gics,2026-10-09
+PSA,Real Estate,wikipedia-gics,2026-10-09
+PSX,Energy,wikipedia-gics,2026-10-09
+PTC,Technology,wikipedia-gics,2026-10-09
+PWR,Industrials,wikipedia-gics,2026-10-09
+PYPL,Financials,wikipedia-gics,2026-10-09
+QCOM,Technology,wikipedia-gics,2026-10-09
+RCL,Consumer Discretionary,wikipedia-gics,2026-10-09
+REG,Real Estate,wikipedia-gics,2026-10-09
+REGN,Health Care,wikipedia-gics,2026-10-09
+RF,Financials,wikipedia-gics,2026-10-09
+RIVN,Consumer Discretionary,yfinance,2026-10-09
+RJF,Financials,wikipedia-gics,2026-10-09
+RL,Consumer Discretionary,wikipedia-gics,2026-10-09
+RMD,Health Care,wikipedia-gics,2026-10-09
+ROK,Industrials,wikipedia-gics,2026-10-09
+ROL,Industrials,wikipedia-gics,2026-10-09
+ROP,Technology,wikipedia-gics,2026-10-09
+ROST,Consumer Discretionary,wikipedia-gics,2026-10-09
+RSG,Industrials,wikipedia-gics,2026-10-09
+RTX,Industrials,wikipedia-gics,2026-10-09
+RVTY,Health Care,wikipedia-gics,2026-10-09
+SBAC,Real Estate,wikipedia-gics,2026-10-09
+SBUX,Consumer Discretionary,wikipedia-gics,2026-10-09
+SCHW,Financials,wikipedia-gics,2026-10-09
+SHW,Materials,wikipedia-gics,2026-10-09
+SIRI,Comm. Services,yfinance,2026-10-09
+SJM,Consumer Staples,wikipedia-gics,2026-10-09
+SLB,Energy,wikipedia-gics,2026-10-09
+SMCI,Technology,wikipedia-gics,2026-10-09
+SNA,Industrials,wikipedia-gics,2026-10-09
+SNPS,Technology,wikipedia-gics,2026-10-09
+SO,Utilities,wikipedia-gics,2026-10-09
+SOLV,Health Care,wikipedia-gics,2026-10-09
+SPG,Real Estate,wikipedia-gics,2026-10-09
+SPGI,Financials,wikipedia-gics,2026-10-09
+SRE,Utilities,wikipedia-gics,2026-10-09
+STE,Health Care,wikipedia-gics,2026-10-09
+STLD,Materials,wikipedia-gics,2026-10-09
+STT,Financials,wikipedia-gics,2026-10-09
+STX,Technology,wikipedia-gics,2026-10-09
+STZ,Consumer Staples,wikipedia-gics,2026-10-09
+SWK,Industrials,wikipedia-gics,2026-10-09
+SWKS,Technology,wikipedia-gics,2026-10-09
+SYF,Financials,wikipedia-gics,2026-10-09
+SYK,Health Care,wikipedia-gics,2026-10-09
+SYY,Consumer Staples,wikipedia-gics,2026-10-09
+T,Comm. Services,wikipedia-gics,2026-10-09
+TDG,Industrials,wikipedia-gics,2026-10-09
+TDY,Technology,wikipedia-gics,2026-10-09
+TEAM,Technology,yfinance,2026-10-09
+TECH,Health Care,wikipedia-gics,2026-10-09
+TEL,Technology,wikipedia-gics,2026-10-09
+TER,Technology,wikipedia-gics,2026-10-09
+TFC,Financials,wikipedia-gics,2026-10-09
+TGT,Consumer Staples,wikipedia-gics,2026-10-09
+TJX,Consumer Discretionary,wikipedia-gics,2026-10-09
+TMO,Health Care,wikipedia-gics,2026-10-09
+TMUS,Comm. Services,wikipedia-gics,2026-10-09
+TPR,Consumer Discretionary,wikipedia-gics,2026-10-09
+TRGP,Energy,wikipedia-gics,2026-10-09
+TRMB,Technology,wikipedia-gics,2026-10-09
+TROW,Financials,wikipedia-gics,2026-10-09
+TRV,Financials,wikipedia-gics,2026-10-09
+TSCO,Consumer Discretionary,wikipedia-gics,2026-10-09
+TSLA,Consumer Discretionary,wikipedia-gics,2026-10-09
+TSN,Consumer Staples,wikipedia-gics,2026-10-09
+TT,Industrials,wikipedia-gics,2026-10-09
+TTWO,Comm. Services,wikipedia-gics,2026-10-09
+TXN,Technology,wikipedia-gics,2026-10-09
+TXT,Industrials,wikipedia-gics,2026-10-09
+TYL,Technology,wikipedia-gics,2026-10-09
+UAL,Industrials,wikipedia-gics,2026-10-09
+UBER,Industrials,wikipedia-gics,2026-10-09
+UDR,Real Estate,wikipedia-gics,2026-10-09
+UHS,Health Care,wikipedia-gics,2026-10-09
+ULTA,Consumer Discretionary,wikipedia-gics,2026-10-09
+UNH,Health Care,wikipedia-gics,2026-10-09
+UNP,Industrials,wikipedia-gics,2026-10-09
+UPS,Industrials,wikipedia-gics,2026-10-09
+URI,Industrials,wikipedia-gics,2026-10-09
+USB,Financials,wikipedia-gics,2026-10-09
+V,Financials,wikipedia-gics,2026-10-09
+VICI,Real Estate,wikipedia-gics,2026-10-09
+VLO,Energy,wikipedia-gics,2026-10-09
+VLTO,Industrials,wikipedia-gics,2026-10-09
+VRSK,Industrials,wikipedia-gics,2026-10-09
+VRSN,Technology,wikipedia-gics,2026-10-09
+VRTX,Health Care,wikipedia-gics,2026-10-09
+VST,Utilities,wikipedia-gics,2026-10-09
+VTR,Real Estate,wikipedia-gics,2026-10-09
+VTRS,Health Care,wikipedia-gics,2026-10-09
+VZ,Comm. Services,wikipedia-gics,2026-10-09
+WAB,Industrials,wikipedia-gics,2026-10-09
+WAT,Health Care,wikipedia-gics,2026-10-09
+WBD,Comm. Services,yfinance,2026-10-09
+WDAY,Technology,wikipedia-gics,2026-10-09
+WDC,Technology,wikipedia-gics,2026-10-09
+WEC,Utilities,wikipedia-gics,2026-10-09
+WELL,Real Estate,wikipedia-gics,2026-10-09
+WFC,Financials,wikipedia-gics,2026-10-09
+WM,Industrials,wikipedia-gics,2026-10-09
+WMB,Energy,wikipedia-gics,2026-10-09
+WMT,Consumer Staples,wikipedia-gics,2026-10-09
+WST,Health Care,wikipedia-gics,2026-10-09
+WTW,Financials,wikipedia-gics,2026-10-09
+WY,Real Estate,wikipedia-gics,2026-10-09
+WYNN,Consumer Discretionary,wikipedia-gics,2026-10-09
+XEL,Utilities,wikipedia-gics,2026-10-09
+XOM,Energy,wikipedia-gics,2026-10-09
+XYL,Industrials,wikipedia-gics,2026-10-09
+YUM,Consumer Discretionary,wikipedia-gics,2026-10-09
+ZBH,Health Care,wikipedia-gics,2026-10-09
+ZBRA,Technology,wikipedia-gics,2026-10-09
+ZM,Technology,yfinance,2026-10-09
+ZS,Technology,yfinance,2026-10-09
+ZTS,Health Care,wikipedia-gics,2026-10-09

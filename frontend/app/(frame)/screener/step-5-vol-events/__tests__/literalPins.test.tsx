@@ -119,7 +119,7 @@ describe('the rendered Swing page, word for word', () => {
   it('the summary line', () => {
     expect(line('summary')).toBe(
       '3 shown — 0 PASS, 2 CAUTION, 1 REJECT. '
-      + "Driven by: 1 on IV rank above its threshold; 1 on an event inside this horizon's window. "
+      + "Driven by measured checks: 1 on IV rank above its threshold; 1 on an event inside this horizon's window. "
       + '1 of them has no volatility reading at all — graded CAUTION on the volatility side alone, '
       + 'never PASS there. The gate verdict above is the worse of that and the event window, '
       + 'so it can be lower still.',
@@ -130,17 +130,17 @@ describe('the rendered Swing page, word for word', () => {
     expect(tooltip('RNK')).toBe(
       'Gate shows the worse of IV rank and event proximity. IV rank 37 (CAUTION); '
       + "next event in 60d vs. this horizon's reject <21d / caution <45d window (PASS). "
-      + 'Driven by: IV rank.',
+      + 'Driven by: measured checks: IV rank.',
     );
     expect(tooltip('ABS')).toBe(
       'Gate shows the worse of IV and event proximity. '
       + 'IV 58.0% — an absolute level, no rank source available (CAUTION); '
       + "next event in 10d vs. this horizon's reject <21d / caution <45d window (REJECT). "
-      + 'Driven by: event proximity.',
+      + 'Driven by: measured checks: event proximity.',
     );
     expect(tooltip('NOV')).toBe(
       'Gate shows the worse of IV and event proximity. IV: no data; no known upcoming event. '
-      + 'Driven by: no volatility reading.',
+      + 'Driven by: no measured check. Missing volatility reading is not a measured driver.',
     );
   });
 

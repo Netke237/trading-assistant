@@ -47,7 +47,7 @@ const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   // (STOP-SEMANTICS-2026-10-02); a fired row is labelled by its stamped side.
   PREMIUM_STOP:           'Premium / stock stop',
   TIME_STOP_APPROACHING:  'Time stop approaching',
-  TIME_STOP:              'Time stop (≤3 DTE)',
+  TIME_STOP:              'Time stop (≤3 DTE / hold reached)',
   EARNINGS_APPROACHING:   'Earnings within 3 days',
   EVENT_RISK:             'Event risk (≤3 days)',
   EXPIRATION_APPROACHING: 'Expiration within 3 days',

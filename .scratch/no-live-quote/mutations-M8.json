@@ -1,0 +1,9 @@
+[
+  {
+    "mutation": "M8",
+    "exit_code": 1,
+    "log": ".scratch/no-live-quote/M8-mutation.log",
+    "expected_test_failed": true,
+    "original_sha256": "6d0a7312e7edad9ca1d224b1ecbc7f0421004a62bc79e8a8f27c14636f77dc6f"
+  }
+]
