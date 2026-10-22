@@ -8632,18 +8632,18 @@
       "plan": "docs/superpowers/plans/2026-10-22-watchlist-residuals-plan.md",
       "branch": "board/watchlist-residuals-45225aff",
       "tracking_issue": 168,
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "verify": {
         "kind": "present",
         "path": "frontend/lib/__tests__/contractGrading.test.ts",
         "pattern": "test_oversized_strike_isolation",
         "note": "PRESENCE ONLY of test_oversized_strike_isolation (#168)."
       },
-      "completion_pct": 75,
+      "completion_pct": 90,
       "size": "M",
       "complexity": 4,
-      "note": "Build complete. Ready for Code Audit Round 1.",
+      "note": "Plan 1 + code 1 rounds clean (0 gate findings). Built, verified, audited clean. Opening PR.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -8659,8 +8659,23 @@
           "reviewed": "docs/superpowers/plans/2026-10-22-watchlist-residuals-plan.md",
           "gate_findings": 0,
           "findings": []
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "65695e43-9c8e-4d19-a9de-1d60ccf341b1",
+          "reviewed": "origin/main..HEAD",
+          "gate_findings": 0,
+          "findings": []
         }
-      ]
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 65695e43-9c8e-4d19-a9de-1d60ccf341b1 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/WATCHLIST-RESIDUALS/code-r1.md"
+      }
     }
   ],
   "already_shipped": [
