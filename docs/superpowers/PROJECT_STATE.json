@@ -8456,8 +8456,8 @@
       "id": "EXACT-STRIKE",
       "name": "Fractional option strikes are carried exactly end to end (chain rows, contract ids, quote matching, Watchlist grading); integer-strike ids and JSON stay byte-identical; read-only check of persisted contract ids",
       "status": "built",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "depends_on": [
         "NO-LIVE-QUOTE"
       ],
@@ -8467,7 +8467,7 @@
         "pattern": "\"strike\": int\\(strike\\)",
         "note": "PRESENCE of the truncating chain-row strike is the unfixed defect (D1-D5 in the plan). Presence probe only; behaviour is pinned by the plan's tests once built."
       },
-      "note": "2026-10-22 BUILT (board #162, branch board/exact-strike-41be05fa): tickets ES-1 #502 (7317f239), ES-2 #503 (8749de7a + comment fix b2d5c5a6), ES-3 #504 (99239a0e), ES-4 #505 (0889862b) built, coordinator-verified and closed; origin/main merged again (e80fc1d5, PROJECT_STATE.json conflict only). Full local checks and code audit round 1 (stage round 1 of 3) next. || 2026-10-22 BUILD START (board #162, branch board/exact-strike-41be05fa): Q-1 -> A, Q-2 -> A (decision record on #162, 2026-10-21). origin/main bf0b3b54 merged; plan section 9 records the build-start re-check (no step changed). Tickets ES-1..ES-4 next. || 2026-10-09 PLAN ROUND 2 (plan stage round 2 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope git diff 646c6510..6cc3f005 of the plan, the R1-1 fix + interactions): CLEAN, ZERO GATE FINDINGS. Plan stage closed clean at round 2. Phase audit_clean stays false until the CODE stage (its own cap of 3) is clean. Build waits for NO-LIVE-QUOTE to merge to main. Open for Kenneth: Q-1, Q-2 (plan section 6). || 2026-10-09 PLAN ROUND 1 (plan stage round 1 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope whole plan r1 @ 646c6510 vs code + NLQ b6f2259e): NOT CLEAN, 1 gate finding R1-1 (frontend/lib/step6CardContract.ts Math.trunc on the Step-6 card-contract rescue, omitted by the plan) -- fixed in plan r2. 5 below-gate items logged in plan section 8, not fixed. NEXT: plan round 2 over the r2 fix only. || 2026-10-09 PLAN r1 written (claude/intelligent-merkle-ba9f03), read against NO-LIVE-QUOTE @ b6f2259e. Pre-existing defect found by the NLQ-1 code audit. Plan stage round 1 next. Build waits for NO-LIVE-QUOTE to merge to main. Open: Q-1 (ambiguous persisted ids: report only?), Q-2 (which DB the migration check reads).",
+      "note": "2026-10-22 CODE ROUND 3 (code stage round 1 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope git diff f61399ad 42f25621 = whole integrated change): CLEAN, ZERO GATE FINDINGS. Traced 182.5 chain row -> card contract/contractDetails/alternatives -> contractId -> pipe_to_occ (...00182500); integer-strike bytes unchanged for int/float/str inputs; every fetch_contract_quote_async consumer; old last_result_json reload; ES-4 read-only (SQLite mode=ro INSERT refused, Postgres read-only session, SELECT/PRAGMA/SHOW guard). Auditor tests: pytest 244 passed, Jest 109 passed. Local checks on 42f25621: backend full suite Python 3.11.17 9963 passed / 9 skipped / 3 deselected (container-config failures that also fail on the pre-change commit); frontend typecheck clean, Jest 315 suites / 5963 tests passed. audit_clean true; PR next. || 2026-10-22 BUILT (board #162, branch board/exact-strike-41be05fa): tickets ES-1 #502 (7317f239), ES-2 #503 (8749de7a + comment fix b2d5c5a6), ES-3 #504 (99239a0e), ES-4 #505 (0889862b) built, coordinator-verified and closed; origin/main merged again (e80fc1d5, PROJECT_STATE.json conflict only). Full local checks and code audit round 1 (stage round 1 of 3) next. || 2026-10-22 BUILD START (board #162, branch board/exact-strike-41be05fa): Q-1 -> A, Q-2 -> A (decision record on #162, 2026-10-21). origin/main bf0b3b54 merged; plan section 9 records the build-start re-check (no step changed). Tickets ES-1..ES-4 next. || 2026-10-09 PLAN ROUND 2 (plan stage round 2 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope git diff 646c6510..6cc3f005 of the plan, the R1-1 fix + interactions): CLEAN, ZERO GATE FINDINGS. Plan stage closed clean at round 2. Phase audit_clean stays false until the CODE stage (its own cap of 3) is clean. Build waits for NO-LIVE-QUOTE to merge to main. Open for Kenneth: Q-1, Q-2 (plan section 6). || 2026-10-09 PLAN ROUND 1 (plan stage round 1 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope whole plan r1 @ 646c6510 vs code + NLQ b6f2259e): NOT CLEAN, 1 gate finding R1-1 (frontend/lib/step6CardContract.ts Math.trunc on the Step-6 card-contract rescue, omitted by the plan) -- fixed in plan r2. 5 below-gate items logged in plan section 8, not fixed. NEXT: plan round 2 over the r2 fix only. || 2026-10-09 PLAN r1 written (claude/intelligent-merkle-ba9f03), read against NO-LIVE-QUOTE @ b6f2259e. Pre-existing defect found by the NLQ-1 code audit. Plan stage round 1 next. Build waits for NO-LIVE-QUOTE to merge to main. Open: Q-1 (ambiguous persisted ids: report only?), Q-2 (which DB the migration check reads).",
       "plan": "docs/superpowers/plans/2026-10-09-exact-strike-plan.md",
       "plan_stage": {
         "rounds": 2,
@@ -8479,7 +8479,13 @@
       "plan_audit_clean": true,
       "size": "XL",
       "complexity": 5,
-      "completion_pct": 50
+      "completion_pct": 85,
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent general-purpose subagent (agent ababc506) applying bmad-review-adversarial-general reviewed git diff f61399ad 42f25621 (origin/main..branch, 21 files) against plan sections 1-3, 5, 8, 9; 0 gate findings."
+      }
     }
   ],
   "already_shipped": [
