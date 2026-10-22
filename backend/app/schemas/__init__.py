@@ -3,12 +3,13 @@ from __future__ import annotations
 from app.schemas.payload_depth import validate_payload_depth
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal, Optional, Union
 from pydantic import (
     AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, StringConstraints,
     field_validator, model_validator,
 )
 
+from app.data.strike import canonical_strike
 from app.schemas.scan import (
     ContinuousScanConfig,
     ContinuousScanStatus,
@@ -25,6 +26,13 @@ ScanState = Literal['IDLE', 'SCANNING', 'COMPLETED', 'FAILED', 'PARTIAL', 'CANCE
 AlertKind = Literal['Info', 'Action', 'Critical']
 OrderType = Literal['Limit', 'Market', 'Stop']
 OptionRight = Literal['C', 'P']
+# EXACT-STRIKE (plan 2026-10-09 section 2, I4): an option strike on the wire.
+# Smart-mode union keeps an int an int, and canonical_strike returns an
+# integral value as int, so an integer strike serialises as `185`, never
+# `185.0` (byte-identical to the old `strike: int`), while a fractional strike
+# such as 22.5 is kept exactly (3 dp) instead of being truncated. Non-finite,
+# <= 0 and bool values are refused.
+Strike = Annotated[Union[int, float], AfterValidator(canonical_strike)]
 TrendDir = Literal['up', 'flat', 'down']
 RrModel = Literal['Heston repriced', 'BS repriced (IV-derived)', 'Delta approximation']
 # Active take-profit method driving a position's TP_HIT alert — see
@@ -324,7 +332,7 @@ class OptionContract(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     id: str
     symbol: str
-    strike: int
+    strike: Strike
     expiry: str
     right: OptionRight
     dte: int
@@ -597,7 +605,7 @@ class TargetLevel(BaseModel):
 
 class ContractDetails(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    strike: int
+    strike: Strike
     expiry: str
     right: OptionRight
     mid: float
@@ -699,7 +707,7 @@ class OptionLeg(BaseModel):
 class AlternativeContract(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     symbol:             str
-    strike:             int
+    strike:             Strike
     expiry:             str
     right:              OptionRight
     dte:                int
