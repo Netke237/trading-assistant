@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal
 
+from app.data.strike import format_strike
 from app.services.config_health import config_health
 
 logger = logging.getLogger(__name__)
@@ -199,6 +200,24 @@ def _int_pref_override(val: float) -> int:
     if 0 < val < 1:
         return 1
     return int(val)
+
+
+def _int_score_floor(val: Any) -> int:
+    """Validate and convert score floor override to an integer in [0, 100].
+    Rejects bool, non-finite float, and out-of-bounds values.
+    """
+    if val is None or isinstance(val, bool):
+        raise TypeError(f"Invalid score floor type: {type(val).__name__}")
+    try:
+        num = float(val)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Cannot parse score floor: {val}") from e
+    if not math.isfinite(num):
+        raise ValueError(f"Non-finite score floor: {val}")
+    val_int = int(round(num))
+    if not (0 <= val_int <= 100):
+        raise ValueError(f"Score floor {val_int} out of bounds [0, 100]")
+    return val_int
 
 
 def _score_liquidity(contract: dict, cfg: dict) -> tuple[int, int, list[str]]:
@@ -391,7 +410,7 @@ _CONTRACT_OVERRIDES: dict[str, tuple[str, Callable[[Any], float | int]]] = {
     "max_iv_abs":             ("hard_reject", float),
     "preferred_dte_min":      ("soft_rank",   int),
     "preferred_dte_max":      ("soft_rank",   int),
-    "min_stock_score":        ("hard_reject", int),
+    "min_stock_score":        ("hard_reject", _int_score_floor),
     # Below: the SOFT-RANK counterparts of the hard-reject liquidity/
     # spread keys above. Added so a caller can move both together, the
     # same reason `widen_contract_overrides_for_dte` (dte_window.py)
@@ -453,12 +472,22 @@ def effective_contract_overrides(overrides: dict | None) -> dict[str, float | in
     only the keys it reads, each cast exactly as it casts them. Raises
     ValueError/TypeError on a value the cast refuses, as validate_contract would.
 
+    `contract_min_stock_score` is translated to `min_stock_score`.
+    If both `contract_min_stock_score` and `min_stock_score` are present,
+    `contract_min_stock_score` takes precedence.
+
     A scan records this on its result (ScanResult.contract_rules) and Step 6
     sends it back to /api/contracts, so the contracts table grades every
     contract with the rules the trade cards were graded with."""
+    if not overrides:
+        return {}
+    raw = dict(overrides)
+    if "contract_min_stock_score" in raw:
+        raw["min_stock_score"] = raw.pop("contract_min_stock_score")
+
     return {
         key: _CONTRACT_OVERRIDES[key][1](val)
-        for key, val in (overrides or {}).items()
+        for key, val in raw.items()
         if key in _CONTRACT_OVERRIDES
     }
 
@@ -487,7 +516,19 @@ def effective_dte_limits(overrides: dict | None) -> tuple[int, int, int, int]:
 
 def _contract_id(contract: dict) -> str:
     side = "C" if contract.get("is_call", True) else "P"
-    return f"{contract.get('symbol', '')}|{contract.get('strike', '')}|{contract.get('expiry', '')}|{side}"
+    # format_strike (EXACT-STRIKE): a float integral strike is `185`, never
+    # `185.0`, so the evidence id matches the card's and the chain row's. The
+    # id is an evidence label, so an invalid strike falls back to its old text
+    # rather than raising inside scoring.
+    strike = contract.get("strike")
+    if strike is None:
+        strike_text = ""
+    else:
+        try:
+            strike_text = format_strike(strike)
+        except (TypeError, ValueError):
+            strike_text = str(strike)
+    return f"{contract.get('symbol', '')}|{strike_text}|{contract.get('expiry', '')}|{side}"
 
 
 def validate_contract(

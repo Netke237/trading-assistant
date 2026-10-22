@@ -147,12 +147,19 @@ def test_twelve_tied_strikes_are_all_returned(client):
     assert sorted(c["strike"] for c in r.json()) == last12
 
 
-@pytest.mark.parametrize("bad", ["185,abc", "185,-5", "185,+5", "1_85", "185.0", "1" * 10, "1" * 4301],
-                         ids=["abc", "neg", "plus", "underscore", "float", "10-digits", "4301-digits"])
+@pytest.mark.parametrize("bad", ["185,abc", "185,-5", "185,+5", "1_85", "1" * 10, "1" * 4301],
+                         ids=["abc", "neg", "plus", "underscore", "10-digits", "4301-digits"])
 def test_a_non_int_strike_is_a_422(client, bad):
     r, _ = _get(client, [_row(185)], "&strikes=" + bad.replace("+", "%2B"))
     assert r.status_code == 422
     assert r.json()["detail"][0]["loc"] == ["query", "strikes"]
+
+
+def test_a_decimal_integral_strike_matches_the_integer_row(client):
+    """EXACT-STRIKE I3: `strikes=185.0` is the canonical strike 185, not a 422."""
+    r, _ = _get(client, [_row(185), _row(190)], "&strikes=185.0")
+    assert r.status_code == 200
+    assert [(c["id"], c["strike"]) for c in r.json()] == [(f"XOM|185|{_E}|C", 185)]
 
 
 @pytest.mark.parametrize("q", ["&strikes=", "&strikes=,", "&strikes=%20"])

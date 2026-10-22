@@ -17,7 +17,8 @@ export interface CardContractRequest {
   index: number;
   id: string;
   expiry: string;
-  /** Truncated as the backend truncates OptionContract.strike. */
+  /** The card's exact strike (e.g. 182.5): GET /api/contracts matches
+   *  `strikes=` exactly, so 182.5 returns the 182.5 row and never the 182 row. */
   strike: number;
 }
 
@@ -38,16 +39,16 @@ export function missingCardContracts(
     if (typeof cd.expiry !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(cd.expiry)) return;
     if (!Number.isFinite(cd.strike) || cd.strike < 0) return;
     if ((rows[index] ?? []).some((r) => r.id === c.contract)) return;
-    out.push({ index, id: c.contract, expiry: cd.expiry, strike: Math.trunc(cd.strike) });
+    out.push({ index, id: c.contract, expiry: cd.expiry, strike: cd.strike });
   });
   return out;
 }
 
 /** Append the card's own row to `rows` (a new array; `rows` untouched). Only a
- *  returned row whose id IS the card's contract is taken. NOTE: ids carry
- *  int(strike) (backend market.py), so a 182 and a 182.5 strike share one id
- *  and cannot be told apart here or anywhere else that matches on id -- a
- *  pre-existing limit of the contract id, logged, not fixed by this change. */
+ *  returned row whose id IS the card's contract is taken. NOTE: ids carry the
+ *  exact strike (backend `format_strike`: 182 -> "182", 182.5 -> "182.5"), so
+ *  a 182 and a 182.5 contract have different ids and the 182 row is never
+ *  taken for a 182.5 card. */
 export function withCardContract(
   rows: readonly OptionContract[],
   fetched: readonly OptionContract[],

@@ -1,6 +1,6 @@
 """Tests for contract_validator — hard reject and soft rank."""
 import pytest
-from app.scoring.contract_validator import validate_contract
+from app.scoring.contract_validator import validate_contract, effective_contract_overrides, _int_score_floor
 
 
 def _base_contract(**overrides):
@@ -137,6 +137,68 @@ def test_override_lowers_min_stock_score():
         overrides={"min_stock_score": 20},
     )
     assert "stock_score_below_threshold" not in card.reject_reasons
+
+
+def test_contract_min_stock_score_translates_and_lowers_floor():
+    """Board #389: contract_min_stock_score is accepted as an override,
+    translates to min_stock_score, and relaxes the contract floor."""
+    card = validate_contract(
+        _base_contract(),
+        stock_score=30,
+        overrides={"contract_min_stock_score": 30},
+    )
+    assert "stock_score_below_threshold" not in card.reject_reasons
+
+    # Check effective_contract_overrides translation and key cleanup
+    eff = effective_contract_overrides({"contract_min_stock_score": 30})
+    assert eff == {"min_stock_score": 30}
+    assert "contract_min_stock_score" not in eff
+
+
+def test_contract_min_stock_score_precedence_over_min_stock_score():
+    """If both contract_min_stock_score and min_stock_score arrive in overrides,
+    contract_min_stock_score wins."""
+    eff = effective_contract_overrides({
+        "contract_min_stock_score": 30,
+        "min_stock_score": 50,
+    })
+    assert eff["min_stock_score"] == 30
+
+
+def test_int_score_floor_validation():
+    """_int_score_floor enforces 0..100 integer bounds and rejects invalid inputs."""
+    assert _int_score_floor(0) == 0
+    assert _int_score_floor(100) == 100
+    assert _int_score_floor(30) == 30
+    assert _int_score_floor(30.2) == 30
+    assert _int_score_floor(30.8) == 31
+    assert _int_score_floor("45") == 45
+
+    # Out of bounds
+    with pytest.raises(ValueError, match="out of bounds"):
+        _int_score_floor(-1)
+    with pytest.raises(ValueError, match="out of bounds"):
+        _int_score_floor(101)
+
+    # Non-finite floats
+    with pytest.raises(ValueError, match="Non-finite"):
+        _int_score_floor(float("nan"))
+    with pytest.raises(ValueError, match="Non-finite"):
+        _int_score_floor(float("inf"))
+    with pytest.raises(ValueError, match="Non-finite"):
+        _int_score_floor(float("-inf"))
+
+    # Booleans and None
+    with pytest.raises(TypeError):
+        _int_score_floor(True)
+    with pytest.raises(TypeError):
+        _int_score_floor(False)
+    with pytest.raises(TypeError):
+        _int_score_floor(None)
+
+    # Non-numeric string
+    with pytest.raises(ValueError):
+        _int_score_floor("not_a_number")
 
 
 def test_preferred_dte_min_intentionally_matches_hard_reject_floor():

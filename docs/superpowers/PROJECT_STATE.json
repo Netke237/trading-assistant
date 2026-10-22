@@ -8453,6 +8453,118 @@
       "note": "Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete."
     },
     {
+      "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
+      "name": "Step 3 Options underlying-score contract floor override",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 00664302-66c1-40e5-8e16-25bcbd29784a reviewed Criterion 2 fix and interactions at 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b; 0 gate findings."
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3e041e3b-3d36-4c42-b477-10ec52c96139 reviewed git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f; 0 gate findings."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent-242450a2-b916-4181-90db-a1b047da87b3",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md SHA256 5bdb74aebbc5358d99f38b340b97b13a5892414314412982965405d963b9c822",
+          "gate_findings": 1,
+          "findings": [
+            "[F1] Acceptance Criterion 2 misstates diagnostic label mechanism for default/reset scans"
+          ],
+          "fixes": [
+            "Criterion 2 updated to state that un-overridden scans show Stock Score Below Contract Minimum without override parenthetical and reflect YAML in tooltip"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "subagent-00664302-66c1-40e5-8e16-25bcbd29784a",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md commit 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent-3e041e3b-3d36-4c42-b477-10ec52c96139",
+          "reviewed": "git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        }
+      ],
+      "branch": "board/options-contract-floor-override-cc55c73a",
+      "plan": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md",
+      "covers": [
+        "board item #389",
+        "open question #8"
+      ],
+      "notes": "SELF-MERGE PENDING, PR #513, audited head bc5c49f0. Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean.",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/scoring/contract_validator.py",
+        "pattern": "contract_min_stock_score",
+        "note": "Verify presence of contract_min_stock_score translation in contract_validator."
+      },
+      "tickets": [
+        509,
+        510,
+        511
+      ]
+    },
+    {
+      "id": "EXACT-STRIKE",
+      "name": "Fractional option strikes are carried exactly end to end (chain rows, contract ids, quote matching, Watchlist grading); integer-strike ids and JSON stay byte-identical; read-only check of persisted contract ids",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [
+        "NO-LIVE-QUOTE"
+      ],
+      "verify": {
+        "kind": "defect_marker",
+        "path": "backend/app/data/market.py",
+        "pattern": "\"strike\": int\\(strike\\)",
+        "note": "PRESENCE of the truncating chain-row strike is the unfixed defect (D1-D5 in the plan). Presence probe only; behaviour is pinned by the plan's tests once built."
+      },
+      "note": "SELF-MERGE PENDING, PR #512, audited head 42f25621 (code round 1 clean). Commits after the audited head are documentation-only state records (5c86c175 and this one). Not merged; the live PR state is authoritative. || 2026-10-22 CODE ROUND 3 (code stage round 1 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope git diff f61399ad 42f25621 = whole integrated change): CLEAN, ZERO GATE FINDINGS. Traced 182.5 chain row -> card contract/contractDetails/alternatives -> contractId -> pipe_to_occ (...00182500); integer-strike bytes unchanged for int/float/str inputs; every fetch_contract_quote_async consumer; old last_result_json reload; ES-4 read-only (SQLite mode=ro INSERT refused, Postgres read-only session, SELECT/PRAGMA/SHOW guard). Auditor tests: pytest 244 passed, Jest 109 passed. Local checks on 42f25621: backend full suite Python 3.11.17 9963 passed / 9 skipped / 3 deselected (container-config failures that also fail on the pre-change commit); frontend typecheck clean, Jest 315 suites / 5963 tests passed. audit_clean true; PR next. || 2026-10-22 BUILT (board #162, branch board/exact-strike-41be05fa): tickets ES-1 #502 (7317f239), ES-2 #503 (8749de7a + comment fix b2d5c5a6), ES-3 #504 (99239a0e), ES-4 #505 (0889862b) built, coordinator-verified and closed; origin/main merged again (e80fc1d5, PROJECT_STATE.json conflict only). Full local checks and code audit round 1 (stage round 1 of 3) next. || 2026-10-22 BUILD START (board #162, branch board/exact-strike-41be05fa): Q-1 -> A, Q-2 -> A (decision record on #162, 2026-10-21). origin/main bf0b3b54 merged; plan section 9 records the build-start re-check (no step changed). Tickets ES-1..ES-4 next. || 2026-10-09 PLAN ROUND 2 (plan stage round 2 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope git diff 646c6510..6cc3f005 of the plan, the R1-1 fix + interactions): CLEAN, ZERO GATE FINDINGS. Plan stage closed clean at round 2. Phase audit_clean stays false until the CODE stage (its own cap of 3) is clean. Build waits for NO-LIVE-QUOTE to merge to main. Open for Kenneth: Q-1, Q-2 (plan section 6). || 2026-10-09 PLAN ROUND 1 (plan stage round 1 of 3; fresh independent gate-briefed subagent, bmad-review-adversarial-general; scope whole plan r1 @ 646c6510 vs code + NLQ b6f2259e): NOT CLEAN, 1 gate finding R1-1 (frontend/lib/step6CardContract.ts Math.trunc on the Step-6 card-contract rescue, omitted by the plan) -- fixed in plan r2. 5 below-gate items logged in plan section 8, not fixed. NEXT: plan round 2 over the r2 fix only. || 2026-10-09 PLAN r1 written (claude/intelligent-merkle-ba9f03), read against NO-LIVE-QUOTE @ b6f2259e. Pre-existing defect found by the NLQ-1 code audit. Plan stage round 1 next. Build waits for NO-LIVE-QUOTE to merge to main. Open: Q-1 (ambiguous persisted ids: report only?), Q-2 (which DB the migration check reads).",
+      "plan": "docs/superpowers/plans/2026-10-09-exact-strike-plan.md",
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean"
+      },
+      "branch": "board/exact-strike-41be05fa",
+      "tracking_issue": 162,
+      "plan_audit_clean": true,
+      "size": "XL",
+      "complexity": 5,
+      "completion_pct": 85,
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent general-purpose subagent (agent ababc506) applying bmad-review-adversarial-general reviewed git diff f61399ad 42f25621 (origin/main..branch, 21 files) against plan sections 1-3, 5, 8, 9; 0 gate findings."
+      }
+    },
+    {
       "id": "SETUP-BACKTEST-CHART",
       "name": "SETUP-BACKTEST-CHART: backtest curve on Chart for Pre-Breakout and Fib Pullback (#391)",
       "status": "built",

@@ -67,6 +67,7 @@ from app.data.market import (
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
+from app.data.strike import canonical_strike, format_strike
 from app.scoring.stock_scorer import score_stock, StockScoreCard, Horizon, effective_event_window, effective_veto_days
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
@@ -976,7 +977,10 @@ async def _process_symbol(
     # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
     _rr = _merge_rr_cfg(overrides)
     observe_configuration("options.reward_risk", _rr, symbol=symbol)
-    strike = float(contract.get("strike", price))
+    # `contract["strike"]`, never a `price` fallback (EXACT-STRIKE ES-2.4):
+    # every chain row carries a valid strike or was dropped by the builder, so
+    # a stock price can never become a strike.
+    strike = float(contract["strike"])
     premium = max(float(contract.get("price", 0.10)), 0.01)
 
     # ── Heston calibration (best-effort) ───────────────────────────────────────
@@ -1285,7 +1289,7 @@ async def _process_symbol(
         ),
         nextEventDays=next_event_days,
         nextEventLabel=next_event_label,
-        contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
+        contract=f"{symbol}|{format_strike(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
         contractScore=contract_card.score,
         contractConfidence=contract_card.status,
         contractExplanation=contract_card.explanation,
@@ -1302,7 +1306,7 @@ async def _process_symbol(
             spreadDetail=   _safe(SpreadDetail,    contract_card.detail.get("spread")),
         ),
         contractDetails=ContractDetails(
-            strike=int(strike),
+            strike=canonical_strike(strike),
             expiry=contract.get("expiry", "TBD"),
             right="C" if direction == "Bullish" else "P",
             mid=round(premium, 2),
@@ -1410,7 +1414,7 @@ async def _process_symbol(
             # len(alts), so this naturally yields a correct, consistent
             # count with no further bookkeeping.
             continue
-        alt_strike = float(alt_c.get("strike", price))
+        alt_strike = float(alt_c["strike"])
         alt_expiry_years = alt_c.get("dte", 30) / 365.0
         alt_premium = float(alt_c.get("price", 0.10))
         alt_stop_fraction = None
@@ -1439,7 +1443,7 @@ async def _process_symbol(
         )
         alts.append(AlternativeContract(
             symbol=symbol,
-            strike=int(alt_strike),
+            strike=canonical_strike(alt_strike),
             expiry=alt_c.get("expiry", "TBD"),
             right="C" if direction == "Bullish" else "P",
             dte=int(alt_c.get("dte", 30)),
@@ -1482,7 +1486,7 @@ async def _process_symbol(
         )
         alts.append(AlternativeContract(
             symbol=symbol,
-            strike=int(float(_alt_sp.legs[0].strike)),
+            strike=canonical_strike(_alt_sp.legs[0].strike),
             expiry=_alt_sp.legs[0].expiry,
             right=_alt_sp.legs[0].right,
             dte=int(contract.get("dte", 30)),
