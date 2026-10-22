@@ -240,7 +240,7 @@ def get_contract_rules() -> dict:
 ## 5. Acceptance Criteria Checklist
 
 - [ ] 1. Manual options scan with `contract_min_stock_score` set to 30: contracts of an underlying with stock score between 30 and 44 are not rejected with `stock_score_below_threshold`. Scan report label reads `Stock Score Below Contract Minimum (< 30)`.
-- [ ] 2. Field reset (cleared/empty): the next options scan applies 45 from `contract_rules.yaml`, and the report shows `< 45`.
+- [ ] 2. Field reset (cleared/empty): the next options scan applies 45 from `contract_rules.yaml`, and the report shows `Stock Score Below Contract Minimum` without an override threshold parenthetical (with its tooltip reflecting `contract_rules.yaml min_stock_score`).
 - [ ] 3. Scheduled options scan saved with `contract_min_stock_score` at 30: runs with 30 (proven by test in `test_scan_schedule.py`).
 - [ ] 4. Legacy schedule whose `resolved_request.overrides` carries `min_stock_score`: still stripped by the scheduler, and runs on YAML 45.
 - [ ] 5. A Stocks-field `min_stock_score` value never affects the contract floor on manual or scheduled options paths.

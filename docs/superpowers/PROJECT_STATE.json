@@ -8393,17 +8393,33 @@
       "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
       "name": "Step 3 Options underlying-score contract floor override",
       "status": "not_started",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "audit_history": [],
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent-242450a2-b916-4181-90db-a1b047da87b3",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md SHA256 5bdb74aebbc5358d99f38b340b97b13a5892414314412982965405d963b9c822",
+          "gate_findings": 1,
+          "findings": [
+            "[F1] Acceptance Criterion 2 misstates diagnostic label mechanism for default/reset scans"
+          ],
+          "fixes": [
+            "Criterion 2 updated to state that un-overridden scans show Stock Score Below Contract Minimum without override parenthetical and reflect YAML in tooltip"
+          ],
+          "outstanding": [],
+          "clean": false
+        }
+      ],
       "branch": "board/options-contract-floor-override-cc55c73a",
       "plan": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md",
       "covers": [
