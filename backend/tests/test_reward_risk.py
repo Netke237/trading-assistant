@@ -2,8 +2,19 @@
 
 import logging
 
+import pytest
+
 from app.scoring.reward_risk import estimate_rr, estimate_targets
-from app.models.heston import HestonParams
+from app.models.heston import HestonParams, HestonPrice
+
+
+def _as_detail(fake_price):
+    """Adapt a float-returning Heston price fake to heston_price_detail, the
+    entry point reward_risk calls since DECISION-23 H-1: the same price with
+    fell_back=False, and any exception raised unchanged."""
+    def _detail(*args, **kwargs):
+        return HestonPrice(price=fake_price(*args, **kwargs), fell_back=False)
+    return _detail
 
 
 # ── BS-fallback pricing (Heston unavailable) — call ───────────────────────────
@@ -286,7 +297,7 @@ def test_heston_exception_falls_back_to_delta_approx(monkeypatch):
     def _boom(*args, **kwargs):
         raise ValueError("integration failed")
 
-    monkeypatch.setattr(rr_module, "heston_price", _boom)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(_boom))
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
     rr = estimate_rr(
         stock_price=185, target_price=200, invalidation_price=175,
@@ -313,17 +324,18 @@ def test_estimate_targets_floors_non_monotonic_heston_price_instead_of_switching
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    real_heston_price = rr_module.heston_price
+    real_heston_price = rr_module.heston_price_detail
     call_count = {"n": 0}
 
     def _flaky(S, K, T, r, p, is_call):
         call_count["n"] += 1
-        price = real_heston_price(S, K, T, r, p, is_call)
+        detail = real_heston_price(S, K, T, r, p, is_call)
         if call_count["n"] == 2:
-            return price * 0.1  # simulate T2 coming back numerically too low
-        return price
+            # simulate T2 coming back numerically too low
+            return HestonPrice(price=detail.price * 0.1, fell_back=detail.fell_back)
+        return detail
 
-    monkeypatch.setattr(rr_module, "heston_price", _flaky)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _flaky)
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
@@ -377,17 +389,17 @@ def test_ladder_floor_says_so_when_it_fires(monkeypatch, caplog):
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    real_heston_price = rr_module.heston_price
+    real_heston_price = rr_module.heston_price_detail
     call_count = {"n": 0}
 
     def _flaky(S, K, T, r, p, is_call):
         call_count["n"] += 1
-        price = real_heston_price(S, K, T, r, p, is_call)
+        detail = real_heston_price(S, K, T, r, p, is_call)
         if call_count["n"] == 2:
-            return price * 0.1
-        return price
+            return HestonPrice(price=detail.price * 0.1, fell_back=detail.fell_back)
+        return detail
 
-    monkeypatch.setattr(rr_module, "heston_price", _flaky)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _flaky)
     with caplog.at_level(logging.WARNING, logger="app.scoring.reward_risk"):
         targets = estimate_targets(
             stock_price=185, base_target_price=200, strike=190,
@@ -467,7 +479,7 @@ def test_estimate_targets_clamps_delta_approx_fallback_to_prev_level(monkeypatch
             raise ValueError("integration failed")  # T2: genuinely unusable
         return 25.0  # T3: legitimate, its own value
 
-    monkeypatch.setattr(rr_module, "heston_price", _fake)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(_fake))
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
@@ -522,7 +534,7 @@ def test_estimate_targets_relabels_heston_price_still_below_inflated_prior_displ
             raise ValueError("integration failed")  # T2: genuinely unusable
         return 12.0  # T3: legitimate on its own, but below T2's fallback display
 
-    monkeypatch.setattr(rr_module, "heston_price", _fake)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(_fake))
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
@@ -577,7 +589,7 @@ def test_estimate_targets_falls_back_when_both_floor_and_display_checks_fail(mon
             raise ValueError("integration failed")  # T2: genuinely unusable
         return 3.0  # T3: artifact (below T1) that, even floored to T1, is still below T2's display
 
-    monkeypatch.setattr(rr_module, "heston_price", _fake)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(_fake))
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
@@ -659,7 +671,7 @@ def test_estimate_targets_falls_back_on_nan_heston_price(monkeypatch):
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.nan)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(lambda *a, **k: math.nan))
 
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
@@ -677,7 +689,7 @@ def test_estimate_targets_falls_back_on_inf_heston_price(monkeypatch):
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.inf)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(lambda *a, **k: math.inf))
 
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
@@ -697,7 +709,7 @@ def test_estimate_rr_falls_back_on_inf_heston_price(monkeypatch):
     import math
     import app.scoring.reward_risk as rr_module
 
-    monkeypatch.setattr(rr_module, "heston_price", lambda *a, **k: math.inf)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(lambda *a, **k: math.inf))
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
     rr = estimate_rr(
         stock_price=185, target_price=200, invalidation_price=175,
@@ -792,17 +804,17 @@ def test_estimate_targets_put_floors_non_monotonic_heston_price(monkeypatch):
     import app.scoring.reward_risk as rr_module
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    real_heston_price = rr_module.heston_price
+    real_heston_price = rr_module.heston_price_detail
     call_count = {"n": 0}
 
     def _flaky(S, K, T, r, p, is_call):
         call_count["n"] += 1
-        price = real_heston_price(S, K, T, r, p, is_call)
+        detail = real_heston_price(S, K, T, r, p, is_call)
         if call_count["n"] == 2:
-            return price * 0.1
-        return price
+            return HestonPrice(price=detail.price * 0.1, fell_back=detail.fell_back)
+        return detail
 
-    monkeypatch.setattr(rr_module, "heston_price", _flaky)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _flaky)
     targets = estimate_targets(
         stock_price=185, base_target_price=185 * 0.92, strike=170,
         expiry_years=30 / 365, current_premium=3.00, is_call=False,
@@ -881,7 +893,7 @@ def test_estimate_targets_seeds_heston_reference_from_first_successful_level(mon
         # actually distinguish the two
         return 12.0
 
-    monkeypatch.setattr(rr_module, "heston_price", _fake)
+    monkeypatch.setattr(rr_module, "heston_price_detail", _as_detail(_fake))
     targets = estimate_targets(
         stock_price=185, base_target_price=200, strike=190,
         expiry_years=30 / 365, current_premium=2.50, is_call=True,
@@ -923,7 +935,8 @@ def test_negative_reward_preserves_sign_deterministic():
     from app.scoring.reward_risk import estimate_rr
 
     params = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
-    with mock.patch("app.scoring.reward_risk.heston_price", return_value=3.00):
+    with mock.patch("app.scoring.reward_risk.heston_price_detail",
+                    return_value=HestonPrice(price=3.00, fell_back=False)):
         rr = estimate_rr(
             stock_price=100.0, target_price=105.0, invalidation_price=95.0,
             strike=100.0, expiry_years=0.25, current_premium=5.00, is_call=True,
@@ -955,7 +968,8 @@ def test_estimate_targets_preserves_negative_rr_contribution():
     import unittest.mock as mock
     from app.scoring.reward_risk import estimate_targets
 
-    with mock.patch("app.scoring.reward_risk.heston_price", return_value=3.00):
+    with mock.patch("app.scoring.reward_risk.heston_price_detail",
+                    return_value=HestonPrice(price=3.00, fell_back=False)):
         results = estimate_targets(
             stock_price=100.0, base_target_price=105.0,
             strike=100.0, expiry_years=0.25, current_premium=5.00, is_call=True,
@@ -970,3 +984,81 @@ def test_estimate_targets_preserves_negative_rr_contribution():
             f"expected -0.40 (real negative ratio), got {level.rrContribution} — "
             "rrContribution must not clamp negative reward to 0.0"
         )
+
+
+# ── DECISION-23 H-1: a Heston fallback is never labelled "Heston repriced" ────
+# heston_price_detail returns Black-Scholes at sqrt(v0) with fell_back=True
+# when the integration fails arithmetically. That number is not a Heston
+# price, so both call sites must take their existing non-Heston path -- the
+# same label and number as heston_params=None -- instead of showing it as
+# "Heston repriced" (G2 in the H-1 plan).
+
+_H1_PARAMS = HestonParams(v0=0.04, kappa=2.0, theta=0.04, sigma_v=0.3, rho=-0.7)
+
+# (estimate_rr kwargs) for a call and a put fixture already used above.
+_H1_RR_CASES = [
+    dict(stock_price=185, target_price=200, invalidation_price=175,
+         strike=190, expiry_years=30 / 365, current_premium=2.50, is_call=True),
+    dict(stock_price=185, target_price=170, invalidation_price=195,
+         strike=180, expiry_years=30 / 365, current_premium=2.00, is_call=False),
+]
+_H1_LADDER_CASES = [
+    dict(stock_price=185, base_target_price=200, strike=190,
+         expiry_years=30 / 365, current_premium=2.50, is_call=True),
+    dict(stock_price=185, base_target_price=185 * 0.92, strike=170,
+         expiry_years=30 / 365, current_premium=3.00, is_call=False),
+]
+
+
+def _force_integration_error(exc_type):
+    """Make the REAL pricer's integration raise `exc_type`. ZeroDivisionError
+    is what the integrand can raise (a zero complex denominator), so
+    heston_price_detail takes its genuine fallback branch; TypeError is a bug,
+    which now propagates out of the pricer and must be caught by the call
+    site's own try/except."""
+    def _force(monkeypatch):
+        import types
+        import app.models.heston as heston_module
+
+        def _quad(*args, **kwargs):
+            raise exc_type("forced integration failure")
+
+        monkeypatch.setattr(heston_module, "integrate", types.SimpleNamespace(quad=_quad))
+    return _force
+
+
+def _force_flagged_fallback_price(monkeypatch, price=12.34):
+    """A positive, finite price that is flagged fell_back=True: only the flag
+    says it is not a Heston price."""
+    import app.scoring.reward_risk as rr_module
+
+    monkeypatch.setattr(rr_module, "heston_price_detail",
+                        lambda *a, **k: HestonPrice(price=price, fell_back=True))
+
+
+_H1_FORCES = [_force_integration_error(ZeroDivisionError),
+              _force_integration_error(TypeError),
+              _force_flagged_fallback_price]
+_H1_FORCE_IDS = ["zero_division", "type_error", "flagged_fell_back"]
+
+
+@pytest.mark.parametrize("case", _H1_RR_CASES, ids=["call", "put"])
+@pytest.mark.parametrize("force", _H1_FORCES, ids=_H1_FORCE_IDS)
+def test_estimate_rr_heston_fallback_is_not_labelled_heston(monkeypatch, case, force):
+    baseline = estimate_rr(**case, heston_params=None)
+    force(monkeypatch)
+    rr = estimate_rr(**case, heston_params=_H1_PARAMS)
+
+    assert rr.model_used != "Heston repriced"
+    assert rr == baseline
+
+
+@pytest.mark.parametrize("case", _H1_LADDER_CASES, ids=["call", "put"])
+@pytest.mark.parametrize("force", _H1_FORCES, ids=_H1_FORCE_IDS)
+def test_estimate_targets_heston_fallback_is_not_labelled_heston(monkeypatch, case, force):
+    baseline = estimate_targets(**case, heston_params=None)
+    force(monkeypatch)
+    targets = estimate_targets(**case, heston_params=_H1_PARAMS)
+
+    assert all(t.pricingMethod != "Heston repriced" for t in targets)
+    assert [t.model_dump() for t in targets] == [t.model_dump() for t in baseline]

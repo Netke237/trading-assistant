@@ -286,10 +286,11 @@ def test_no_arbitrage_bounds_hold_across_the_scanner_delta_band():
     The high-accuracy reference returns exactly the forward intrinsic at these
     points, so the residual is quadrature truncation, not a formula error. The
     pre-F1 code did not show it only because it was grossly OVER-priced
-    everywhere. Tightening heston_price's `max(price, 0.0)` clamp to the true
-    no-arbitrage floor would close it, but the F1 spec scopes the put-call
-    parity tail as unchanged, and no contract with |delta| == 1.0 reaches a
-    card -- so it is logged as an open question, not fixed here.
+    everywhere. (The shortfalls above were measured on the raw integration.
+    DECISION-23 H-1 has since tightened heston_price's `max(price, 0.0)`
+    clamp to the true no-arbitrage floor, so heston_price now returns exactly
+    the forward intrinsic at those points -- see
+    test_floor_lifts_a_real_below_intrinsic_price_to_forward_intrinsic.)
 
     HONEST SCOPE, as for the parity test above: this does NOT catch the F1
     defect. The pre-F1 code passes this test -- its errors, though as large as
@@ -497,4 +498,225 @@ def test_short_expiry_low_variance_is_integrated_to_convergence():
             f"under-integrated at v0={v0} theta={theta} dte={dte} K={K}: got "
             f"{actual!r}, reference {expected!r} ({rel * 100:.4f}% off). The "
             f"quadrature cutoff is no longer adapting to sqrt(v*T)."
+        )
+
+
+# --- DECISION-23 H-1: no-arbitrage floor and honest fallback -----------------
+# Plan: docs/superpowers/plans/2026-10-22-heston-hygiene-plan.md section 2 H-1.
+# heston_price used to clamp at 0 rather than at the forward intrinsic, and
+# its `except Exception` returned Black-Scholes at sqrt(v0) with nothing to
+# tell a caller that the number was not a Heston price.
+
+import types
+
+import app.models.heston as heston_module
+
+# The parameters of the worst below-intrinsic shortfalls measured in
+# test_no_arbitrage_bounds_hold_across_the_scanner_delta_band's docstring.
+_LOW_VAR_PARAMS = HestonParams(v0=0.01, kappa=0.5, theta=0.02,
+                               sigma_v=0.6, rho=-0.8)
+
+
+def _fake_integrate(monkeypatch, *, returns=None, raises=None):
+    """Replace the `integrate` module heston.py sees -- only there -- with one
+    whose quad returns `returns` in turn, or raises `raises`."""
+    queue = list(returns or [])
+
+    def _quad(*args, **kwargs):
+        if raises is not None:
+            raise raises
+        return queue.pop(0), 0.0
+
+    monkeypatch.setattr(heston_module, "integrate",
+                        types.SimpleNamespace(quad=_quad))
+
+
+@pytest.mark.parametrize("dte, mult, is_call", [
+    # Raw integration measured BELOW forward intrinsic on these, before H-1:
+    # the put by 0.0022534 (30 DTE, 9.9x) and the call by 0.0002816 (7 DTE,
+    # 0.2x). |delta| == 1.0 on both, far outside the scanner band.
+    (30, 9.9, False),
+    (7, 0.2, True),
+])
+def test_floor_lifts_a_real_below_intrinsic_price_to_forward_intrinsic(dte, mult, is_call):
+    T = dte / 365
+    K = S * mult
+    expected = (S - K * math.exp(-R * T)) if is_call else (K * math.exp(-R * T) - S)
+    assert heston_price(S, K, T, R, _LOW_VAR_PARAMS, is_call) == expected
+
+
+def test_floor_applies_to_both_rights_when_integration_lands_below_intrinsic(monkeypatch):
+    """p1 = p2 = 0 makes P1 = P2 = 1/2, so the raw call is HALF the forward
+    intrinsic (S > K e^{-rT}) and the raw put half its own (K e^{-rT} > S).
+    Both must come back at exactly the floor."""
+    T = 30 / 365
+    _fake_integrate(monkeypatch, returns=[0.0, 0.0])
+    K_call = 150.0
+    assert heston_price(S, K_call, T, R, _SKEW_PARAMS, True) == S - K_call * math.exp(-R * T)
+
+    _fake_integrate(monkeypatch, returns=[0.0, 0.0])
+    K_put = 260.0
+    assert heston_price(S, K_put, T, R, _SKEW_PARAMS, False) == K_put * math.exp(-R * T) - S
+
+
+def test_floor_leaves_a_price_above_intrinsic_unchanged(monkeypatch):
+    """With the integrals fixed, the price is the closed form exactly, call
+    and parity put alike -- the floor must not touch it."""
+    T = 30 / 365
+    K = S
+    p1, p2 = 0.3, 0.1
+    call = S * (0.5 + p1 / math.pi) - K * math.exp(-R * T) * (0.5 + p2 / math.pi)
+    put = call - S + K * math.exp(-R * T)
+    assert call > S - K * math.exp(-R * T) and put > K * math.exp(-R * T) - S
+
+    _fake_integrate(monkeypatch, returns=[p1, p2])
+    assert heston_price(S, K, T, R, _SKEW_PARAMS, True) == call
+    _fake_integrate(monkeypatch, returns=[p1, p2])
+    assert heston_price(S, K, T, R, _SKEW_PARAMS, False) == put
+
+
+def test_floor_keeps_nan_as_nan(monkeypatch):
+    """A NaN integral stays NaN (as before H-1), so reward_risk's
+    isfinite check still rejects it instead of the floor laundering it into
+    a plausible intrinsic value."""
+    _fake_integrate(monkeypatch, returns=[math.nan, math.nan])
+    assert math.isnan(heston_price(S, 150.0, 30 / 365, R, _SKEW_PARAMS, True))
+    _fake_integrate(monkeypatch, returns=[math.nan, math.nan])
+    assert math.isnan(heston_price(S, 260.0, 30 / 365, R, _SKEW_PARAMS, False))
+
+
+@pytest.mark.parametrize("is_call", (True, False))
+def test_arithmetic_integration_failure_falls_back_and_says_so(monkeypatch, is_call):
+    from app.models.heston import HestonPrice, heston_price_detail
+
+    T = 45 / 365
+    K = 205.0
+    expected = bs_price(S, K, T, R, math.sqrt(_SKEW_PARAMS.v0), is_call)
+
+    _fake_integrate(monkeypatch, raises=ZeroDivisionError("complex division by zero"))
+    detail = heston_price_detail(S, K, T, R, _SKEW_PARAMS, is_call)
+    assert detail == HestonPrice(price=expected, fell_back=True)
+    assert heston_price(S, K, T, R, _SKEW_PARAMS, is_call) == expected
+
+
+def test_successful_integration_is_not_flagged_as_a_fallback():
+    from app.models.heston import heston_price_detail
+
+    detail = heston_price_detail(S, 205.0, 45 / 365, R, _SKEW_PARAMS, True)
+    assert detail.fell_back is False
+    assert detail.price == heston_price(S, 205.0, 45 / 365, R, _SKEW_PARAMS, True)
+
+
+def test_heston_price_result_is_frozen():
+    import dataclasses
+
+    from app.models.heston import HestonPrice
+
+    result = HestonPrice(price=1.0, fell_back=False)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        result.price = 2.0
+
+
+def _integration_warning() -> Exception:
+    from scipy.integrate import IntegrationWarning
+    return IntegrationWarning("The maximum number of subdivisions (200) has been achieved.")
+
+
+@pytest.mark.parametrize("make_exc, exc_type", [
+    (lambda: TypeError("a bug, not an integration failure"), TypeError),
+    (_integration_warning, Warning),
+])
+def test_non_arithmetic_exception_propagates(monkeypatch, make_exc, exc_type):
+    """Only what the integrand can raise arithmetically is a fallback. A
+    TypeError is a bug, and an IntegrationWarning raised as an error means
+    someone turned warnings into errors -- neither may be silently replaced
+    by a Black-Scholes number."""
+    _fake_integrate(monkeypatch, raises=make_exc())
+    with pytest.raises(exc_type):
+        heston_price(S, 205.0, 45 / 365, R, _SKEW_PARAMS, True)
+
+
+# Exact current outputs, captured on the pre-H-1 pricer (scipy 1.17.1,
+# numpy 2.4.6, Python 3.11). Ordinary prices sit above forward intrinsic, so
+# H-1's floor must leave every one of them BIT-FOR-BIT unchanged.
+_GOLDEN_PRICES = {
+    # (S, K, dte or T, (v0, kappa, theta, sigma_v, rho), is_call): price
+    # test_matches_independent_reference_under_real_skew's points.
+    (S, 160.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 0.4632791856070355,
+    (S, 180.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 2.439446661545219,
+    (S, 195.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 6.38616728797146,
+    (S, 205.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 8.905212005364248,
+    (S, 225.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 2.418144708637314,
+    (S, 250.0, 45, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 0.21498810396350798,
+    (S, 160.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 4.015652957774421,
+    (S, 180.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 8.29857409668449,
+    (S, 195.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), False): 13.2154323413221,
+    (S, 205.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 19.29264625772764,
+    (S, 225.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 10.655874221249832,
+    (S, 250.0, 180, (0.1287, 2.0, 0.09, 0.5, -0.7), True): 4.185425939837529,
+    # test_short_expiry_low_variance_is_integrated_to_convergence's points.
+    (S, 201.86, 1, (0.01, 2.0, 0.02, 0.5, -0.7), True): 0.4354343364525306,
+    (S, 201.86, 7, (0.01, 2.0, 0.04, 0.5, -0.7), True): 1.2347925900774612,
+    (S, 205.0, 2, (0.04, 2.0, 0.02, 0.5, -0.7), True): 0.21422953128494981,
+    # test_reward_risk.py's ladder fixtures, repriced at 15/365.
+    (200.0, 190.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), True): 10.824772314222088,
+    (207.5, 190.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), True): 17.963518142291434,
+    (215.0, 190.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), True): 25.399857193157715,
+    (170.0, 180.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), False): 9.83551723459209,
+    (170.2, 170.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), False): 2.4821958550373324,
+    (162.8, 170.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), False): 7.304850229403087,
+    (155.4, 170.0, 15, (0.04, 2.0, 0.04, 0.3, -0.7), False): 14.264581837704668,
+}
+
+
+def test_ordinary_prices_are_unchanged():
+    # rel=1e-12, not ==: the values were captured on one machine, and CI's
+    # libm/QUADPACK may differ in the last bit without any price moving. The
+    # floor's smallest real effect is far larger (the shortfalls it lifts are
+    # ~1e-6 relative), so this tolerance still catches any floor change.
+    for (spot, K, dte, p, is_call), expected in _GOLDEN_PRICES.items():
+        actual = heston_price(spot, K, dte / 365, R, HestonParams(*p), is_call)
+        assert actual == pytest.approx(expected, rel=1e-12, abs=0.0), (
+            f"heston_price({spot}, {K}, {dte}/365, {p}, "
+            f"{'call' if is_call else 'put'}) moved: {actual!r} != {expected!r}"
+        )
+
+
+def _in_band_grid_points() -> list[tuple]:
+    """The 648 in-band (spot, K, T, params, is_call) points
+    test_no_arbitrage_bounds_hold_across_the_scanner_delta_band walks."""
+    points = []
+    for v0 in (0.01, 0.09):
+        for kappa in (0.5, 3.0):
+            for theta in (0.02, 0.08):
+                for sigma_v in (0.2, 0.6):
+                    for rho in (-0.8, -0.2):
+                        params = HestonParams(v0, kappa, theta, sigma_v, rho)
+                        for dte in (30, 180, 365):
+                            T = dte / 365
+                            atm = heston_price(S, S, T, R, params, True)
+                            sigma = bs_iv(atm, S, S, T, R, True) or math.sqrt(params.v0)
+                            for K in range(120, 321, 20):
+                                for is_call in (True, False):
+                                    if 0.15 <= abs(bs_delta(S, K, T, R, sigma, is_call)) <= 0.90:
+                                        points.append((S, K, T, params, is_call))
+    return points
+
+
+def test_floor_never_engages_on_the_in_band_grid():
+    # The floor is max(raw, forward intrinsic, 0). A price STRICTLY above its
+    # forward intrinsic (and above 0) is therefore exactly the raw Heston
+    # value, i.e. unchanged by H-1. Checking that property, rather than a
+    # digest of the exact floats, proves the same thing without failing on
+    # a last-bit libm difference between machines.
+    points = _in_band_grid_points()
+    assert len(points) == 648
+    for spot, K, T, params, is_call in points:
+        price = heston_price(spot, K, T, R, params, is_call)
+        disc_k = K * math.exp(-R * T)
+        intrinsic = spot - disc_k if is_call else disc_k - spot
+        assert price > max(intrinsic, 0.0), (
+            f"in-band price at or below forward intrinsic -- the floor engaged: "
+            f"K={K} T={T:.4f} {params} {'call' if is_call else 'put'}: "
+            f"{price!r} vs {intrinsic!r}"
         )
