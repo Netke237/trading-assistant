@@ -133,6 +133,8 @@ class PreBreakoutResult(BaseModel):
     # (None when Fib was not used). Send-only, mirrors the route's row dict.
     confidence_breakdown: dict | None = None
     fib_swing: dict | None = None
+    backtest_artifact_id: str | None = None
+    backtest_artifact_status: str | None = None
 
 
 _SCORING_CFG = _Path(__file__).parent.parent.parent / "config" / "scoring_rules.yaml"
@@ -2166,6 +2168,7 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
     """Scan symbols for Fibonacci retracement setups using fibonacci_pullback_detail."""
     from app.services.strategy_engine import fibonacci_pullback_detail
 
+    scan_id = new_rec_id()
     end = date.today()
     start = end - timedelta(days=365)
 
@@ -2293,6 +2296,40 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
             confidence = max(60, round(100 - (dist_pct / tol) * 40))
         else:
             confidence = max(0, round(60 - ((dist_pct - tol) / tol) * 30))
+        _bt_strategy = "fibonacci_pullback"
+        _bt_commission = _backtest_commission()
+        _bt_hold = hold_for_backtest("Swing", _bt_strategy, None)
+        _detail_inputs = dict(
+            strategy=_bt_strategy,
+            direction=body.direction,
+            params=scan_params,
+            commission=_bt_commission,
+            hold_max_days=_bt_hold,
+        )
+        try:
+            _detail_identity = _detail_key(sym, bars, _detail_inputs)
+        except (ValueError, TypeError):
+            _detail_identity = None
+
+        try:
+            bt_result, _detail = await asyncio.get_running_loop().run_in_executor(
+                _BACKTEST_POOL,
+                functools.partial(_run_backtest_with_details, bars, **_detail_inputs),
+            )
+        except Exception:
+            bt_result, _detail = None, None
+
+        _artifact = await _original_artifact(
+            _detail,
+            scan_id=scan_id,
+            symbol=sym,
+            strategy=_bt_strategy,
+            direction=body.direction,
+            horizon="Swing",
+            interval="1d",
+            detail_key=_detail_identity,
+        ) if _detail_identity else dict(backtest_artifact_status="capture_unavailable")
+
         results.append({
             "symbol": sym,
             "direction": body.direction,
@@ -2302,6 +2339,7 @@ async def _fib_pullback_scan_core(body: FibPullbackScanRequest) -> list[dict]:
             "confidence": confidence,
             # STOCK-PRES-P1: the swing low/high the Fib levels were measured from.
             "fib_swing": {"low": fib["swing_low"], "high": fib["swing_high"]},
+            **_artifact,
         })
 
     # Sort: at-level hits first, then by proximity ascending (closer = better rank).
@@ -2324,6 +2362,7 @@ async def prebreakout_scan(body: PreBreakoutScanRequest, response: Response = No
 
 async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
     """Scan symbols for pre-breakout consolidation setups using breakout_setup_signal."""
+    scan_id = new_rec_id()
     end = date.today()
     start = end - timedelta(days=365)
 
@@ -2400,6 +2439,40 @@ async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
         if signal is None:
             observe_terminal(sym, "no_setup", "setup_not_returned")
             continue
+        _bt_strategy = "breakout_setup"
+        _bt_commission = _backtest_commission()
+        _bt_hold = hold_for_backtest("Swing", _bt_strategy, None)
+        _detail_inputs = dict(
+            strategy=_bt_strategy,
+            direction=body.direction,
+            params=base_params,
+            commission=_bt_commission,
+            hold_max_days=_bt_hold,
+        )
+        try:
+            _detail_identity = _detail_key(sym, bars, _detail_inputs)
+        except (ValueError, TypeError):
+            _detail_identity = None
+
+        try:
+            bt_result, _detail = await asyncio.get_running_loop().run_in_executor(
+                _BACKTEST_POOL,
+                functools.partial(_run_backtest_with_details, bars, **_detail_inputs),
+            )
+        except Exception:
+            bt_result, _detail = None, None
+
+        _artifact = await _original_artifact(
+            _detail,
+            scan_id=scan_id,
+            symbol=sym,
+            strategy=_bt_strategy,
+            direction=body.direction,
+            horizon="Swing",
+            interval="1d",
+            detail_key=_detail_identity,
+        ) if _detail_identity else dict(backtest_artifact_status="capture_unavailable")
+
         results.append({
             "symbol": sym,
             "confidence": signal.confidence,
@@ -2408,6 +2481,7 @@ async def _prebreakout_scan_core(body: PreBreakoutScanRequest) -> list[dict]:
             # STOCK-PRES-P1: evidence behind `confidence` + Fib swing low/high.
             "confidence_breakdown": signal.confidence_breakdown,
             "fib_swing": signal.fib_swing,
+            **_artifact,
         })
 
     results.sort(key=lambda r: r["confidence"], reverse=True)
