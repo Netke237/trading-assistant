@@ -8947,8 +8947,8 @@
       "branch": "board/heston-rr-overpricing-fd5b379b",
       "tracking_issue": 335,
       "plan": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "plan_stage": {
         "rounds": 3,
@@ -8963,7 +8963,7 @@
       },
       "size": "L",
       "complexity": 4,
-      "completion_pct": 70,
+      "completion_pct": 85,
       "audit_history": [
         {
           "round": 1,
@@ -9023,9 +9023,30 @@
             "replayed rows carry today's quote-liveness labels (unused by calibration and M3)",
             "mock-raised errors are swallowed into 0-row chains by fetch_option_chain_async's catch-all; already counted and listed"
           ]
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent a1e0eee3)",
+          "reviewed": "git diff origin/main 61743f70 (whole change: probe, tests, evidence outputs, report, recompute, plan, state)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "below_gate_logged": [
+            "report.md Status line still says the recompute has not run although its later section reports it did",
+            "M2 Swing/Position horizons applied to every DTE incl. expiries a Swing scan would not pick (plan-defined; ranges reported inclusively)"
+          ]
         }
       ],
-      "note": "Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
+      "note": "CODE ROUND 4 (code stage round 1 of 3): CLEAN, 0 gate findings; no app/config/frontend/fixture change; report numbers re-derived from outputs; options C/D legs, all horizons, M1 recovery sweep and rrRatio-consumer grep independently checked. audit_clean true; PR (refers to #335, does not close it) next. || Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22.",
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent general-purpose subagent (agent a1e0eee3) applying bmad-review-adversarial-general reviewed git diff origin/main 61743f70 (15 files) against the plan; 0 gate findings."
+      }
     }
   ],
   "already_shipped": [
