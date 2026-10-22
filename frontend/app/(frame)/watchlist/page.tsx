@@ -162,6 +162,9 @@ export default function WatchlistPage() {
 
   useEffect(() => {
     refreshContracts();
+    return () => {
+      contractsAbortRef.current?.abort();
+    };
   }, [refreshContracts]);
 
   const sorted = useMemo<WatchlistRow[]>(() => {
@@ -277,9 +280,9 @@ export default function WatchlistPage() {
             ? `${sortedContracts.length} starred contract${sortedContracts.length === 1 ? '' : 's'} · sorted by ${contractSortKey} ${contractSortDir === 'asc' ? '↑' : '↓'}`
             : `${compositeWatches.length} composite alert${compositeWatches.length === 1 ? '' : 's'}`}
         </Text>
-        {offline ? (
+        {tab === 'stocks' && offline ? (
           <Text size={13} tone="dim">Backend not running — start it (uvicorn app.main:app --port 8000) to load live data.</Text>
-        ) : contractsOffline && tab === 'contracts' ? (
+        ) : tab === 'contracts' && contractsOffline ? (
           <Text size={13} tone="dim">Could not load option chains — retry</Text>
         ) : null}
       </div>

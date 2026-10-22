@@ -7,7 +7,7 @@ jest.mock('@/lib/api', () => ({
 
 import { api } from '@/lib/api';
 import {
-  migrateWatchedContracts, useWatchedContractsStore, WATCHED_CONTRACTS_STORAGE_KEY,
+  migrateWatchedContracts, sanitizePersisted, useWatchedContractsStore, WATCHED_CONTRACTS_STORAGE_KEY,
 } from '@/lib/watchedContractsStore';
 import type { ContractGrading } from '@/types/domain';
 
@@ -37,8 +37,50 @@ describe('watchedContractsStore — migrate', () => {
     expect(migrateWatchedContracts({ ids: [A], grading: { [A]: G } }, 3)).toEqual({ ids: [A], grading: { [A]: G } });
   });
 
+  it('drops orphan keys and corrupt grading entries during migration', () => {
+    expect(migrateWatchedContracts({
+      ids: [A],
+      grading: {
+        [A]: G,
+        [B]: G2,
+        corrupt: { stock_score: 999 },
+      },
+    }, 3)).toEqual({ ids: [A], grading: { [A]: G } });
+  });
+
   it('a non-object or array grading, and non-string or empty ids, are repaired', () => {
     expect(migrateWatchedContracts({ ids: [A, 7, '', null], grading: [G] }, 3)).toEqual({ ids: [A], grading: {} });
+  });
+});
+
+describe('watchedContractsStore — sanitizePersisted', () => {
+  it('drops orphan keys not present in ids', () => {
+    const raw = {
+      ids: [A],
+      grading: {
+        [A]: G,
+        [B]: G2,
+      },
+    };
+    expect(sanitizePersisted(raw)).toEqual({ ids: [A], grading: { [A]: G } });
+  });
+
+  it('drops invalid grading entries', () => {
+    const raw = {
+      ids: [A],
+      grading: {
+        [A]: { stock_score: 999 }, // invalid score > 100
+      },
+    };
+    expect(sanitizePersisted(raw)).toEqual({ ids: [A], grading: {} });
+  });
+
+  it('handles non-array ids by resetting ids to [] and grading to {}', () => {
+    const raw = {
+      ids: 'not-an-array',
+      grading: { [A]: G },
+    };
+    expect(sanitizePersisted(raw)).toEqual({ ids: [], grading: {} });
   });
 });
 
@@ -72,6 +114,23 @@ describe('watchedContractsStore — rehydrate repairs hand-corrupted v3 storage'
     }));
     await useWatchedContractsStore.persist.rehydrate();
     expect(useWatchedContractsStore.getState().ids).toEqual([]);
+  });
+
+  it('drops orphan keys and corrupt grading entries on rehydrate', async () => {
+    localStorage.setItem(WATCHED_CONTRACTS_STORAGE_KEY, JSON.stringify({
+      state: {
+        ids: [A],
+        grading: {
+          [A]: G,
+          [B]: G2,
+          corrupt: { stock_score: 999 },
+        },
+      },
+      version: 3,
+    }));
+    await useWatchedContractsStore.persist.rehydrate();
+    expect(useWatchedContractsStore.getState().ids).toEqual([A]);
+    expect(useWatchedContractsStore.getState().grading).toEqual({ [A]: G });
   });
 
   it('nothing stored leaves the current state alone', async () => {
