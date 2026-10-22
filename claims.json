@@ -23,6 +23,14 @@
       "expires_at": "2026-10-22T10:16:16Z",
       "note": "Take #162: exact fractional strikes end to end (plan r2 clean; Q1/Q2 answered A/A)",
       "task": "EXACT-STRIKE"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/search-profiles-recal-options-20a39a3a",
+      "claimed_at": "2026-10-22T07:33:48Z",
+      "expires_at": "2026-10-22T10:33:48Z",
+      "note": "Take #187: Recalibrate the 18 Options search profiles",
+      "task": "SEARCH-PROFILES-RECAL-OPTIONS"
     }
   ]
 }
