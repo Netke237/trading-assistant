@@ -8516,7 +8516,7 @@
         "board item #389",
         "open question #8"
       ],
-      "notes": "Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean. Ready for self-merge.",
+      "notes": "SELF-MERGE PENDING, PR #513, audited head bc5c49f0. Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean.",
       "verify": {
         "kind": "present",
         "path": "backend/app/scoring/contract_validator.py",
