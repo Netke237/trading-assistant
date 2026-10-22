@@ -5,7 +5,6 @@ import type { BacktestArtifact, CandidateChartContext, OriginalBacktestState } f
 
 function initialState(context: CandidateChartContext | null, activeSymbol: string | null): OriginalBacktestState {
   if (!context) return {status: 'idle'};
-  if (context.source === 'prebreakout' || context.source === 'fib') return {status: 'unavailable', reason: 'unsupported'};
   if (activeSymbol !== context.symbol) return {status: 'unavailable', reason: 'context_mismatch'};
   if (context.status !== 'available') return {status: 'unavailable', reason: context.status};
   if (!context.artifactId) return {status: 'unavailable', reason: 'original_unavailable'};

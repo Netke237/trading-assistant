@@ -9,7 +9,7 @@ from typing import Literal
 import pandas as pd
 
 from app.services.strategy_backtest_details import (
-    DetailedBacktestResult, DetailStatus, collect_details, source_frame,
+    DetailedBacktestResult, DetailStatus, collect_details, collect_setup_details, source_frame,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +86,7 @@ class TradeRecord:
     exit_price:     float
     net_return_pct: float
     exit_reason:    ExitReason
+    size:           int = 1
 
 
 def _bars_to_df(bars: list[dict]) -> pd.DataFrame:
@@ -233,6 +234,17 @@ def _run_backtest(
             min_win_rate=min_win_rate, params=params, commission=commission,
             entry_start=entry_start, entry_end=entry_end, hold_max_days=hold_max_days,
         )
+        if detail_collector is not None:
+            try:
+                detail = collect_setup_details(
+                    result, records, bars=bars, strategy=strategy, direction=direction,
+                    params=params, commission=commission, entry_start=entry_start,
+                    entry_end=entry_end, hold_max_days=hold_max_days,
+                    min_trades=min_trades, min_win_rate=min_win_rate,
+                )
+            except Exception as exc:
+                detail = DetailedBacktestResult(result, "invalid_evidence", str(exc))
+            detail_collector.append(detail)
         return result, records if collect_trades else None
     direction = normalize_direction(direction)
 
@@ -473,6 +485,7 @@ def _trade_records(
             exit_price=exit_price,
             net_return_pct=float(row.ReturnPct) * 100.0,
             exit_reason=reason,
+            size=int(row.Size),
         ))
     return out
 

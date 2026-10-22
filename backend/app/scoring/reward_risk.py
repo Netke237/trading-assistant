@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from app.models.heston import HestonParams, heston_price
+from app.models.heston import HestonParams, heston_price_detail
 from app.models.black_scholes import bs_iv, bs_price
 
 _log = logging.getLogger(__name__)
@@ -144,7 +144,11 @@ def estimate_rr(
 
     if heston_params is not None:
         try:
-            heston_exit_premium = heston_price(target_price, strike, dte_at_target, r, heston_params, is_call)
+            detail = heston_price_detail(target_price, strike, dte_at_target, r, heston_params, is_call)
+            # fell_back: the integration failed and the price is Black-Scholes
+            # at sqrt(v0), not Heston -- treat it exactly like a failed Heston
+            # price so it is never labelled "Heston repriced" (DECISION-23 H-1).
+            heston_exit_premium = 0.0 if detail.fell_back else detail.price
         except Exception:
             heston_exit_premium = 0.0
         heston_ok = math.isfinite(heston_exit_premium) and heston_exit_premium > 0
@@ -253,7 +257,10 @@ def estimate_targets(
 
         if heston_params is not None:
             try:
-                raw_price = heston_price(t_price, strike, dte_at_target, r, heston_params, is_call)
+                detail = heston_price_detail(t_price, strike, dte_at_target, r, heston_params, is_call)
+                # fell_back: Black-Scholes at sqrt(v0), not Heston -- treated
+                # exactly like a failed Heston price (DECISION-23 H-1).
+                raw_price = None if detail.fell_back else detail.price
             except Exception:
                 raw_price = None
             heston_ok = raw_price is not None and math.isfinite(raw_price) and raw_price > 0
@@ -332,8 +339,9 @@ def estimate_targets(
 
         if not use_heston_price:
             # Heston is unusable for this level — either genuinely (no
-            # params, raised, or returned a non-finite/non-positive price;
-            # heston_ok is False) or because its own artifact-floored price
+            # params, raised, fell back to Black-Scholes at sqrt(v0), or
+            # returned a non-finite/non-positive price; heston_ok is False)
+            # or because its own artifact-floored price
             # still can't clear the display check above (heston_ok was True
             # but use_heston_price was rejected). Either way, fall back to a
             # Black-Scholes reprice using the contract's own market-implied

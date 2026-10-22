@@ -3,16 +3,18 @@ import { buildCandidateChartHref, parseCandidateChartContext } from '@/lib/candi
 const id = '0f15f060-4602-4254-a113-2076894eb97c';
 const parse = (url: string) => parseCandidateChartContext(new URL(url, 'http://localhost').searchParams);
 
-test.each(['stocks', 'pullback'] as const)('%s carries clicked candidate original ID independent of direction', source => {
+test.each(['stocks', 'pullback', 'prebreakout', 'fib'] as const)('%s carries clicked candidate original ID independent of direction', source => {
   for (const direction of ['Bullish', 'Bearish']) {
     const url = buildCandidateChartHref({symbol: 'BRK.B', direction, backtest_artifact_id: id, backtest_artifact_status: 'available'}, source);
     expect(parse(url)).toEqual({source, symbol: 'BRK.B', artifactId: id, status: 'available'});
     expect(url).not.toContain('direction=');
   }
 });
-test.each(['prebreakout', 'fib'] as const)('%s cannot manufacture strategy evidence from setup confidence', source => {
-  expect(parse(buildCandidateChartHref({symbol:'AAA',backtest_artifact_id:id,backtest_artifact_status:'available'}, source)))
+test.each(['prebreakout', 'fib'] as const)('%s preserves explicit unavailable status', source => {
+  expect(parse(buildCandidateChartHref({symbol:'AAA',backtest_artifact_status:'unsupported'}, source)))
     .toEqual({source,symbol:'AAA',artifactId:null,status:'unsupported'});
+  expect(parse(buildCandidateChartHref({symbol:'AAA',backtest_artifact_status:'insufficient_history'}, source)))
+    .toEqual({source,symbol:'AAA',artifactId:null,status:'insufficient_history'});
 });
 test('legacy candidate has explicit missing original, ordinary chart has no original scope', () => {
   expect(parse(buildCandidateChartHref({symbol:'AAA'}, 'stocks'))?.status).toBe('original_unavailable');

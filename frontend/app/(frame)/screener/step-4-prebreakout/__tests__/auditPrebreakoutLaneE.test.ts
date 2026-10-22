@@ -10,7 +10,7 @@ import type { PreBreakoutResultRow } from '@/types/stockDomain';
 
 describe('Lane E Pre-Breakout Audit Verification', () => {
   describe('Candidate Chart Navigation Contract', () => {
-    it('sets status to unsupported and omits artifact ID for prebreakout candidates', () => {
+    it('sets status to original_unavailable and omits artifact ID for prebreakout candidates without artifact', () => {
       const row = {
         symbol: 'AAPL',
         confidence: 85,
@@ -22,23 +22,26 @@ describe('Lane E Pre-Breakout Audit Verification', () => {
       expect(url.pathname).toBe('/chart');
       expect(url.searchParams.get('symbol')).toBe('AAPL');
       expect(url.searchParams.get('source')).toBe('prebreakout');
-      expect(url.searchParams.get('backtest_artifact_status')).toBe('unsupported');
+      expect(url.searchParams.get('backtest_artifact_status')).toBe('original_unavailable');
       expect(url.searchParams.has('backtest_artifact_id')).toBe(false);
     });
 
-    it('sets status to unsupported and omits artifact ID for fib candidates', () => {
+    it('preserves valid artifact ID and status for prebreakout and fib candidates (#391)', () => {
+      const artifactId = '12345678-1234-1234-1234-1234567890ab';
       const row = {
         symbol: 'NVDA',
         confidence: 90,
         direction: 'Bullish' as const,
+        backtest_artifact_id: artifactId,
+        backtest_artifact_status: 'available' as const,
       };
       const href = buildCandidateChartHref(row, 'fib');
       const url = new URL(href, 'http://localhost');
       expect(url.pathname).toBe('/chart');
       expect(url.searchParams.get('symbol')).toBe('NVDA');
       expect(url.searchParams.get('source')).toBe('fib');
-      expect(url.searchParams.get('backtest_artifact_status')).toBe('unsupported');
-      expect(url.searchParams.has('backtest_artifact_id')).toBe(false);
+      expect(url.searchParams.get('backtest_artifact_status')).toBe('available');
+      expect(url.searchParams.get('backtest_artifact_id')).toBe(artifactId);
     });
 
     it('preserves valid artifact ID and status for pullback candidates', () => {
@@ -57,19 +60,19 @@ describe('Lane E Pre-Breakout Audit Verification', () => {
       expect(url.searchParams.get('backtest_artifact_id')).toBe(artifactId);
     });
 
-    it('parses prebreakout and fib context strictly to unsupported status', () => {
+    it('parses valid prebreakout candidate context with artifact ID and available status (#391)', () => {
       const query = new URLSearchParams({
         symbol: 'TSLA',
         source: 'prebreakout',
-        backtest_artifact_status: 'available', // attempted spoof
+        backtest_artifact_status: 'available',
         backtest_artifact_id: '12345678-1234-1234-1234-1234567890ab',
       });
       const parsed = parseCandidateChartContext(query);
       expect(parsed).toEqual({
         source: 'prebreakout',
         symbol: 'TSLA',
-        artifactId: null,
-        status: 'unsupported',
+        artifactId: '12345678-1234-1234-1234-1234567890ab',
+        status: 'available',
       });
     });
   });

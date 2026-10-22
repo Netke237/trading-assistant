@@ -702,6 +702,43 @@ def test_rejected_fit_is_logged_with_its_verdict(caplog):
     assert any("REJECTED (bs_flat)" in rec.getMessage() for rec in caplog.records)
 
 
+def test_rejected_fit_on_the_full_grid_logs_one_line_with_its_numbers(monkeypatch, caplog):
+    """DECISION-23 H-2 (H4): the rejected-fit WARNING under
+    HESTON_FULL_CALIBRATION=1 (the three-rung grid) was asserted nowhere, so a
+    mutation dropping or garbling it survived. This pins its CONTENT, not just
+    its presence: the strike count, the verdict, and both sides of the
+    comparison, each recomputed here independently of the calibrator.
+
+    The fit's rel-RMSE is the minimum over every full-grid combination at the
+    chain's own seeded v0 (re-derived with this module's `_rel_rmse_of`, which
+    sums in the calibrator's order); the baseline is `_flat_bs_baseline` on
+    the same strikes. Removing the line, changing its count, its verdict or
+    either number fails one assertion below."""
+    import app.models.heston_cache as hc
+
+    monkeypatch.setattr(hc, "_USE_FULL_GRID", True)
+    chain = _chain(45, lambda K: 0.30)
+    with caplog.at_level(logging.WARNING, logger="app.models.heston_cache"):
+        result = _calibrate(chain)
+
+    assert result.method == "bs_flat"
+    warnings = [rec for rec in caplog.records
+                if rec.name == "app.models.heston_cache" and rec.levelno == logging.WARNING]
+    assert len(warnings) == 1, [rec.getMessage() for rec in warnings]
+    message = warnings[0].getMessage()
+
+    v0 = hc._seed_v0(chain, S, R)
+    full = dict(FULL_GRID, v0=[v0])
+    best_rmse = min(_rel_rmse_of(_params_from(combo), chain)
+                    for combo in _every_combo(full))
+    baseline_rmse, _sigma = _flat_bs_baseline(chain, S, R)
+    assert baseline_rmse is not None
+
+    assert f"Heston calibration on {len(chain)} strikes:" in message, message
+    assert "REJECTED (bs_flat)" in message, message
+    assert f"rel-RMSE {best_rmse:.4f} vs flat-BS baseline {baseline_rmse:.4f}" in message, message
+
+
 # --------------------------------------------------------------------------
 # Spec test 8 — nothing but heston_grid may be labelled "Heston repriced"
 # --------------------------------------------------------------------------

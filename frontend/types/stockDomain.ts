@@ -96,14 +96,14 @@ export interface PreBreakoutConfidenceBreakdown {
   confidence: number;
 }
 export interface FibSwing { low: number | null; high: number | null; }
-export interface PreBreakoutResultRow {
+export interface PreBreakoutResultRow extends BacktestArtifactReference {
   symbol: string; confidence: number; direction: string; metrics: Record<string, number>;
   /** STOCK-PRES-P1. Absent on rows persisted before P1. */
   confidence_breakdown?: PreBreakoutConfidenceBreakdown | null;
   /** Swing low/high the Fib levels were measured from; null when Fib was not used. */
   fib_swing?: FibSwing | null;
 }
-export interface FibPullbackResultRow {
+export interface FibPullbackResultRow extends BacktestArtifactReference {
   symbol: string; direction: string; fib_level_hit: string; fib_dist_pct: number | null;
   at_level: boolean; confidence: number;
   /** STOCK-PRES-P1. Absent on rows persisted before P1. */
