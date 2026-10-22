@@ -1,6 +1,6 @@
 """test_search_profiles_recalibration.py — Regression tests for the 18 Options Search Profiles recalibration.
 
-Target: Issue #187 (SEARCH-PROFILES-RECAL-OPTIONS).
+Target: Issue #187 (SEARCH-PROFILES-RECAL-OPTIONS / PR #508).
 Verifies:
 - docs/search-profiles/search-profiles-export.json Schema Version 5 compliance.
 - Preservation of all 18 stable profile IDs.

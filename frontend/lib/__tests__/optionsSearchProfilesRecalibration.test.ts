@@ -28,7 +28,7 @@ const EXPECTED_PROFILE_IDS = [
   'mu2n6y1r5fyf', // SemiAnnual_Loose_Bearish
 ];
 
-describe('Options Search Profiles Recalibration (#187)', () => {
+describe('Options Search Profiles Recalibration (#187 / PR #508)', () => {
   let exportData: { state: { profiles: unknown[] }; version: number };
   let profiles: SearchProfile[];
 
