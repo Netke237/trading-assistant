@@ -60,6 +60,10 @@ class HistoryUpdateResult:
     # for "deferred", the deferred kind's value.
     action: str | None = None
     reason: str | None = None
+    # Copied from the executed ``NightlyAction`` on the kept-prefix (SUFFIX_ONLY / RESCALE)
+    # path, so the nightly selects tonight's revalidations from its own pass-1 results.
+    revalidation_due: bool = False
+    prefix_age_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -257,7 +261,8 @@ async def _seam_signature_now(db, symbol: str, last_prefix: date, seam: date) ->
 
 
 async def _write_kept_prefix(db, symbol: str, start: date, end: date, state, rows, alpaca_bars, *,
-                             ratio=None, action: str, reason: str) -> HistoryUpdateResult:
+                             ratio=None, action: str, reason: str, revalidation_due: bool = False,
+                             prefix_age_days: int | None = None) -> HistoryUpdateResult:
     """``SUFFIX_ONLY`` (``ratio`` None) and ``RESCALE`` (plan 2.3, 2.4).
 
     The verified stored prefix is kept: untouched (raw, factor, ``fetched_at``), or every
@@ -286,7 +291,8 @@ async def _write_kept_prefix(db, symbol: str, start: date, end: date, state, row
     notify_bars_changed(symbol)
     return HistoryUpdateResult(stored=len(stored), backfilled=False,
                                floor_reached=_first_after_floor(rows, start),
-                               action=action, reason=reason)
+                               action=action, reason=reason, revalidation_due=revalidation_due,
+                               prefix_age_days=prefix_age_days)
 
 
 async def _write_window(db, symbol: str, start: date, end: date, window_start: date, reply, *,
@@ -419,7 +425,9 @@ async def update_history(symbol: str, start: date, end: date, *,
             if action.kind in (K.SUFFIX_ONLY, K.RESCALE):
                 return await _write_kept_prefix(db, symbol, start, end, state, rows, alpaca_bars,
                                                 ratio=action.ratio, action=action.kind.value,
-                                                reason=action.reason)
+                                                reason=action.reason,
+                                                revalidation_due=action.revalidation_due,
+                                                prefix_age_days=action.prefix_age_days)
             # FULL, CONFIRM, REVALIDATE: the full prefix path below.
             current = _validated(alpaca_bars, start, end)
             if current and any(b["source"] != "alpaca" for b in current.values()):

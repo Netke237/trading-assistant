@@ -46,6 +46,19 @@ data_providers:
       symbols_per_month: 25
       bytes_per_month: 100000000
 
+# Incremental nightly ingestion (app/services/history_incremental.py, plan
+# 2026-10-19-history-incremental-nightly). Absent = these defaults; a key left
+# out of a present block keeps its default. An unknown key, a wrong type or a
+# negative value fails the nightly run before any write, naming the key.
+# history_incremental:
+#   provider_lag_days: 5        # L, trading days a provider may lag an adjustment event
+#   revalidate_days: 90         # a kept prefix older than this is due for revalidation
+#   revalidate_per_night: 10    # at most this many (oldest first), while the Tiingo budget has room
+#   confirm: true               # true = D1-a (re-fetch L trading days after an event); false = D1-b
+#   adj_tol: 0.000001           # factor tolerance (write it as a decimal, not 1e-6)
+#   anchor_overlap_days: 21     # Tiingo-only: calendar days re-fetched before the window anchor
+#   anchor_max_age_days: 45     # Tiingo-only: an older anchor takes the full-window path
+
 alert_delivery:
   masterEnabled: true
   enabledTypes:

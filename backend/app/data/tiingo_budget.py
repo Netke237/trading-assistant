@@ -296,6 +296,18 @@ async def usage_summary() -> dict:
             for key in DEFAULT_LIMITS}
 
 
+async def caller_usage(caller_name: str, since: datetime, until: datetime) -> tuple[int, int]:
+    """Read-only: (requests, response bytes) recorded for `caller_name` with
+    `since <= requested_at <= until` — a run's own Tiingo usage (the nightly's
+    run counters). Raises the database error when the ledger cannot be read."""
+    async with AsyncSessionLocal() as db:
+        count, size = (await db.execute(
+            select(func.count(), func.sum(Log.response_bytes)).where(
+                Log.provider == PROVIDER, Log.caller == caller_name,
+                Log.requested_at >= since, Log.requested_at <= until))).one()
+    return int(count or 0), int(size or 0)   # SUM(bigint) is a Decimal on Postgres
+
+
 async def prune_usage(older_than: timedelta = RETENTION) -> int:
     """Delete ledger rows older than `older_than` (40 days); returns the count."""
     cutoff = _utcnow() - older_than
