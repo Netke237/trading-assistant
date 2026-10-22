@@ -104,9 +104,9 @@ test.describe('SETUP-BACKTEST-CHART (#391): Pre-Breakout & Fib Pullback candidat
     await page.setViewportSize({ width: 1280, height: 1000 });
     await setupApiMocks(page);
 
-    const artifact = buildMockArtifact('PRESYM', 'breakout_setup', 'art-prebreakout-123');
+    const artifact = buildMockArtifact('PRESYM', 'breakout_setup', 'c8b41724-4f45-4bb6-a973-123456789abc');
 
-    await page.route('**/api/backtest-artifacts/art-prebreakout-123**', async (route) => {
+    await page.route('**/api/backtest-artifacts/c8b41724-4f45-4bb6-a973-123456789abc**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -114,7 +114,7 @@ test.describe('SETUP-BACKTEST-CHART (#391): Pre-Breakout & Fib Pullback candidat
       });
     });
 
-    await page.goto('/chart?symbol=PRESYM&source=prebreakout&backtest_artifact_status=available&backtest_artifact_id=art-prebreakout-123');
+    await page.goto('/chart?symbol=PRESYM&source=prebreakout&backtest_artifact_status=available&backtest_artifact_id=c8b41724-4f45-4bb6-a973-123456789abc');
 
     // Historical candles pane and equity comparison pane must be visible
     await expect(page.getByLabel('Historical candles', { exact: true })).toBeVisible();
@@ -135,9 +135,9 @@ test.describe('SETUP-BACKTEST-CHART (#391): Pre-Breakout & Fib Pullback candidat
     await page.setViewportSize({ width: 1280, height: 1000 });
     await setupApiMocks(page);
 
-    const artifact = buildMockArtifact('FIBSYM', 'fibonacci_pullback', 'art-fib-456');
+    const artifact = buildMockArtifact('FIBSYM', 'fibonacci_pullback', 'd9c52835-5f56-4cc7-ba84-234567890def');
 
-    await page.route('**/api/backtest-artifacts/art-fib-456**', async (route) => {
+    await page.route('**/api/backtest-artifacts/d9c52835-5f56-4cc7-ba84-234567890def**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -145,7 +145,7 @@ test.describe('SETUP-BACKTEST-CHART (#391): Pre-Breakout & Fib Pullback candidat
       });
     });
 
-    await page.goto('/chart?symbol=FIBSYM&source=fib&backtest_artifact_status=available&backtest_artifact_id=art-fib-456');
+    await page.goto('/chart?symbol=FIBSYM&source=fib&backtest_artifact_status=available&backtest_artifact_id=d9c52835-5f56-4cc7-ba84-234567890def');
 
     await expect(page.getByLabel('Historical candles', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Indexed equity comparison', { exact: true })).toBeVisible();

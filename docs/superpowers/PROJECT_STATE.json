@@ -8459,18 +8459,18 @@
       "plan": "docs/superpowers/plans/2026-10-22-setup-backtest-chart-plan.md",
       "branch": "board/setup-backtest-chart-4777cda7",
       "tracking_issue": 391,
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "verify": {
         "kind": "present",
         "path": "backend/tests/test_setup_backtest_chart.py",
         "pattern": "test_setup_backtest_chart",
         "note": "PRESENCE ONLY of setup backtest chart tests (#391)."
       },
-      "completion_pct": 70,
+      "completion_pct": 95,
       "size": "L",
       "complexity": 4,
-      "note": "Plan stage clean after 1 round (0 gate findings). Implementation complete; ready for Code stage audit.",
+      "note": "Plan stage clean after 1 round. Code stage clean after 1 round (continuous round 2). Implementation complete and verified clean; ready for PR.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -8486,8 +8486,23 @@
           "reviewed": "docs/superpowers/plans/2026-10-22-setup-backtest-chart-plan.md@2f92e7c2",
           "gate_findings": 0,
           "findings": []
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "b4ebb850-0aeb-49aa-a4da-83654365f30e",
+          "reviewed": "origin/main..HEAD@db257049",
+          "gate_findings": 0,
+          "findings": []
         }
-      ]
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent b4ebb850-0aeb-49aa-a4da-83654365f30e reviewed diff origin/main..HEAD (db257049); 0 gate findings; report docs/superpowers/audits/SETUP-BACKTEST-CHART/code-r1.md"
+      }
     }
   ],
   "already_shipped": [
