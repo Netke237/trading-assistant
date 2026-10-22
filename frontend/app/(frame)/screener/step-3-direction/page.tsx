@@ -28,6 +28,7 @@ import {
   resolveParamsHorizon, type HorizonKey,
 } from '@/lib/horizonPresets';
 import { PARAM_DEFAULTS_PER_HORIZON, type ParamDefaults } from '@/lib/executionParamDefaults';
+import { useContractRulesStore } from '@/lib/contractRulesStore';
 
 const DIRECTIONS: Direction[] = ['Bullish', 'Bearish'];
 
@@ -158,6 +159,8 @@ const PARAM_DEFS: ParamDef[] = [
   { key: 'confidence_atr_mult_stop',   label: 'Confidence ATR stop',   type: 'number', section: 'stocks', subGroup: 'Confidence', min: 0.5, max: 5, step: 0.1,
     hint: 'Loss barrier for the mini backtest = this × ATR, for the active horizon. Overrides the Settings default for this scan only. A lone target or stop override (without the other) is ignored.' },
   // OPTIONS — Contract
+  { key: 'contract_min_stock_score', label: 'Min underlying score (contract floor)', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 100, step: 1,
+    hint: 'Judges the underlying stock score before contracts are graded. Separate from the Stocks min score; default comes from contract_rules.yaml.' },
   { key: 'max_delta',              label: 'Max delta',              type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
     hint: 'Highest delta (0–1) allowed — controls how far in-the-money contracts can be. ↑ Higher → near-the-money contracts allowed (more) · ↓ Lower → OTM-only (fewer)' },
   { key: 'max_bid_ask_spread_pct', label: 'Bid-ask spread ceiling', type: 'number', section: 'options', subGroup: 'Contract', min: 0, max: 1,     step: 0.01,
@@ -686,6 +689,10 @@ export default function Step3Page() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    useContractRulesStore.getState().fetch();
+  }, []);
+
   const toggleSubGroup = useCallback((name: string) => {
     setSubGroupOpen((prev) => ({ ...prev, [name]: !(prev[name] ?? true) }));
   }, []);
@@ -757,7 +764,13 @@ export default function Step3Page() {
   const custom = hz === 'Custom';
   const defaults = PARAM_DEFAULTS_PER_HORIZON[resolveParamsHorizon(hz, holdMax)];
   const [previewMinDte, previewMaxDte] = previewDteWindow(holdMin, holdMax);
-  const displayDefaults: ParamDefaults = { ...defaults, min_dte: previewMinDte, max_dte: previewMaxDte };
+  const contractMinStockScoreDefault = useContractRulesStore((s) => s.minStockScore);
+  const displayDefaults: ParamDefaults = {
+    ...defaults,
+    min_dte: previewMinDte,
+    max_dte: previewMaxDte,
+    contract_min_stock_score: contractMinStockScoreDefault,
+  };
 
   // `rejectedLog` is written only by RunScanButton and is NOT persisted, while
   // the identical entries on `scanResult.rejected` ARE. After a reload the

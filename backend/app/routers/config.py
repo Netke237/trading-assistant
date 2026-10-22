@@ -53,6 +53,20 @@ def get_iv_thresholds() -> dict:
     }
 
 
+@router.get("/contract-rules")
+def get_contract_rules() -> dict:
+    """Return default contract rules configuration from contract_rules.yaml.
+
+    Provides min_stock_score so frontend does not hardcode a duplicate 45.
+    """
+    from app.scoring.contract_validator import _load_config
+    cfg = _load_config()
+    hard_reject = cfg.get("hard_reject", {})
+    return {
+        "min_stock_score": int(hard_reject.get("min_stock_score", 45)),
+    }
+
+
 @router.get("/event-thresholds")
 def get_event_thresholds() -> dict:
     """Return per-horizon event-proximity reject/caution day windows from scoring_rules.yaml.

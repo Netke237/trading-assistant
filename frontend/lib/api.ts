@@ -988,6 +988,9 @@ export const api = {
       '/api/config/event-thresholds'
     ),
 
+  getContractRules: () =>
+    get<{ min_stock_score: number }>('/api/config/contract-rules'),
+
   // STOCKS-HORIZON-T1 H4/H5: per-horizon strategy parameter profiles.
   // Untyped on purpose: lib/strategyProfilesStore.ts parseStrategyProfiles validates it.
   getStrategyProfiles: () => get<unknown>('/api/config/strategy-profiles'),

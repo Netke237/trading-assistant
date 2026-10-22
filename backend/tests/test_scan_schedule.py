@@ -212,6 +212,46 @@ async def test_run_scheduled_entry_options_drops_leaked_min_stock_score(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_run_scheduled_entry_options_preserves_contract_min_stock_score(monkeypatch):
+    """Board #389: contract_min_stock_score is the intentional contract floor
+    override for options scans and MUST NOT be dropped by the scheduler."""
+    from app.services.scan_schedule_store import scan_schedule_store
+    from app.services import scan_schedule_scheduler as sss
+    from tests.conftest import _TestSession
+    import app.database as dbmod
+
+    entry = _options_entry_body(resolved_request={
+        "universe": ["AAPL"], "direction": "Bullish", "horizon": "Swing",
+        "overrides": {"contract_min_stock_score": 30, "min_stock_score": 40, "min_volume": 10},
+    })
+    entry["id"] = "contract-floor-1"
+    scan_schedule_store.upsert(entry)
+    monkeypatch.setattr(dbmod, "AsyncSessionLocal", _TestSession)
+
+    seen = []
+
+    async def _fake_core(req, db, previous_result=None):
+        seen.append(req)
+        raise RuntimeError("stop here")
+
+    async def _quiet(*a, **k):
+        return None
+
+    monkeypatch.setattr("app.routers.scan._execute_scan_core", _fake_core)
+    monkeypatch.setattr(sss, "_notify_scan_schedule_error", _quiet)
+    try:
+        await sss._run_scheduled_entry("contract-floor-1")
+        assert len(seen) == 1
+        # min_stock_score is stripped (legacy/stocks leak guard)
+        assert "min_stock_score" not in seen[0].overrides
+        # contract_min_stock_score is preserved and reaches the core
+        assert seen[0].overrides["contract_min_stock_score"] == 30
+        assert seen[0].overrides["min_volume"] == 10
+    finally:
+        scan_schedule_store.delete("contract-floor-1")
+
+
+@pytest.mark.asyncio
 async def test_run_scheduled_entry_deleted_mid_flight_logs_and_returns():
     from app.services import scan_schedule_scheduler as sss
     # Entry was never created — must log+return, not raise.
