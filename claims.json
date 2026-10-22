@@ -23,6 +23,14 @@
       "expires_at": "2026-10-22T09:13:04Z",
       "note": "Resume #351 APP-AUDIT-OPTIONS: Verify Options scores, contracts, reports and trade-card numbers",
       "task": "APP-AUDIT-OPTIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/app-audit-presentation-58612753",
+      "claimed_at": "2026-10-22T06:13:53Z",
+      "expires_at": "2026-10-22T09:13:53Z",
+      "note": "Take #358: Verify usability and every expanded, empty, error and legacy disclosure",
+      "task": "APP-AUDIT-PRESENTATION"
     }
   ]
 }
