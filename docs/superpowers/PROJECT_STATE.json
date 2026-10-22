@@ -6584,7 +6584,7 @@
       "owner": "agent",
       "name": "Incremental nightly, Stage B: incremental writer",
       "summary": "Window-anchor state columns (B0), pure nightly classifier T1-T6 + RESCALE/CONFIRM/REVALIDATE (B1), incremental update_history branches + Tiingo-only anchored recent window (B2), two-pass nightly run with Tiingo priority queue and run counters (B3). Plan sections 2 and 5 Stage B.",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 0,
       "audit_clean": false,
       "depends_on": [
@@ -6595,12 +6595,12 @@
       "tracking_issue": 413,
       "branch": "claude/history-incremental-b-687c68",
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "backend/app/services/ingestion_job.py",
         "pattern": "revalidation_skipped_budget",
-        "note": "PRESENCE ONLY: absent until B3 adds the two-pass run counters (flips to present when Stage B is built). Correctness requires tests and the independent stage audit."
+        "note": "PRESENCE ONLY of the B3 run counters in the two-pass nightly. Correctness requires tests and the independent stage audit."
       },
-      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified.",
+      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified. B2 #496 8c819eb6 and B3 #497 9560e7f2 committed and coordinator-verified (B2 full suite 9684 passed, baseline only). Built, NOT audited: code audit pending (#498).",
       "audit_history": []
     },
     {
