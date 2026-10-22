@@ -8455,7 +8455,7 @@
     {
       "id": "SETUP-BACKTEST-CHART",
       "name": "SETUP-BACKTEST-CHART: backtest curve on Chart for Pre-Breakout and Fib Pullback (#391)",
-      "status": "in_progress",
+      "status": "built",
       "plan": "docs/superpowers/plans/2026-10-22-setup-backtest-chart-plan.md",
       "branch": "board/setup-backtest-chart-4777cda7",
       "tracking_issue": 391,
@@ -8467,10 +8467,10 @@
         "pattern": "test_setup_backtest_chart",
         "note": "PRESENCE ONLY of setup backtest chart tests (#391)."
       },
-      "completion_pct": 30,
+      "completion_pct": 70,
       "size": "L",
       "complexity": 4,
-      "note": "Plan stage clean after 1 round (0 gate findings). Implementation in progress.",
+      "note": "Plan stage clean after 1 round (0 gate findings). Implementation complete; ready for Code stage audit.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
