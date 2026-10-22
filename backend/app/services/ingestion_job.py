@@ -98,10 +98,10 @@ STALENESS_REFERENCE = "SPY"
 #   single_provider_skipped_current  action SINGLE_PROVIDER_CURRENT
 #   revalidated                      action REVALIDATE
 #   revalidation_skipped_budget      a selected revalidation refused by ensure_room
-#   tiingo_requests / tiingo_bytes   ledger rows with the run's own caller ("nightly" for
-#                                    the scheduled/startup runs, "on_demand" for a manual
-#                                    run) between the run's start and end; None when the
-#                                    ledger cannot be read
+#   tiingo_requests / tiingo_bytes   this run's own Tiingo HTTP attempts as recorded by the
+#                                    ledger (run-scoped tally; other code's concurrent
+#                                    requests are not counted); None when the ledger failed
+#                                    to record one of them
 #
 # A revalidated symbol was also written SUFFIX_ONLY in pass 1, so it counts in both.
 RUN_COUNTERS = ("suffix_only", "adjustment_changed", "prefix_refetched", "prefix_rescaled",
@@ -150,14 +150,13 @@ def counters_for(action: str | None, reason: str | None) -> list[str]:
     return out
 
 
-async def _ledger_usage(caller: str, since: datetime) -> tuple[int | None, int | None]:
-    """This run's Tiingo (requests, bytes) under its own caller; (None, None) if the
-    ledger is unreadable."""
-    try:
-        return await tiingo_budget.caller_usage(caller, since, tiingo_budget._utcnow())
-    except Exception as exc:
-        logger.warning("ingestion: tiingo usage ledger unreadable, counters unknown — %s", exc)
+def _ledger_counters(usage: tiingo_budget.RunUsage) -> tuple[int | None, int | None]:
+    """The run's (tiingo_requests, tiingo_bytes); (None, None) when the ledger failed to
+    record one of its attempts, so the true numbers are unknown."""
+    if usage.unrecorded:
+        logger.warning("ingestion: tiingo usage ledger missed an attempt, counters unknown")
         return None, None
+    return usage.requests, usage.bytes
 
 
 @dataclass
@@ -354,8 +353,6 @@ async def run_ingestion(
     tally = {"alpaca": 0, "gapfill": 0}
     fetch_end = date.today()
     fetch_start = fetch_end - timedelta(days=years * 365)
-    ledger_since = tiingo_budget._utcnow()     # the ledger's own clock (requested_at)
-    ledger_caller = tiingo_budget.current_caller()   # this run's ledger caller
     alpaca_result: dict[str, list[dict]] = {}
 
     def record(sym: str, result, *, first: bool) -> None:
@@ -452,114 +449,116 @@ async def run_ingestion(
             errors.append(f"{sym}: history error — {exc}")
             _state["failed"] += 1
 
-    try:
-        # Invalid `history_incremental` config fails the run here, naming the key,
-        # before any provider request or write.
-        params = hi.load_params(_load_settings())
+    # Every Tiingo attempt of this run (and of the tasks it creates) lands in `usage`.
+    with tiingo_budget.run_usage() as usage:
+        try:
+            # Invalid `history_incremental` config fails the run here, naming the key,
+            # before any provider request or write.
+            params = hi.load_params(_load_settings())
 
-        # ── Step 1: Alpaca batch fetch ────────────────────────────────────────
-        alpaca_client = await get_alpaca_client()
-        if alpaca_client is not None:
-            try:
-                for i in range(0, len(symbols), _ALPACA_CHUNK):
-                    chunk = symbols[i:i + _ALPACA_CHUNK]
-                    partial = await fetch_daily_bars_batch(chunk, fetch_start, fetch_end,
-                                                          client=alpaca_client, strict_adjustments=True)
-                    alpaca_result.update(partial)
-            except Exception as exc:
-                logger.warning("ingestion: Alpaca batch fetch failed — %s", exc)
-        else:
-            logger.info("ingestion: Alpaca unconfigured, skipping batch fetch")
+            # ── Step 1: Alpaca batch fetch ────────────────────────────────────────
+            alpaca_client = await get_alpaca_client()
+            if alpaca_client is not None:
+                try:
+                    for i in range(0, len(symbols), _ALPACA_CHUNK):
+                        chunk = symbols[i:i + _ALPACA_CHUNK]
+                        partial = await fetch_daily_bars_batch(chunk, fetch_start, fetch_end,
+                                                              client=alpaca_client, strict_adjustments=True)
+                        alpaca_result.update(partial)
+                except Exception as exc:
+                    logger.warning("ingestion: Alpaca batch fetch failed — %s", exc)
+            else:
+                logger.info("ingestion: Alpaca unconfigured, skipping batch fetch")
 
-        # No suffix is persisted before its retained prefix has been validated.
-        if rebuild:
-            for sym in symbols:
-                await rebuild_requested(sym)
-                _state["done"] += 1
-        elif force_backfill:
-            # Manual full re-fetch: every symbol takes its full path, in input order.
-            for sym in symbols:
-                await run_update(sym, tiingo_allowed=True)
-                _state["done"] += 1
-        else:
-            # Pass 2 queue entries: (priority, sequence, symbol, kind, seam exception).
-            queue: list[tuple[int, int, str, str, HistorySeamMismatch | None]] = []
-            due: list[tuple[str, int]] = []
-
-            def enqueue(sym: str, priority: int, kind: str, exc=None) -> None:
-                if sym == STALENESS_REFERENCE:
-                    priority = _PRIORITY_REFERENCE
-                queue.append((priority, len(queue), sym, kind, exc))
-
-            # ── Pass 1: no Tiingo request ────────────────────────────────────
-            for sym in symbols:
-                outcome = await run_update(sym, tiingo_allowed=False)
-                if isinstance(outcome, HistorySeamMismatch):
-                    enqueue(sym, _PRIORITY_REBUILD, "rebuild", outcome)
-                    continue
-                if getattr(outcome, "action", None) == "deferred":
-                    enqueue(sym, _PRIORITY.get(outcome.reason, _PRIORITY[_K.FULL.value]), "update")
-                    continue
-                if (getattr(outcome, "revalidation_due", False) is True
-                        and outcome.prefix_age_days is not None):
-                    due.append((sym, outcome.prefix_age_days))
-                _state["done"] += 1
-            for sym in hi.select_revalidations(due, params.revalidate_per_night):
-                enqueue(sym, _PRIORITY_REVALIDATE, "revalidate")
-            queue.sort(key=lambda entry: entry[:2])
-
-            # ── Pass 2: the Tiingo queue, in priority order ──────────────────
-            for _, _, sym, kind, exc in queue:
-                if kind == "update":
+            # No suffix is persisted before its retained prefix has been validated.
+            if rebuild:
+                for sym in symbols:
+                    await rebuild_requested(sym)
+                    _state["done"] += 1
+            elif force_backfill:
+                # Manual full re-fetch: every symbol takes its full path, in input order.
+                for sym in symbols:
                     await run_update(sym, tiingo_allowed=True)
                     _state["done"] += 1
-                elif kind == "rebuild":
-                    await rebuild_after_seam(sym, exc)
-                    _state["done"] += 1
-                else:
-                    # Already written SUFFIX_ONLY in pass 1; re-fetched only with budget room.
-                    _state["current_symbol"] = sym
-                    try:
-                        await tiingo_budget.ensure_room(sym, "nightly")
-                    except Exception as refused:
-                        _state["revalidation_skipped_budget"] += 1
-                        logger.info("ingestion: revalidation of %s skipped — %s", sym, refused)
+            else:
+                # Pass 2 queue entries: (priority, sequence, symbol, kind, seam exception).
+                queue: list[tuple[int, int, str, str, HistorySeamMismatch | None]] = []
+                due: list[tuple[str, int]] = []
+
+                def enqueue(sym: str, priority: int, kind: str, exc=None) -> None:
+                    if sym == STALENESS_REFERENCE:
+                        priority = _PRIORITY_REFERENCE
+                    queue.append((priority, len(queue), sym, kind, exc))
+
+                # ── Pass 1: no Tiingo request ────────────────────────────────────
+                for sym in symbols:
+                    outcome = await run_update(sym, tiingo_allowed=False)
+                    if isinstance(outcome, HistorySeamMismatch):
+                        enqueue(sym, _PRIORITY_REBUILD, "rebuild", outcome)
                         continue
-                    await run_update(sym, tiingo_allowed=True, revalidate=True, first=False)
+                    if getattr(outcome, "action", None) == "deferred":
+                        enqueue(sym, _PRIORITY.get(outcome.reason, _PRIORITY[_K.FULL.value]), "update")
+                        continue
+                    if (getattr(outcome, "revalidation_due", False) is True
+                            and outcome.prefix_age_days is not None):
+                        due.append((sym, outcome.prefix_age_days))
+                    _state["done"] += 1
+                for sym in hi.select_revalidations(due, params.revalidate_per_night):
+                    enqueue(sym, _PRIORITY_REVALIDATE, "revalidate")
+                queue.sort(key=lambda entry: entry[:2])
 
-        # ── Step 4: Prune old rows ─────────────────────────────────────────────
-        pruned = await _prune_old_rows(years) if symbols else 0
-        _state["pruned_rows"] = pruned
+                # ── Pass 2: the Tiingo queue, in priority order ──────────────────
+                for _, _, sym, kind, exc in queue:
+                    if kind == "update":
+                        await run_update(sym, tiingo_allowed=True)
+                        _state["done"] += 1
+                    elif kind == "rebuild":
+                        await rebuild_after_seam(sym, exc)
+                        _state["done"] += 1
+                    else:
+                        # Already written SUFFIX_ONLY in pass 1; re-fetched only with budget room.
+                        _state["current_symbol"] = sym
+                        try:
+                            await tiingo_budget.ensure_room(sym, "nightly")
+                        except Exception as refused:
+                            _state["revalidation_skipped_budget"] += 1
+                            logger.info("ingestion: revalidation of %s skipped — %s", sym, refused)
+                            continue
+                        await run_update(sym, tiingo_allowed=True, revalidate=True, first=False)
 
-        requests, size = await _ledger_usage(ledger_caller, ledger_since)
-        _state.update({
-            "status":         "completed",
-            "done":           len(symbols),
-            "alpaca_count":   tally["alpaca"],
-            "gapfill_count":  tally["gapfill"],
-            "pruned_rows":    pruned,
-            "current_symbol": None,
-            "finished_at":    datetime.now(timezone.utc).isoformat(),
-            "tiingo_requests": requests,
-            "tiingo_bytes":   size,
-        })
-        logger.info(
-            "ingestion complete: %d symbols, alpaca=%d, gapfill=%d, pruned=%d, failed=%d, %s",
-            len(symbols), tally["alpaca"], tally["gapfill"], pruned, _state["failed"],
-            ", ".join(f"{key}={_state[key]}" for key in RUN_COUNTERS),
-        )
+            # ── Step 4: Prune old rows ─────────────────────────────────────────────
+            pruned = await _prune_old_rows(years) if symbols else 0
+            _state["pruned_rows"] = pruned
 
-    except Exception as exc:
-        requests, size = await _ledger_usage(ledger_caller, ledger_since)
-        _state.update({
-            "status":      "error",
-            "error":       str(exc),
-            "finished_at": datetime.now(timezone.utc).isoformat(),
-            "tiingo_requests": requests,
-            "tiingo_bytes": size,
-        })
-        logger.error("ingestion crashed: %s", exc, exc_info=True)
-        errors.append(f"crash: {exc}")
+            requests, size = _ledger_counters(usage)
+            _state.update({
+                "status":         "completed",
+                "done":           len(symbols),
+                "alpaca_count":   tally["alpaca"],
+                "gapfill_count":  tally["gapfill"],
+                "pruned_rows":    pruned,
+                "current_symbol": None,
+                "finished_at":    datetime.now(timezone.utc).isoformat(),
+                "tiingo_requests": requests,
+                "tiingo_bytes":   size,
+            })
+            logger.info(
+                "ingestion complete: %d symbols, alpaca=%d, gapfill=%d, pruned=%d, failed=%d, %s",
+                len(symbols), tally["alpaca"], tally["gapfill"], pruned, _state["failed"],
+                ", ".join(f"{key}={_state[key]}" for key in RUN_COUNTERS),
+            )
+
+        except Exception as exc:
+            requests, size = _ledger_counters(usage)
+            _state.update({
+                "status":      "error",
+                "error":       str(exc),
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+                "tiingo_requests": requests,
+                "tiingo_bytes": size,
+            })
+            logger.error("ingestion crashed: %s", exc, exc_info=True)
+            errors.append(f"crash: {exc}")
 
     return IngestionResult(
         total=len(symbols),

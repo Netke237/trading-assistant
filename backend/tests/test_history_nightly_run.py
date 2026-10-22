@@ -18,6 +18,7 @@ The symbols of the main scenario, by the night ``N = E + L``:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
@@ -443,10 +444,21 @@ async def test_invalid_incremental_config_fails_the_run_before_any_write(nightly
 # ── the ledger read never fails the run ───────────────────────────────────────
 
 async def test_unreadable_ledger_reports_none_and_the_run_completes(nightly, monkeypatch):
+    """The ledger is down for the whole run: every attempt is admitted unchecked and none can
+    be recorded, so the run's own Tiingo usage is unknown."""
     env = nightly
     await seed_to_n_minus(env)
-    monkeypatch.setattr(budget, "caller_usage", AsyncMock(side_effect=RuntimeError("db down")))
+
+    class Broken:
+        async def __aenter__(self):
+            raise RuntimeError("db down")
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(budget, "AsyncSessionLocal", Broken)
     result = await env.run(N, N_UNIVERSE)
+    assert env.tiingo_symbols()                       # the run still asked Tiingo
     state = job.get_ingestion_state()
     assert state["status"] == "completed" and result.failed == 0
     assert state["tiingo_requests"] is None and state["tiingo_bytes"] is None
@@ -472,21 +484,105 @@ async def test_manual_run_counts_its_own_on_demand_tiingo_requests(nightly):
     assert state["tiingo_bytes"] == sum(b for _, b in rows) > 0
 
 
-async def test_caller_usage_counts_only_the_caller_inside_the_range(nightly):
-    env = nightly
-    t0 = et(N)
+def concurrent_traffic(env: Nightly, callers: list[str]) -> asyncio.Task:
+    """Another task, created outside the run (so not part of it), that records one Tiingo
+    request per entry of `callers` through the real ``send_recorded`` while the run waits
+    inside its first Tiingo call: the other requests land in the ledger inside the run's
+    window, deterministically."""
+    go, done = asyncio.Event(), asyncio.Event()
+
+    async def other():
+        await go.wait()
+        for i, name in enumerate(callers):
+            async def send():
+                return SimpleNamespace(content=b"y" * 7, status_code=200)
+
+            with budget.caller(name):
+                await budget.send_recorded(f"OTH{i}", send)
+        done.set()
+
+    task = asyncio.create_task(other())
+    run_tiingo = env._tiingo
+
+    async def tiingo_call(symbol, start, end, *, strict_adjustments):
+        if not go.is_set():
+            go.set()
+            await done.wait()
+        return await run_tiingo(symbol, start, end, strict_adjustments=strict_adjustments)
+
+    env.monkeypatch.setattr(tiingo, "fetch_historical_candles", tiingo_call)
+    return task
+
+
+async def ledger_rows_tonight(env: Nightly):
     async with env.ledger() as db:
-        for at, caller, size in [(t0 - timedelta(seconds=1), "nightly", 7),
-                                 (t0, "nightly", 10), (t0 + timedelta(minutes=5), "nightly", 20),
-                                 (t0 + timedelta(minutes=6), "on_demand", 40),
-                                 (t0 + timedelta(minutes=10), "nightly", 80),
-                                 (t0 + timedelta(minutes=11), "nightly", 160)]:
-            db.add(Log(provider="tiingo", requested_at=at, symbol="X", response_bytes=size,
-                       status_code=200, caller=caller))
-        await db.commit()
-    assert await budget.caller_usage("nightly", t0, t0 + timedelta(minutes=10)) == (3, 110)
-    assert await budget.caller_usage("nightly", t0 + timedelta(hours=1),
-                                     t0 + timedelta(hours=2)) == (0, 0)
+        return (await db.execute(select(Log.symbol, Log.caller, Log.response_bytes)
+                                 .where(Log.requested_at == et(N)).order_by(Log.id))).all()
+
+
+async def test_manual_run_does_not_count_concurrent_on_demand_requests(nightly):
+    """R2-F1: a manual run and every other Tiingo user share the on_demand caller; the run's
+    counters are its own attempts only."""
+    env = nightly
+    await seed_to_n_minus(env)
+    env.night, env.now = N, et(N)
+    env.log.clear()
+    other = concurrent_traffic(env, ["on_demand"] * 3)
+    await job.run_ingestion(N_UNIVERSE)                 # outside caller("nightly")
+    await other
+    rows = await ledger_rows_tonight(env)
+    own = [r for r in rows if not r.symbol.startswith("OTH")]
+    assert len(rows) == len(own) + 3 and {r.caller for r in rows} == {"on_demand"}
+    assert len(own) == len(env.tiingo_symbols()) > 0
+    state = job.get_ingestion_state()
+    assert state["status"] == "completed"
+    assert state["tiingo_requests"] == len(own)
+    assert state["tiingo_bytes"] == sum(r.response_bytes for r in own) == len(own) * REPLY_BYTES
+
+
+async def test_nightly_run_does_not_count_concurrent_requests(nightly):
+    """The same for a nightly run, with concurrent on_demand traffic and another task's
+    request under the nightly caller."""
+    env = nightly
+    await seed_to_n_minus(env)
+    other = concurrent_traffic(env, ["on_demand", "on_demand", "nightly"])
+    await env.run(N, N_UNIVERSE)
+    await other
+    rows = await ledger_rows_tonight(env)
+    assert len(rows) == 5 + 3
+    state = job.get_ingestion_state()
+    assert state["status"] == "completed"
+    assert (state["tiingo_requests"], state["tiingo_bytes"]) == (5, 5 * REPLY_BYTES)
+
+
+async def test_ledger_write_failure_during_the_run_reports_none(nightly):
+    """One attempt the ledger could not record makes the run's true usage unknown: both
+    counters None, and the run still completes."""
+    env = nightly
+    await seed_to_n_minus(env)
+    good_factory, commits = env.ledger, []
+
+    def flaky_ledger():
+        session = good_factory()
+        real_commit = session.commit
+
+        async def commit():
+            commits.append(1)
+            if len(commits) == 2:
+                raise RuntimeError("ledger write failed")
+            await real_commit()
+
+        session.commit = commit
+        return session
+
+    env.monkeypatch.setattr(budget, "AsyncSessionLocal", flaky_ledger)
+    result = await env.run(N, N_UNIVERSE)
+    assert result.failed == 0, result.errors
+    rows = await ledger_rows_tonight(env)
+    assert len(rows) == 4 and len(env.tiingo_symbols()) == 5     # one attempt unrecorded
+    state = job.get_ingestion_state()
+    assert state["status"] == "completed"
+    assert state["tiingo_requests"] is None and state["tiingo_bytes"] is None
 
 
 # ── counter mapping and queue mechanics (update_history mocked) ───────────────
@@ -523,7 +619,6 @@ def mocked(monkeypatch):
     monkeypatch.setattr(job, "get_alpaca_client", AsyncMock(return_value=object()))
     monkeypatch.setattr(job, "fetch_daily_bars_batch", AsyncMock(return_value={}))
     monkeypatch.setattr(job, "_prune_old_rows", AsyncMock(return_value=0))
-    monkeypatch.setattr(budget, "caller_usage", AsyncMock(return_value=(0, 0)))
     calls: list[tuple] = []
     rebuild = AsyncMock(side_effect=history.SingleProviderRefused("synthetic refusal"))
 
