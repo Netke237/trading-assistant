@@ -1,6 +1,6 @@
 {
   "probe_name": "browser_probe.cjs",
-  "timestamp": "2026-10-22T07:27:13.225Z",
+  "timestamp": "2026-10-22T07:42:45.036Z",
   "environment": {
     "node_version": "v22.23.2",
     "platform": "win32",

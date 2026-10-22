@@ -4640,8 +4640,8 @@
       "id": "APP-AUDIT-OPTIONS",
       "name": "Options numbers, contracts and reports audit",
       "status": "built",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -4649,8 +4649,10 @@
         "closure_evidence": "Fresh independent /root/options_plan_r1 reviewed entire116-line plan at bb1adedafebbb780099e697a88843fb3d9010ff5 SHA256 a3df68494c0185aa9416c3155a0c274e9207d9403b485660148c2f8aae9430cf against pinned880c8441 and #351; second scope pass; zero numeric/persistence gate findings."
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent (275597a0-1ad0-4c0c-a5d0-b60106c4c7a2) reviewed full integrated 18-file diff origin/board/app-audit-options-baa5a15a..1107a4c2 SHA256 a46e2a907d080c1c03e0c8b91afb539da3c805e825e9ce4be0e0ffa366351fdb against plan and pinned 880c8441; zero numeric/persistence gate findings."
       },
       "audit_history": [
         {
@@ -4658,6 +4660,17 @@
           "stage": "plan",
           "reviewer": "/root/options_plan_r1",
           "reviewed": "bb1adedafebbb780099e697a88843fb3d9010ff5 full116-line plan; SHA256 a3df68494c0185aa9416c3155a0c274e9207d9403b485660148c2f8aae9430cf",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "fresh-subagent-275597a0-1ad0-4c0c-a5d0-b60106c4c7a2",
+          "reviewed": "origin/board/app-audit-options-baa5a15a..1107a4c2 full 18-file diff; SHA256 a46e2a907d080c1c03e0c8b91afb539da3c805e825e9ce4be0e0ffa366351fdb",
           "gate_findings": 0,
           "findings": [],
           "fixes": [],
@@ -4671,7 +4684,7 @@
         "board item #351",
         "programme #348 lane C"
       ],
-      "notes": "Independent plan round1 clean. Execution #376/#378/#379 underway. Partial A increment6309c063 gives515 C-handoff candidate instances/4635 pending states; semantic/final reconciliation not complete. No numeric/persistence verdict yet.",
+      "notes": "Independent plan round 1 clean. Execution #376/#378/#379 complete. Independent code round 1 clean. 359 tests passed, 0 failed, typecheck clean. 5 defects cataloged.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report.md",

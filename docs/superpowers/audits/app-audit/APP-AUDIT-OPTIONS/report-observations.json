@@ -1,6 +1,6 @@
 {
   "probe_metadata": {
-    "timestamp": "2026-10-22T07:27:07.715824+00:00",
+    "timestamp": "2026-10-22T07:39:27.723733+00:00",
     "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
     "platform": "win32",
     "baseline_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
@@ -84,10 +84,10 @@
         "name": "2.1 begin_run creates running report with generation 1 and frozen inputs",
         "passed": true,
         "details": {
-          "run_id": "7121344b-72c0-45c3-a4f4-f5a2ccc8dcb9",
+          "run_id": "1b14092e-9094-4570-bbde-592dd35cf394",
           "generation": 1,
           "status": "running",
-          "started_at": "2026-10-22T07:27:07.794616+00:00"
+          "started_at": "2026-10-22T07:39:27.809436+00:00"
         }
       },
       {
@@ -95,7 +95,7 @@
         "passed": true,
         "details": {
           "status": "complete",
-          "ended_at": "2026-10-22T07:27:07.810281+00:00",
+          "ended_at": "2026-10-22T07:39:27.817620+00:00",
           "diagnostics_available": true
         }
       },
@@ -103,7 +103,7 @@
         "name": "2.3 Head pointer promotes complete report to usable_id",
         "passed": true,
         "details": {
-          "latest_run_id": "7121344b-72c0-45c3-a4f4-f5a2ccc8dcb9",
+          "latest_run_id": "1b14092e-9094-4570-bbde-592dd35cf394",
           "previous_report": null
         }
       },
@@ -119,8 +119,8 @@
         "passed": true,
         "details": {
           "latest_attempt_status": "failed",
-          "latest_attempt_id": "2a76cada-4b9a-43ec-bfe4-e293daa2cef9",
-          "previous_report_id": "7121344b-72c0-45c3-a4f4-f5a2ccc8dcb9"
+          "latest_attempt_id": "43c56c43-13e2-46c6-b32b-57e1b743ae51",
+          "previous_report_id": "1b14092e-9094-4570-bbde-592dd35cf394"
         }
       },
       {
@@ -169,7 +169,7 @@
         "name": "3.3 Pruning never deletes inflight running attempts",
         "passed": true,
         "details": {
-          "inflight_run_id": "aacb8e16-07bf-4661-a431-896a7549895d",
+          "inflight_run_id": "1bd4fe8d-520d-42e5-8f5b-b4baa7cb67a7",
           "inflight_status": "running"
         }
       }
@@ -180,7 +180,7 @@
         "passed": true,
         "details": {
           "recovered_count": 1,
-          "crashed_run_id": "2b100a26-6670-4c7f-a69c-7b6079328231"
+          "crashed_run_id": "9cf03085-008a-4c91-93f8-fc9b3b6afd71"
         }
       },
       {
@@ -357,9 +357,9 @@
         "passed": true,
         "details": {
           "tables_created": [
+            "scan_reports",
             "scan_sessions",
-            "scan_report_heads",
-            "scan_reports"
+            "scan_report_heads"
           ],
           "preserved_value": "preserved_json"
         }
@@ -380,7 +380,7 @@
         "name": "10.1 run_reported_scan wraps normal scan and attaches durable identity metadata",
         "passed": true,
         "details": {
-          "report_run_id": "e3a7a35b-e953-4cb3-a531-c2486723cded",
+          "report_run_id": "203d5393-ec80-4dbf-9520-34d5ee325250",
           "report_generation": 10,
           "report_persistence": "saved",
           "db_status": "complete"
@@ -404,7 +404,7 @@
   },
   "browser_probe": {
     "probe_name": "browser_probe.cjs",
-    "timestamp": "2026-10-22T07:25:13.907Z",
+    "timestamp": "2026-10-22T07:27:13.225Z",
     "environment": {
       "node_version": "v22.23.2",
       "platform": "win32",
