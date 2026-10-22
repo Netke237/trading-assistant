@@ -9,10 +9,80 @@
  */
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { reportingLocalStorage } from './reportingLocalStorage';
 
 export const SETTINGS_STORAGE_KEY = 'bamendjou-settings';
+
+/**
+ * Deep equality helper for settings store states and nested configuration objects.
+ * Handles primitives, NaN, arrays (atomic equality), and plain objects.
+ */
+export function isSettingsEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) {
+    return false;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) {
+    return false;
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isSettingsEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
+    if (!isSettingsEqual(aObj[key], bObj[key])) return false;
+  }
+  return true;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Recursive leaf-property three-way merge.
+ * Traverses nested configuration objects and resolves at scalar/leaf level:
+ * - tabChanged && !diskChanged => incoming
+ * - diskChanged && !tabChanged => disk
+ * - tabChanged && diskChanged => incoming (active user action wins conflict)
+ * - neither changed => disk !== undefined ? disk : incoming
+ */
+export function mergeLeafProperties(
+  incoming: unknown,
+  disk: unknown,
+  baseline: unknown,
+): unknown {
+  if (isPlainObject(incoming) && isPlainObject(disk)) {
+    const baseObj = isPlainObject(baseline) ? baseline : {};
+    const allKeys = new Set([
+      ...Object.keys(incoming),
+      ...Object.keys(disk),
+      ...Object.keys(baseObj),
+    ]);
+    const result: Record<string, unknown> = {};
+    for (const key of allKeys) {
+      result[key] = mergeLeafProperties(incoming[key], disk[key], baseObj[key]);
+    }
+    return result;
+  }
+  const tabChanged = !isSettingsEqual(incoming, baseline);
+  const diskChanged = !isSettingsEqual(disk, baseline);
+  if (tabChanged && !diskChanged) return incoming;
+  if (diskChanged && !tabChanged) return disk;
+  if (tabChanged && diskChanged) return incoming;
+  return disk !== undefined ? disk : incoming;
+}
 
 export type MarkovPreset = 'default' | 'conservative' | 'aggressive';
 
@@ -399,6 +469,225 @@ export function migrateSettings(
   return next as unknown as SettingsState;
 }
 
+export function getDefaultPersistedSettings(): Record<string, unknown> {
+  return {
+    broker:                  { ...DEFAULT_BROKER },
+    alertDeduplicationHours: 24,
+    markov:                  { ...DEFAULT_MARKOV },
+    shortlistMaxCandidates: 10,
+    maxContractsPerChain:   10,
+    maxContractPrice:       50,
+    premiumStopPct:         0.60,
+    targetProfitPct:        { ...DEFAULT_TARGET_PROFIT_PCT },
+    confidenceGate:         {
+      ...DEFAULT_CONFIDENCE_GATE,
+      atrMult: { ...DEFAULT_ATR_MULT_BY_HORIZON },
+    },
+    fundamentalsGate:       { ...DEFAULT_FUNDAMENTALS_GATE },
+    ibkrPaper:              { ...DEFAULT_IBKR_PAPER },
+    tradierPaper:           { ...DEFAULT_TRADIER_PAPER },
+    tradierLive:            { ...DEFAULT_TRADIER_LIVE },
+    alpacaPaper:            { ...DEFAULT_ALPACA_PAPER },
+    tastytradePaper:        { ...DEFAULT_TASTYTRADE_PAPER },
+    spreads:                { ...DEFAULT_SPREADS },
+    scheduleConfig:         { ...DEFAULT_SCHEDULE_CONFIG },
+  };
+}
+
+let lastCommittedSettings: Record<string, unknown> | null = initializeLastCommittedSettings();
+let isMerging = false;
+let isSyncing = false;
+
+function initializeLastCommittedSettings(): Record<string, unknown> {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return getDefaultPersistedSettings();
+  }
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return getDefaultPersistedSettings();
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && parsed.state && typeof parsed.state === 'object') {
+      if (typeof parsed.version === 'number' && parsed.version < 24) {
+        return migrateSettings(parsed.state, parsed.version) as unknown as Record<string, unknown>;
+      }
+      return parsed.state as Record<string, unknown>;
+    }
+  } catch {
+    // malformed disk contents
+  }
+  return getDefaultPersistedSettings();
+}
+
+export function getLastCommittedSettings(): Record<string, unknown> | null {
+  return lastCommittedSettings;
+}
+
+export function setLastCommittedSettings(baseline: Record<string, unknown> | null): void {
+  lastCommittedSettings = baseline;
+}
+
+export function syncSettingsFromStorage(raw?: string | null): void {
+  if (raw === undefined && typeof localStorage !== 'undefined') {
+    try {
+      raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    } catch {
+      raw = null;
+    }
+  }
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.state !== 'object') {
+      return;
+    }
+    let migrated = parsed.state as Record<string, unknown>;
+    if (typeof parsed.version === 'number' && parsed.version < 24) {
+      migrated = migrateSettings(parsed.state, parsed.version) as unknown as Record<string, unknown>;
+    }
+    lastCommittedSettings = migrated;
+    isSyncing = true;
+    try {
+      useSettingsStore.setState(migrated as Partial<SettingsState>, false);
+    } finally {
+      isSyncing = false;
+    }
+  } catch {
+    // malformed payload
+  }
+}
+
+export function createSettingsStateStorage(): StateStorage {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    };
+  }
+  const reportingStorage = reportingLocalStorage('Settings (this browser)');
+  return {
+    getItem: (key: string): string | null => {
+      const raw = reportingStorage.getItem(key);
+      if (!raw) {
+        lastCommittedSettings = getDefaultPersistedSettings();
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.state && typeof parsed.state === 'object') {
+          if (typeof parsed.version === 'number' && parsed.version < 24) {
+            lastCommittedSettings = migrateSettings(parsed.state, parsed.version) as unknown as Record<string, unknown>;
+          } else {
+            lastCommittedSettings = parsed.state as Record<string, unknown>;
+          }
+        }
+      } catch {
+        lastCommittedSettings = getDefaultPersistedSettings();
+      }
+      return raw;
+    },
+    setItem: (key: string, valueString: string): void => {
+      if (isMerging || isSyncing) return;
+      try {
+        isMerging = true;
+        let incoming: { state: Record<string, unknown>; version?: number };
+        try {
+          incoming = JSON.parse(valueString);
+        } catch {
+          reportingStorage.setItem(key, valueString);
+          return;
+        }
+        if (!incoming || typeof incoming !== 'object' || typeof incoming.state !== 'object') {
+          reportingStorage.setItem(key, valueString);
+          return;
+        }
+
+        let currentDiskRaw: string | null = null;
+        try {
+          currentDiskRaw = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+        } catch {
+          // localStorage access error
+        }
+
+        if (!currentDiskRaw) {
+          reportingStorage.setItem(key, valueString);
+          lastCommittedSettings = incoming.state;
+          return;
+        }
+
+        let currentDisk: { state: Record<string, unknown>; version?: number };
+        try {
+          currentDisk = JSON.parse(currentDiskRaw);
+        } catch {
+          reportingStorage.setItem(key, valueString);
+          lastCommittedSettings = incoming.state;
+          return;
+        }
+
+        if (!currentDisk || typeof currentDisk !== 'object' || typeof currentDisk.state !== 'object') {
+          reportingStorage.setItem(key, valueString);
+          lastCommittedSettings = incoming.state;
+          return;
+        }
+
+        let diskState = currentDisk.state;
+        if (typeof currentDisk.version === 'number' && currentDisk.version < 24) {
+          diskState = migrateSettings(currentDisk.state, currentDisk.version) as unknown as Record<string, unknown>;
+        }
+
+        const baseline = lastCommittedSettings ?? getDefaultPersistedSettings();
+        const mergedState = mergeLeafProperties(
+          incoming.state,
+          diskState,
+          baseline,
+        ) as Record<string, unknown>;
+
+        // Re-clamp confidenceGate and fundamentalsGate to maintain rejectBelow <= cautionBelow
+        if (mergedState.confidenceGate && typeof mergedState.confidenceGate === 'object') {
+          const gate = mergedState.confidenceGate as ConfidenceGate;
+          const clamped = clampGateThresholds(
+            'cautionBelow',
+            Math.max(0, Math.min(100, Number(gate.cautionBelow) || 0)),
+            Math.max(0, Math.min(100, Number(gate.rejectBelow) || 0)),
+          );
+          gate.cautionBelow = clamped.cautionBelow;
+          gate.rejectBelow = clamped.rejectBelow;
+        }
+        if (mergedState.fundamentalsGate && typeof mergedState.fundamentalsGate === 'object') {
+          const gate = mergedState.fundamentalsGate as FundamentalsGate;
+          const clamped = clampGateThresholds(
+            'cautionBelow',
+            Math.max(0, Math.min(100, Number(gate.cautionBelow) || 0)),
+            Math.max(0, Math.min(100, Number(gate.rejectBelow) || 0)),
+          );
+          gate.cautionBelow = clamped.cautionBelow;
+          gate.rejectBelow = clamped.rejectBelow;
+        }
+
+        const serialized = JSON.stringify({
+          state: mergedState,
+          version: incoming.version ?? 24,
+        });
+        reportingStorage.setItem(key, serialized);
+        lastCommittedSettings = mergedState;
+
+        const hasDiffFromIncoming = !isSettingsEqual(mergedState, incoming.state);
+        if (hasDiffFromIncoming) {
+          useSettingsStore.setState(mergedState as Partial<SettingsState>, false);
+        }
+      } finally {
+        isMerging = false;
+      }
+    },
+    removeItem: (key: string): void => {
+      reportingStorage.removeItem(key);
+      lastCommittedSettings = getDefaultPersistedSettings();
+    },
+  };
+}
+
+const settingsStateStorage: StateStorage = createSettingsStateStorage();
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
@@ -464,10 +753,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: SETTINGS_STORAGE_KEY,
-      storage: createJSONStorage(() => {
-        if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return reportingLocalStorage('Settings (this browser)');
-      }),
+      storage: createJSONStorage(() => settingsStateStorage),
       skipHydration: true,
       version: 24,
       partialize: (state) => ({
@@ -493,3 +779,11 @@ export const useSettingsStore = create<SettingsState>()(
     }
   )
 );
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === SETTINGS_STORAGE_KEY) {
+      syncSettingsFromStorage(e.newValue);
+    }
+  });
+}

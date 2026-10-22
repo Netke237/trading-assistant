@@ -8532,9 +8532,9 @@
     {
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
-      "status": "planned",
+      "status": "built",
       "audit_rounds": 3,
-      "audit_clean": true,
+      "audit_clean": false,
       "plan_stage": {
         "rounds": 3,
         "clean": true,
