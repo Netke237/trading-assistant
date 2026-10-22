@@ -6585,7 +6585,7 @@
       "name": "Incremental nightly, Stage B: incremental writer",
       "summary": "Window-anchor state columns (B0), pure nightly classifier T1-T6 + RESCALE/CONFIRM/REVALIDATE (B1), incremental update_history branches + Tiingo-only anchored recent window (B2), two-pass nightly run with Tiingo priority queue and run counters (B3). Plan sections 2 and 5 Stage B.",
       "status": "built",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY",
@@ -6610,10 +6610,8 @@
           "findings": [
             "R1-F1 (Low) run counters tiingo_requests/tiingo_bytes count only caller='nightly' ledger rows, so a manual POST /api/data/ingest run reports 0 Tiingo requests on the status endpoint (reproduced: 5 made, 0 shown); root cause the #497 coordinator clarification 4"
           ],
-          "fixes": "pending: count the ledger rows of the run's own caller (tiingo_budget.current_caller() captured at run start)",
-          "outstanding": [
-            "R1-F1"
-          ],
+          "fixes": "fixed at 084a8283: count the run's own caller's ledger rows (superseded by the round-2 fix)",
+          "outstanding": [],
           "clean": false,
           "sanity_check": "classifier T1-T6/RESCALE (i)-(iii)/CONFIRM/revalidation/single-provider steps traced against plan; writer transactions, rollback, D1-a fallback, stale_reasons/verified_boundary/get_bars interactions; two-pass queue, deferral, seam rebuild, budget gating, counters; migration chain; 251 focused tests run plus a reproduction for R1-F1",
           "below_gate_logged": [
@@ -6621,6 +6619,24 @@
             "revalidate_no_reply counts suffix_only twice for one symbol",
             "revalidation ensure_room hard-coded to 'nightly' in manual runs",
             "Tiingo-only event applied >21 calendar days late keeps old factors before the anchor (plan 2.6 design)"
+          ]
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent ae0074ca6a5e3cbd6 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 63aea464 084a8283 -- backend (the R1-F1 fix) plus interactions: caller ContextVar on every run_ingestion entry path, concurrent on-demand Tiingo traffic, error path, the new test",
+          "findings": [
+            "R2-F1 (Medium) a manual run counts every caller='on_demand' ledger row in its time window, so on-demand get_bars/scan/watch Tiingo requests overlapping a long manual run inflate tiingo_requests/tiingo_bytes on the status endpoint"
+          ],
+          "fixes": "pending: run-scoped usage tally (ContextVar set inside run_ingestion, incremented by the ledger on each recorded attempt), so only the run's own attempts count",
+          "outstanding": [
+            "R2-F1"
+          ],
+          "clean": false,
+          "sanity_check": "traced _run_nightly/startup_catch_up caller('nightly') -> create_task context copy, router entry in default context, single-run guard, error path, probe caller; ran test_history_nightly_run.py (29 passed)",
+          "below_gate_logged": [
+            "new manual-run test calls run_ingestion directly, not through start_ingestion_task/router"
           ]
         }
       ]
