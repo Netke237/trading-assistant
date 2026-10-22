@@ -8533,10 +8533,10 @@
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
       "status": "planned",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": false
       },
       "code_stage": {
@@ -8567,6 +8567,23 @@
             "F-05: Added clampGateThresholds re-clamping for merged confidenceGate and fundamentalsGate",
             "F-06: Implemented synchronous setState and baseline update in syncSettingsFromStorage",
             "F-07: Added migrateSettings on read for pre-v24 disk state when establishing baseline"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "subagent-5f54a284-7c43-42ad-9d64-a1695939ca4c",
+          "reviewed": "docs/superpowers/plans/2026-10-22-app-audit-b-settings-lost-update-plan.md commit 2d7b1e21 SHA256 f1cbf566457d26860b3f5ce993e5a6c25ef666df424753a8768f7a8e5757a1b9",
+          "gate_findings": 2,
+          "findings": [
+            "F-08: Shallow object merge drops independent horizon edits within nested confidenceGate.atrMult",
+            "F-09: syncSettingsFromStorage without sync guard triggers cross-tab infinite write loop and stale baseline corruption"
+          ],
+          "fixes": [
+            "F-08: Replaced shallow merge with recursive mergeLeafProperties to merge scalar leaves at arbitrary object depth",
+            "F-09: Added isSyncing guard in createSettingsStorage setItem and wrapped syncSettingsFromStorage state update"
           ],
           "outstanding": [],
           "clean": false
