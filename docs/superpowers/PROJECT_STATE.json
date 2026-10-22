@@ -7735,8 +7735,8 @@
       "id": "APP-AUDIT-B-SAVE-FEEDBACK",
       "name": "Settings footer confirms Saved after a failed or unsubmitted save (#371)",
       "status": "built",
-      "audit_rounds": 6,
-      "audit_clean": false,
+      "audit_rounds": 7,
+      "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-save-feedback-plan.md",
       "branch": "board/app-audit-b-save-feedback-e801c2d4",
       "covers": [
@@ -7744,8 +7744,8 @@
         "remediation from #350"
       ],
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true
       },
       "audit_history": [
         {
@@ -7852,6 +7852,20 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/audits/APP-AUDIT-B-SAVE-FEEDBACK/plan-r6.md"
+        },
+        {
+          "round": 7,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "/root/save371_code_r1",
+          "reviewed": "acd94a1d879f8ade40cc60e5dfb6c31f7c1dcb5c..21c09e98c0e70fc47661493113038f8ddea781f3 -- frontend; whole integrated12-file target",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/APP-AUDIT-B-SAVE-FEEDBACK/code-r1.md",
+          "note": "Same independent round resumed after usage pause; required second pass and8 independent ledger probes; scope verified and frontend unchanged."
         }
       ],
       "verify": {
@@ -7860,10 +7874,10 @@
         "pattern": "function useSaveDraft\\(",
         "note": "Presence of final T3 draft integration helper; existence only, not a behavioral/audit/merge claim."
       },
-      "completion_pct": 70,
+      "completion_pct": 85,
       "size": "L",
       "complexity": 5,
-      "note": "All3 tickets closed and main acd94a1d integrated;312 suites/5930 tests and TypeScript pass. Phase70%, L/5. Fresh independent code round1 next; code unaudited, not ready to merge.",
+      "note": "Independent CODE round1 clean after second pass, same review resumed after usage interruption; report code-r1.md. All3 tickets closed, integrated5930tests/typecheck pass. Built/unmerged85%, L/5; exact-head CI/premerge pending. Plan original3capped history and authorized stage2 clean preserved.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -7937,14 +7951,11 @@
         ],
         "checks": "TypeScript clean; full frontend312 suites/5930 tests pass,224.964s with4GB heap. State check no drift; main phase/decision records preserved."
       },
-      "pending_audit": {
-        "stage": "code",
-        "stage_round": 1,
-        "continuous_round": 7,
-        "reviewer_task": "/root/save371_code_r1",
+      "clean_code_provenance": {
         "base": "acd94a1d879f8ade40cc60e5dfb6c31f7c1dcb5c",
         "head": "21c09e98c0e70fc47661493113038f8ddea781f3",
-        "scope": "Whole integrated phase application diff and approved plan; independent review dispatch next; no verdict claimed."
+        "frontend_tree": "87264776ab4a3441302dd03b47657d8a05073034",
+        "report_sha256": "6eb1b8a42c4b6de9f11317702a0a3e652d9c23c1316dcaf7f39de9400861c983"
       }
     }
   ],
