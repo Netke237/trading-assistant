@@ -16,7 +16,7 @@
     "plan_rounds": 1,
     "code_rounds": 2,
     "unchanged": true,
-    "new_reconciliation_review": "pending"
+    "new_reconciliation_review": "reserved until final reconciliation; draft PR520 has no new independent clean verdict"
   },
   "defects": [
     {
@@ -1301,5 +1301,6 @@
       },
       "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
     }
-  ]
+  ],
+  "integrated_regressions": "verification-2026-10-22.json"
 }

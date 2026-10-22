@@ -157,6 +157,8 @@
     ],
     "application_acceptance": false,
     "new_increment_review": "pending; historical plan1/code2 counters and exact scopes unchanged",
-    "next": "#400 owner resolves/ships; integrated regressions; independent reconciliation review; explicit residuals and J hold stay open"
+    "next": "#400 owner resolves/ships; integrated regressions; independent reconciliation review; explicit residuals and J hold stay open",
+    "verification": "remediation/verification-2026-10-22.json",
+    "draft_pr": "https://github.com/Netke237/trading-assistant/pull/520"
   }
 }
