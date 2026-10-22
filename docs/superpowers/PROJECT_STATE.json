@@ -8850,7 +8850,8 @@
         "note": "Verify presence of syncSettingsFromStorage in settingsStore.ts"
       },
       "tickets": [],
-      "completion_pct": 98
+      "completion_pct": 98,
+      "note": "SELF-MERGE PENDING, PR #525, audited head b6874f67. Plan 3 clean, code 2 clean (continuous round 5). All tests passing."
     }
   ],
   "already_shipped": [
