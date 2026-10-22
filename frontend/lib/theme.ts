@@ -12,6 +12,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { reportingLocalStorage } from './reportingLocalStorage';
 
 export type Theme = 'dark' | 'light';
 export type Density = 'Comfortable' | 'Compact';
@@ -39,7 +40,7 @@ export const useThemeStore = create<ThemeState>()(
       name: THEME_STORAGE_KEY,
       storage: createJSONStorage(() => {
         if (typeof window === 'undefined') return undefined as unknown as Storage;
-        return localStorage;
+        return reportingLocalStorage('Appearance (this browser)');
       }),
       version: 1,
       migrate: (persistedState: unknown, version: number) => {

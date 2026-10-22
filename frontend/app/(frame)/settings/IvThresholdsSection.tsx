@@ -31,6 +31,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { setDraft, discardDraft, clearDiscarded } from '@/lib/settingsSaveStatus';
 import { Text } from '@/components/primitives';
 import {
   useIvThresholdsStore, type HorizonIvThresholds, type IvOverrideHorizon, type IvOverrides,
@@ -79,6 +80,11 @@ export function IvThresholdsSection() {
   const [dirty, setDirty] = useState<PerField<boolean>>({ Swing: false, Position: false });
   const [refused, setRefused] = useState<PerField<boolean>>({ Swing: false, Position: false });
 
+  useEffect(() => {
+    setDraft('iv-thresholds', 'IV thresholds (session)', dirty.Swing || dirty.Position);
+  }, [dirty.Swing, dirty.Position]);
+  useEffect(() => () => discardDraft('iv-thresholds'), []);
+
   // Store changes from elsewhere (a re-fetch): follow them while not dirty.
   useEffect(() => {
     if (!dirty.Swing) setText((t) => ({ ...t, Swing: swingSeed }));
@@ -112,6 +118,7 @@ export function IvThresholdsSection() {
       nextDirty[h]   = false;
       nextRefused[h] = false;
     }
+    if (!nextDirty.Swing && !nextDirty.Position) clearDiscarded('iv-thresholds');
     setText(nextText);
     setDirty(nextDirty);
     setRefused(nextRefused);
@@ -119,6 +126,7 @@ export function IvThresholdsSection() {
 
   function handleReset() {
     useIvThresholdsStore.getState().clearOverrides();
+    clearDiscarded('iv-thresholds');
     setText({ Swing: yamlText('Swing', thresholds), Position: yamlText('Position', thresholds) });
     setDirty({ Swing: false, Position: false });
     setRefused({ Swing: false, Position: false });
