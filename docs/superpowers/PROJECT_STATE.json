@@ -8568,8 +8568,8 @@
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
       "status": "built",
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan_stage": {
         "rounds": 3,
         "clean": true,
@@ -8577,8 +8577,10 @@
         "closure_evidence": "Fresh independent subagent dad00795-9934-4a92-8812-6e99fc161443 reviewed commit 5933eae1 SHA256 923e4712ea3ec1ffc64762efec301b93e879ca2f834c1405ca637b1296680ee9; 0 gate findings."
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent general-purpose subagent (subagent-6e9a6a0b-a5c8-4daa-aa21-a31ccf280491) applying bmad-review-adversarial-general reviewed git diff origin/main..HEAD (98999847, diff SHA256 10f3f819dd56a95aca703f108857f90cfc17410ae388e08451bd5c615b4654c0, 4 files) against plan and Issue #400; 0 gate findings."
       },
       "audit_history": [
         {
@@ -8635,6 +8637,17 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "reviewer": "subagent-6e9a6a0b-a5c8-4daa-aa21-a31ccf280491",
+          "reviewed": "git diff origin/main..HEAD commit 98999847f5710583f4777d5a32c6bee103fd531d diff SHA256 10f3f819dd56a95aca703f108857f90cfc17410ae388e08451bd5c615b4654c0",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "branch": "board/app-audit-b-settings-lost-update-0a62fb27",
@@ -8643,7 +8656,7 @@
         "board item #400",
         "remediation from #350"
       ],
-      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Plan approved in round 3 (clean). Proceeding to build.",
+      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Code audit round 1 clean (0 gate findings). Self-merge pending.",
       "verify": {
         "kind": "present",
         "path": "frontend/lib/settingsStore.ts",
