@@ -1,3 +1,10 @@
+> Current remediation reconciliation (2026-10-22): **24/25 verified merged fixes**;
+> #400 remains open with another owner. See the [dated report](remediation/status-2026-10-22.md),
+> [merge/CI snapshot](remediation/status-2026-10-22.json), and
+> [final Lane A ID/requirement join](remediation/final-A-join-2026-10-22.json).
+> The historical evidence below remains frozen. Its “unfixed” statements describe
+> the captured sources. Application acceptance and new-increment review remain open.
+
 # Lane B audit evidence — issue #350
 
 Original evidence frozen at `880c8441841cc22d5090cdc5f984e4cf7e3d9a8d`.

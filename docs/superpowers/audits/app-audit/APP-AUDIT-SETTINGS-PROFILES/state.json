@@ -144,5 +144,19 @@
     "ownership": "Root #350 claim recovered with matching branch and agent-in-progress checks; child labels are coordinator tracking metadata, not implementation claims.",
     "review_status": "This new workflow/reporting delta is outside the historical exact review scopes; no new clean audit verdict or merge readiness is claimed.",
     "label_publication": "remediation/label-publication-2026-10-19.json"
+  },
+  "remediation_reconciliation_2026_10_22": {
+    "application_snapshot": "9ae6f30db3fb55e77bf053004d1f9bc3aa5102b5",
+    "report": "remediation/status-2026-10-22.md",
+    "snapshot": "remediation/status-2026-10-22.json",
+    "final_A_join": "remediation/final-A-join-2026-10-22.json",
+    "verified_merged_fixes": 24,
+    "total_confirmed_defects": 25,
+    "open_defects": [
+      400
+    ],
+    "application_acceptance": false,
+    "new_increment_review": "pending; historical plan1/code2 counters and exact scopes unchanged",
+    "next": "#400 owner resolves/ships; integrated regressions; independent reconciliation review; explicit residuals and J hold stay open"
   }
 }
