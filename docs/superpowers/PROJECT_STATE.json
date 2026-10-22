@@ -8643,7 +8643,7 @@
       "completion_pct": 90,
       "size": "M",
       "complexity": 4,
-      "note": "Plan 1 + code 1 rounds clean (0 gate findings). Built, verified, audited clean. Opening PR.",
+      "note": "Plan 1 + code 1 rounds clean (0 gate findings). PR #519 open, self-merge pending CI.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
