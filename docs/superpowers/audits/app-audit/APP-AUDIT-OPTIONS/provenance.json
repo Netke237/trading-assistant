@@ -1,0 +1,155 @@
+{
+  "audit_phase": "APP-AUDIT-OPTIONS",
+  "lane": "C",
+  "target_issue": 351,
+  "head_commit": "5a4e7776",
+  "application_baseline": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "inventory_baseline": "6309c0636f8021e212d8014e3df2fe15394c0659",
+  "python": "Python 3.11.9 (64-bit AMD64 Windows)",
+  "node": "v22.23.2",
+  "npm": "10.9.8",
+  "frameworks": {
+    "next": "15.5.23",
+    "react": "19.2.5",
+    "fastapi": "0.110.0",
+    "pydantic": "2.6.4",
+    "sqlalchemy": "2.0.28",
+    "jest": "29.7.0",
+    "pytest": "9.1.1"
+  },
+  "artifacts": [
+    "docs/superpowers/plans/2026-10-16-app-audit-options-plan.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend_probe.py",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend-fixtures.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend-observations.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend-evidence.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-probes.test.tsx",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-fixtures.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-observations.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-evidence.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report_probe.py",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report-fixtures.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report-observations.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report-browser-evidence.md",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/browser_probe.cjs",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/browser-observations.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/defects.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/provenance.json",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report.md"
+  ],
+  "test_suites": [
+    {
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/backend_probe.py",
+      "runner": "python",
+      "tests_passed": 34,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_alternatives.py",
+      "runner": "pytest",
+      "tests_passed": 8,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_contracts_scoring.py",
+      "runner": "pytest",
+      "tests_passed": 20,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_contract_validator.py",
+      "runner": "pytest",
+      "tests_passed": 52,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_scan_core.py",
+      "runner": "pytest",
+      "tests_passed": 9,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_scan_direction_funnel.py",
+      "runner": "pytest",
+      "tests_passed": 42,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_trade_plan.py",
+      "runner": "pytest",
+      "tests_passed": 15,
+      "tests_failed": 0
+    },
+    {
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/frontend-probes.test.tsx",
+      "runner": "jest",
+      "tests_passed": 23,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/components/organisms/RankingTable/__tests__/RankingTable.test.tsx",
+      "runner": "jest",
+      "tests_passed": 17,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/components/organisms/ContractsTable/__tests__/ContractsTable.test.tsx",
+      "runner": "jest",
+      "tests_passed": 12,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.test.tsx",
+      "runner": "jest",
+      "tests_passed": 28,
+      "tests_failed": 0
+    },
+    {
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report_probe.py",
+      "runner": "python",
+      "tests_passed": 30,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_scan_reports.py",
+      "runner": "pytest",
+      "tests_passed": 9,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_scan_report_lifecycle.py",
+      "runner": "pytest",
+      "tests_passed": 9,
+      "tests_failed": 0
+    },
+    {
+      "path": "backend/tests/test_scan_report_routes.py",
+      "runner": "pytest",
+      "tests_passed": 7,
+      "tests_failed": 0
+    },
+    {
+      "path": "frontend/components/organisms/SavedScanReportInspector/__tests__/SavedScanReportInspector.test.tsx",
+      "runner": "jest",
+      "tests_passed": 44,
+      "tests_failed": 0
+    }
+  ],
+  "verification_summary": {
+    "total_automated_tests_passed": 359,
+    "total_automated_tests_failed": 0,
+    "typescript_typecheck": "passed",
+    "environmental_blocks": [
+      {
+        "check": "Production Next.js Build",
+        "status": "BLOCKED",
+        "reason": "Google Fonts network fetch timeout during build in air-gapped sandbox"
+      },
+      {
+        "check": "Playwright Chromium Launch",
+        "status": "BLOCKED",
+        "reason": "Missing Chromium headless shell executable in local ms-playwright directory"
+      }
+    ]
+  }
+}

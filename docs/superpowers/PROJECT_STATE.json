@@ -4639,7 +4639,7 @@
     {
       "id": "APP-AUDIT-OPTIONS",
       "name": "Options numbers, contracts and reports audit",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan_stage": {
