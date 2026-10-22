@@ -7972,11 +7972,11 @@
       "branch": "board/app-audit-presentation-58612753",
       "tracking_issue": 358,
       "plan": "docs/superpowers/plans/2026-10-22-app-audit-presentation-plan.md",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": false
       },
       "verify": {
@@ -8013,9 +8013,32 @@
             "/dev/components captured once as production 404 and dispositioned blocked"
           ],
           "outstanding": []
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent ab23a407)",
+          "reviewed": "git diff a1a3e583..6f8327a4 of the plan (round-1 fixes and interactions); plan sha256 af27b2c0d6837c46f8b6e8ae1a1bc67c15b3ddd5006fcabc8c187590dfbfc9ec",
+          "gate_findings": 5,
+          "findings": [
+            "R2-1 server-component rule (no 'use client' in file) misclassified client-imported shared atoms/molecules as server components; example list wrong",
+            "R2-2 native signature matching let one DOM node / descendant output credit colliding natives (49 natives in 19 groups)",
+            "R2-3 fiber census could traverse the stale alternate tree instead of the FiberRoot's current tree",
+            "R2-4 verifier claimed to check per-definition targeting mechanically, but Lane A entry requirements are one template per key with no per-definition map",
+            "R2-5 99 of 198 supplemental route-state requirements use keys outside the nine; no procedure and no honest not-run disposition"
+          ],
+          "fixes": [
+            "Server-only = module not in client module set ('use client' plus transitive imports); census first, host evidence only for server-only; server-only.json committed",
+            "Each node assigned to at most one native of its nearest owning definition; colliding signatures always observed-ambiguous",
+            "Census from hostRoot.stateNode.current with isConnected nodes only; self-test that a closed dialog is absent",
+            "Section 5.2 splits observed-verified (checked against source-derived target-map.json) from observed-asserted (reported separately, not summed)",
+            "Added not-run disposition; supplemental-key rows not-run unless captured for that exact key"
+          ],
+          "outstanding": []
         }
       ],
-      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. Plan round 1: 6 gate findings, all fixed; plan round 2 pending."
+      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. Plan round 1: 6, round 2: 5 gate findings, all fixed; plan round 3 (last of the plan-stage cap) pending."
     }
   ],
   "already_shipped": [
