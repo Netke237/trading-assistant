@@ -7972,11 +7972,11 @@
       "branch": "board/app-audit-presentation-58612753",
       "tracking_issue": 358,
       "plan": "docs/superpowers/plans/2026-10-22-app-audit-presentation-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
-        "rounds": 0,
+        "rounds": 1,
         "clean": false
       },
       "verify": {
@@ -7988,8 +7988,34 @@
       "completion_pct": 10,
       "size": "XL",
       "complexity": 4,
-      "audit_history": [],
-      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. Plan drafted 2026-10-22; independent plan audit pending."
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "fresh independent general-purpose subagent applying bmad-review-adversarial-general (agent af843661)",
+          "reviewed": "docs/superpowers/plans/2026-10-22-app-audit-presentation-plan.md@a1a3e583 (sha256 bc6b091a44605e67c9809770ab14c3c73b739d45d4361f37b37564b183ffad37) against inventory/source",
+          "gate_findings": 6,
+          "findings": [
+            "P1-1 native-surface level (2,900 native route instances / 26,100 native state IDs) missing from coverage contract",
+            "P1-2 presence-only 'observed' credits state rows whose own entry requirement never ran",
+            "P1-3 state families renamed/narrowed vs inventory keys (false, cancelled dialog, interrupted request, unsupported mode/broker/strategy, missing provenance, legacy/corrupt reload, stale-async pre-N/A checks)",
+            "P1-4 addInitScript re-seeds on reload so post-reload would read the seed, not app-persisted data",
+            "P1-5 upward fiber walk misses server components and null-rendering components -> false not-triggered",
+            "P1-6 /dev/components is notFound() in production builds; would be reported as covered"
+          ],
+          "fixes": [
+            "Section 5 rewritten: five levels incl. native expansion per native_instance_expansion; verifier recomputes totals from Lane A files",
+            "State credit requires route+state match, census/host-marker presence and per-row targeting evidence; new rendered-untargeted disposition is not coverage",
+            "Section 4.1 uses exact nine keys with all template sub-cases, per-path failures, not-run recording",
+            "Seed-once sessionStorage guard plus before/after storage readback and self-test",
+            "Full-tree fiber traversal; server-component host-evidence rule or blocked; renderless/supplemental observable-effect rule",
+            "/dev/components captured once as production 404 and dispositioned blocked"
+          ],
+          "outstanding": []
+        }
+      ],
+      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. Plan round 1: 6 gate findings, all fixed; plan round 2 pending."
     }
   ],
   "already_shipped": [
