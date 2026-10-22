@@ -23,6 +23,14 @@
       "expires_at": "2026-10-22T10:53:51Z",
       "note": "Take #187: Recalibrate the 18 Options search profiles",
       "task": "SEARCH-PROFILES-RECAL-OPTIONS"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/options-contract-floor-override-cc55c73a",
+      "claimed_at": "2026-10-22T08:07:39Z",
+      "expires_at": "2026-10-22T11:07:39Z",
+      "note": "Take #389: Step 3 Options contract underlying-score floor override",
+      "task": "OPTIONS-CONTRACT-FLOOR-OVERRIDE"
     }
   ]
 }
