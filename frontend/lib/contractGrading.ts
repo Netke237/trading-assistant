@@ -116,12 +116,12 @@ export function gradingKey(g: ContractGrading | null | undefined): string {
 export interface ParsedContractId {
   id:          string;
   symbol:      string;
-  /** As written in the id, `parseFloat`ed: `187.5` stays 187.5 (the label). */
-  strike:      number;
-  /** `Math.trunc(strike)`, matching market.py's `int()`: what is sent and matched. */
-  truncStrike: number;
-  expiry:      string;
-  right:       OptionRight;
+  /** As written in the id, `parseFloat`ed: `187.5` stays 187.5, `187.0` is
+   *  187. The exact strike: what is shown, sent and matched (the backend
+   *  matches strikes exactly, EXACT-STRIKE). */
+  strike: number;
+  expiry: string;
+  right:  OptionRight;
 }
 
 const SYMBOL_RE = /^[A-Z][A-Z0-9.\-]*$/;
@@ -140,7 +140,7 @@ export function parseContractId(id: string): ParsedContractId | null {
   if (!EXPIRY_RE.test(expiry)) return null;
   if (right !== 'C' && right !== 'P') return null;
   const strike = parseFloat(strikeText);
-  return { id, symbol, strike, truncStrike: Math.trunc(strike), expiry, right };
+  return { id, symbol, strike, expiry, right };
 }
 
 /** Today's LOCAL date as `YYYY-MM-DD`. */
@@ -159,7 +159,7 @@ export interface ContractGroup {
   symbol:  string;
   right:   OptionRight;
   expiry:  string;
-  /** De-duplicated trunc strikes, in first-seen order. */
+  /** De-duplicated exact strikes, in first-seen order. */
   strikes: number[];
   /** The grading ctx: the first member's grading, in `watchedIds` order. */
   ctx:     GradingCtx;
@@ -204,7 +204,7 @@ export function planContractGroups(
       group = { key, symbol: p.symbol, right: p.right, expiry: p.expiry, strikes: [], ctx: gradingToCtx(g) };
       byKey.set(key, group);
     }
-    if (!group.strikes.includes(p.truncStrike)) group.strikes.push(p.truncStrike);
+    if (!group.strikes.includes(p.strike)) group.strikes.push(p.strike);
   }
   return { ids, parsed, expired, groupOf, groups: [...byKey.values()] };
 }
@@ -250,14 +250,14 @@ export function resolveWatchedRows(
       ({ kind: 'missing', id, symbol: p.symbol, strike: p.strike, expiry: p.expiry, right: p.right, reason });
     if (plan.expired.has(id)) return missing('expired');
     const key = plan.groupOf.get(id);
-    const result = kept.find((k) => k.groupKey === key && k.strikes.has(p.truncStrike));
+    const result = kept.find((k) => k.groupKey === key && k.strikes.has(p.strike));
     if (!result) return missing('loading');
     if (result.outcome === 'rejected') return missing('fetch_failed');
     const yamlGraded = isYamlGraded(grading[id]);
     const exact = result.outcome.find((c) => c.id === id);
     if (exact) return { kind: 'live', contract: exact, yamlGraded };
     const fallback = result.outcome.find((c) =>
-      c.symbol === p.symbol && Math.trunc(Number(c.strike)) === p.truncStrike
+      c.symbol === p.symbol && Number(c.strike) === p.strike
       && c.expiry === p.expiry && c.right === p.right);
     // The stored id, so ContractStar.isWatched is true and a click unstars.
     if (fallback) return { kind: 'live', contract: { ...fallback, id }, yamlGraded };

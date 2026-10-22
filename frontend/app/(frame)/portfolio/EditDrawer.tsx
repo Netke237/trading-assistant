@@ -32,10 +32,12 @@ import { TIME_STOP_DTE } from '@/lib/alertEngine';
 
 /** `position.contract` for an option position is a backend-generated,
  *  pipe-delimited machine ID — "SYMBOL|STRIKE|EXPIRY|C/P" (see
- *  backend/app/routers/scan.py's `contract=f"{symbol}|{int(strike)}|..."`
- *  and backend/app/schemas/__init__.py's persistence-schema comment). Note
- *  the `int(strike)` truncation — this id is INTEGER-only, so it silently
- *  rounds down any fractional strike (e.g. 187.5 -> "187"). Every option
+ *  backend/app/routers/scan.py's `contract=f"{symbol}|{format_strike(strike)}|..."`
+ *  and backend/app/schemas/__init__.py's persistence-schema comment). New ids
+ *  carry the exact strike (EXACT-STRIKE: 187.5 -> "187.5", 187 -> "187"), but
+ *  ids written before that used `int(strike)` and silently rounded a
+ *  fractional strike down (187.5 -> "187"), and such legacy ids are still
+ *  stored. Every option
  *  position, old or new, has this format, unlike `tradeCardSnapshot.strike`,
  *  which is only populated for positions opened after this Monte Carlo
  *  feature shipped — so this is used strictly as the FALLBACK for
