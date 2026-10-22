@@ -6585,7 +6585,7 @@
       "name": "Incremental nightly, Stage B: incremental writer",
       "summary": "Window-anchor state columns (B0), pure nightly classifier T1-T6 + RESCALE/CONFIRM/REVALIDATE (B1), incremental update_history branches + Tiingo-only anchored recent window (B2), two-pass nightly run with Tiingo priority queue and run counters (B3). Plan sections 2 and 5 Stage B.",
       "status": "built",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY",
@@ -6601,7 +6601,29 @@
         "note": "PRESENCE ONLY of the B3 run counters in the two-pass nightly. Correctness requires tests and the independent stage audit."
       },
       "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified. B2 #496 8c819eb6 and B3 #497 9560e7f2 committed and coordinator-verified (B2 full suite 9684 passed, baseline only). Built, NOT audited: code audit pending (#498).",
-      "audit_history": []
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent af00f53934192f59d (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 5c41d96a 773951a6 -- backend (B0-B3: ohlcv_daily model, migration b7d4e2a9c816, history_incremental, history_backfill, ingestion_job, historical_store, tiingo_budget helper, settings example, tests) against plan sections 2, 4, 5, 8 and tickets #494-#497",
+          "findings": [
+            "R1-F1 (Low) run counters tiingo_requests/tiingo_bytes count only caller='nightly' ledger rows, so a manual POST /api/data/ingest run reports 0 Tiingo requests on the status endpoint (reproduced: 5 made, 0 shown); root cause the #497 coordinator clarification 4"
+          ],
+          "fixes": "pending: count the ledger rows of the run's own caller (tiingo_budget.current_caller() captured at run start)",
+          "outstanding": [
+            "R1-F1"
+          ],
+          "clean": false,
+          "sanity_check": "classifier T1-T6/RESCALE (i)-(iii)/CONFIRM/revalidation/single-provider steps traced against plan; writer transactions, rollback, D1-a fallback, stale_reasons/verified_boundary/get_bars interactions; two-pass queue, deferral, seam rebuild, budget gating, counters; migration chain; 251 focused tests run plus a reproduction for R1-F1",
+          "below_gate_logged": [
+            "single_provider_updated counts SINGLE_PROVIDER_CURRENT skips",
+            "revalidate_no_reply counts suffix_only twice for one symbol",
+            "revalidation ensure_room hard-coded to 'nightly' in manual runs",
+            "Tiingo-only event applied >21 calendar days late keeps old factors before the anchor (plan 2.6 design)"
+          ]
+        }
+      ]
     },
     {
       "id": "APP-AUDIT-INVENTORY",
