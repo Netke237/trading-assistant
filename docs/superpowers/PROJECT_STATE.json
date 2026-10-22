@@ -8762,7 +8762,7 @@
       },
       "size": "L",
       "complexity": 4,
-      "completion_pct": 50,
+      "completion_pct": 70,
       "audit_history": [
         {
           "round": 1,
@@ -8824,7 +8824,7 @@
           ]
         }
       ],
-      "note": "BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
+      "note": "Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22."
     }
   ],
   "already_shipped": [

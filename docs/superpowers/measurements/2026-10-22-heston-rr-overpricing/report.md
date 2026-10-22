@@ -20,7 +20,7 @@ Every number below is printed by `backend/scripts/heston_rr_overpricing_probe.py
 - #174's per-scan summary line only appears on live scans after deployment. That evidence needs the mini PC. It is **pending, not measured**.
 - Calibration latency is measured single-thread on this cloud box, with the cache cleared before every calibration. The mini PC's absolute numbers differ, so options are compared relative to D only. These timings are **not** scan abandonment rates: abandonment at the 2.0 s guard is driven by GIL queueing under concurrency.
 - M4 results are about **fits**, never cards: no stored card carries the chain, fit or parameters an option needs.
-- M3 spot comes from put–call parity with no dividend term. M3 expiries are near-dated only.
+- M3 spot comes from put–call parity with no dividend term: the two-sided call/put pair with the smallest |C_mid − P_mid| (the strike nearest the forward), searched **across all of the symbol's listed expiries in that capture**, so the pair can sit on a different expiry from the fit (`m3.md`; reproduced 35 of 35 by the independent recompute, `recompute.md`). M3 expiries are near-dated only.
 
 ## 2. Reach and exit gap on real cards (M1)
 
@@ -115,3 +115,7 @@ Only M1 speaks about cards. Over the three committed days of real scans:
 - No gate, ranking or sizing reads the card's R/R [m1].
 
 These are old-schema results. The comparison uses exit premiums, and both R/Rs are recomputed on today's full-premium basis. Live evidence from #174's per-scan line on the mini PC is still pending.
+
+## Independent recompute (plan §3)
+
+A fresh independent subagent recomputed, with its own code calling only the shipped functions being measured (never the probe), the M1 counts, three M1 Heston cards, three M2 cells, three M3 fits (one per capture, through the shipped chain builder with its own mock) and option B's effect count; it also recalibrated all 326 fits. Every compared value agrees with this evidence with zero difference. Details, tables and the two clarifying notes (parity-spot search scope; one-cent T2/T3 stock-target rounding with no exit-premium effect) are in [`recompute.md`](recompute.md). This recompute is evidence for the acceptance criterion; it is not an audit round.
