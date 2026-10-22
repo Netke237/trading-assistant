@@ -2,17 +2,9 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/app-audit-b-save-feedback-e801c2d4",
-      "claimed_at": "2026-10-21T20:51:02Z",
-      "expires_at": "2026-10-22T00:10:58Z",
-      "note": "Resume same-session #371 after claim expiry; T1/T2 pushed, T3 next",
-      "task": "APP-AUDIT-B-SAVE-FEEDBACK"
-    },
-    {
-      "agent": "claude",
       "branch": "claude/history-incremental-b-687c68",
       "claimed_at": "2026-10-21T21:16:54Z",
-      "expires_at": "2026-10-22T02:49:54Z",
+      "expires_at": "2026-10-22T04:27:36Z",
       "note": "Stage B incremental writer (#494-#498)",
       "task": "HISTORY-INCREMENTAL-NIGHTLY-B"
     }
