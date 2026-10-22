@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/kenneth-bar-alignment-9f05661f",
       "claimed_at": "2026-10-22T11:23:26Z",
-      "expires_at": "2026-10-22T14:23:26Z",
+      "expires_at": "2026-10-22T14:25:00Z",
       "note": "Take #173: run-book for the read-only bar-source alignment check (1 A, 2 A)",
       "task": "KENNETH-BAR-ALIGNMENT"
     }
