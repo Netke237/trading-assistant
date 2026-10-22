@@ -47,3 +47,22 @@ it('is never posted by an options scan, so the contract floor stays contract_rul
   // Everything else still goes through.
   expect(b.overrides.weight_trend).toBe(0.3);
 });
+
+it('forwards contract_min_stock_score in options overrides, and excludes it from stocks scan', () => {
+  // Options scan
+  const optBody = buildOptionsScanRequestBody({
+    universe: ['SP500'], direction: 'Bullish', horizon: 'Swing',
+    horizonPreset: 'Swing', holdMinDays: 5, holdMaxDays: 15,
+    minPriceRaw: '', maxPriceRaw: '', minCapRaw: '', maxCapRaw: '', capUnit: 'B',
+    scanOverrides: { contract_min_stock_score: 30, min_stock_score: 40 },
+    confidenceGate: DEFAULT_CONFIDENCE_GATE, fundamentalsGate: DEFAULT_FUNDAMENTALS_GATE,
+    shortlistMaxCandidates: 10, spreads: DEFAULT_SPREADS,
+  });
+  expect(optBody.overrides).not.toHaveProperty('min_stock_score');
+  expect(optBody.overrides.contract_min_stock_score).toBe(30);
+
+  // Stocks scan
+  const stockBody = body({ contract_min_stock_score: 30, min_stock_score: 40 });
+  expect(stockBody.min_stock_score).toBe(40);
+  expect(stockBody.overrides).not.toHaveProperty('contract_min_stock_score');
+});
