@@ -244,6 +244,9 @@ async def test_update_history_routes_single_provider_symbol_away_from_seam(facto
     monkeypatch.setattr(alpaca, "get_alpaca_client", client)
     monkeypatch.setattr(alpaca, "fetch_daily_bars_single", single)
     tiingo_fetch.return_value = bars(factor=0.9)
+    # HISTORY-INCREMENTAL-NIGHTLY B2: a nightly in the same settle period as the rebuild is
+    # SINGLE_PROVIDER_CURRENT (no request); run each write after a later settle boundary.
+    monkeypatch.setattr(hs, "_utcnow", lambda: NOW + timedelta(days=3))
     result = await history.update_history("TEST", START, END, alpaca_bars=bars(SEAM, source="alpaca"))
     assert result.provider == "tiingo"
     assert result.stored == len(days(START, END))
@@ -259,6 +262,7 @@ async def test_update_history_routes_single_provider_symbol_away_from_seam(facto
     tiingo_fetch.return_value = []
     tiingo_fetch.side_effect = RuntimeError("tiingo down")
     yf_fetch.return_value = bars(source="yfinance")
+    monkeypatch.setattr(hs, "_utcnow", lambda: NOW + timedelta(days=4))
     before = await snapshot(factory)
     with pytest.raises(history.SingleProviderRefused):
         await history.update_history("TEST", START, END, alpaca_bars=bars(SEAM, source="alpaca"))
@@ -293,8 +297,9 @@ async def test_rebuild_holds_the_history_lock(factory, providers):
     tiingo_fetch.side_effect = fetch
     rebuild = asyncio.create_task(history.rebuild_single_provider("TEST", START, END))
     await started.wait()
-    update = asyncio.create_task(
-        history.update_history("TEST", START, END, alpaca_bars=bars(SEAM, source="alpaca")))
+    # B2: the rebuild's fresh anchor would make an unforced nightly a no-op (CURRENT).
+    update = asyncio.create_task(history.update_history(
+        "TEST", START, END, alpaca_bars=bars(SEAM, source="alpaca"), force_backfill=True))
     for _ in range(20):
         await asyncio.sleep(0)
     assert not update.done() and len(calls) == 1
