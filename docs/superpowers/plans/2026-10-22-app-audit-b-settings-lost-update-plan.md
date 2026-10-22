@@ -13,65 +13,107 @@ Issue #400 tracks the remediation for this defect (`APP-AUDIT-B-SETTINGS-LOST-UP
 
 ## Core Requirements & Acceptance Criteria
 - **Criterion 1 (Different-field stale-tab edit):** When Tab A updates setting field $X$ (e.g. `markov.lookback = 55`) and Tab B updates setting field $Y$ (e.g. `confidenceGate.cautionBelow = 64`), persisting Tab B's edit must preserve Tab A's setting $X$ (55) alongside Tab B's setting $Y$ (64).
-- **Criterion 2 (Same-field conflict resolution):** When Tab A updates setting field $X$ and Tab B also updates setting field $X$ from the stale baseline, the active user edit in Tab B applies without corrupting or resetting unrelated fields.
-- **Criterion 3 (Live cross-tab synchronization):** When `localStorage` is updated in one tab, a `storage` event on `SETTINGS_STORAGE_KEY` synchronizes the in-memory store in other open tabs in real time.
-- **Criterion 4 (Storage key and schema compatibility):** The storage key remains `bamendjou-settings` and version remains `24`. Existing migration branches and serialized JSON structure (`{ state: ..., version: 24 }`) are strictly preserved.
-- **Criterion 5 (Local write failure reporting):** Storage exceptions (`QuotaExceededError`, `SecurityError`) continue to be reported via `reportingLocalStorage` and `settingsSaveStatus` without suppression.
+- **Criterion 2 (Deep property merge & same-field conflict resolution):** For nested configuration objects (`confidenceGate`, `markov`, `spreads`, `broker`, `scheduleConfig`, `fundamentalsGate`, `targetProfitPct`, `ibkrPaper`, `tradierPaper`, `tradierLive`, `alpacaPaper`, `tastytradePaper`), merging operates at the leaf-property level so edits to independent leaf properties (e.g. Tab A edits `atrMult.swing` while Tab B edits `cautionBelow`) merge cleanly. When both tabs modify the exact same leaf property, the active tab's edit applies without resetting other properties or corrupting persisted data.
+- **Criterion 3 (Threshold ordering invariant):** After merging threshold objects (`confidenceGate`, `fundamentalsGate`), the invariant `rejectBelow <= cautionBelow` is strictly re-clamped via `clampGateThresholds`, ensuring invalid inverted gates can never reach storage or scoring engines.
+- **Criterion 4 (Live synchronous cross-tab synchronization):** When `localStorage` is updated in one tab, a `storage` event on `SETTINGS_STORAGE_KEY` parses, migrates, and synchronizes the in-memory store in other open tabs synchronously, eliminating race conditions between user blur events and async hydration.
+- **Criterion 5 (Storage key and schema compatibility):** The storage key remains `bamendjou-settings` and version remains `24`. Existing migration branches and serialized JSON structure (`{ state: ..., version: 24 }`) are strictly preserved. Initial read of pre-v24 disks migrates before establishing the committed baseline.
+- **Criterion 6 (Local write failure reporting):** All writes delegate to the wrapped `reportingLocalStorage` instance, ensuring exceptions (`QuotaExceededError`, `SecurityError`) are caught and tracked in `useSettingsSaveStatus` without suppression.
 
 ## Architectural Design
 
-### 1. Diff-Based Three-Way Merge on Write
-In `frontend/lib/settingsStore.ts`, we track the last committed storage snapshot `lastCommittedSettings` in memory:
-- On initial hydration/read, `lastCommittedSettings` is initialized to the parsed disk state.
-- During `setItem(key, valueString)`:
-  - Parse `incoming = JSON.parse(valueString)`.
-  - Read `currentDiskRaw = localStorage.getItem(key)`.
-  - If `currentDiskRaw` exists:
-    - Parse `currentDisk = JSON.parse(currentDiskRaw)`.
-    - If `currentDisk.version` differs from current version, run `migrateSettings(currentDisk.state, currentDisk.version)` so merging operates on canonical schemas.
-    - For each top-level key $K$ in `SETTINGS_PERSISTED_KEYS`:
-      - Determine if current tab changed $K$: `tabChanged = !isEqual(incoming.state[K], lastCommittedSettings[K])`.
-      - Determine if disk (another tab) changed $K$: `diskChanged = !isEqual(currentDisk.state[K], lastCommittedSettings[K])`.
-      - If `tabChanged` and `!diskChanged`: use `incoming.state[K]`.
-      - If `diskChanged` and `!tabChanged`: use `currentDisk.state[K]` (preserves other tab's update).
-      - If neither changed: use `currentDisk.state[K]`.
-      - If both changed (conflict): use `incoming.state[K]` (the active user action).
-    - Construct `mergedState`.
-    - Serialize `{ state: mergedState, version: incoming.version }` and write to `localStorage`.
-    - Update `lastCommittedSettings = mergedState`.
-    - If `mergedState` incorporates updates from disk that differed from in-memory state, update in-memory `useSettingsStore` state via `setState(mergedState, false)` without re-triggering storage write.
+### 1. Baseline Tracking with Default Fallback and Migration
+In `frontend/lib/settingsStore.ts`:
+- Maintain an in-memory baseline `lastCommittedSettings: Record<string, unknown> | null`.
+- Provide `getDefaultPersistedSettings()` returning a fresh copy of the store's default persisted state.
+- On initialization or read from storage:
+  - Read `localStorage.getItem(SETTINGS_STORAGE_KEY)`.
+  - If null or empty: `lastCommittedSettings = getDefaultPersistedSettings()`.
+  - If present: parse JSON; if `parsed.version < 24`, pass through `migrateSettings(parsed.state, parsed.version)` so `lastCommittedSettings` is always in canonical v24 shape (preventing false diffs against legacy storage).
+- Whenever merge logic evaluates a baseline, fallback safely: `const baseline = lastCommittedSettings ?? getDefaultPersistedSettings();`.
 
-### 2. Cross-Tab Storage Event Synchronization (`syncSettingsFromStorage`)
+### 2. Deep Three-Way Merge on Write
+During `setItem(key, valueString)`:
+- Parse `incoming = JSON.parse(valueString)`.
+- Read `currentDiskRaw = localStorage.getItem(key)`.
+- If `currentDiskRaw` is null or corrupted:
+  - Write `valueString` through `reportingStorage.setItem(key, valueString)`.
+  - Update `lastCommittedSettings = incoming.state`.
+  - Return.
+- Parse `currentDisk = JSON.parse(currentDiskRaw)`.
+- If `currentDisk.version < 24`: `currentDisk.state = migrateSettings(currentDisk.state, currentDisk.version)`.
+- For each top-level key $K$ in `SETTINGS_PERSISTED_KEYS`:
+  - If `incoming.state[K]` and `currentDisk.state[K]` are plain objects (e.g. `confidenceGate`, `markov`, `spreads`, `scheduleConfig`, `fundamentalsGate`, `broker`):
+    - Perform a leaf-property 3-way merge:
+      - For each property $P$ of the object:
+        - `tabChanged = !isSettingsEqual(incoming.state[K]?.[P], baseline[K]?.[P])`
+        - `diskChanged = !isSettingsEqual(currentDisk.state[K]?.[P], baseline[K]?.[P])`
+        - If `tabChanged` and `!diskChanged`: take `incoming.state[K][P]`.
+        - If `diskChanged` and `!tabChanged`: take `currentDisk.state[K][P]` (preserves other tab's edit).
+        - If neither changed: take `currentDisk.state[K][P]`.
+        - If both changed (conflict): take `incoming.state[K][P]` (active tab's user action).
+    - If $K === 'confidenceGate'`: re-clamp `merged.confidenceGate` via `clampGateThresholds('cautionBelow', mergedGate.cautionBelow, mergedGate.rejectBelow)` to guarantee `rejectBelow <= cautionBelow`.
+    - If $K === 'fundamentalsGate'`: clamp `rejectBelow <= cautionBelow`.
+  - Else (primitives or top-level scalars like `shortlistMaxCandidates`, `premiumStopPct`):
+    - `tabChanged = !isSettingsEqual(incoming.state[K], baseline[K])`
+    - `diskChanged = !isSettingsEqual(currentDisk.state[K], baseline[K])`
+    - If `tabChanged` and `!diskChanged`: take `incoming.state[K]`.
+    - If `diskChanged` and `!tabChanged`: take `currentDisk.state[K]`.
+    - If neither changed: take `currentDisk.state[K]`.
+    - If both changed: take `incoming.state[K]`.
+- Construct `mergedState`.
+- Serialize `{ state: mergedState, version: incoming.version }` and write through wrapped `reportingStorage.setItem(key, serialized)`.
+- Update `lastCommittedSettings = mergedState`.
+- If `mergedState` incorporates updates from disk that differed from `incoming.state`, update in-memory store using a re-entrancy guarded `setState(mergedState, false)`.
+
+### 3. Re-Entrancy Guard
+To prevent recursive calls when `useSettingsStore.setState(mergedState, false)` is called inside `setItem`:
+```ts
+let isMerging = false;
+// inside setItem:
+if (isMerging) return;
+try {
+  isMerging = true;
+  // compute mergedState, write through reportingStorage, update lastCommittedSettings
+  if (hasDiffFromIncoming) {
+    useSettingsStore.setState(mergedState, false);
+  }
+} finally {
+  isMerging = false;
+}
+```
+
+### 4. Live Synchronous Cross-Tab Synchronization (`syncSettingsFromStorage`)
 Export `syncSettingsFromStorage(raw?: string | null): void`:
 - When a `storage` event fires with `key === SETTINGS_STORAGE_KEY`:
-  - If `raw === null` or `localStorage.getItem(SETTINGS_STORAGE_KEY) === null`:
-    - Storage was cleared externally; optionally reset or preserve in-memory.
+  - If `raw === null` or storage cleared: do nothing or preserve in-memory state.
   - If raw JSON exists:
     - Parse `{ state, version }`.
-    - If valid, execute `useSettingsStore.persist.rehydrate()`.
-    - Update `lastCommittedSettings = migratedState`.
-- Initialize `window.addEventListener('storage', handleStorage)` in browser environments (`typeof window !== 'undefined'`).
-
-### 3. Pure Deep-Equality Helper (`isSettingsEqual`)
-Provide a fast, deterministic deep equality helper for settings state objects (supporting primitives, arrays, and nested plain objects like `markov`, `confidenceGate`, `spreads`, `broker`, `scheduleConfig`).
+    - If valid:
+      - If `version < 24`: `migrated = migrateSettings(state, version)`. Else `migrated = state`.
+      - Synchronously update in-memory store: `useSettingsStore.setState(migrated, false)`.
+      - Synchronously update `lastCommittedSettings = migrated`.
+- Attach `window.addEventListener('storage', (e) => { if (e.key === SETTINGS_STORAGE_KEY) syncSettingsFromStorage(e.newValue); })` when `typeof window !== 'undefined'`.
 
 ## Sub-Tasks & Breakdown
 
-### Task 1: Core Merge and Synchronization Implementation (`frontend/lib/settingsStore.ts`)
+### Task 1: Core 3-Way Deep Merge & Synchronization Implementation (`frontend/lib/settingsStore.ts`)
 - Define `SETTINGS_PERSISTED_KEYS`.
-- Implement `isSettingsEqual(a: unknown, b: unknown): boolean`.
-- Implement `mergeSettingsState(incoming: SettingsState, disk: SettingsState, baseline: SettingsState): SettingsState`.
-- Implement custom `createSettingsStorage()` wrapping `reportingLocalStorage` with 3-way merge logic.
-- Implement `syncSettingsFromStorage(raw?: string | null): void`.
-- Register cross-tab `storage` event listener.
+- Implement `isSettingsEqual(a: unknown, b: unknown): boolean` for deep value comparison.
+- Implement `getDefaultPersistedSettings()`.
+- Implement leaf-property 3-way merge with `clampGateThresholds` ordering protection.
+- Implement `createSettingsStorage()` wrapping `reportingLocalStorage` with re-entrancy protection and 3-way merge.
+- Implement `syncSettingsFromStorage(raw?: string | null): void` with synchronous state & baseline update.
+- Register window `storage` listener.
 
 ### Task 2: Unit & Regression Tests (`frontend/lib/__tests__/settingsLostUpdate.test.ts`)
-- Add comprehensive test suite covering:
-  - Stale tab different-field update: Tab A modifies `markov.lookback: 55`, Tab B modifies `confidenceGate.cautionBelow: 64` -> verify persisted state contains BOTH `55` and `64`.
-  - Same-field conflict: Tab A modifies `markov.lookback: 55`, Tab B modifies `markov.lookback: 45` -> verify Tab B's active edit applies without resetting other fields.
-  - Storage event dispatch: dispatching `StorageEvent` for `bamendjou-settings` updates `useSettingsStore` in-memory state and UI text values.
-  - Schema version and keys: verify storage key `'bamendjou-settings'` and version `24` are strictly preserved.
-  - Error reporting: verify `reportingLocalStorage` still reports write failures to `useSettingsSaveStatus`.
+- Stale-tab different-field update (finding S5): Tab A sets `markov.lookback: 55`, Tab B sets `confidenceGate.cautionBelow: 64` -> storage preserves both `55` and `64`.
+- Deep property merge within same section: Tab A sets `confidenceGate.atrMult.swing.target: 3.5`, Tab B sets `confidenceGate.cautionBelow: 64` -> storage preserves both `3.5` and `64`.
+- Same-field leaf conflict: Tab A sets `markov.lookback: 55`, Tab B sets `markov.lookback: 45` -> Tab B's active edit applies without corrupting other settings.
+- Threshold invariant re-clamping: Tab A sets `cautionBelow: 40`, Tab B sets `rejectBelow: 45` -> merged result re-clamps `rejectBelow` to `40`.
+- Fresh session handling: empty localStorage initializes baseline without crashing on null dereference.
+- Legacy schema migration on read: pre-v24 disk state migrates before establishing baseline, preventing spurious conflict detection.
+- Cross-tab `StorageEvent`: dispatching `StorageEvent` updates `useSettingsStore` in-memory state and UI synchronously.
+- Error reporting: verify storage quota exceptions are reported to `useSettingsSaveStatus` via `reportingLocalStorage`.
 
 ### Task 3: Full Verification & Audit
 - Run `npm test -- settings` and full frontend test suite.
