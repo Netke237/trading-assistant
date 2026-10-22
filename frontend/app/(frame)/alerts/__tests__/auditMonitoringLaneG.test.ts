@@ -25,6 +25,7 @@ import {
 import { useAlertStore } from '@/lib/alertStore';
 import { useChartAlertStore } from '@/lib/chartAlertStore';
 import { parseAlertIndicator } from '@/lib/alertIndicators';
+import type { ContractGrading } from '@/types/domain';
 
 describe('Lane G Frontend Audit: APP-AUDIT-MONITORING (#355)', () => {
   describe('1. Watched Contracts Store (useWatchedContractsStore)', () => {
@@ -33,15 +34,21 @@ describe('Lane G Frontend Audit: APP-AUDIT-MONITORING (#355)', () => {
     });
 
     it('implements schema version 3 migration resetting gradings when version < 3', () => {
-      const v2Blob = { ids: ['AAPL|180|2026-06-19|C'], grading: { 'AAPL|180|2026-06-19|C': { ivScore: 80 } } };
+      const sampleGrading: ContractGrading = {
+        contract_rules: { min_volume: 20 },
+        hold_min_days: 20,
+        hold_max_days: 25,
+        stock_score: 80,
+      };
+      const v2Blob = { ids: ['AAPL|180|2026-06-19|C'], grading: { 'AAPL|180|2026-06-19|C': sampleGrading } };
       const migratedFromV2 = migrateWatchedContracts(v2Blob, 2);
       expect(migratedFromV2.ids).toEqual(['AAPL|180|2026-06-19|C']);
       expect(migratedFromV2.grading).toEqual({});
 
-      const v3Blob = { ids: ['AAPL|180|2026-06-19|C'], grading: { 'AAPL|180|2026-06-19|C': { ivScore: 80 } } };
+      const v3Blob = { ids: ['AAPL|180|2026-06-19|C'], grading: { 'AAPL|180|2026-06-19|C': sampleGrading } };
       const migratedFromV3 = migrateWatchedContracts(v3Blob, 3);
       expect(migratedFromV3.ids).toEqual(['AAPL|180|2026-06-19|C']);
-      expect(migratedFromV3.grading).toEqual({ 'AAPL|180|2026-06-19|C': { ivScore: 80 } });
+      expect(migratedFromV3.grading).toEqual({ 'AAPL|180|2026-06-19|C': sampleGrading });
     });
 
     it('handles add, remove, and clearGrading correctly', () => {
