@@ -8035,7 +8035,7 @@
       "completion_pct": 85,
       "size": "L",
       "complexity": 5,
-      "note": "Independent CODE round1 clean after second pass, same review resumed after usage interruption; report code-r1.md. All3 tickets closed, integrated5930tests/typecheck pass. Built/unmerged85%, L/5; exact-head CI/premerge pending. Plan original3capped history and authorized stage2 clean preserved.",
+      "note": "SELF-MERGE PENDING, PR #500, audited head21c09e98c0e70fc47661493113038f8ddea781f3. Built/unmerged85%, L/5. Plan/code clean; frontend unchanged after allowed main/state/doc records. Exact-head native CI and final ownership/mergeability/hold checks pending. Main records preserved; no shipped claim.",
       "additional_plan_stage_authorization": {
         "decision": "APP-AUDIT-B-SAVE-FEEDBACK-PLAN-STAGE-2-2026-10-21",
         "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
@@ -8122,6 +8122,15 @@
         ],
         "frontend_bytes": "unchanged from audited21c09e98; later main had no frontend changes",
         "checks": "TypeScript clean;4 focused suites/97 tests pass in11.376s. Frontend exactly equals audited21c09e98; no application conflict."
+      },
+      "pr": 500,
+      "self_merge_pending": {
+        "status": "SELF-MERGE PENDING",
+        "pr": 500,
+        "audited_head": "21c09e98c0e70fc47661493113038f8ddea781f3",
+        "implementation_head": "a9c4a33d",
+        "ci": "pending on the new documentation head",
+        "merge": "not attempted; built/unmerged"
       }
     }
   ],
