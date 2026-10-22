@@ -14,8 +14,8 @@
       "plan": "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/plan.md",
       "branch": "board/app-audit-settings-profiles-03d8b275",
       "tracking_issue": 350,
-      "audit_rounds": 3,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -23,10 +23,10 @@
         "closure_evidence": "Fresh independent reviewer /root/settings_profiles_plan_r1 reviewed plan.md SHA256 3350e499922759bbb4b6912c459addca5d65a8bc94119774a7282798a7b0f7c4; 0 gate findings."
       },
       "code_stage": {
-        "rounds": 2,
-        "clean": false,
-        "closed_by": null,
-        "closure_evidence": null
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent c014236a-bbe8-475b-b331-ab47c091a17d reviewed full Lane B reconciliation package against origin/main (81e01277); 0 gate findings; report docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/review-code-r3.md"
       },
       "audit_history": [
         {
@@ -67,6 +67,19 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/review-code-r2.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 3,
+          "reviewer": "subagent-c014236a-bbe8-475b-b331-ab47c091a17d",
+          "reviewed": "git diff origin/main..HEAD (HEAD 35f17b0f vs origin/main 81e01277); full Lane B reconciliation package and all 25 defect remediation phases",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/review-code-r3.md"
         }
       ],
       "verify": {
@@ -78,7 +91,7 @@
       "completion_pct": 100,
       "size": "XL",
       "complexity": 5,
-      "note": "Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled."
+      "note": "Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled. Code stage round 3 clean."
     },
     {
       "id": "APP-AUDIT-BROKER-PORTFOLIO",
