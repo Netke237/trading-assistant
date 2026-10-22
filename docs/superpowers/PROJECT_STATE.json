@@ -8680,7 +8680,7 @@
     {
       "id": "DECISION-23-HESTON-EVIDENCE",
       "name": "Heston hygiene (#174): forward-intrinsic floor, narrowed integration catch with an honest Black-Scholes fallback label, one per-scan worst-accepted-fit log line, missing rejected-fit log test",
-      "status": "not_started",
+      "status": "built",
       "owner": "agent",
       "branch": "board/decision-23-heston-evidence-af6b702a",
       "tracking_issue": 174,
@@ -8701,7 +8701,7 @@
       },
       "size": "M",
       "complexity": 4,
-      "completion_pct": 20,
+      "completion_pct": 50,
       "audit_history": [
         {
           "round": 1,
@@ -8719,7 +8719,7 @@
           ]
         }
       ],
-      "note": "Plan round 1 CLEAN (0 gate findings): floor proven a valid lower bound; 34,020-call probe raised no exception; every heston_price caller handles propagation; collector counts only card-reaching heston_grid fits. Size re-estimated L -> M. Tickets next. || Kenneth #174: Q1 A, Q2 B, Q3 A (#335 separate). Covers part of task_backlog HESTON-HYGIENE. Plan r1 drafted 2026-10-22; independent plan audit next."
+      "note": "BUILT 2026-10-22: H-1 #517 (cb0b133b + golden-test hardening 3fc020a3) and H-2 #518 (61960273) built, coordinator-verified, closed; origin/main merged (9920ba2a, PROJECT_STATE.json conflict only). Code audit round 1 (code stage 1 of 3) next. || Plan round 1 CLEAN (0 gate findings): floor proven a valid lower bound; 34,020-call probe raised no exception; every heston_price caller handles propagation; collector counts only card-reaching heston_grid fits. Size re-estimated L -> M. Tickets next. || Kenneth #174: Q1 A, Q2 B, Q3 A (#335 separate). Covers part of task_backlog HESTON-HYGIENE. Plan r1 drafted 2026-10-22; independent plan audit next."
     }
   ],
   "already_shipped": [
