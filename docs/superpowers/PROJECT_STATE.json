@@ -8456,8 +8456,8 @@
       "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
       "name": "Step 3 Options underlying-score contract floor override",
       "status": "built",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "plan_stage": {
         "rounds": 2,
         "clean": true,
@@ -8465,8 +8465,10 @@
         "closure_evidence": "Fresh independent subagent 00664302-66c1-40e5-8e16-25bcbd29784a reviewed Criterion 2 fix and interactions at 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b; 0 gate findings."
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3e041e3b-3d36-4c42-b477-10ec52c96139 reviewed git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f; 0 gate findings."
       },
       "audit_history": [
         {
@@ -8494,6 +8496,18 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent-3e041e3b-3d36-4c42-b477-10ec52c96139",
+          "reviewed": "git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "branch": "board/options-contract-floor-override-cc55c73a",
@@ -8502,14 +8516,14 @@
         "board item #389",
         "open question #8"
       ],
-      "notes": "Step 3 Options underlying-score contract floor override (#389). Plan approved in Round 2 (0 gate findings). Ready for implementation tickets.",
+      "notes": "Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean. Ready for self-merge.",
       "verify": {
         "kind": "present",
         "path": "backend/app/scoring/contract_validator.py",
         "pattern": "contract_min_stock_score",
         "note": "Verify presence of contract_min_stock_score translation in contract_validator."
       },
-      "tickets": []
+      "tickets": [509, 510, 511]
     }
   ],
   "already_shipped": [
