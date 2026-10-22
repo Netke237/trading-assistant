@@ -18,14 +18,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/search-profiles-recal-options-20a39a3a",
-      "claimed_at": "2026-10-22T07:33:48Z",
-      "expires_at": "2026-10-22T11:40:27Z",
-      "note": "Take #187: Recalibrate the 18 Options search profiles",
-      "task": "SEARCH-PROFILES-RECAL-OPTIONS"
-    },
-    {
-      "agent": "claude",
       "branch": "board/options-contract-floor-override-cc55c73a",
       "claimed_at": "2026-10-22T08:07:39Z",
       "expires_at": "2026-10-22T11:40:09Z",
