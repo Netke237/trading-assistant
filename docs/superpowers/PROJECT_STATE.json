@@ -8453,6 +8453,79 @@
       "note": "Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete."
     },
     {
+      "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
+      "name": "Step 3 Options underlying-score contract floor override",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 00664302-66c1-40e5-8e16-25bcbd29784a reviewed Criterion 2 fix and interactions at 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b; 0 gate findings."
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3e041e3b-3d36-4c42-b477-10ec52c96139 reviewed git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f; 0 gate findings."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "subagent-242450a2-b916-4181-90db-a1b047da87b3",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md SHA256 5bdb74aebbc5358d99f38b340b97b13a5892414314412982965405d963b9c822",
+          "gate_findings": 1,
+          "findings": [
+            "[F1] Acceptance Criterion 2 misstates diagnostic label mechanism for default/reset scans"
+          ],
+          "fixes": [
+            "Criterion 2 updated to state that un-overridden scans show Stock Score Below Contract Minimum without override parenthetical and reflect YAML in tooltip"
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "subagent-00664302-66c1-40e5-8e16-25bcbd29784a",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md commit 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent-3e041e3b-3d36-4c42-b477-10ec52c96139",
+          "reviewed": "git diff origin/main..HEAD at bc5c49f0 SHA256 b28f8836b7b9f9b3222c3a5eeb300733b17215ca148ca4c273e3a59ba40ba14f",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
+        }
+      ],
+      "branch": "board/options-contract-floor-override-cc55c73a",
+      "plan": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md",
+      "covers": [
+        "board item #389",
+        "open question #8"
+      ],
+      "notes": "SELF-MERGE PENDING, PR #513, audited head bc5c49f0. Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean.",
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/scoring/contract_validator.py",
+        "pattern": "contract_min_stock_score",
+        "note": "Verify presence of contract_min_stock_score translation in contract_validator."
+      },
+      "tickets": [509, 510, 511]
+    },
+    {
       "id": "EXACT-STRIKE",
       "name": "Fractional option strikes are carried exactly end to end (chain rows, contract ids, quote matching, Watchlist grading); integer-strike ids and JSON stay byte-identical; read-only check of persisted contract ids",
       "status": "built",
