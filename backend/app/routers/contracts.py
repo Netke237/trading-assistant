@@ -20,6 +20,7 @@ from app.data.market import (
     fetch_candles_async, _compute_iv_bs,
 )
 from app.data.augment import _augment, opt_float, opt_int
+from app.data.strike import format_strike, parse_strike_text
 from app.scoring.contract_validator import (
     CONTRACT_OVERRIDE_KEYS, dte_holding_multiplier, effective_contract_overrides, effective_dte_limits,
     is_finite_rule_value,
@@ -112,25 +113,26 @@ def _parse_contract_rules(raw: str | None) -> dict[str, float | int]:
     return effective_contract_overrides(parsed)
 
 
-def _parse_strikes(raw: str | None) -> set[int] | None:
-    """`strikes=187,190` -> {187, 190}. Items are stripped and empty items
+def _parse_strikes(raw: str | None) -> set[int | float] | None:
+    """`strikes=187,187.5` -> {187, 187.5}, canonical strikes (EXACT-STRIKE:
+    `187.0` is 187, 22.5 never matches 22). Items are stripped and empty items
     dropped (`187,` and `187, 190` parse); a list empty after that, `strikes=`
-    included, is absent (None). Any item that is not plain digits is a 422
-    (int() alone would also take "-5", "+5" and "1_000"). So is an item longer
-    than 9 digits: no strike is that large, and int() raises ValueError past
-    4300 digits, which was a 500."""
+    included, is absent (None). Any item `parse_strike_text` refuses -- sign,
+    exponent, underscore, more than 5 integer or 3 decimal digits, 0 -- is a
+    422, never a 500."""
     if raw is None:
         return None
     items = [p.strip() for p in raw.split(",")]
     items = [p for p in items if p]
     if not items:
         return None
-    if not all(p.isascii() and p.isdigit() and len(p) <= 9 for p in items):
+    try:
+        return {parse_strike_text(p) for p in items}
+    except (TypeError, ValueError):
         raise HTTPException(
             status_code=422,
-            detail=[{"loc": ["query", "strikes"], "msg": "Value error, strikes must be comma-separated integers", "type": "value_error"}],
+            detail=[{"loc": ["query", "strikes"], "msg": "Value error, strikes must be comma-separated strikes, e.g. 187 or 187.5", "type": "value_error"}],
         )
-    return {int(p) for p in items}
 
 
 @router.get('/contracts', response_model=list[OptionContract])
@@ -156,7 +158,7 @@ async def get_contracts(
     # The Watchlist asks for a starred contract's own expiry and strikes
     # (WATCHLIST-SCAN-CONTRACT-RULES). Both absent = the behaviour above,
     # exactly. `expiry`: fetch that expiry's chain and keep only its rows.
-    # `strikes`: comma-separated integer strikes; keep only those, and apply
+    # `strikes`: comma-separated exact strikes; keep only those, and apply
     # neither `max_price` nor `limit` -- the caller asked for specific
     # contracts, so nothing may cut them (a 150-strike chain ties a
     # hard-rejected star at 0 and `limit` cut it in strike order). Grading is
@@ -314,7 +316,9 @@ async def get_contracts(
         results.append(OptionContract(
             id=str(c.get("id", "")),
             symbol=str(c.get("symbol", symbol.upper())),
-            strike=int(c.get("strike", 0)),
+            # The row's exact strike (EXACT-STRIKE): every chain row carries a
+            # valid one or was dropped by the builder.
+            strike=c["strike"],
             expiry=str(c.get("expiry", "")),
             right=opt_type,  # type: ignore[arg-type]
             dte=int(c.get("dte", 0)),
@@ -372,14 +376,23 @@ async def get_contracts(
 @router.get('/quote/option', response_model=ContractQuoteResponse)
 async def get_option_quote(
     symbol: str = Query(...),
-    strike: int = Query(...),
+    # Strike TEXT (EXACT-STRIKE): `int` made 22.5 a 422. Parsed exactly; the
+    # id carries format_strike, so an integer strike's id is unchanged.
+    strike: str = Query(...),
     expiry: str = Query(...),
     right: str = Query(...),
 ) -> ContractQuoteResponse:
+    try:
+        strike_value = parse_strike_text(strike)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["query", "strike"], "msg": "Value error, strike must be a strike price, e.g. 187 or 187.5", "type": "value_error"}],
+        )
     right_upper = right.upper()
     if right_upper not in ('C', 'P'):
         raise HTTPException(status_code=400, detail="right must be C or P")
-    contract_id = f"{symbol.upper()}|{strike}|{expiry}|{right_upper}"
+    contract_id = f"{symbol.upper()}|{format_strike(strike_value)}|{expiry}|{right_upper}"
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             quote = await asyncio.wait_for(
