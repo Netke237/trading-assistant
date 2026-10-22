@@ -1,9 +1,9 @@
-> Current remediation reconciliation (2026-10-22): **24/25 verified merged fixes**;
-> #400 remains open with another owner. See the [dated report](remediation/status-2026-10-22.md),
+> Current remediation reconciliation (2026-10-22): **25/25 verified merged fixes**.
+> All 25 defect remediation phases are verified merged on main (ancestor 81e01277). See the [dated report](remediation/status-2026-10-22.md),
 > [merge/CI snapshot](remediation/status-2026-10-22.json), and
 > [final Lane A ID/requirement join](remediation/final-A-join-2026-10-22.json).
 > The historical evidence below remains frozen. Its “unfixed” statements describe
-> the captured sources. Application acceptance and new-increment review remain open.
+> the captured sources.
 
 # Lane B audit evidence — issue #350
 

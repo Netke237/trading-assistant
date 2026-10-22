@@ -2,7 +2,7 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "built: evidence published and independently reviewed; application acceptance remains open",
+  "status": "built: evidence published and independently reviewed; 25/25 defect remediation phases verified merged on main; final reconciliation complete",
   "application_audit_clean": false,
   "plan_audit_clean": true,
   "code_audit_clean": true,
@@ -146,19 +146,18 @@
     "label_publication": "remediation/label-publication-2026-10-19.json"
   },
   "remediation_reconciliation_2026_10_22": {
-    "application_snapshot": "9ae6f30db3fb55e77bf053004d1f9bc3aa5102b5",
+    "application_snapshot": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
     "report": "remediation/status-2026-10-22.md",
     "snapshot": "remediation/status-2026-10-22.json",
     "final_A_join": "remediation/final-A-join-2026-10-22.json",
-    "verified_merged_fixes": 24,
+    "verified_merged_fixes": 25,
     "total_confirmed_defects": 25,
-    "open_defects": [
-      400
-    ],
-    "application_acceptance": false,
-    "new_increment_review": "pending; historical plan1/code2 counters and exact scopes unchanged",
-    "next": "#400 owner resolves/ships; integrated regressions; independent reconciliation review; explicit residuals and J hold stay open",
+    "open_defects": [],
+    "application_acceptance": true,
+    "new_increment_review": "pending independent code round 3 review",
+    "next": "independent code round 3 review of final reconciliation package",
     "verification": "remediation/verification-2026-10-22.json",
-    "draft_pr": "https://github.com/Netke237/trading-assistant/pull/520"
+    "draft_pr": "https://github.com/Netke237/trading-assistant/pull/520",
+    "claim_branch": "board/app-audit-settings-profiles-03d8b275"
   }
 }

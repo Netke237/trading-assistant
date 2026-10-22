@@ -1,17 +1,17 @@
 {
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "captured_at_utc": "2026-10-22T12:46:56.531237+00:00",
-  "application_source": "9ae6f30db3fb55e77bf053004d1f9bc3aa5102b5",
-  "claim_branch": "board/app-audit-settings-profiles-885e1566",
+  "application_source": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+  "claim_branch": "board/app-audit-settings-profiles-03d8b275",
   "counts": {
     "confirmed_defects": 25,
-    "closed_issues": 24,
-    "verified_merged_fixes": 24,
-    "open_defects": 1
+    "closed_issues": 25,
+    "verified_merged_fixes": 25,
+    "open_defects": 0
   },
-  "application_acceptance": false,
+  "application_acceptance": true,
   "aggregate_completion_pct": null,
-  "completion_reason": "No weighted aggregate or completion milestone inferred from closed issues; final application acceptance, #400 and residual boundaries remain open.",
+  "completion_reason": "All 25 of 25 confirmed Lane B defect remediation phases are verified merged on main (ancestor 81e01277), each with three successful native CI checks. All 36 historical Lane B definitions join to delivered Lane A IDs and 324 state requirements. Application acceptance complete.",
   "historical_reviews": {
     "plan_rounds": 1,
     "code_rounds": 2,
@@ -1077,17 +1077,57 @@
     {
       "issue": 400,
       "title": "An ordinary Settings edit in a stale tab overwrites unrelated saved values",
-      "issue_state": "OPEN",
+      "issue_state": "CLOSED",
       "ratings": [
         "size:L",
         "complexity:5"
       ],
       "phase": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
-      "recorded_phase_status": null,
-      "recorded_audit_clean": null,
-      "recorded_plan_stage": null,
-      "recorded_code_stage": null,
-      "acceptance": "OPEN: #400 owned by another branch; PR #515 is conflicting at b6874f673ea1bc642d17f0ce36f0befa88f29cd0. No acceptance or implementation credited here."
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent dad00795-9934-4a92-8812-6e99fc161443 reviewed commit 5933eae1; 0 gate findings."
+      },
+      "recorded_code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewed_head": "e524a1877fd8185bb83d18fb214028be76d8687b",
+        "reviewer": "subagent-9935f078-5942-40e9-acce-b6a9228a107f",
+        "report": "docs/superpowers/plans/2026-10-22-app-audit-b-settings-lost-update-plan.md"
+      },
+      "acceptance": "Merged via PR #525 at 81e01277; independent plan 3 rounds clean, code 2 rounds clean. Full 17 unit and regression tests pass.",
+      "merge": {
+        "pr": 525,
+        "url": "https://github.com/Netke237/trading-assistant/pull/525",
+        "head": "e524a1877fd8185bb83d18fb214028be76d8687b",
+        "commit": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+        "merged_at": "2026-10-22T17:02:30Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579658/job/119924810707",
+            "completedAt": "2026-10-22T15:57:06Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579659/job/119924810642",
+            "completedAt": "2026-10-22T15:46:33Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579658/job/119924811049",
+            "completedAt": "2026-10-22T15:49:11Z"
+          }
+        ]
+      }
     },
     {
       "issue": 401,

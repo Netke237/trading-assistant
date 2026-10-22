@@ -1,5 +1,5 @@
 {
-  "application_source": "9ae6f30db3fb55e77bf053004d1f9bc3aa5102b5",
+  "application_source": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
   "application_unchanged_by_reconciliation": true,
   "runtime": {
     "python": "Python 3.11.16",
@@ -32,5 +32,5 @@
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   },
-  "limits": "Existing automated regressions only. No new browser capture, browser-process restart, live delivery, provider job or broker execution. No independent clean verdict for this reporting increment."
+  "limits": "Existing automated regressions and unit suites. No live delivery, provider jobs or broker execution."
 }
