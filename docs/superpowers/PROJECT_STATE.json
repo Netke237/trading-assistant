@@ -8392,7 +8392,7 @@
     {
       "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
       "name": "Step 3 Options underlying-score contract floor override",
-      "status": "not_started",
+      "status": "built",
       "audit_rounds": 2,
       "audit_clean": false,
       "plan_stage": {
