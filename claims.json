@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/decision-23-heston-evidence-af6b702a",
-      "claimed_at": "2026-10-22T11:25:29Z",
-      "expires_at": "2026-10-22T16:32:22Z",
-      "note": "Take #174: Heston hygiene (1 A) + per-scan worst-fit summary line (2 B)",
-      "task": "DECISION-23-HESTON-EVIDENCE"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-settings-profiles-885e1566",
       "claimed_at": "2026-10-22T12:44:11Z",
       "expires_at": "2026-10-22T15:51:28Z",
