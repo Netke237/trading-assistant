@@ -73,7 +73,7 @@ test.each(['prebreakout', 'fib', 'pullback'])('%s actions keep selection and per
   expect(api.removeWatchlist).toHaveBeenCalledWith('CLICK');
   expect(useWatchlistStore.getState().added).not.toContain('CLICK');
   fireEvent.click(screen.getByRole('button', {name: 'Open CLICK chart in a new tab'}));
-  expect(open).toHaveBeenCalledWith(`/chart?symbol=CLICK&source=${mode}&backtest_artifact_status=${mode === 'pullback' ? 'original_unavailable' : 'unsupported'}`, '_blank');
+  expect(open).toHaveBeenCalledWith(`/chart?symbol=CLICK&source=${mode}&backtest_artifact_status=original_unavailable`, '_blank');
   expect(screen.getByLabelText('Selected setup')).toHaveTextContent('OTHER');
   expect(within(screen.getByRole('region', {name: 'Selected setup chart'})).queryByRole('button', {name: /Alert|watchlist|new tab/})).toBeNull();
   open.mockRestore();
