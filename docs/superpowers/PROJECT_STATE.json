@@ -8393,11 +8393,13 @@
       "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
       "name": "Step 3 Options underlying-score contract floor override",
       "status": "not_started",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_stage": {
-        "rounds": 1,
-        "clean": false
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 00664302-66c1-40e5-8e16-25bcbd29784a reviewed Criterion 2 fix and interactions at 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b; 0 gate findings."
       },
       "code_stage": {
         "rounds": 0,
@@ -8418,6 +8420,17 @@
           ],
           "outstanding": [],
           "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "subagent-00664302-66c1-40e5-8e16-25bcbd29784a",
+          "reviewed": "docs/superpowers/plans/2026-10-22-options-contract-floor-override-plan.md commit 3ffc6207 SHA256 15bcef08b09997c9c421dba8b6892d8c81b8d6a49a5ffb9357549802e8bdd47b",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true
         }
       ],
       "branch": "board/options-contract-floor-override-cc55c73a",
@@ -8426,7 +8439,7 @@
         "board item #389",
         "open question #8"
       ],
-      "notes": "Step 3 Options underlying-score contract floor override (#389). Drafting implementation plan.",
+      "notes": "Step 3 Options underlying-score contract floor override (#389). Plan approved in Round 2 (0 gate findings). Ready for implementation tickets.",
       "verify": {
         "kind": "present",
         "path": "backend/app/scoring/contract_validator.py",
