@@ -10,20 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/setup-backtest-chart-4777cda7",
-      "claimed_at": "2026-10-22T08:48:25Z",
-      "expires_at": "2026-10-22T11:48:25Z",
-      "note": "Take #391: SETUP-BACKTEST-CHART on board/setup-backtest-chart-4777cda7",
-      "previous": [
-        {
-          "branch": "main",
-          "claimed_at": "2026-10-22T08:48:00Z"
-        }
-      ],
-      "task": "SETUP-BACKTEST-CHART"
-    },
-    {
-      "agent": "claude",
       "branch": "board/app-audit-b-settings-lost-update-0a62fb27",
       "claimed_at": "2026-10-22T09:33:14Z",
       "expires_at": "2026-10-22T13:36:25Z",
