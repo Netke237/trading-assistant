@@ -113,6 +113,29 @@ describe('mergeLeafProperties', () => {
       },
     });
   });
+
+  it('does not add undefined properties when merging a partial object', () => {
+    const incoming = { confidenceGate: { enabled: true } };
+    const disk = {
+      confidenceGate: {
+        enabled: true,
+        cautionBelow: 50,
+        rejectBelow: 35,
+        atrMult: { swing: { target: 3.0, stop: 1.5 } },
+      },
+    };
+    const baseline = {
+      confidenceGate: {
+        enabled: true,
+        cautionBelow: 50,
+        rejectBelow: 35,
+        atrMult: { swing: { target: 3.0, stop: 1.5 } },
+      },
+    };
+    const merged = mergeLeafProperties(incoming, disk, baseline) as { confidenceGate: Record<string, unknown> };
+    expect(merged.confidenceGate).toEqual({ enabled: true });
+    expect(Object.keys(merged.confidenceGate)).toEqual(['enabled']);
+  });
 });
 
 describe('settingsLostUpdate — end to end store behavior', () => {
@@ -351,6 +374,14 @@ describe('settingsLostUpdate — end to end store behavior', () => {
     expect(failure).toBeDefined();
     expect(failure?.label).toBe('Settings (this browser)');
 
-    setItemSpy.mockRestore();
+        setItemSpy.mockRestore();
+  });
+
+  it('does not mutate in-memory store when partial confidenceGate is set on store', () => {
+    const partialGate = { enabled: true };
+    act(() => {
+      useSettingsStore.setState({ confidenceGate: partialGate as never });
+    });
+    expect(useSettingsStore.getState().confidenceGate).toBe(partialGate);
   });
 });

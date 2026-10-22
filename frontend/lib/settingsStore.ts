@@ -72,7 +72,10 @@ export function mergeLeafProperties(
     ]);
     const result: Record<string, unknown> = {};
     for (const key of allKeys) {
-      result[key] = mergeLeafProperties(incoming[key], disk[key], baseObj[key]);
+      const mergedVal = mergeLeafProperties(incoming[key], disk[key], baseObj[key]);
+      if (mergedVal !== undefined) {
+        result[key] = mergedVal;
+      }
     }
     return result;
   }
@@ -643,22 +646,32 @@ export function createSettingsStateStorage(): StateStorage {
         ) as Record<string, unknown>;
 
         // Re-clamp confidenceGate and fundamentalsGate to maintain rejectBelow <= cautionBelow
-        if (mergedState.confidenceGate && typeof mergedState.confidenceGate === 'object') {
+        if (
+          mergedState.confidenceGate &&
+          typeof mergedState.confidenceGate === 'object' &&
+          typeof (mergedState.confidenceGate as ConfidenceGate).cautionBelow === 'number' &&
+          typeof (mergedState.confidenceGate as ConfidenceGate).rejectBelow === 'number'
+        ) {
           const gate = mergedState.confidenceGate as ConfidenceGate;
           const clamped = clampGateThresholds(
             'cautionBelow',
-            Math.max(0, Math.min(100, Number(gate.cautionBelow) || 0)),
-            Math.max(0, Math.min(100, Number(gate.rejectBelow) || 0)),
+            Math.max(0, Math.min(100, gate.cautionBelow)),
+            Math.max(0, Math.min(100, gate.rejectBelow)),
           );
           gate.cautionBelow = clamped.cautionBelow;
           gate.rejectBelow = clamped.rejectBelow;
         }
-        if (mergedState.fundamentalsGate && typeof mergedState.fundamentalsGate === 'object') {
+        if (
+          mergedState.fundamentalsGate &&
+          typeof mergedState.fundamentalsGate === 'object' &&
+          typeof (mergedState.fundamentalsGate as FundamentalsGate).cautionBelow === 'number' &&
+          typeof (mergedState.fundamentalsGate as FundamentalsGate).rejectBelow === 'number'
+        ) {
           const gate = mergedState.fundamentalsGate as FundamentalsGate;
           const clamped = clampGateThresholds(
             'cautionBelow',
-            Math.max(0, Math.min(100, Number(gate.cautionBelow) || 0)),
-            Math.max(0, Math.min(100, Number(gate.rejectBelow) || 0)),
+            Math.max(0, Math.min(100, gate.cautionBelow)),
+            Math.max(0, Math.min(100, gate.rejectBelow)),
           );
           gate.cautionBelow = clamped.cautionBelow;
           gate.rejectBelow = clamped.rejectBelow;
