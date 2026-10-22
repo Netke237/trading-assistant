@@ -10,14 +10,6 @@
     },
     {
       "agent": "claude",
-      "branch": "board/watchlist-residuals-45225aff",
-      "claimed_at": "2026-10-22T11:06:01Z",
-      "expires_at": "2026-10-22T15:01:24Z",
-      "note": "Take #168: Watchlist validation and refresh residuals",
-      "task": "WATCHLIST-RESIDUALS"
-    },
-    {
-      "agent": "claude",
       "branch": "board/decision-23-heston-evidence-af6b702a",
       "claimed_at": "2026-10-22T11:25:29Z",
       "expires_at": "2026-10-22T14:38:14Z",
