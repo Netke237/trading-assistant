@@ -26,10 +26,16 @@
     },
     {
       "agent": "claude",
-      "branch": "main",
-      "claimed_at": "2026-10-22T08:48:00Z",
-      "expires_at": "2026-10-22T11:48:00Z",
-      "note": "Take #391: SETUP-BACKTEST-CHART: backtest curve on Chart for Pre-Breakout / Fib Pullback",
+      "branch": "board/setup-backtest-chart-4777cda7",
+      "claimed_at": "2026-10-22T08:48:25Z",
+      "expires_at": "2026-10-22T11:48:25Z",
+      "note": "Take #391: SETUP-BACKTEST-CHART on board/setup-backtest-chart-4777cda7",
+      "previous": [
+        {
+          "branch": "main",
+          "claimed_at": "2026-10-22T08:48:00Z"
+        }
+      ],
       "task": "SETUP-BACKTEST-CHART"
     }
   ]
