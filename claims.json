@@ -28,7 +28,7 @@
       "agent": "claude",
       "branch": "board/app-audit-b-settings-lost-update-3dab3675",
       "claimed_at": "2026-10-22T06:19:01Z",
-      "expires_at": "2026-10-22T09:19:01Z",
+      "expires_at": "2026-10-22T09:19:18Z",
       "note": "Fix #400 stale-tab Settings overwrite; sizeL complexity5; #371 merged",
       "task": "APP-AUDIT-B-SETTINGS-LOST-UPDATE"
     }
