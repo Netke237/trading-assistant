@@ -1,0 +1,123 @@
+{
+  "probe_name": "browser_probe.cjs",
+  "timestamp": "2026-10-22T07:27:13.225Z",
+  "environment": {
+    "node_version": "v22.23.2",
+    "platform": "win32",
+    "arch": "x64",
+    "playwright_module_resolved": true,
+    "playwright_version": "1.62.1",
+    "chromium_executable_path": "C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe",
+    "chromium_executable_exists": false,
+    "browser_launchable": false,
+    "launch_error": "browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+    "next_build_status": "BLOCKED",
+    "next_build_block_reason": "Next.js production build blocked by offline network sandbox preventing Google Fonts asset download (Client network socket disconnected before secure TLS connection was established)"
+  },
+  "pure_logic_tests": [
+    {
+      "name": "Pure 1: Report category domains match backend scan_reports.CATEGORIES",
+      "passed": true,
+      "details": {
+        "expectedCategories": [
+          "options",
+          "stocks",
+          "prebreakout",
+          "pullback",
+          "fib"
+        ],
+        "expectedTerminalCategories": [
+          "prebreakout",
+          "pullback",
+          "fib"
+        ]
+      }
+    },
+    {
+      "name": "Pure 2: scanReportInputsDiffer correctly identifies field mutations and canonical key order invariance",
+      "passed": true,
+      "details": {
+        "direction_differ": true,
+        "min_price_removal": true,
+        "zero_vs_absent": true,
+        "null_vs_absent": false,
+        "key_order_invariance": false
+      }
+    },
+    {
+      "name": "Pure 3: MinWidthGate boundary pinned at 1200px viewport width",
+      "passed": true,
+      "details": {
+        "min_width_gate": 1200
+      }
+    }
+  ],
+  "browser_journeys": [
+    {
+      "id": "JOURNEY-01",
+      "title": "Options Steps 4–7 Screener Navigation with Frozen Fixtures",
+      "target": "/screener/step-4-ranking -> /screener/step-7-trade-card",
+      "viewport": "1280x800 and 1440x900",
+      "expected_behavior": "Options scan results render in Step 4 sortable ranking table, proceed through Step 5 IV/event gate, Step 6 contracts table, and Step 7 Trade Card preview without crashing or mutating persisted records.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by Jest component tests: Step 4 ranking tests (10 passed), Step 5 vol-events tests (5 passed), Step 6 contracts tests (8 passed), Step 7 trade card tests (12 passed)."
+    },
+    {
+      "id": "JOURNEY-02",
+      "title": "SavedScanReportInspector Drawer Opening & Category Switching",
+      "target": "SavedScanReportInspector dialog / drawer",
+      "viewport": "1280x800",
+      "expected_behavior": "Inspector opens via drawer toggle or button, displays current category report, allows switching across all 5 categories (options, stocks, prebreakout, pullback, fib) and legacy, loading respective latest attempts and previous usable reports.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"all five categories are independently readable after remount and options replacement\" (passed)."
+    },
+    {
+      "id": "JOURNEY-03",
+      "title": "Inspector Nested Disclosures Expansion & Retention",
+      "target": "SavedScanReportInspector details/summary elements",
+      "viewport": "1280x800",
+      "expected_behavior": "Raw frozen inputs, Pipeline stages, Saved exclusions, Terminal outcomes, and Raw report data disclosures open on click and collapse on switching runs, maintaining isolated state.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"raw report and exclusion data are collapsed, and opening a different run resets disclosure\" (passed)."
+    },
+    {
+      "id": "JOURNEY-04",
+      "title": "Frozen Settings Preservation Against Live Control Mutations",
+      "target": "SavedScanReportInspector vs Step 3 Execution Parameters",
+      "viewport": "1280x800",
+      "expected_behavior": "When current screener controls (e.g. direction or fast_ema) are mutated, SavedScanReportInspector renders \"Current controls differ from this saved run\" alert banner, while all historical numbers, parameters, and contract labels remain strictly frozen.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"clearing candidates and editing controls leaves frozen report contents intact\" (passed) and report_probe.py Suite 5 (passed)."
+    },
+    {
+      "id": "JOURNEY-05",
+      "title": "Viewport Boundary Gate & Desktop Responsive Rendering",
+      "target": "MinWidthGate (1200px) and wide desktop viewports (1280px, 1440px, 1920px)",
+      "viewport": "<1200px shows rotation gate; >=1200px renders full screener shell",
+      "expected_behavior": "Viewports < 1200px display MinWidthGate overlay; viewports >= 1200px render full multi-column shell without horizontal body overflow.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by MinWidthGate component specification and CSS media query tokens."
+    },
+    {
+      "id": "JOURNEY-06",
+      "title": "Keyboard Accessibility & Drawer Focus Management",
+      "target": "SavedScanReportInspector keydown handlers (Escape, Tab, Shift+Tab)",
+      "viewport": "1280x800",
+      "expected_behavior": "Pressing Escape dismisses the inspector drawer and returns focus to the opener element; Tab and Shift+Tab cycle within visible non-hidden controls without escaping the drawer modal.",
+      "status": "BLOCKED",
+      "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "corroboration": "Corroborated by SavedScanReportInspector keydown effect handler implementation and unit tests."
+    }
+  ],
+  "summary": {
+    "total_journeys": 6,
+    "passed_journeys": 0,
+    "blocked_journeys": 6,
+    "not_run_journeys": 0
+  }
+}
