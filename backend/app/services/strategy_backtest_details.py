@@ -247,3 +247,151 @@ def collect_details(summary, stats, df, *, source_bars, entry_start, entry_end, 
                                                   variant_fns=variant_fns),
         time_basis=("UTC epoch seconds from source bars; fills/equity mapped by actual engine bar position; "
                     "legacy engine timestamp interpretation unchanged; naive input interpreted UTC"))
+
+
+
+def collect_setup_details(
+    summary,
+    records,
+    *,
+    bars,
+    strategy,
+    direction,
+    params,
+    commission,
+    entry_start,
+    entry_end,
+    hold_max_days,
+    min_trades,
+    min_win_rate,
+) -> DetailedBacktestResult:
+    """Read setup backtest's real equity and fills into DetailedBacktestResult."""
+    from app.services.setup_entries import setup_params
+
+    # Handle insufficient bars or failed runs where records is not a SimulatedTrades with equity_curve
+    if not hasattr(records, "equity_curve") or records.equity_curve is None:
+        status = "insufficient_history" if "Insufficient" in (summary.summary_text or "") else "failed"
+        return DetailedBacktestResult(copy.deepcopy(summary), status, summary.summary_text)
+
+    source, source_times, numeric = source_frame(bars)
+    input_candles = tuple(
+        BacktestCandle(t, *(float(v) for v in row))
+        for t, row in zip(source_times, source.to_numpy())
+    )
+    if len(source) != len(records.equity_curve):
+        raise ValueError("source/engine bar count mismatch")
+
+    times = pd.DatetimeIndex(pd.to_datetime([b["time"] for b in bars]))
+    eq = pd.Series(records.equity_curve, index=times)
+    df = source.copy()
+    visible_times = source_times
+
+    if entry_start is not None:
+        cutoff = pd.Timestamp(entry_start)
+        if df.index.tz is not None:
+            cutoff = cutoff.tz_localize(df.index.tz)
+        mask = df.index >= cutoff
+        visible_times = [t for t, keep in zip(source_times, mask) if keep]
+        df = df[mask]
+        eq = eq[mask]
+
+    if not len(eq):
+        raise ValueError("empty evaluation window")
+
+    baseline = float(eq.iloc[0]) if entry_start is not None else 100_000.0
+    if baseline <= 0 or not all(math.isfinite(float(v)) for v in eq):
+        raise ValueError("invalid equity baseline/samples")
+
+    for key in ("win_rate", "total_return_pct", "max_drawdown_pct", "expectancy", "sharpe"):
+        if not math.isfinite(getattr(summary, key)):
+            raise ValueError("nonfinite summary")
+
+    if not math.isclose((float(eq.iloc[-1]) / baseline - 1.0) * 100.0, summary.total_return_pct, abs_tol=1e-9):
+        raise ValueError("equity does not reconcile with summary return")
+
+    candles = tuple(
+        BacktestCandle(t, *(float(v) for v in row))
+        for t, row in zip(visible_times, df.to_numpy())
+    )
+    benchmark_baseline = float(df.Close.iloc[0])
+    equity = tuple(
+        EquitySample(
+            t,
+            float(v),
+            100.0 * float(v) / baseline,
+            100.0 * float(close) / benchmark_baseline,
+        )
+        for t, v, close in zip(visible_times, eq, df.Close)
+    )
+    if not all(
+        math.isfinite(v)
+        for sample in equity
+        for v in (sample.time, sample.equity, sample.strategy_index, sample.benchmark_index)
+    ):
+        raise ValueError("nonfinite indexed series")
+
+    date_to_time = {d: t for d, t in zip(source.index.date, source_times)}
+
+    trades = []
+    for i, tr in enumerate(records):
+        entry_t = date_to_time.get(tr.entry_date)
+        exit_t = date_to_time.get(tr.exit_date)
+        if entry_t is None or exit_t is None:
+            raise ValueError("trade date not found in source bars")
+        values = [tr.entry_price, tr.exit_price, tr.net_return_pct, commission]
+        if not all(math.isfinite(float(v)) for v in values):
+            raise ValueError("nonfinite fill")
+        trade_size = getattr(tr, "size", 1)
+        trades.append(
+            DetailedTrade(
+                f"closed-{i}",
+                summary.direction,
+                entry_t,
+                exit_t,
+                float(tr.entry_price),
+                float(tr.exit_price),
+                int(trade_size),
+                float(tr.net_return_pct),
+                float(commission),
+                "time" if tr.exit_reason == "time" else "unknown",
+            )
+        )
+
+    effective_p = setup_params(strategy, params)
+    configuration = dict(
+        initial_cash=100_000.0,
+        commission=commission,
+        commission_basis="per leg",
+        order_size=1.0,
+        sizing="fraction of available equity; whole units",
+        margin=1.0,
+        spread=0.0,
+        exclusive_orders=True,
+        trade_on_close=False,
+        finalize_trades=False,
+        hold_max_days=hold_max_days,
+        min_trades=min_trades,
+        min_win_rate=min_win_rate,
+        min_expectancy=0.0,
+        signal_window_bars=None,
+        entry_start=entry_start.isoformat() if entry_start is not None else None,
+        entry_end=entry_end.isoformat() if entry_end is not None else None,
+    )
+
+    return DetailedBacktestResult(
+        copy.deepcopy(summary),
+        "success",
+        input_candles=input_candles,
+        candles=candles,
+        equity=equity,
+        trades=tuple(trades),
+        open_positions=(),
+        initial_equity=baseline,
+        configuration=configuration,
+        effective_params=effective_p,
+        engine_contract_version=ENGINE_CONTRACT_VERSION,
+        time_basis=(
+            "UTC epoch seconds from source bars; fills/equity mapped by actual engine bar position; "
+            "legacy engine timestamp interpretation unchanged; naive input interpreted UTC"
+        ),
+    )

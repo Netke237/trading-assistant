@@ -208,7 +208,7 @@ async def test_prebreakout_endpoint_carries_breakdown_and_swing():
     assert row["confidence_breakdown"] == expected.confidence_breakdown
     assert row["fib_swing"] == expected.fib_swing
     assert set(row) == {"symbol", "confidence", "direction", "metrics",
-                        "confidence_breakdown", "fib_swing"}
+                        "confidence_breakdown", "fib_swing", "backtest_artifact_status"}
 
 
 @pytest.mark.asyncio
@@ -238,4 +238,5 @@ async def test_fib_pullback_endpoint_carries_swing():
             "low": min(b["low"] for b in window),
             "high": max(b["high"] for b in window),
         },
+        "backtest_artifact_status": "original_unavailable",
     }]

@@ -1,0 +1,13 @@
+{
+  "application_baseline": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "inventory_commit": "6309c0636f8021e212d8014e3df2fe15394c0659",
+  "inventory_sha256": "f9dd2bbcc1c56f527ee61c66009d75528baaba39cc8ced28f7633eb44085d1aa",
+  "inputs": {
+    "backend/config/scoring_rules.yaml": "8e52b620e93dbe09455eba3c51c7dd227b5f9d0f19d00b73816cc393ade78146",
+    "backend/config/contract_rules.yaml": "79e2ecb99848022ec9d912ee0e5812637a578bc5d8893161ae7b94e1822a4346",
+    "backend/config/risk_rules.yaml": "72bb1231b6ef30ce4391aa0d400f8e2f6af963c78334ac4b8b81d7431f63f968",
+    "frontend/package-lock.json": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+    "backend/requirements.txt": "a19f70c7742649daca8f72c979e18455b6d40df77560e04688d4019d4bb5861a"
+  },
+  "provenance": "Configuration and dependency files from pinned application baseline; synthetic fixture artifacts carry separate lane reports. No live market-data certification."
+}

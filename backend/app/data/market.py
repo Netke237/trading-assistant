@@ -23,6 +23,7 @@ import pandas as pd
 from app.data import governor as _governor
 from app.data.governor import ProviderUnavailable, RateLimited
 from app.data.quote_liveness import classify_quote
+from app.data.strike import canonical_strike, format_strike, parse_strike_text
 from app.scoring.contract_validator import max_quote_age_seconds
 from app.scoring.dte_window import DTE_WINDOW_TOLERANCE_DAYS
 from app.services.audit import log_event
@@ -1092,7 +1093,12 @@ def fetch_option_chain(
             spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
-            strike = float(c.get("strike") or 0)
+            # A row with no valid strike (missing, non-finite, <= 0) is dropped
+            # rather than written as strike 0 (EXACT-STRIKE ES-1).
+            try:
+                strike = canonical_strike(c.get("strike"))
+            except (TypeError, ValueError):
+                continue
             iv = float(c.get("implied_volatility") or 0)
 
             greeks = c.get("greeks") or {}
@@ -1100,9 +1106,9 @@ def fetch_option_chain(
             theta = float(greeks.get("theta") or 0)
 
             result.append({
-                "id": f"{symbol}|{int(strike)}|{target_exp}|{option_type}",
+                "id": f"{symbol}|{format_strike(strike)}|{target_exp}|{option_type}",
                 "symbol": symbol,
-                "strike": int(strike),
+                "strike": strike,
                 "expiry": target_exp,
                 "right": option_type,
                 "dte": dte,
@@ -1906,7 +1912,12 @@ async def fetch_option_chain_async(
             spread = round(ask - bid, 2)
             volume = int(c.get("volume") or 0)
             oi = int(c.get("open_interest") or 0)
-            strike = float(c.get("strike") or 0)
+            # A row with no valid strike (missing, non-finite, <= 0) is dropped
+            # rather than written as strike 0 (EXACT-STRIKE ES-1).
+            try:
+                strike = canonical_strike(c.get("strike"))
+            except (TypeError, ValueError):
+                continue
             iv = float(c.get("implied_volatility") or 0)
 
             greeks = c.get("greeks") or {}
@@ -1914,9 +1925,9 @@ async def fetch_option_chain_async(
             theta = float(greeks.get("theta") or 0)
 
             result.append({
-                "id": f"{symbol}|{int(strike)}|{target_exp}|{option_type}",
+                "id": f"{symbol}|{format_strike(strike)}|{target_exp}|{option_type}",
                 "symbol": symbol,
-                "strike": int(strike),
+                "strike": strike,
                 "expiry": target_exp,
                 "right": option_type,
                 "dte": dte,
@@ -2038,12 +2049,14 @@ async def fetch_contract_quote_async(
         row is not this contract's quote, so it is refused here, once, for
         every caller (it used to be returned, and only get_option_quote
         checked).
-      - STRIKE after integer truncation on BOTH sides (`int(float(strike))`
-        here, `int(strike)` in the chain rows). A known, pre-existing limit: a
-        fractional strike such as 22.5 gets the 22 row's price. Callers must
-        not use this helper to authorize money on a fractional strike --
-        daily_risk_hooks.opening_price quotes the exact OSI symbol instead for
-        that reason.
+      - STRIKE exactly (EXACT-STRIKE ES-1). The id's strike text is parsed by
+        `strike.parse_strike_text` (plain decimal, at most 5 integer and 3
+        fractional digits; anything else returns None) and compared with ==
+        against the chain row's `strike`, which the builders keep exact via
+        `strike.canonical_strike`. 22.5 gets the 22.5 row and never the 22
+        row; `22.0` and `22` both get the 22 row; a strike the chain does not
+        list returns None. (daily_risk_hooks.opening_price still quotes the
+        exact OSI symbol: it needs the ask, which a chain row does not carry.)
     A contract whose ask is 0 has no row (the chain builder drops it), so it
     is None too. What None means is up to each caller: most treat it as
     "quote unavailable", and GET /api/portfolio marks the row
@@ -2064,7 +2077,7 @@ async def fetch_contract_quote_async(
         symbol, strike_str, expiry, right = parts
         if right not in ("C", "P"):
             return None
-        target_strike = int(float(strike_str))
+        target_strike = parse_strike_text(strike_str)
         chain = await fetch_option_chain_async(
             client, symbol, expiry=expiry, option_type=right  # type: ignore[arg-type]
         )

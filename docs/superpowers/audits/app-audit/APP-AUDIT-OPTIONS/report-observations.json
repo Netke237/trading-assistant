@@ -1,0 +1,528 @@
+{
+  "probe_metadata": {
+    "timestamp": "2026-10-22T07:57:32.681321+00:00",
+    "python_version": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "platform": "win32",
+    "baseline_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+    "source_hashes": {
+      "scan_report_model": "32b32b9c3118906a8c9adc58280215b750bf429bdb9ea1ec13ccabccfc8828b4",
+      "scan_reports_service": "c04a92ec531ba2cffa52a83c2fa389bb38ad71eed20b012148a015edfd98ca09",
+      "scan_report_lifecycle": "a5d4b800d029ed421aaf3481c3e6457371297f47c84324c49b249981df3b34b6",
+      "scan_reports_router": "4a33c2be714bc16c6b3983ab49f9aa7a2bb70875b34e8c2ee65baf1b86e70c3b",
+      "scoring_rules_yaml": "5d556a1aaf2b5fc188815a81ca3884c2a58e55920652ed8428c310cd19209b76",
+      "contract_rules_yaml": "1b658c4e78a4a4f44fe2f58a7d8878fd53cb8c6dc9a835fd3ef8dc3d166e6784",
+      "risk_rules_yaml": "c961cdec2db7a776cfd45f2cddae8d229d9c4089e05d82a20ec92f0c2726434d"
+    }
+  },
+  "suites": {
+    "1. Storage Schema & Model Invariants": [
+      {
+        "name": "1.1 Required tables exist in isolated SQLite schema",
+        "passed": true,
+        "details": {
+          "tables_found": [
+            "scan_report_heads",
+            "scan_reports",
+            "scan_sessions"
+          ],
+          "required": [
+            "scan_reports",
+            "scan_report_heads",
+            "scan_sessions"
+          ]
+        }
+      },
+      {
+        "name": "1.2 ScanReport column definitions match additive model",
+        "passed": true,
+        "details": {
+          "columns": {
+            "id": "VARCHAR",
+            "category": "VARCHAR",
+            "generation": "INTEGER",
+            "status": "VARCHAR",
+            "envelope_json": "TEXT"
+          }
+        }
+      },
+      {
+        "name": "1.3 ScanReportHead tracks category primary key and generation",
+        "passed": true,
+        "details": {
+          "columns": {
+            "category": "VARCHAR",
+            "generation": "INTEGER",
+            "latest_id": "VARCHAR",
+            "usable_id": "VARCHAR"
+          },
+          "pk_constraint": {
+            "constrained_columns": [
+              "category"
+            ],
+            "name": null
+          }
+        }
+      },
+      {
+        "name": "1.4 ScanReport enforces unique constraint on (category, generation)",
+        "passed": true,
+        "details": {
+          "unique_constraints": [
+            {
+              "name": null,
+              "column_names": [
+                "category",
+                "generation"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "2. Lifecycle State Transitions": [
+      {
+        "name": "2.1 begin_run creates running report with generation 1 and frozen inputs",
+        "passed": true,
+        "details": {
+          "run_id": "33431245-1e51-4e6d-a0f9-81d91a1ae553",
+          "generation": 1,
+          "status": "running",
+          "started_at": "2026-10-22T07:57:32.765513+00:00"
+        }
+      },
+      {
+        "name": "2.2 finish_run transitions to complete, saves diagnostics and result",
+        "passed": true,
+        "details": {
+          "status": "complete",
+          "ended_at": "2026-10-22T07:57:32.780966+00:00",
+          "diagnostics_available": true
+        }
+      },
+      {
+        "name": "2.3 Head pointer promotes complete report to usable_id",
+        "passed": true,
+        "details": {
+          "latest_run_id": "33431245-1e51-4e6d-a0f9-81d91a1ae553",
+          "previous_report": null
+        }
+      },
+      {
+        "name": "2.4 Re-finishing a terminal run is rejected with ValueError",
+        "passed": true,
+        "details": {
+          "rejected_as_expected": true
+        }
+      },
+      {
+        "name": "2.5 Failed run retains previous usable report as previous_report",
+        "passed": true,
+        "details": {
+          "latest_attempt_status": "failed",
+          "latest_attempt_id": "143c76e5-9b70-4690-9555-3e626d7d5169",
+          "previous_report_id": "33431245-1e51-4e6d-a0f9-81d91a1ae553"
+        }
+      },
+      {
+        "name": "2.6 Cancelled run records status='cancelled' and error_code='cancelled'",
+        "passed": true,
+        "details": {
+          "status": "cancelled",
+          "error_code": "cancelled"
+        }
+      },
+      {
+        "name": "2.7 Invalid terminal status or error codes are rejected",
+        "passed": true,
+        "details": {
+          "rejections": 2
+        }
+      }
+    ],
+    "3. Category Isolation & Dual Retention": [
+      {
+        "name": "3.1 All 5 categories are independently stored and accessible",
+        "passed": true,
+        "details": {
+          "categories": [
+            "options",
+            "stocks",
+            "prebreakout",
+            "pullback",
+            "fib"
+          ]
+        }
+      },
+      {
+        "name": "3.2 Mutations in options category leave other 4 categories untouched",
+        "passed": true,
+        "details": {
+          "tested_categories": [
+            "stocks",
+            "prebreakout",
+            "pullback",
+            "fib"
+          ]
+        }
+      },
+      {
+        "name": "3.3 Pruning never deletes inflight running attempts",
+        "passed": true,
+        "details": {
+          "inflight_run_id": "38d518db-e76e-40cc-9414-9b9e977ee50d",
+          "inflight_status": "running"
+        }
+      }
+    ],
+    "4. Process Restart & Read-Back Parity": [
+      {
+        "name": "4.1 Cold process startup recovers interrupted in-flight scans",
+        "passed": true,
+        "details": {
+          "recovered_count": 1,
+          "crashed_run_id": "95ab59aa-13e6-4822-859b-f159b773f22b"
+        }
+      },
+      {
+        "name": "4.2 Cold process read-back has exact parity with pre-shutdown snapshot",
+        "passed": true,
+        "details": {
+          "interrupted_status": "interrupted",
+          "interrupted_error_code": "interrupted",
+          "unrelated_categories_parity": true
+        }
+      }
+    ],
+    "5. Frozen Settings Preservation & Mutation Safety": [
+      {
+        "name": "5.1 Stored report inputs are immune to post-invocation caller dictionary mutations",
+        "passed": true,
+        "details": {
+          "stored_direction": "Bullish",
+          "stored_fast_ema": 8,
+          "secret_leaked": false
+        }
+      },
+      {
+        "name": "5.2 scanReportInputsDiffer correctly identifies frozen vs live drift cases",
+        "passed": true,
+        "details": {
+          "cases_evaluated": 7,
+          "all_passed": true,
+          "details": [
+            {
+              "description": "Direction mutated from Bullish to Bearish",
+              "expected": true,
+              "actual": true,
+              "passed": true
+            },
+            {
+              "description": "Universe mutated from SP500 to DOW30",
+              "expected": true,
+              "actual": true,
+              "passed": true
+            },
+            {
+              "description": "Override parameter fast_ema mutated from 8 to 12",
+              "expected": true,
+              "actual": true,
+              "passed": true
+            },
+            {
+              "description": "Override parameter removed vs zero distinction",
+              "expected": true,
+              "actual": true,
+              "passed": true
+            },
+            {
+              "description": "Zero value vs absent value",
+              "expected": true,
+              "actual": true,
+              "passed": true
+            },
+            {
+              "description": "Explicit null value matches absent key under canonical serialization",
+              "expected": false,
+              "actual": false,
+              "passed": true
+            },
+            {
+              "description": "Dict key order differences are invariant under canonical sorting",
+              "expected": false,
+              "actual": false,
+              "passed": true
+            }
+          ]
+        }
+      }
+    ],
+    "6. Pipeline Diagnostics & Terminal Outcomes": [
+      {
+        "name": "6.1 Options pipeline funnel counts satisfy monotonic non-increasing drop-off",
+        "passed": true,
+        "details": {
+          "pipeline": {
+            "scanned": 120,
+            "pre_screen_pass": 65,
+            "direction_pass": 40,
+            "chain_pass": 28,
+            "contracts_pass": 18,
+            "shortlist": 5
+          }
+        }
+      },
+      {
+        "name": "6.2 Terminal outcomes version 1 schema and count balance equations hold",
+        "passed": true,
+        "details": {
+          "counts": {
+            "accepted": 2,
+            "excluded": 1,
+            "no_data": 1,
+            "error_count": 0,
+            "no_setup": 2,
+            "filtered": 2,
+            "input": 8,
+            "evaluated": 7
+          },
+          "outcomes_count": 8,
+          "complete": true
+        }
+      },
+      {
+        "name": "6.3 Conflicting symbol outcomes are flagged and invalidate complete status",
+        "passed": true,
+        "details": {
+          "conflicts": [
+            "AAPL"
+          ],
+          "diagnostic_unavailable": true
+        }
+      }
+    ],
+    "7. Security & Credential Redaction": [
+      {
+        "name": "7.1 _encode rejects all forbidden secret and exception payload keys",
+        "passed": true,
+        "details": {
+          "tested_keys": 10,
+          "rejected_keys": 10
+        }
+      },
+      {
+        "name": "7.2 _encode rejects non-finite IEEE-754 floats (NaN, +/-Inf)",
+        "passed": true,
+        "details": {
+          "rejected_count": 3
+        }
+      },
+      {
+        "name": "7.3 project() strictly redacts untyped free text and unwhitelisted overrides",
+        "passed": true,
+        "details": {
+          "projected_keys": [
+            "direction",
+            "horizon",
+            "malicious_free_text_unavailable",
+            "numeric_threshold",
+            "overrides"
+          ],
+          "unavailable_paths": [
+            "request.malicious_free_text",
+            "request.overrides.unsupported_override"
+          ]
+        }
+      }
+    ],
+    "8. Legacy Scan Sessions Interoperability": [
+      {
+        "name": "8.1 get_legacy parses legacy sessions with unclassified category and safe projection",
+        "passed": true,
+        "details": {
+          "total_legacy_sessions": 3,
+          "corrupted_handled": true
+        }
+      },
+      {
+        "name": "8.2 Legacy scan_sessions table is never modified or rewritten by get_legacy",
+        "passed": true,
+        "details": {
+          "session_count": 3
+        }
+      }
+    ],
+    "9. Additive Alembic Migration Verification": [
+      {
+        "name": "9.1 migration.upgrade() creates scan_reports and leaves scan_sessions intact",
+        "passed": true,
+        "details": {
+          "tables_created": [
+            "scan_sessions",
+            "scan_report_heads",
+            "scan_reports"
+          ],
+          "preserved_value": "preserved_json"
+        }
+      },
+      {
+        "name": "9.2 migration.downgrade() drops report tables while preserving legacy scan_sessions",
+        "passed": true,
+        "details": {
+          "tables_remaining": [
+            "scan_sessions"
+          ],
+          "preserved_value": "preserved_json"
+        }
+      }
+    ],
+    "10. Dispatch Lifecycle Wrap (run_reported_scan)": [
+      {
+        "name": "10.1 run_reported_scan wraps normal scan and attaches durable identity metadata",
+        "passed": true,
+        "details": {
+          "report_run_id": "d3a9dad8-6376-4429-8056-0e8c468260ca",
+          "report_generation": 10,
+          "report_persistence": "saved",
+          "db_status": "complete"
+        }
+      },
+      {
+        "name": "10.2 run_reported_scan records cancelled status on asyncio.CancelledError",
+        "passed": true,
+        "details": {
+          "cancelled_caught": true,
+          "latest_status": "cancelled"
+        }
+      }
+    ]
+  },
+  "findings": [],
+  "summary": {
+    "total_tests": 30,
+    "passed_tests": 30,
+    "failed_tests": 0
+  },
+  "browser_probe": {
+    "probe_name": "browser_probe.cjs",
+    "timestamp": "2026-10-22T07:42:45.036Z",
+    "environment": {
+      "node_version": "v22.23.2",
+      "platform": "win32",
+      "arch": "x64",
+      "playwright_module_resolved": true,
+      "playwright_version": "1.62.1",
+      "chromium_executable_path": "C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe",
+      "chromium_executable_exists": false,
+      "browser_launchable": false,
+      "launch_error": "browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+      "next_build_status": "BLOCKED",
+      "next_build_block_reason": "Next.js production build blocked by offline network sandbox preventing Google Fonts asset download (Client network socket disconnected before secure TLS connection was established)"
+    },
+    "pure_logic_tests": [
+      {
+        "name": "Pure 1: Report category domains match backend scan_reports.CATEGORIES",
+        "passed": true,
+        "details": {
+          "expectedCategories": [
+            "options",
+            "stocks",
+            "prebreakout",
+            "pullback",
+            "fib"
+          ],
+          "expectedTerminalCategories": [
+            "prebreakout",
+            "pullback",
+            "fib"
+          ]
+        }
+      },
+      {
+        "name": "Pure 2: scanReportInputsDiffer correctly identifies field mutations and canonical key order invariance",
+        "passed": true,
+        "details": {
+          "direction_differ": true,
+          "min_price_removal": true,
+          "zero_vs_absent": true,
+          "null_vs_absent": false,
+          "key_order_invariance": false
+        }
+      },
+      {
+        "name": "Pure 3: MinWidthGate boundary pinned at 1200px viewport width",
+        "passed": true,
+        "details": {
+          "min_width_gate": 1200
+        }
+      }
+    ],
+    "browser_journeys": [
+      {
+        "id": "JOURNEY-01",
+        "title": "Options Steps 4\u20137 Screener Navigation with Frozen Fixtures",
+        "target": "/screener/step-4-ranking -> /screener/step-7-trade-card",
+        "viewport": "1280x800 and 1440x900",
+        "expected_behavior": "Options scan results render in Step 4 sortable ranking table, proceed through Step 5 IV/event gate, Step 6 contracts table, and Step 7 Trade Card preview without crashing or mutating persisted records.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by Jest component tests: Step 4 ranking tests (10 passed), Step 5 vol-events tests (5 passed), Step 6 contracts tests (8 passed), Step 7 trade card tests (12 passed)."
+      },
+      {
+        "id": "JOURNEY-02",
+        "title": "SavedScanReportInspector Drawer Opening & Category Switching",
+        "target": "SavedScanReportInspector dialog / drawer",
+        "viewport": "1280x800",
+        "expected_behavior": "Inspector opens via drawer toggle or button, displays current category report, allows switching across all 5 categories (options, stocks, prebreakout, pullback, fib) and legacy, loading respective latest attempts and previous usable reports.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"all five categories are independently readable after remount and options replacement\" (passed)."
+      },
+      {
+        "id": "JOURNEY-03",
+        "title": "Inspector Nested Disclosures Expansion & Retention",
+        "target": "SavedScanReportInspector details/summary elements",
+        "viewport": "1280x800",
+        "expected_behavior": "Raw frozen inputs, Pipeline stages, Saved exclusions, Terminal outcomes, and Raw report data disclosures open on click and collapse on switching runs, maintaining isolated state.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"raw report and exclusion data are collapsed, and opening a different run resets disclosure\" (passed)."
+      },
+      {
+        "id": "JOURNEY-04",
+        "title": "Frozen Settings Preservation Against Live Control Mutations",
+        "target": "SavedScanReportInspector vs Step 3 Execution Parameters",
+        "viewport": "1280x800",
+        "expected_behavior": "When current screener controls (e.g. direction or fast_ema) are mutated, SavedScanReportInspector renders \"Current controls differ from this saved run\" alert banner, while all historical numbers, parameters, and contract labels remain strictly frozen.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by SavedScanReportInspector.test.tsx: \"clearing candidates and editing controls leaves frozen report contents intact\" (passed) and report_probe.py Suite 5 (passed)."
+      },
+      {
+        "id": "JOURNEY-05",
+        "title": "Viewport Boundary Gate & Desktop Responsive Rendering",
+        "target": "MinWidthGate (1200px) and wide desktop viewports (1280px, 1440px, 1920px)",
+        "viewport": "<1200px shows rotation gate; >=1200px renders full screener shell",
+        "expected_behavior": "Viewports < 1200px display MinWidthGate overlay; viewports >= 1200px render full multi-column shell without horizontal body overflow.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by MinWidthGate component specification and CSS media query tokens."
+      },
+      {
+        "id": "JOURNEY-06",
+        "title": "Keyboard Accessibility & Drawer Focus Management",
+        "target": "SavedScanReportInspector keydown handlers (Escape, Tab, Shift+Tab)",
+        "viewport": "1280x800",
+        "expected_behavior": "Pressing Escape dismisses the inspector drawer and returns focus to the opener element; Tab and Shift+Tab cycle within visible non-hidden controls without escaping the drawer modal.",
+        "status": "BLOCKED",
+        "reason": "Playwright browser binary missing: browserType.launch: Executable doesn't exist at C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium_headless_shell-1234\\chrome-headless-shell-win64\\chrome-headless-shell.exe",
+        "corroboration": "Corroborated by SavedScanReportInspector keydown effect handler implementation and unit tests."
+      }
+    ],
+    "summary": {
+      "total_journeys": 6,
+      "passed_journeys": 0,
+      "blocked_journeys": 6,
+      "not_run_journeys": 0
+    }
+  }
+}

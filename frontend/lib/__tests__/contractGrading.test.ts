@@ -25,12 +25,15 @@ function contract(id: string, over: Partial<OptionContract> = {}): OptionContrac
 describe('parseContractId', () => {
   it('parses a valid id', () => {
     expect(parseContractId(`AAPL|187|${E}|C`)).toEqual({
-      id: `AAPL|187|${E}|C`, symbol: 'AAPL', strike: 187, truncStrike: 187, expiry: E, right: 'C',
+      id: `AAPL|187|${E}|C`, symbol: 'AAPL', strike: 187, expiry: E, right: 'C',
     });
   });
-  it('keeps a fractional strike for the label and truncates it for matching', () => {
-    expect(parseContractId(`AAPL|187.5|${E}|P`)).toMatchObject({ strike: 187.5, truncStrike: 187 });
-    expect(parseContractId(`AAPL|187.0|${E}|C`)).toMatchObject({ truncStrike: 187 });
+  // EXACT-STRIKE ES-3: the strike is matched exactly (the backend sends exact
+  // fractional strikes); 187.0 is the number 187.
+  it('keeps a fractional strike exactly; 187.0 parses to 187', () => {
+    expect(parseContractId(`AAPL|187.5|${E}|P`)).toMatchObject({ strike: 187.5 });
+    expect(parseContractId(`AAPL|187.5|${E}|P`)).not.toHaveProperty('truncStrike');
+    expect(parseContractId(`AAPL|187.0|${E}|C`)).toMatchObject({ strike: 187 });
   });
   it.each([
     ['3 parts', `AAPL|187|${E}`],
@@ -38,12 +41,20 @@ describe('parseContractId', () => {
     ['bad strike', `AAPL|abc|${E}|C`],
     ['187abc', `AAPL|187abc|${E}|C`],
     ['negative strike', `AAPL|-5|${E}|C`],
+    ['oversized strike 6 digits', `AAPL|100000|${E}|C`],
+    ['oversized strike 10 digits', `AAPL|9999999999|${E}|C`],
+    ['oversized fractional digits >3', `AAPL|187.1234|${E}|C`],
+    ['zero strike', `AAPL|0|${E}|C`],
+    ['zero fractional strike', `AAPL|0.000|${E}|C`],
     ['bad expiry', 'AAPL|187|2026-1-5|C'],
     ['lowercase symbol', `aapl|187|${E}|C`],
     ['empty symbol', `|187|${E}|C`],
     ['bad right', `AAPL|187|${E}|X`],
   ])('rejects %s', (_label, id) => {
     expect(parseContractId(id)).toBeNull();
+  });
+  it('accepts valid strikes up to 5 integer digits and 3 fractional digits', () => {
+    expect(parseContractId(`AAPL|99999.999|${E}|C`)).toMatchObject({ strike: 99999.999 });
   });
   it('accepts an impossible date by shape (lands as not_listed)', () => {
     expect(parseContractId('AAPL|187|2026-02-30|C')).not.toBeNull();
@@ -176,12 +187,30 @@ describe('resolveWatchedRows', () => {
     expect(resolveWatchedRows(plan, [{ groupKey: key, strikes: new Set([187, 190]), outcome: [contract(A)] }], {})[1])
       .toMatchObject({ reason: 'not_listed' });
   });
-  it('a legacy 187.0 id is matched by trunc and carries the stored id', () => {
+  it('a legacy 187.0 id is matched exactly to the 187 row and carries the stored id', () => {
     const legacy = `AAPL|187.0|${E}|C`;
     const p = planContractGroups([legacy], {}, TODAY);
     const rows = resolveWatchedRows(p, [{ groupKey: p.groups[0]!.key, strikes: new Set([187]), outcome: [contract(A)] }], {});
     expect(rows[0]).toMatchObject({ kind: 'live' });
     expect(rows[0]!.kind === 'live' && rows[0]!.contract.id).toBe(legacy);
+  });
+  it('a 187.5 star requests 187.5 and is graded only by the 187.5 row, never the 187 row', () => {
+    const half = `AAPL|187.5|${E}|C`;
+    const p = planContractGroups([half, A], {}, TODAY);
+    expect(p.groups).toHaveLength(1);
+    expect(p.groups[0]!.strikes).toEqual([187.5, 187]);
+    const k = p.groups[0]!.key;
+    // Only the 187 row came back: the 187.5 star is not listed, not graded with 187's numbers.
+    const only187 = resolveWatchedRows(p, [{ groupKey: k, strikes: new Set([187.5, 187]), outcome: [contract(A)] }], {});
+    expect(only187[0]).toMatchObject({ kind: 'missing', reason: 'not_listed', strike: 187.5 });
+    expect(only187[1]).toMatchObject({ kind: 'live' });
+    // Both rows: each star gets its own row.
+    const both = resolveWatchedRows(p, [{ groupKey: k, strikes: new Set([187.5, 187]), outcome: [contract(A), contract(half, { price: 9 })] }], {});
+    expect(both[0]!.kind === 'live' && both[0]!.contract).toMatchObject({ id: half, strike: 187.5, price: 9 });
+    expect(both[1]!.kind === 'live' && both[1]!.contract).toMatchObject({ id: A, strike: 187, price: 2.5 });
+    // A request holding only 187 does not grade the 187.5 star.
+    const req187 = resolveWatchedRows(p, [{ groupKey: k, strikes: new Set([187]), outcome: [contract(A)] }], {});
+    expect(req187[0]).toMatchObject({ kind: 'missing', reason: 'loading' });
   });
 });
 
@@ -207,3 +236,34 @@ describe('compareWatchedRows', () => {
     expect(ids(byPrice).slice(0, 2)).toEqual(['L2', 'L1']);
   });
 });
+
+describe('test_oversized_strike_isolation', () => {
+  it('oversized or zero strike star does not taint sibling valid contracts in the same group', () => {
+    const valid = `AAPL|187|${E}|C`;
+    const oversized = `AAPL|100000|${E}|C`;
+    const zero = `AAPL|0|${E}|C`;
+    const plan = planContractGroups([valid, oversized, zero], {}, TODAY);
+
+    // Plan must only create a group for the valid contract with strikes [187]
+    expect(plan.groups).toHaveLength(1);
+    expect(plan.groups[0]!.strikes).toEqual([187]);
+    expect(plan.parsed.get(oversized)).toBeNull();
+    expect(plan.parsed.get(zero)).toBeNull();
+    expect(plan.groupOf.has(oversized)).toBe(false);
+
+    // When backend returns results for the valid contract group
+    const kept: KeptGroupResult[] = [
+      { groupKey: plan.groups[0]!.key, strikes: new Set([187]), outcome: [contract(valid)] },
+    ];
+    const rows = resolveWatchedRows(plan, kept, {});
+
+    expect(rows).toHaveLength(3);
+    // Valid contract resolves as live
+    expect(rows[0]).toMatchObject({ kind: 'live', yamlGraded: true });
+    expect(rows[0]!.kind === 'live' && rows[0]!.contract.id).toBe(valid);
+
+    // Oversized & zero contracts resolve as invalid without failing sibling
+    expect(rows[1]).toMatchObject({ kind: 'invalid', id: oversized });
+    expect(rows[2]).toMatchObject({ kind: 'invalid', id: zero });
+  });
+  });

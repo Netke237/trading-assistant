@@ -1,0 +1,209 @@
+{
+  "audit_phase": "APP-AUDIT-STOCKS",
+  "lane": "D",
+  "issue": 352,
+  "description": "Verify Stocks scan, strategies, backtests and position numbers",
+  "A_inventory_status": "reconciled to Lane D stock scanning, backtesting, and position sizing suites",
+  "summary": {
+    "endpoints_verified": 4,
+    "primary_strategies_verified": 7,
+    "demotion_caps_verified": 4,
+    "backtest_metrics_verified": 7,
+    "position_sizing_rules_verified": 4,
+    "automated_test_count": 22,
+    "gate_findings_count": 0
+  },
+  "reconciled_surfaces": [
+    {
+      "id": "endpoint:POST/api/stock-scan",
+      "source": "backend/app/routers/stock_scan.py",
+      "category": "scan-pipeline",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD",
+        "backend/tests/test_audit_stocks_lane_d.py:TestPositionSizingLaneD",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 1"
+      ],
+      "disposition": "verified; synchronous and asynchronous scan execution, universe parsing, price/cap filtering, 5-rule scoring with event exclusion, and position sizing"
+    },
+    {
+      "id": "endpoint:GET/api/stock-scan/last",
+      "source": "backend/app/routers/stock_scan.py",
+      "category": "scan-persistence",
+      "verified": true,
+      "evidence": [
+        "frontend/components/StoreHydration/index.tsx",
+        "frontend/app/(frame)/screener/step-4-stocks/__tests__/auditStocksLaneD.test.tsx",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 6"
+      ],
+      "disposition": "verified; retrieves latest persisted stock scan result and request context for client rehydration"
+    },
+    {
+      "id": "endpoint:GET/api/stock-scan/last-run",
+      "source": "backend/app/routers/stock_scan.py",
+      "category": "scan-meta",
+      "verified": true,
+      "evidence": [
+        "frontend/lib/scanStore.ts",
+        "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 6"
+      ],
+      "disposition": "verified; tracks background scan run metadata, status, updated_at timestamp, and active strategy"
+    },
+    {
+      "id": "endpoint:GET/api/backtest-artifacts/{artifact_id}?symbol={symbol}",
+      "source": "backend/app/routers/backtest_artifacts.py",
+      "category": "backtest-evidence",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestBacktestEngineAndConfidenceLaneD::test_backtest_artifact_lifecycle_and_symbol_query",
+        "backend/tests/test_backtest_artifacts.py",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 4"
+      ],
+      "disposition": "verified; immutable frozen candidate backtest evidence, schema_version 1, provenance 'original', strictly requires matching symbol query"
+    },
+    {
+      "id": "scorer:backend/app/scoring/stock_scorer.py#score_stock",
+      "source": "backend/app/scoring/stock_scorer.py",
+      "category": "scoring-algorithm",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_stock_mode_event_weight_zeroed_and_renormalized",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_threshold_status_verdicts",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 2"
+      ],
+      "disposition": "verified; 5-rule composite scorer with stock-mode event exclusion (w_event=0.0) and non-event weight renormalization (sum=1.0)"
+    },
+    {
+      "id": "demotions:backend/app/scoring/stock_scorer.py#4-tier-caps",
+      "source": "backend/app/scoring/stock_scorer.py",
+      "category": "status-demotions",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_pullback_timing_veto_demotes_pass_to_caution",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_confidence_gate_caps_evaluates_integer_confidence",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_regime_gate_demotion_alignment",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_fundamentals_gate_bullish_and_bearish_thresholds",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_worse_monotonicity",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 2"
+      ],
+      "disposition": "verified; 4 demotion caps (pullback timing veto, confidence gate, regime gate, fundamentals gate) demote monotonically via _worse without promotion"
+    },
+    {
+      "id": "strategy_engine:backend/app/services/strategy_engine.py#7-strategies",
+      "source": "backend/app/services/strategy_engine.py",
+      "category": "strategy-signals",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestStrategyEngineLaneD::test_all_seven_primary_strategies_exist_in_schema",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStrategyEngineLaneD::test_seven_strategies_signal_execution",
+        "backend/tests/test_audit_stocks_lane_d.py:TestStrategyEngineLaneD::test_strategy_parameter_boundaries_enforced",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 3"
+      ],
+      "disposition": "verified; 7 exposed primary strategies (pullback_ema, breakout_base, ma_crossover, mean_reversion_rsi, mean_reversion_bb, mean_reversion_vwap, mean_reversion_multi) match Strategy enum and execute symmetrically"
+    },
+    {
+      "id": "backtest_runner:backend/app/services/strategy_backtest.py#run_strategy_backtest",
+      "source": "backend/app/services/strategy_backtest.py",
+      "category": "backtest-engine",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestBacktestEngineAndConfidenceLaneD::test_backtest_metric_calculations_and_schema",
+        "backend/tests/test_audit_stocks_lane_d.py:TestBacktestEngineAndConfidenceLaneD::test_zero_trades_empty_result_safe",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 4"
+      ],
+      "disposition": "verified; vectorized backtest runner calculates win_rate, expectancy, total_return_pct, max_drawdown_pct, sharpe, passes_gate, and time exits on bar close"
+    },
+    {
+      "id": "confidence_evaluator:backend/app/scoring/signal_confidence.py#status_cap",
+      "source": "backend/app/scoring/signal_confidence.py",
+      "category": "confidence-gate",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestStockScorerAndDemotionsLaneD::test_confidence_gate_caps_evaluates_integer_confidence",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 2"
+      ],
+      "disposition": "verified; evaluates forward-replay integer confidence score (0-100) against cautionBelow and rejectBelow thresholds, with sample size sufficiency check"
+    },
+    {
+      "id": "position_sizing:backend/app/routers/stock_scan.py#_position_size",
+      "source": "backend/app/routers/stock_scan.py",
+      "category": "position-sizing",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestPositionSizingLaneD::test_position_sizing_formula_with_conviction",
+        "backend/tests/test_audit_stocks_lane_d.py:TestPositionSizingLaneD::test_position_sizing_boundary_conditions",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 5"
+      ],
+      "disposition": "verified; risk-budget share sizing: max(1, floor(Dollar Risk / Risk per Share + 1e-9)) with conviction multiplier ramp and boundary guards"
+    },
+    {
+      "id": "component:frontend/components/organisms/StockPositionCard",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "category": "position-presentation",
+      "verified": true,
+      "evidence": [
+        "backend/tests/test_audit_stocks_lane_d.py:TestPositionSizingLaneD::test_concentration_flag_math_never_clamps_shares",
+        "frontend/components/organisms/StockPositionCard/index.tsx:70-116",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 5"
+      ],
+      "disposition": "verified; displays sizing preview, target rungs, R/R ratio, and concentrationFlag warning without clamping recommendedShares"
+    },
+    {
+      "id": "resolver:frontend/lib/resolveStockScanRequest.ts#buildStockScanRequestBody",
+      "source": "frontend/lib/resolveStockScanRequest.ts",
+      "category": "request-resolution",
+      "verified": true,
+      "evidence": [
+        "frontend/app/(frame)/screener/step-4-stocks/__tests__/auditStocksLaneD.test.tsx:1. Request Resolution & Whitelist Isolation",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 1"
+      ],
+      "disposition": "verified; builds canonical StockScanRequest with price/cap filtering, unit conversion, weight decimal normalization, and options key whitelist isolation"
+    },
+    {
+      "id": "lifecycle:frontend/components/StoreHydration",
+      "source": "frontend/components/StoreHydration/index.tsx",
+      "category": "client-hydration",
+      "verified": true,
+      "evidence": [
+        "frontend/app/(frame)/screener/step-4-stocks/__tests__/auditStocksLaneD.test.tsx:2. Scan Store State & Clean Invalidation",
+        "frontend/components/StoreHydration/index.tsx:50-80",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 6"
+      ],
+      "disposition": "verified; rehydrates persisted stock scan results, aligns local wall-clock timestamp, validates matching context, and clears obsolete results"
+    },
+    {
+      "id": "page:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "source": "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "category": "ui-workflow",
+      "verified": true,
+      "evidence": [
+        "frontend/app/(frame)/screener/step-4-stocks/__tests__/customUniverseScan.test.tsx",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 6"
+      ],
+      "disposition": "verified; primary stocks workflow UI coordinating strategy picker, scan results table, score breakdown, and position card preview"
+    },
+    {
+      "id": "page:frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "category": "ui-workflow",
+      "verified": true,
+      "evidence": [
+        "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 4"
+      ],
+      "disposition": "verified; inspects candidate backtest metrics and retrieves frozen candidate artifact via GET /api/backtest-artifacts/{artifact_id}?symbol={symbol}"
+    },
+    {
+      "id": "page:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "source": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "category": "ui-workflow",
+      "verified": true,
+      "evidence": [
+        "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+        "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md:Task 5"
+      ],
+      "disposition": "verified; final stock trade execution stage presenting ConfidenceBadge, share quantity, order parameters, and paper broker submission"
+    }
+  ]
+}

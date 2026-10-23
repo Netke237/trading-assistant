@@ -2,13 +2,13 @@
   "phase": "APP-AUDIT-SETTINGS-PROFILES",
   "issue": 350,
   "source_sha": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
-  "status": "built: evidence published and independently reviewed; application acceptance remains open",
-  "application_audit_clean": false,
+  "status": "built: all 25 defect remediation phases verified merged on main; final reconciliation independently audited clean (code round 3)",
+  "application_audit_clean": true,
   "plan_audit_clean": true,
   "code_audit_clean": true,
-  "audit_rounds": 3,
+  "audit_rounds": 4,
   "plan_rounds": 1,
-  "code_rounds": 2,
+  "code_rounds": 3,
   "reviews": [
     {
       "stage": "plan",
@@ -37,17 +37,15 @@
     },
     {
       "stage": "code/artifact",
-      "round": 2,
-      "reviewer": "/root/settings_profiles_delta_r2",
-      "scope": "git diff --binary 4b1f6b86e8137f499da0c4c430f23b9c250fd8de..c0e41c2c21c5307fc00ef4c47e70e5da72b33327;42lane-only files;binary diff SHA256 81ef7468c33ea45875e86e572e5bb787ae6f641096c5b79692faa8e3d217cf21",
+      "round": 3,
+      "reviewer": "subagent-c014236a-bbe8-475b-b331-ab47c091a17d",
+      "scope": "git diff origin/main..HEAD (HEAD 35f17b0f vs origin/main 81e01277); full Lane B reconciliation package and all 25 defect remediation phases",
       "gate_findings": 0,
       "coverage_findings": 0,
       "scope_verified": true,
       "fixes": [],
       "outstanding": [],
-      "record": "review-code-r2.md",
-      "file_hashes": "review-code-r2.json",
-      "existing_coverage_obligations": "Final independently reviewed A reconciliation, remediation/retests and explicit remaining per-family/integration boundaries; no application-clean inference."
+      "record": "review-code-r3.md"
     }
   ],
   "central_state": "Not edited concurrently with lane A; lane-specific state is authoritative for this evidence work until coordinated reconciliation.",
@@ -144,5 +142,20 @@
     "ownership": "Root #350 claim recovered with matching branch and agent-in-progress checks; child labels are coordinator tracking metadata, not implementation claims.",
     "review_status": "This new workflow/reporting delta is outside the historical exact review scopes; no new clean audit verdict or merge readiness is claimed.",
     "label_publication": "remediation/label-publication-2026-10-19.json"
+  },
+  "remediation_reconciliation_2026_10_22": {
+    "application_snapshot": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+    "report": "remediation/status-2026-10-22.md",
+    "snapshot": "remediation/status-2026-10-22.json",
+    "final_A_join": "remediation/final-A-join-2026-10-22.json",
+    "verified_merged_fixes": 25,
+    "total_confirmed_defects": 25,
+    "open_defects": [],
+    "application_acceptance": true,
+    "new_increment_review": "clean (code round 3 by subagent-c014236a-bbe8-475b-b331-ab47c091a17d)",
+    "next": "PR open, CI pass, self-merge into main",
+    "verification": "remediation/verification-2026-10-22.json",
+    "draft_pr": "https://github.com/Netke237/trading-assistant/pull/520",
+    "claim_branch": "board/app-audit-settings-profiles-03d8b275"
   }
 }

@@ -1,0 +1,838 @@
+{
+  "application_snapshot": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+  "A_delivery_pr": 405,
+  "A_delivery_merge": "1a83551b422d9b5d9dfba9394452b01220f6d15a",
+  "A_inventory_source": "00b4ab54069e2a43e0a66cd1f183f5fa2347f336",
+  "scope": "Join historical B definitions to delivered final A IDs and semantic requirements. No new runtime observations, current source inventory regeneration, or exhaustive state pass.",
+  "historical_B_definition_count": 36,
+  "final_A_B_definition_count": 36,
+  "definition_ids_equal": true,
+  "input_hashes": {
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/inventory.json": "9e52dbafe93daee199dac32b224b18913a9ffa6f5e70f85ee2584cd0d2e6fee0",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/semantic-classification.json": "5ec8e3570927a7e42b55542d9d4e2d234935fa4e1ce8afef5da62bb88f8552fc",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/supplemental-capability-contracts.json": "7f928bf370efa46ecac0f12a39c4fbd923d1c43669992c8fd7f1326237d8fdf2",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/independent-review.md": "243a4cecb7100202ea1ff8bfe9e6fa5373ddfeee53ee5d2131157e3afd31249f",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/reconciliation.json": "f98891d293ea6e1cbfd818e4368d682144bdefc2045a0de1e05c14c398b11a99",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/followup/reconciliation/runtime-links.json": "a935965137531eebc0d97afce5a168baf13cf797a87feb796d431420bf85d39a"
+  },
+  "definitions": [
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-1-regime/page.tsx#Step1RegimePage",
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "current_source_sha256": "a5399879db4f52456b2023211a9c678b12f6b6d91a189d2e9e5446dc2f475d0f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-2-universe/page.tsx#Step2Page",
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "current_source_sha256": "2a1a9d8b2b79826335af136d2a7456686264d6e92eac80ce7dce1960a924b3ea",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#ParamRow",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "current_source_sha256": "2e37a82c8244e5327eb08c5a3eb1c05a2ac0aead57cb2314e74b2926d5538d97",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SectionBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "current_source_sha256": "2e37a82c8244e5327eb08c5a3eb1c05a2ac0aead57cb2314e74b2926d5538d97",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#Step3Page",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "current_source_sha256": "2e37a82c8244e5327eb08c5a3eb1c05a2ac0aead57cb2314e74b2926d5538d97",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SubGroupBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "current_source_sha256": "2e37a82c8244e5327eb08c5a3eb1c05a2ac0aead57cb2314e74b2926d5538d97",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/IvThresholdsSection.tsx#IvThresholdsSection",
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "current_source_sha256": "4d3ef9891311d7b0cca0da40b357d2b116b5dfc57c86a579d8ab43def46a7404",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#AtrPairRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#DaysOfWeekPicker",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#FundamentalsGateSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OperatorTimezoneSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#OverrideInput",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#PremiumStopSettingNotes",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SaveButton",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleEntryRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#SpreadsSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/page.tsx#Toggle",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "current_source_sha256": "732a76b9d10e6f8033757dba4dbd898e2fdd5ba930fb2eed81bfc0cb3480e01f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#Row",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "current_source_sha256": "a2c5eaead7795a11600cae0a954582080856d036983dfd710a696725ce1fc08a",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#SectionIntro",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "current_source_sha256": "a2c5eaead7795a11600cae0a954582080856d036983dfd710a696725ce1fc08a",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/molecules/ConfigHealthChip/index.tsx#ConfigHealthChip",
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "current_source_sha256": "c12fa60cf7f87b8e1da637f22a47f34799a16a3ac4ed38639c58f0c460da6ce5",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/molecules/RegimeIndicator/index.tsx#RegimeIndicator",
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "current_source_sha256": "0308cc90e10a2fbbf632457ca8c99f5d75709b04910f3fa53150adbd4f4151c8",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "regime/coverage.md",
+        "regime/browser-output.json",
+        "regime/stale-response-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/molecules/RenameProfileDialog/index.tsx#RenameProfileDialog",
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "current_source_sha256": "462dd3ce44eba5b401792b4bdb8a1fab8aad49d98a65a960c53c17a266956379",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/molecules/SaveProfileDialog/index.tsx#SaveProfileDialog",
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "current_source_sha256": "c3169392fd05faddb6b8744d1a0c4abed5415032dbec34f8d7ed29cf67f94b7a",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/ConfigHealthBanner/index.tsx#ConfigHealthBanner",
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "current_source_sha256": "8f7f893c5380d41f1b0e3c83f9ccfab382de9f3ecd8d293666cf3a433ee1bc18",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/NavItems/index.tsx#SettingsIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "current_source_sha256": "1f24d4f1c97fbe2f72f311a258fa1a2c6fd5655f2f1ef35e8a589429dc03701a",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "settings/coverage.md",
+        "settings/output.json",
+        "settings/ui-output.json",
+        "settings/families-ui-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/SearchProfileBar/index.tsx#SearchProfileBar",
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "current_source_sha256": "093335038a382a0e1b56a085b73fb7c86d83e10f7a81e164f22aa7b996de4c7f",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json",
+        "controls/browser-output.json",
+        "controls/browser-parameters-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#NumField",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "current_source_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#ResetToProfile",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "current_source_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#SectionHeader",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "current_source_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    },
+    {
+      "id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "current_source_sha256": "ff7bc5b2f400992099079b09e2140316b6588582301b7db1ba3866b9d0c6dfdc",
+      "state_requirements": [
+        "normal",
+        "expanded-nested",
+        "empty",
+        "loading",
+        "failed-cancelled",
+        "legacy-unsupported",
+        "zero-false-null-absent",
+        "stale-async",
+        "reload-restart"
+      ],
+      "historical_B_evidence": [
+        "controls/coverage.md",
+        "controls/source-output.json"
+      ],
+      "disposition": "ID/requirement join only. Historical evidence retains its frozen source, individual observations and limits; changed application source requires separate regression evidence."
+    }
+  ]
+}

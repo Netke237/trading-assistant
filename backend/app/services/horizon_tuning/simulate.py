@@ -139,6 +139,7 @@ def simulate_trades(
             entry_date=dates[trade["entry_bar"]], exit_date=dates[i],
             entry_price=entry, exit_price=price,
             net_return_pct=pl_pct * 100.0, exit_reason=reason,
+            size=size,
         ))
         trade = None
 

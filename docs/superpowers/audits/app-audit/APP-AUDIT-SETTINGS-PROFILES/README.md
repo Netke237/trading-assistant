@@ -1,3 +1,10 @@
+> Current remediation reconciliation (2026-10-22): **25/25 verified merged fixes**.
+> All 25 defect remediation phases are verified merged on main (ancestor 81e01277). See the [dated report](remediation/status-2026-10-22.md),
+> [merge/CI snapshot](remediation/status-2026-10-22.json), and
+> [final Lane A ID/requirement join](remediation/final-A-join-2026-10-22.json).
+> The historical evidence below remains frozen. Its “unfixed” statements describe
+> the captured sources.
+
 # Lane B audit evidence — issue #350
 
 Original evidence frozen at `880c8441841cc22d5090cdc5f984e4cf7e3d9a8d`.

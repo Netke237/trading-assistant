@@ -12,7 +12,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { api } from '@/lib/api';
 import type { ContractGrading } from '@/types/domain';
-import { stableStringify } from '@/lib/contractGrading';
+import { isValidGrading, stableStringify } from '@/lib/contractGrading';
 
 export const WATCHED_CONTRACTS_STORAGE_KEY = 'bamendjou-watched-contracts-v1';
 
@@ -40,11 +40,18 @@ function isId(x: unknown): x is string {
 /** Repairs a stored blob: ids kept only as non-empty strings, grading only as
  *  a plain object. Shared by migrate and merge, since persist() calls migrate
  *  only when the stored version differs and a hand-edited v3 blob skips it. */
-function sanitizePersisted(persisted: unknown): Persisted {
+export function sanitizePersisted(persisted: unknown): Persisted {
   const p = (persisted ?? {}) as { ids?: unknown; grading?: unknown };
   const ids = Array.isArray(p.ids) ? p.ids.filter(isId) : [];
   const g = p.grading;
-  const grading = g && typeof g === 'object' && !Array.isArray(g) ? (g as Record<string, ContractGrading>) : {};
+  const rawGrading = g && typeof g === 'object' && !Array.isArray(g) ? (g as Record<string, unknown>) : {};
+  const idSet = new Set(ids);
+  const grading: Record<string, ContractGrading> = {};
+  for (const [k, v] of Object.entries(rawGrading)) {
+    if (idSet.has(k) && isValidGrading(v)) {
+      grading[k] = v;
+    }
+  }
   return { ids, grading };
 }
 

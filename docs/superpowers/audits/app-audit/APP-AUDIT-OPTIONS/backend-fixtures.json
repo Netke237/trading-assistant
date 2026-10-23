@@ -1,0 +1,164 @@
+{
+  "application_baseline": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "python_version_pinned": "3.11",
+  "generated_at": "2026-10-22T08:30:00Z",
+  "provenance": "Deterministic boundary and trace fixtures independently derived from YAML rules and frozen contracts",
+  "contract_scoring_fixtures": {
+    "liquidity": [
+      {"name": "full_pass", "volume": 500, "open_interest": 2000, "expected_vol_score": 100, "expected_oi_score": 100, "expected_score": 100, "expected_flags": []},
+      {"name": "preferred_boundary", "volume": 200, "open_interest": 1000, "expected_vol_score": 60, "expected_oi_score": 60, "expected_score": 60, "expected_flags": []},
+      {"name": "partial_soft_fail", "volume": 100, "open_interest": 500, "expected_vol_score": 30, "expected_oi_score": 30, "expected_score": 30, "expected_flags": ["thin_liquidity"]},
+      {"name": "zero_liquidity_soft_reject", "volume": 0, "open_interest": 0, "expected_vol_score": 0, "expected_oi_score": 0, "expected_score": 0, "expected_flags": ["thin_liquidity"]},
+      {"name": "disabled_floors", "volume": 10, "open_interest": 10, "overrides": {"preferred_volume_min": 0, "preferred_oi_min": 0}, "expected_vol_score": 100, "expected_oi_score": 100, "expected_score": 100, "expected_flags": []}
+    ],
+    "spread": [
+      {"name": "zero_spread", "bid": 5.0, "ask": 5.0, "expected_spread_pct": 0.0, "expected_score": 100, "expected_flags": []},
+      {"name": "tight_spread", "bid": 4.90, "ask": 5.10, "expected_spread_pct": 0.04, "expected_score": 50, "expected_flags": []},
+      {"name": "preferred_boundary", "bid": 4.80, "ask": 5.20, "expected_spread_pct": 0.08, "expected_score": 0, "expected_flags": []},
+      {"name": "elevated_spread", "bid": 4.50, "ask": 5.50, "expected_spread_pct": 0.20, "expected_score": 0, "expected_flags": ["spread_elevated"]},
+      {"name": "hard_reject_spread", "bid": 4.00, "ask": 5.20, "expected_spread_pct": 0.26087, "expected_hard_reject": "spread_too_wide"}
+    ],
+    "delta": [
+      {"name": "golden_center", "delta": 0.50, "expected_score": 100, "expected_flags": []},
+      {"name": "in_zone_moderate", "delta": 0.40, "expected_score": 50, "expected_flags": []},
+      {"name": "preferred_boundary_low", "delta": 0.30, "expected_score": 0, "expected_flags": []},
+      {"name": "preferred_boundary_high", "delta": 0.70, "expected_score": 0, "expected_flags": []},
+      {"name": "outside_low_soft_fail", "delta": 0.25, "expected_score": 20, "expected_flags": ["delta_outside_preferred"]},
+      {"name": "outside_high_soft_fail", "delta": 0.75, "expected_score": 20, "expected_flags": ["delta_outside_preferred"]},
+      {"name": "hard_reject_low", "delta": 0.15, "expected_hard_reject": "delta_too_low_far_otm"},
+      {"name": "hard_reject_high", "delta": 0.88, "expected_hard_reject": "delta_too_high_deep_itm"}
+    ],
+    "dte": [
+      {"name": "center_dte", "days_to_expiry": 40, "expected_score": 97, "expected_flags": []},
+      {"name": "preferred_boundary_min", "days_to_expiry": 21, "expected_score": 0, "expected_flags": []},
+      {"name": "preferred_boundary_max", "days_to_expiry": 60, "expected_score": 0, "expected_flags": []},
+      {"name": "soft_decay_short", "days_to_expiry": 15, "expected_score": 17, "expected_flags": ["dte_outside_preferred"]},
+      {"name": "soft_decay_long", "days_to_expiry": 75, "expected_score": 5, "expected_flags": ["dte_outside_preferred"]},
+      {"name": "hard_reject_too_short", "days_to_expiry": 14, "expected_hard_reject": "dte_too_short"},
+      {"name": "hard_reject_too_long", "days_to_expiry": 95, "expected_hard_reject": "dte_too_long"}
+    ],
+    "iv": [
+      {"name": "normal_iv", "iv_rank": 30, "basis": "rank", "expected_score": 45, "expected_flags": []},
+      {"name": "at_preferred_max", "iv_rank": 55, "basis": "rank", "expected_score": 0, "expected_flags": []},
+      {"name": "discontinuity_jump", "iv_rank": 56, "basis": "rank", "expected_score": 19, "expected_flags": ["iv_rank_elevated"]},
+      {"name": "elevated_moderate", "iv_rank": 60, "basis": "rank", "expected_score": 17, "expected_flags": ["iv_rank_elevated"]},
+      {"name": "hard_reject_iv", "iv_rank": 75, "basis": "rank", "expected_hard_reject": "iv_rank_too_high"},
+      {"name": "missing_iv", "iv_rank": null, "basis": "none", "expected_score": 50, "expected_flags": ["no_iv_rank_data"]}
+    ]
+  },
+  "sizing_and_risk_fixtures": {
+    "account": {
+      "portfolio_value": 100000.0,
+      "min_portfolio_value": 5000.0,
+      "max_contracts_per_trade": 5,
+      "max_single_position_pct": 0.05,
+      "max_loss_per_trade_pct": 0.0375,
+      "effective_single_cap_pct": 0.0375,
+      "effective_single_cap_dollars": 3750.0
+    },
+    "cases": [
+      {
+        "id": "valid_standard",
+        "proposed_contracts": 2,
+        "entry_premium": 10.0,
+        "capital_at_risk": 2000.0,
+        "expected_approved": true,
+        "expected_adjusted_size": null
+      },
+      {
+        "id": "size_reduced_to_cap",
+        "proposed_contracts": 5,
+        "entry_premium": 10.0,
+        "capital_at_risk": 5000.0,
+        "expected_approved": true,
+        "expected_adjusted_size": 3,
+        "expected_reason": "size_reduced_to_fit_exposure_limit"
+      },
+      {
+        "id": "exposure_too_high_single_contract",
+        "proposed_contracts": 1,
+        "entry_premium": 40.0,
+        "capital_at_risk": 4000.0,
+        "expected_approved": false,
+        "expected_reason": "single_trade_exposure_too_high"
+      },
+      {
+        "id": "exceeds_max_contracts",
+        "proposed_contracts": 6,
+        "entry_premium": 2.0,
+        "expected_approved": false,
+        "expected_reason": "exceeds_max_contracts_per_trade"
+      },
+      {
+        "id": "portfolio_too_small",
+        "portfolio_value": 4000.0,
+        "proposed_contracts": 1,
+        "entry_premium": 2.0,
+        "expected_approved": false,
+        "expected_reason": "portfolio_too_small"
+      }
+    ]
+  },
+  "trade_plan_fixtures": {
+    "bullish_call": {
+      "direction": "Bullish",
+      "stock_price": 185.0,
+      "strike": 185.0,
+      "dte": 30,
+      "premium": 4.50,
+      "final_stop_price": 179.45,
+      "target_price": 196.10,
+      "stop_cost_fraction": 0.45,
+      "expected_time_stop_days": 12,
+      "expected_premium_stop": 2.70,
+      "expected_invalidation_price": 179.45,
+      "expected_target_price": 196.10,
+      "expected_risk_basis": "full_premium"
+    },
+    "bearish_put": {
+      "direction": "Bearish",
+      "stock_price": 185.0,
+      "strike": 185.0,
+      "dte": 45,
+      "premium": 5.00,
+      "final_stop_price": 190.55,
+      "target_price": 173.90,
+      "stop_cost_fraction": 0.50,
+      "expected_time_stop_days": 18,
+      "expected_premium_stop": 3.00,
+      "expected_invalidation_price": 190.55,
+      "expected_target_price": 173.90,
+      "expected_risk_basis": "full_premium"
+    }
+  },
+  "defect_investigations": {
+    "issue_162_fractional_strikes": [
+      {"symbol": "AAPL", "strike": 182.5, "expiry": "2026-11-20", "right": "C", "expected_lossy_id": "AAPL|182|2026-11-20|C", "expected_lossless_id": "AAPL|182.5|2026-11-20|C"},
+      {"symbol": "SPY", "strike": 575.5, "expiry": "2026-11-20", "right": "P", "expected_lossy_id": "SPY|575|2026-11-20|P", "expected_lossless_id": "SPY|575.5|2026-11-20|P"}
+    ],
+    "issue_179_iv_jump": [
+      {"iv_rank": 50, "score": 9},
+      {"iv_rank": 54, "score": 1},
+      {"iv_rank": 55, "score": 0},
+      {"iv_rank": 56, "score": 19},
+      {"iv_rank": 60, "score": 17},
+      {"iv_rank": 70, "score": 13},
+      {"iv_rank": 71, "score": 0, "rejected": true}
+    ],
+    "issue_335_heston_overpricing": {
+      "calibrated_params_pinned": {
+        "v0": 0.08,
+        "kappa": 0.5,
+        "theta": 0.08,
+        "sigma_v": 0.6,
+        "rho": -0.8
+      },
+      "feller_condition": {
+        "two_kappa_theta": 0.08,
+        "sigma_v_squared": 0.36,
+        "feller_ratio": 4.5,
+        "satisfied": false
+      }
+    }
+  }
+}

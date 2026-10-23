@@ -1,0 +1,1346 @@
+{
+  "phase": "APP-AUDIT-SETTINGS-PROFILES",
+  "captured_at_utc": "2026-10-22T12:46:56.531237+00:00",
+  "application_source": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+  "claim_branch": "board/app-audit-settings-profiles-03d8b275",
+  "counts": {
+    "confirmed_defects": 25,
+    "closed_issues": 25,
+    "verified_merged_fixes": 25,
+    "open_defects": 0
+  },
+  "application_acceptance": true,
+  "aggregate_completion_pct": null,
+  "completion_reason": "All 25 of 25 confirmed Lane B defect remediation phases are verified merged on main (ancestor 81e01277), each with three successful native CI checks. All 36 historical Lane B definitions join to delivered Lane A IDs and 324 state requirements. Application acceptance complete.",
+  "historical_reviews": {
+    "plan_rounds": 1,
+    "code_rounds": 2,
+    "unchanged": true,
+    "new_reconciliation_review": "reserved until final reconciliation; draft PR520 has no new independent clean verdict"
+  },
+  "defects": [
+    {
+      "issue": 368,
+      "title": "Options millions market-cap filters are sent as dollars",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-CAP-UNITS",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/fix368_plan_r2 reviewed plan SHA2567b87fc503577bcae353abd058518b7783a77f7c157a578bd6a4e424af4fdaebd; exactscope verified,0gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-CAP-UNITS/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewed_head": "d86e80d1b983f44fe4fd97b7e87f13d4098cb1dd",
+        "reviewer": "/root/cap368_code_r1",
+        "report": "docs/superpowers/audits/APP-AUDIT-B-CAP-UNITS/code-r1.md"
+      },
+      "merge": {
+        "pr": 454,
+        "url": "https://github.com/Netke237/trading-assistant/pull/454",
+        "head": "c97955f07fd7873890f8760d92b4f466bd966e35",
+        "commit": "a1811c0ee40c324fbd87291a0cad8e1d3a6fb202",
+        "merged_at": "2026-10-21T04:19:30Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39542548072/job/119033342757",
+            "completedAt": "2026-10-21T04:18:32Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39542548030/job/119033342521",
+            "completedAt": "2026-10-21T04:12:43Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39542548072/job/119033343263",
+            "completedAt": "2026-10-21T04:15:06Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 369,
+      "title": "252-day VIX percentile uses 259 prior bars",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:2"
+      ],
+      "phase": "APP-AUDIT-B-VIX-WINDOW",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh /root/fix369_plan_r1 reviewed plan SHA25642b4a2aa3072118bdeecf864f61a5e13242f8a7f3ddba4a346b2669fd3e98e83; exactscope verified,0gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-VIX-WINDOW/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent b7fe7869-32aa-4c65-8136-1ddd9beb69dc reviewed diff 9adb7ee3..71c48f75 (regime.py [-253:-1], test_vix_percentile_window.py 8 tests, vixPercentileDisplay.test.tsx 2 tests); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-VIX-WINDOW/code-r1.md"
+      },
+      "merge": {
+        "pr": 411,
+        "url": "https://github.com/Netke237/trading-assistant/pull/411",
+        "head": "480230f3c9d61f8d69958f89a7519bd90074c517",
+        "commit": "b5e665cf6fedc1ff04ba1e3898b60dec3f2fbd0e",
+        "merged_at": "2026-10-19T08:32:32Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39221767973/job/117958480972",
+            "completedAt": "2026-10-19T08:31:06Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39221767900/job/117958480922",
+            "completedAt": "2026-10-19T08:20:00Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39221767973/job/117958481443",
+            "completedAt": "2026-10-19T08:22:43Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 370,
+      "title": "Appearance row density resets when the Settings section remounts",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:2"
+      ],
+      "phase": "APP-AUDIT-B-DENSITY",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent reviewed plan SHA256 d2ca053620bfc6e1caff8df313d03c6e719f57a7ceefcbc2680516f9c72e5cd2; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-DENSITY/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 1ba62927-4c41-414f-b628-7a9a3ee8f57e reviewed diff origin/main..HEAD (commit 3b633d04); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-DENSITY/code-r2.md"
+      },
+      "merge": {
+        "pr": 426,
+        "url": "https://github.com/Netke237/trading-assistant/pull/426",
+        "head": "4ba375b7c362dcd8e8a554039a3b85372ae5df4f",
+        "commit": "be557e01a762086a6401d4987c0eeca5d29115fc",
+        "merged_at": "2026-10-20T16:33:08Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39456876071/job/118745952726",
+            "completedAt": "2026-10-20T16:32:12Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39456876083/job/118745952411",
+            "completedAt": "2026-10-20T16:24:59Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39456876071/job/118745952226",
+            "completedAt": "2026-10-20T16:25:56Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 371,
+      "title": "Settings footer confirms Saved after a failed or unsubmitted backend save",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:5"
+      ],
+      "phase": "APP-AUDIT-B-SAVE-FEEDBACK",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": null,
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true
+      },
+      "merge": {
+        "pr": 500,
+        "url": "https://github.com/Netke237/trading-assistant/pull/500",
+        "head": "4b155f43e31b13ef4928e2b41c871fd47b181e33",
+        "commit": "a9d138d3354a065c91fe44eaef3dd9964d528b25",
+        "merged_at": "2026-10-22T06:15:02Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39731733338/job/119668085338",
+            "completedAt": "2026-10-22T06:13:47Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39731733332/job/119668084886",
+            "completedAt": "2026-10-22T06:06:41Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39731733338/job/119668085115",
+            "completedAt": "2026-10-22T06:10:06Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 372,
+      "title": "Late Settings timezone response overwrites an operator edit",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-TIMEZONE-RACE",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 668095e1-2ea2-4a0b-8726-d6b28820cdba reviewed plan SHA256 F18B715B3230FA70E2FC326B8150914C02AEC37BAFC2FB86A0E4836145E89B5D; exact scope verified, 0 gate findings after second pass; report docs/superpowers/audits/APP-AUDIT-B-TIMEZONE-RACE/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 6433f454-7f74-4381-a04d-ca433b754475 reviewed diff f08e4dfc..e80e8341 (page.tsx OperatorTimezoneSection, OperatorTimezoneSection.race.test.tsx 8 tests); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-TIMEZONE-RACE/code-r1.md"
+      },
+      "merge": {
+        "pr": 415,
+        "url": "https://github.com/Netke237/trading-assistant/pull/415",
+        "head": "0b3c9b776f07178f8d906d2616f55a985b5e865a",
+        "commit": "bbaf8f8165049685ce45474ce09ad54ae04ebf15",
+        "merged_at": "2026-10-19T10:44:44Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39238393518/job/118012972133",
+            "completedAt": "2026-10-19T10:43:29Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39238393756/job/118012972930",
+            "completedAt": "2026-10-19T10:36:01Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39238393518/job/118012972447",
+            "completedAt": "2026-10-19T10:39:11Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 373,
+      "title": "Strategy scan stores zero override that the backend rejects",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-STRATEGY-VALIDATION",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "/root/plan_audit_r2 reviewed plan SHA256 1903C4300505F760EDE8E9E4403CEA1E48E368ED7A37F6DB1CC722866D6E19E0: 0 gate findings; plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3b2baac3-e6cf-4e7a-95d0-716c617253f8 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-STRATEGY-VALIDATION/code-r1.md"
+      },
+      "merge": {
+        "pr": 424,
+        "url": "https://github.com/Netke237/trading-assistant/pull/424",
+        "head": "0c0ab72a957ae885e6fb5b479d4447cfd6900fc7",
+        "commit": "2d1e54c4f4f3867da090028d0b84fbbfaeb64f31",
+        "merged_at": "2026-10-20T16:01:25Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39451879520/job/118728528699",
+            "completedAt": "2026-10-20T16:00:47Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39451879519/job/118728526867",
+            "completedAt": "2026-10-20T15:50:40Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39451879520/job/118728528115",
+            "completedAt": "2026-10-20T15:52:46Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 374,
+      "title": "Failed schedule writes change API state while disk and scheduler retain old values",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan Round 1 audited clean with 0 gate findings by subagent 7a41b7c1-9a80-46ed-8c5f-c5356bd470e8"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code Round 1 audited clean with 0 gate findings by subagent 304999da-11c1-4458-ba1a-d386ff974f7c"
+      },
+      "merge": {
+        "pr": 463,
+        "url": "https://github.com/Netke237/trading-assistant/pull/463",
+        "head": "67bba58d331cfdedb5162295fe1e6ee94c406376",
+        "commit": "8493715214b88b92cb25c318f1b521ed34b7be04",
+        "merged_at": "2026-10-21T07:33:15Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39561311297/job/119092986452",
+            "completedAt": "2026-10-21T07:32:39Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39561311325/job/119092986808",
+            "completedAt": "2026-10-21T07:23:18Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39561311297/job/119092986952",
+            "completedAt": "2026-10-21T07:25:46Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 375,
+      "title": "Notifications help text renders a literal Unicode escape",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "phase": "APP-AUDIT-B-NOTIFICATION-TEXT",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3ea573be-6af7-4fcd-ae33-075c53f7a3e8 reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-NOTIFICATION-TEXT/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 76e7d628-6704-4bb6-bf93-c442dbaa4b4c reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-NOTIFICATION-TEXT/code-r1.md"
+      },
+      "merge": {
+        "pr": 429,
+        "url": "https://github.com/Netke237/trading-assistant/pull/429",
+        "head": "d76229424ee8c35e290d0ce87cca07a3f67f3582",
+        "commit": "8f2427fd9cee625e98b3c54da51f177426c532fe",
+        "merged_at": "2026-10-20T17:11:58Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39461982359/job/118763505760",
+            "completedAt": "2026-10-20T17:09:39Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39461982303/job/118763505786",
+            "completedAt": "2026-10-20T17:00:12Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39461982359/job/118763506366",
+            "completedAt": "2026-10-20T17:00:51Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 377,
+      "title": "Tuning schedule says every day despite saved weekday selection",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "phase": "APP-AUDIT-B-TUNING-HINT",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 7eb5fb9d-1e08-4d06-8e64-0e16cd185136 reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-TUNING-HINT/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 60092f79-1d84-43ea-b8a9-1082c6940a3c reviewed diff bbaf8f81..800c58ce (scheduleCadence.ts, TuningScheduleHint.test.tsx 12 tests, settings/page.tsx ScheduleSection hint); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-TUNING-HINT/code-r1.md"
+      },
+      "merge": {
+        "pr": 416,
+        "url": "https://github.com/Netke237/trading-assistant/pull/416",
+        "head": "8e047a19c529f07674a764f28f4bee9e7bb944aa",
+        "commit": "482d827750e3c467636de8170bc494378c40f409",
+        "merged_at": "2026-10-19T12:30:35Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39250888860/job/118054106057",
+            "completedAt": "2026-10-19T12:30:00Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39250889042/job/118054105725",
+            "completedAt": "2026-10-19T12:19:00Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39250888860/job/118054105704",
+            "completedAt": "2026-10-19T12:22:28Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 380,
+      "title": "Stocks manual and scheduled requests drop universe price/cap filters",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-STOCK-FILTERS",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOCK-FILTERS/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOCK-FILTERS/code-r1.md"
+      },
+      "merge": {
+        "pr": 452,
+        "url": "https://github.com/Netke237/trading-assistant/pull/452",
+        "head": "ad1a479e864bfda6243b8972c9118ce685a81cbd",
+        "commit": "809f883ef7615ca9a9c80d2bdc32ce1201e58dfe",
+        "merged_at": "2026-10-21T04:02:15Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39540731477/job/119027629158",
+            "completedAt": "2026-10-21T04:01:55Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39540731460/job/119027628863",
+            "completedAt": "2026-10-21T03:52:35Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39540731477/job/119027629023",
+            "completedAt": "2026-10-21T03:54:20Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 381,
+      "title": "Malformed current-version profile crashes the Search Profile controls",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:5"
+      ],
+      "phase": "APP-AUDIT-B-PROFILE-VALIDATION",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-PROFILE-VALIDATION/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-PROFILE-VALIDATION/code-r3.md"
+      },
+      "merge": {
+        "pr": 475,
+        "url": "https://github.com/Netke237/trading-assistant/pull/475",
+        "head": "81ac714df6c829635c2a7e902e03f25ec14116fb",
+        "commit": "13f7b60a35ababb5237ef2eb7f726997bc1fa8a3",
+        "merged_at": "2026-10-21T14:00:11Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39611380851/job/119260832023",
+            "completedAt": "2026-10-21T13:59:04Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39611380871/job/119260829884",
+            "completedAt": "2026-10-21T13:51:33Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39611380851/job/119260831746",
+            "completedAt": "2026-10-21T13:53:55Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 382,
+      "title": "Options score-weight percent overrides are applied as raw multipliers",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-WEIGHT-UNITS",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Plan Round 3 audited clean with 0 gate findings by subagent ae3ebafc-3ea4-4a06-a080-e10dd5ed2478"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Code Round 1 audited clean with 0 gate findings by subagent d31a6e35-c050-43be-8685-1d5a1d3897ed"
+      },
+      "merge": {
+        "pr": 461,
+        "url": "https://github.com/Netke237/trading-assistant/pull/461",
+        "head": "a991b6529309cd96e5f4284eb12b54b5a454e04c",
+        "commit": "dd511abff828c68349afc428156f3b5228b82500",
+        "merged_at": "2026-10-21T06:49:08Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39556404443/job/119077071415",
+            "completedAt": "2026-10-21T06:48:40Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39556404397/job/119077071031",
+            "completedAt": "2026-10-21T06:38:26Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39556404443/job/119077071544",
+            "completedAt": "2026-10-21T06:39:45Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 383,
+      "title": "Stocks requests ignore Step3 confidence threshold overrides",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 68607bdc-c740-47a2-9b4a-03d9b27985e8 reviewed plan docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-CONFIDENCE-OVERRIDE/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3bd81c8f-f29e-423d-85e0-1f8b294a38a4 reviewed diff 30d0e94e722ec51cf775de52adb22dc4ab1c61d8..01a00316 against plan docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-CONFIDENCE-OVERRIDE/code-r1.md"
+      },
+      "merge": {
+        "pr": 449,
+        "url": "https://github.com/Netke237/trading-assistant/pull/449",
+        "head": "3247376f045f782a885ea4472a04a85ffb66a367",
+        "commit": "542fceb99a5a3ce19edd4d96ce8a91db6ad201a4",
+        "merged_at": "2026-10-20T21:50:37Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39502140725/job/118902022456",
+            "completedAt": "2026-10-20T21:50:03Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39502140680/job/118902022853",
+            "completedAt": "2026-10-20T21:42:04Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39502140725/job/118902022950",
+            "completedAt": "2026-10-20T21:44:50Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 384,
+      "title": "Entry Quality controls reach requests but do not affect the trade plan",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-ENTRY-OVERRIDES",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ebe7d138-7d95-45d9-93e4-56141c9a29a6 reviewed plan docs/superpowers/plans/2026-10-21-app-audit-b-entry-overrides-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 3317a0de-2ad4-4c45-bf9f-dc8b8d95549a reviewed diff origin/main..HEAD (fac2b792); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/code-r1.md"
+      },
+      "merge": {
+        "pr": 485,
+        "url": "https://github.com/Netke237/trading-assistant/pull/485",
+        "head": "73fc46ca319a6446cdb38bbbcd29ff64806e1d19",
+        "commit": "05dc303a743a28043b1b4c330629e491538019ec",
+        "merged_at": "2026-10-21T18:38:20Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39652625777/job/119404612490",
+            "completedAt": "2026-10-21T18:37:55Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39652625613/job/119404610901",
+            "completedAt": "2026-10-21T18:27:45Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39652625777/job/119404612055",
+            "completedAt": "2026-10-21T18:30:54Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 385,
+      "title": "Stop percentages display fractions and clamp a typed 3 percent to 100 percent",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-STOP-PERCENT-UNITS",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-STOP-PERCENT-UNITS/code-r1.md"
+      },
+      "merge": {
+        "pr": 457,
+        "url": "https://github.com/Netke237/trading-assistant/pull/457",
+        "head": "59b2118675cda6555624c9e30809a859324d3cf6",
+        "commit": "03d945201d4c92f95dfa527bf4b76a811a95edaa",
+        "merged_at": "2026-10-21T04:57:03Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39545689569/job/119043232901",
+            "completedAt": "2026-10-21T04:56:38Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39545689560/job/119043232914",
+            "completedAt": "2026-10-21T04:46:59Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39545689569/job/119043233100",
+            "completedAt": "2026-10-21T04:49:36Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 386,
+      "title": "Old regime response overwrites the newer direction-aligned scan gate",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-REGIME-RACE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent a2e4121472cca7fd1 reviewed the plan fixes 674ff931..e49a4473; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent a9e150f6389457db6 reviewed diff origin/main..3b573df6; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-REGIME-RACE/code-r1.md"
+      },
+      "merge": {
+        "pr": 442,
+        "url": "https://github.com/Netke237/trading-assistant/pull/442",
+        "head": "045d8d11088d44df07224d6f106c3b9d58ac205d",
+        "commit": "80b6d6cef41a23d4b5be74c385c493fc577b1cbc",
+        "merged_at": "2026-10-21T04:31:22Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39543594630/job/119036662844",
+            "completedAt": "2026-10-21T04:30:55Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39543594635/job/119036662898",
+            "completedAt": "2026-10-21T04:24:03Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39543594630/job/119036663036",
+            "completedAt": "2026-10-21T04:26:39Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 387,
+      "title": "Shared Run Scan confirmation is bypassed in Stocks and Pre-Breakout",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-RUN-GATE",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent b1291121-adc5-475f-9cd7-e7db2263abfa reviewed plan; exact scope verified, 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-RUN-GATE/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent c52ba529-11fd-4f20-923d-00979cb9cf7d reviewed integrated diff origin/main..HEAD (RunScanButton/index.tsx, RunScanButton.test.tsx 5 new tests); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-RUN-GATE/code-r1.md"
+      },
+      "merge": {
+        "pr": 420,
+        "url": "https://github.com/Netke237/trading-assistant/pull/420",
+        "head": "5aa69acfff41570e9eb5b090099afa6ed04be859",
+        "commit": "be45fcf4ebc4986dfe0ecd6ef15e8d6a7bd7f93f",
+        "merged_at": "2026-10-19T13:29:10Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39258970136/job/118081352647",
+            "completedAt": "2026-10-19T13:28:38Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39258970307/job/118081351784",
+            "completedAt": "2026-10-19T13:19:50Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39258970136/job/118081351622",
+            "completedAt": "2026-10-19T13:23:15Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 388,
+      "title": "Regime VIX percentile labels render incorrect ordinal suffixes",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:XS",
+        "complexity:1"
+      ],
+      "phase": "APP-AUDIT-B-PERCENTILE-TEXT",
+      "recorded_phase_status": "shipped",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 63c2b7b4-7ed4-4a1f-9ed8-a9ec62313437 reviewed plan; exact scope verified, 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-PERCENTILE-TEXT/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ad659a48-7955-4c75-ba54-dda7cf9f4364 reviewed diff bbaf8f81..30856ac6 (formatOrdinal.ts, formatOrdinal.test.ts 13 tests, vixPercentileDisplay.test.tsx 14 tests, step-1-regime/page.tsx 4 call sites); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-PERCENTILE-TEXT/code-r1.md"
+      },
+      "merge": {
+        "pr": 417,
+        "url": "https://github.com/Netke237/trading-assistant/pull/417",
+        "head": "53ed4638645b8b101113ef974d1d4d575351e344",
+        "commit": "3ebaa2916fd036d05a2127ed9183d70131752bd2",
+        "merged_at": "2026-10-19T12:14:04Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39244984993/job/118034623795",
+            "completedAt": "2026-10-19T11:41:49Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39244984977/job/118034623475",
+            "completedAt": "2026-10-19T11:31:06Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39244984993/job/118034623551",
+            "completedAt": "2026-10-19T11:33:55Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 398,
+      "title": "Failed Search Profile writes leave changed profiles active until reload",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 888ac026-782a-4603-a8b1-3dec77ab7abb reviewed plan docs/superpowers/plans/2026-10-21-app-audit-b-profile-write-failure-plan.md; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-PROFILE-WRITE-FAILURE/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 9fe34f4b-fca1-4148-a112-4a571b82450f reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-PROFILE-WRITE-FAILURE/code-r1.md"
+      },
+      "merge": {
+        "pr": 476,
+        "url": "https://github.com/Netke237/trading-assistant/pull/476",
+        "head": "b2d963dd703b733331ce26c1bf1207ef73411cf2",
+        "commit": "036e2e67ad68b754583f4cd4301045a6bcbf0c44",
+        "merged_at": "2026-10-21T14:40:14Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39617214597/job/119281308225",
+            "completedAt": "2026-10-21T14:39:25Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39617214586/job/119281308068",
+            "completedAt": "2026-10-21T14:31:57Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39617214597/job/119281308698",
+            "completedAt": "2026-10-21T14:34:23Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 399,
+      "title": "Theme changes do not synchronize across tabs as Settings promises",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:2"
+      ],
+      "phase": "APP-AUDIT-B-THEME-SYNC",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent a1296fd7-ce3f-47a2-8cf4-4628bfb68bfe reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-THEME-SYNC/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ee9a48ef-9627-400d-a011-c4dc1794d6da reviewed diff 482d8277..8b2df6cc (theme.ts, ThemeProvider/index.tsx, theme.test.ts 8 tests, ThemeProvider.test.tsx 7 tests); 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-THEME-SYNC/code-r1.md"
+      },
+      "merge": {
+        "pr": 419,
+        "url": "https://github.com/Netke237/trading-assistant/pull/419",
+        "head": "77badcab25b2a3286e79196eaa4c13766aa8ef28",
+        "commit": "280f556f2b0f41866428de38493840e465543677",
+        "merged_at": "2026-10-19T13:13:52Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39256152860/job/118071837261",
+            "completedAt": "2026-10-19T13:10:54Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39256152746/job/118071837058",
+            "completedAt": "2026-10-19T12:59:45Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39256152860/job/118071836537",
+            "completedAt": "2026-10-19T13:02:33Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 400,
+      "title": "An ordinary Settings edit in a stale tab overwrites unrelated saved values",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:L",
+        "complexity:5"
+      ],
+      "phase": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent dad00795-9934-4a92-8812-6e99fc161443 reviewed commit 5933eae1; 0 gate findings."
+      },
+      "recorded_code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewed_head": "e524a1877fd8185bb83d18fb214028be76d8687b",
+        "reviewer": "subagent-9935f078-5942-40e9-acce-b6a9228a107f",
+        "report": "docs/superpowers/plans/2026-10-22-app-audit-b-settings-lost-update-plan.md"
+      },
+      "acceptance": "Merged via PR #525 at 81e01277; independent plan 3 rounds clean, code 2 rounds clean. Full 17 unit and regression tests pass.",
+      "merge": {
+        "pr": 525,
+        "url": "https://github.com/Netke237/trading-assistant/pull/525",
+        "head": "e524a1877fd8185bb83d18fb214028be76d8687b",
+        "commit": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998",
+        "merged_at": "2026-10-22T17:02:30Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579658/job/119924810707",
+            "completedAt": "2026-10-22T15:57:06Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579659/job/119924810642",
+            "completedAt": "2026-10-22T15:46:33Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39807579658/job/119924811049",
+            "completedAt": "2026-10-22T15:49:11Z"
+          }
+        ]
+      }
+    },
+    {
+      "issue": 401,
+      "title": "Saving after invalid scan schedule YAML overwrites the only recovery bytes",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:4"
+      ],
+      "phase": "APP-AUDIT-B-SCHEDULE-RECOVERY",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent c59e22c4-a7b9-4d0b-b9cf-4620013ee37b reviewed plan fixes; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-RECOVERY/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 7ca49754-0750-42ae-bc8e-f714a4488ca5 reviewed code diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-RECOVERY/code-r1.md"
+      },
+      "merge": {
+        "pr": 443,
+        "url": "https://github.com/Netke237/trading-assistant/pull/443",
+        "head": "d132daaa373c8cf30917bd71feefdbb27d3a9841",
+        "commit": "acfcde2683f79bf5539108b37273c57a07a3a6bb",
+        "merged_at": "2026-10-20T20:39:49Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39492079823/job/118867566172",
+            "completedAt": "2026-10-20T20:39:15Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39492079705/job/118867566220",
+            "completedAt": "2026-10-20T20:29:36Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39492079823/job/118867565961",
+            "completedAt": "2026-10-20T20:32:02Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 402,
+      "title": "Scheduled scan failures and unresolvable profile selections give no explanation",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:M",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-SCHEDULE-FEEDBACK",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 386e77b8-f002-41fc-a753-1caa7dee65f1 reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-FEEDBACK/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 4a2a43d1-ba96-44d0-9ac8-baa4978a0b60 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-SCHEDULE-FEEDBACK/code-r1.md"
+      },
+      "merge": {
+        "pr": 432,
+        "url": "https://github.com/Netke237/trading-assistant/pull/432",
+        "head": "ecf66a47b6fe5bc34e611aae7348384a27902f7b",
+        "commit": "f7ef94c46d0da01c17052fa54ebe8ffb0bf34450",
+        "merged_at": "2026-10-20T17:55:58Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39468766663/job/118786987462",
+            "completedAt": "2026-10-20T17:55:13Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39468766623/job/118786986928",
+            "completedAt": "2026-10-20T17:47:21Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39468766663/job/118786987185",
+            "completedAt": "2026-10-20T17:48:06Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 403,
+      "title": "A schedule with a missing profile visually selects a different saved profile",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:2"
+      ],
+      "phase": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 80300e2e-c5fb-43e7-96f4-383bbd7bef4f reviewed plan; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE/plan-r1.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent ab99bf76-8509-4fe3-bc8c-dc9194a8ebc8 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE/code-r1.md"
+      },
+      "merge": {
+        "pr": 435,
+        "url": "https://github.com/Netke237/trading-assistant/pull/435",
+        "head": "c1df3a2ec12d9575f02c20d9bd5a2fa16d6aba2d",
+        "commit": "1d9b5b8e7d6df35c742f5899c3630cc9c087af9a",
+        "merged_at": "2026-10-20T18:30:29Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39473402877/job/118803050668",
+            "completedAt": "2026-10-20T18:29:10Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39473402853/job/118803050451",
+            "completedAt": "2026-10-20T18:19:18Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39473402877/job/118803051258",
+            "completedAt": "2026-10-20T18:21:56Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    },
+    {
+      "issue": 404,
+      "title": "An unavailable timezone readback displays an editable default without an error",
+      "issue_state": "CLOSED",
+      "ratings": [
+        "size:S",
+        "complexity:3"
+      ],
+      "phase": "APP-AUDIT-B-TIMEZONE-LOAD-FAILURE",
+      "recorded_phase_status": "built",
+      "recorded_audit_clean": true,
+      "recorded_plan_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 780e6d6c-3034-435f-ba0d-5a9ef1e75819 reviewed plan fixes; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-TIMEZONE-LOAD-FAILURE/plan-r2.md"
+      },
+      "recorded_code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 68cfc30b-1020-48b1-ade1-d862c0c7d159 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-B-TIMEZONE-LOAD-FAILURE/code-r1.md"
+      },
+      "merge": {
+        "pr": 438,
+        "url": "https://github.com/Netke237/trading-assistant/pull/438",
+        "head": "c97827bb4c4bbd07c1b4d59f39cd6d162fa3374d",
+        "commit": "6dd96dc67fd54b3d6099ff496551267345c2ff97",
+        "merged_at": "2026-10-20T19:30:08Z",
+        "ancestor_of_snapshot_main": true,
+        "final_head_checks": [
+          {
+            "name": "backend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39482450539/job/118834206646",
+            "completedAt": "2026-10-20T19:29:10Z"
+          },
+          {
+            "name": "test",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39482450773/job/118834208527",
+            "completedAt": "2026-10-20T19:21:48Z"
+          },
+          {
+            "name": "frontend",
+            "conclusion": "SUCCESS",
+            "detailsUrl": "https://github.com/Netke237/trading-assistant/actions/runs/39482450539/job/118834207012",
+            "completedAt": "2026-10-20T19:24:17Z"
+          }
+        ]
+      },
+      "acceptance": "Merge and historical phase verdict verified; current integrated tests are recorded separately. Issue closure alone is not application acceptance."
+    }
+  ],
+  "integrated_regressions": "verification-2026-10-22.json"
+}

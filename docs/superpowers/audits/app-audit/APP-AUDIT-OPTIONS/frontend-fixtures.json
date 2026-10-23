@@ -1,0 +1,393 @@
+{
+  "application_baseline": "880c8441841cc22d5090cdc5f984e4cf7e3d9a8d",
+  "generated_at": "2026-10-22T08:45:00Z",
+  "provenance": "Deterministic test fixtures independently derived from Options Steps 4-7 rules, risk formulas, contract rules and domain models",
+  "step4_ranking": {
+    "horizon_weights": {
+      "Intraday": { "trend": 35, "pullback": 20, "trigger": 30, "event": 5, "volatility": 10 },
+      "Swing":    { "trend": 30, "pullback": 20, "trigger": 25, "event": 15, "volatility": 10 },
+      "Position": { "trend": 30, "pullback": 20, "trigger": 20, "event": 20, "volatility": 10 }
+    },
+    "signal_thresholds": {
+      "positive_min": 65,
+      "neutral_min": 45,
+      "negative_below": 45
+    },
+    "candidates": [
+      {
+        "symbol": "AAPL",
+        "company": "Apple Inc.",
+        "price": 230.50,
+        "direction": "Bullish",
+        "stockScore": 88,
+        "stockBreakdown": {
+          "trend": 90,
+          "pullback": 80,
+          "trigger": 85,
+          "event": 95,
+          "volatility": 85
+        },
+        "confidence": "HIGH",
+        "confidenceText": "High confidence (win rate 72%, exp 1.85)",
+        "stopCostPct": 28.5,
+        "stopCostStatus": "PASS",
+        "nextEventDays": 42,
+        "nextEventLabel": "Earnings in 42 days",
+        "status": "PASS"
+      },
+      {
+        "symbol": "MSFT",
+        "company": "Microsoft Corporation",
+        "price": 425.00,
+        "direction": "Bullish",
+        "stockScore": 74,
+        "stockBreakdown": {
+          "trend": 70,
+          "pullback": 60,
+          "trigger": 80,
+          "event": 75,
+          "volatility": 85
+        },
+        "confidence": "MEDIUM",
+        "confidenceText": "Medium confidence (win rate 58%, exp 1.10)",
+        "stopCostPct": 65.0,
+        "stopCostStatus": "CAUTION",
+        "nextEventDays": 18,
+        "nextEventLabel": "Earnings in 18 days",
+        "status": "CAUTION"
+      },
+      {
+        "symbol": "NVDA",
+        "company": "NVIDIA Corporation",
+        "price": 138.25,
+        "direction": "Bullish",
+        "stockScore": 92,
+        "stockBreakdown": {
+          "trend": 95,
+          "pullback": 90,
+          "trigger": 90,
+          "event": 85,
+          "volatility": 95
+        },
+        "confidence": "HIGH",
+        "confidenceText": "High confidence (win rate 75%, exp 2.10)",
+        "stopCostPct": null,
+        "stopCostStatus": null,
+        "nextEventDays": null,
+        "nextEventLabel": null,
+        "status": "PASS"
+      }
+    ],
+    "previous_run": {
+      "candidates": [
+        { "symbol": "MSFT", "stockScore": 70 },
+        { "symbol": "AAPL", "stockScore": 82 }
+      ]
+    }
+  },
+  "step5_vol_events": {
+    "event_thresholds": {
+      "Swing": { "reject_days": 21, "caution_days": 45 },
+      "Position": { "reject_days": 30, "caution_days": 60 },
+      "Intraday": { "reject_days": 0, "caution_days": 0 }
+    },
+    "iv_thresholds": {
+      "Swing": {
+        "rank": { "pass_max": 50, "caution_max": 70 },
+        "absolute": { "pass_max": 0.40, "caution_max": 0.65 }
+      },
+      "Position": {
+        "rank": { "pass_max": 40, "caution_max": 60 },
+        "absolute": { "pass_max": 0.35, "caution_max": 0.55 }
+      },
+      "Intraday": {
+        "rank": { "pass_max": null, "caution_max": null },
+        "absolute": { "pass_max": null, "caution_max": null }
+      }
+    },
+    "cases": [
+      { "id": "event_reject_strict", "nextEventDays": 20, "horizon": "Swing", "expected_prox": "REJECT" },
+      { "id": "event_boundary_reject", "nextEventDays": 21, "horizon": "Swing", "expected_prox": "CAUTION" },
+      { "id": "event_caution_strict", "nextEventDays": 44, "horizon": "Swing", "expected_prox": "CAUTION" },
+      { "id": "event_boundary_caution", "nextEventDays": 45, "horizon": "Swing", "expected_prox": "PASS" },
+      { "id": "event_pass", "nextEventDays": 60, "horizon": "Swing", "expected_prox": "PASS" },
+      { "id": "event_null_pass", "nextEventDays": null, "horizon": "Swing", "expected_prox": "PASS" },
+      { "id": "iv_rank_pass", "ivRank": 35, "basis": "rank", "horizon": "Swing", "expected_iv": "PASS" },
+      { "id": "iv_rank_boundary_pass", "ivRank": 50, "basis": "rank", "horizon": "Swing", "expected_iv": "PASS" },
+      { "id": "iv_rank_caution", "ivRank": 65, "basis": "rank", "horizon": "Swing", "expected_iv": "CAUTION" },
+      { "id": "iv_rank_boundary_caution", "ivRank": 70, "basis": "rank", "horizon": "Swing", "expected_iv": "CAUTION" },
+      { "id": "iv_rank_reject", "ivRank": 75, "basis": "rank", "horizon": "Swing", "expected_iv": "REJECT" },
+      { "id": "iv_zero_rank_valid", "ivRank": 0, "basis": "rank", "horizon": "Swing", "expected_iv": "PASS" },
+      { "id": "iv_absolute_pass", "iv": 0.30, "basis": "absolute", "horizon": "Swing", "expected_iv": "PASS" },
+      { "id": "iv_absolute_caution", "iv": 0.55, "basis": "absolute", "horizon": "Swing", "expected_iv": "CAUTION" },
+      { "id": "iv_absolute_reject", "iv": 0.70, "basis": "absolute", "horizon": "Swing", "expected_iv": "REJECT" },
+      { "id": "iv_missing_swing_caution", "iv": null, "ivRank": null, "horizon": "Swing", "expected_iv": "CAUTION" },
+      { "id": "iv_missing_intraday_pass", "iv": null, "ivRank": null, "horizon": "Intraday", "expected_iv": "PASS" }
+    ]
+  },
+  "step6_contracts": {
+    "contracts": [
+      {
+        "id": "AAPL|230|2025-05-16|C",
+        "symbol": "AAPL",
+        "strike": 230.0,
+        "right": "C",
+        "expiry": "2025-05-16",
+        "dte": 45,
+        "delta": 0.52,
+        "bid": 6.80,
+        "ask": 7.00,
+        "mid": 6.90,
+        "spread": 0.20,
+        "volume": 850,
+        "openInterest": 3200,
+        "ivRank": 38,
+        "ivPercentile": 42,
+        "score": 92,
+        "status": "PASS"
+      },
+      {
+        "id": "NVDA|137.5|2025-05-16|C",
+        "symbol": "NVDA",
+        "strike": 137.5,
+        "right": "C",
+        "expiry": "2025-05-16",
+        "dte": 45,
+        "delta": 0.55,
+        "bid": 4.90,
+        "ask": 5.10,
+        "mid": 5.00,
+        "spread": 0.20,
+        "volume": 1200,
+        "openInterest": 5400,
+        "ivRank": null,
+        "iv": 0.44,
+        "score": 85,
+        "status": "PASS"
+      },
+      {
+        "id": "MSFT|430|2025-05-16|C",
+        "symbol": "MSFT",
+        "strike": 430.0,
+        "right": "C",
+        "expiry": "2025-05-16",
+        "dte": 45,
+        "delta": 0.48,
+        "bid": 9.20,
+        "ask": 9.80,
+        "mid": 9.50,
+        "spread": 0.60,
+        "volume": 180,
+        "openInterest": 800,
+        "ivRank": null,
+        "ivPercentile": null,
+        "score": 64,
+        "status": "CAUTION"
+      }
+    ],
+    "explanation": {
+      "weights": { "liquidity": 0.25, "spread": 0.25, "delta": 0.20, "dte": 0.15, "iv_rank": 0.15 },
+      "pass_threshold": 70,
+      "caution_threshold": 50,
+      "breakdown": { "liquidity": 90, "spread": 85, "delta": 95, "dte": 90, "iv_rank": 70 }
+    }
+  },
+  "step7_trade_card": {
+    "account": {
+      "portfolioValue": 100000.0,
+      "maxSingleTradeExposurePct": 0.05,
+      "maxLossPerTradePct": 0.03,
+      "maxTotalExposurePct": 0.30,
+      "maxConcurrentPositions": 5,
+      "maxDailyRecommendations": 3
+    },
+    "sizing_cases": [
+      {
+        "name": "standard_budget_affords_contracts",
+        "budget": 3000.0,
+        "risk_per_contract": 750.0,
+        "expected_raw": 4.0,
+        "expected_recommended": 4,
+        "expected_formatted": "4.00"
+      },
+      {
+        "name": "fractional_budget_floored",
+        "budget": 2500.0,
+        "risk_per_contract": 700.0,
+        "expected_raw": 3.5714285714285716,
+        "expected_recommended": 3,
+        "expected_formatted": "3.57"
+      },
+      {
+        "name": "ieee754_boundary_epsilon_absorbed",
+        "budget": 59.0,
+        "risk_per_contract": 59.00000000000001,
+        "expected_raw": 0.9999999999999998,
+        "expected_recommended": 1,
+        "expected_formatted": "1.00"
+      },
+      {
+        "name": "zero_budget_null",
+        "budget": 0.0,
+        "risk_per_contract": 500.0,
+        "expected_recommended": null
+      }
+    ],
+    "capital_at_risk_cases": [
+      { "mid": 6.90, "contracts": 3, "expected_car": 2070.0, "expected_exposure": 0.0207 },
+      { "mid": 5.00, "contracts": 10, "expected_car": 5000.0, "expected_exposure": 0.0500 },
+      { "mid": 0.00, "contracts": 2, "expected_car": 0.0, "expected_exposure": 0.0000 }
+    ],
+    "stop_cost_cases": [
+      {
+        "premium": 5.20,
+        "valueAtStop": 1.49,
+        "lossDollar": 3.71,
+        "stopPrice": 185.87,
+        "fraction": 0.71346,
+        "passMaxFraction": 0.50,
+        "status": "CAUTION",
+        "basis": "bs_today",
+        "expected_badge": "CAUTION · 71% of premium · $1.49/share left",
+        "expected_headline": "$371 per contract — of the $520 premium, $149 left",
+        "expected_is_total_loss": false
+      },
+      {
+        "premium": 2.10,
+        "valueAtStop": 0.00,
+        "lossDollar": 2.10,
+        "stopPrice": 120.00,
+        "fraction": 1.0,
+        "passMaxFraction": 0.50,
+        "status": "REJECT",
+        "basis": "bs_today",
+        "expected_badge": "REJECT · 100% of premium · $0.00/share left",
+        "expected_headline": "$210 per contract — of the $210 premium, $0 left",
+        "expected_is_total_loss": true
+      }
+    ],
+    "risk_check_cases": [
+      {
+        "id": "all_checks_pass",
+        "card": {
+          "symbol": "AAPL",
+          "contractDetails": { "mid": 6.90 },
+          "exit": { "invalidation": 220.0 }
+        },
+        "proposedContracts": 3,
+        "methodPick": { "method": "barrier_race" },
+        "expected_approved": true,
+        "expected_reasons": []
+      },
+      {
+        "id": "missing_invalidation_blocks",
+        "card": {
+          "symbol": "AAPL",
+          "contractDetails": { "mid": 6.90 },
+          "exit": { "invalidation": null }
+        },
+        "proposedContracts": 3,
+        "methodPick": { "method": "barrier_race" },
+        "expected_approved": false,
+        "expected_reasons": ["missing_invalidation"]
+      },
+      {
+        "id": "missing_method_pick_blocks",
+        "card": {
+          "symbol": "AAPL",
+          "contractDetails": { "mid": 6.90 },
+          "exit": { "invalidation": 220.0 }
+        },
+        "proposedContracts": 3,
+        "methodPick": null,
+        "expected_approved": false,
+        "expected_reasons": ["missing_method_pick"]
+      },
+      {
+        "id": "single_exposure_exceeded",
+        "card": {
+          "symbol": "AAPL",
+          "contractDetails": { "mid": 12.00 },
+          "exit": { "invalidation": 220.0 }
+        },
+        "proposedContracts": 5,
+        "methodPick": { "method": "barrier_race" },
+        "expected_approved": false,
+        "expected_reasons": ["single_trade_exposure_too_high"]
+      },
+      {
+        "id": "duplicate_symbol_blocks",
+        "card": {
+          "symbol": "AAPL",
+          "contractDetails": { "mid": 6.90 },
+          "exit": { "invalidation": 220.0 }
+        },
+        "proposedContracts": 2,
+        "methodPick": { "method": "barrier_race" },
+        "existing_positions": [{ "symbol": "AAPL", "contract": "AAPL|220|2025-05-16|C" }],
+        "expected_approved": false,
+        "expected_reasons": ["duplicate_symbol"]
+      }
+    ],
+    "direct_order_classification": [
+      {
+        "name": "422_pre_submit_validation_fails",
+        "input": { "thrown": { "status": 422, "detail": "Validation error on strike" } },
+        "expected_verdict": "delete"
+      },
+      {
+        "name": "503_broker_credentials_unavailable",
+        "input": { "thrown": { "status": 503, "detail": "Broker credentials unavailable for paper adapter" } },
+        "expected_verdict": "delete"
+      },
+      {
+        "name": "502_ibkr_did_not_place",
+        "input": { "thrown": { "status": 502, "detail": "IBKR did not place the order: rejected by exchange" } },
+        "expected_verdict": "delete"
+      },
+      {
+        "name": "500_unknown_server_error_keeps_row",
+        "input": { "thrown": { "status": 500, "detail": "Internal server error" } },
+        "expected_verdict": "keep"
+      },
+      {
+        "name": "200_rejected_status_deletes_row",
+        "input": { "response": { "status": "rejected", "order_id": "ORD-123" } },
+        "expected_verdict": "delete"
+      },
+      {
+        "name": "200_placed_status_keeps_row",
+        "input": { "response": { "status": "submitted", "order_id": "ORD-999" } },
+        "expected_verdict": "placed"
+      }
+    ],
+    "alternative_contracts": [
+      {
+        "symbol": "AAPL",
+        "strike": 235.0,
+        "right": "C",
+        "expiry": "2025-05-16",
+        "bid": 4.50,
+        "ask": 4.70,
+        "mid": 4.60,
+        "delta": 0.42,
+        "dte": 45,
+        "score": 86,
+        "reason": "Lower capital requirement ($460 vs $690) with slightly lower delta (0.42 vs 0.52)"
+      },
+      {
+        "symbol": "AAPL",
+        "strike": 225.0,
+        "right": "C",
+        "expiry": "2025-05-16",
+        "bid": 9.80,
+        "ask": 10.10,
+        "mid": 9.95,
+        "delta": 0.62,
+        "dte": 45,
+        "score": 84,
+        "reason": "Higher delta (0.62 vs 0.52) for greater stock sensitivity at higher premium"
+      }
+    ]
+  }
+}

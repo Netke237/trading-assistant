@@ -5,6 +5,7 @@ import functools
 import logging
 import os
 import re
+import statistics
 import concurrent.futures
 from datetime import datetime, timezone
 
@@ -67,6 +68,7 @@ from app.data.market import (
 from app.models.black_scholes import bs_delta  # kept for other callers in this module
 from app.data.etfs import is_etf
 from app.data.augment import _augment, opt_float, opt_int
+from app.data.strike import canonical_strike, format_strike
 from app.scoring.stock_scorer import score_stock, StockScoreCard, Horizon, effective_event_window, effective_veto_days
 from app.scoring.signal_confidence import load_gate_cfg, compute_confidence
 from app.data import confidence_cache
@@ -605,6 +607,10 @@ async def _process_symbol(
     direction_min_trend: float | None = None,
     rs_benchmark: list[dict] | None = None,
     rs_misaligned: list[str] | None = None,
+    # DECISION-23 H-2: a shared list collecting every Heston fit that reaches
+    # this symbol's card (an accepted `heston_grid` result, in time), for the
+    # per-scan worst-accepted-fit WARNING. Log only; None collects nothing.
+    heston_fits: list | None = None,
     # confidence_cache.generation() captured by the caller before `bars_map` was
     # read; set_cached drops a confidence computed from bars read before this
     # symbol's last invalidation (audit R2-F1). None = unconditional write.
@@ -976,7 +982,10 @@ async def _process_symbol(
     # ── Entry / Exit / Reward-risk / targets (shared with the recompute endpoint) ─
     _rr = _merge_rr_cfg(overrides)
     observe_configuration("options.reward_risk", _rr, symbol=symbol)
-    strike = float(contract.get("strike", price))
+    # `contract["strike"]`, never a `price` fallback (EXACT-STRIKE ES-2.4):
+    # every chain row carries a valid strike or was dropped by the builder, so
+    # a stock price can never become a strike.
+    strike = float(contract["strike"])
     premium = max(float(contract.get("price", 0.10)), 0.01)
 
     # ── Heston calibration (best-effort) ───────────────────────────────────────
@@ -1062,6 +1071,24 @@ async def _process_symbol(
                 _calibration_result = calibration_task.result()
                 if _calibration_result.method == "heston_grid":
                     heston_params = _calibration_result.params
+                    # DECISION-23 H-2: record the fit that reaches the card,
+                    # for the per-scan summary line. Log only -- nothing here
+                    # feeds a card, result or persisted field. A rejected
+                    # (bs_flat / bs_fallback), failed or timed-out calibration
+                    # never gets here, so it is never counted. Its own guard:
+                    # this sits inside the calibration `try`, whose `except`
+                    # resets heston_params, so a failure here must not reach it.
+                    if heston_fits is not None and heston_chain:
+                        try:
+                            heston_fits.append({
+                                "symbol": symbol,
+                                "rmse": _calibration_result.rmse,
+                                "strikes": len(heston_chain),
+                                "max_dte": int(round(
+                                    max(c["expiry_years"] for c in heston_chain) * 365)),
+                            })
+                        except Exception as exc:
+                            _log.debug("Heston fit summary skipped for %s: %s", symbol, exc)
             # else: still running past the ceiling — move on with
             # heston_params=None; the task finishes in the background.
         except Exception as exc:
@@ -1285,7 +1312,7 @@ async def _process_symbol(
         ),
         nextEventDays=next_event_days,
         nextEventLabel=next_event_label,
-        contract=f"{symbol}|{int(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
+        contract=f"{symbol}|{format_strike(strike)}|{contract.get('expiry','TBD')}|{'C' if direction=='Bullish' else 'P'}",
         contractScore=contract_card.score,
         contractConfidence=contract_card.status,
         contractExplanation=contract_card.explanation,
@@ -1302,7 +1329,7 @@ async def _process_symbol(
             spreadDetail=   _safe(SpreadDetail,    contract_card.detail.get("spread")),
         ),
         contractDetails=ContractDetails(
-            strike=int(strike),
+            strike=canonical_strike(strike),
             expiry=contract.get("expiry", "TBD"),
             right="C" if direction == "Bullish" else "P",
             mid=round(premium, 2),
@@ -1410,7 +1437,7 @@ async def _process_symbol(
             # len(alts), so this naturally yields a correct, consistent
             # count with no further bookkeeping.
             continue
-        alt_strike = float(alt_c.get("strike", price))
+        alt_strike = float(alt_c["strike"])
         alt_expiry_years = alt_c.get("dte", 30) / 365.0
         alt_premium = float(alt_c.get("price", 0.10))
         alt_stop_fraction = None
@@ -1439,7 +1466,7 @@ async def _process_symbol(
         )
         alts.append(AlternativeContract(
             symbol=symbol,
-            strike=int(alt_strike),
+            strike=canonical_strike(alt_strike),
             expiry=alt_c.get("expiry", "TBD"),
             right="C" if direction == "Bullish" else "P",
             dte=int(alt_c.get("dte", 30)),
@@ -1482,7 +1509,7 @@ async def _process_symbol(
         )
         alts.append(AlternativeContract(
             symbol=symbol,
-            strike=int(float(_alt_sp.legs[0].strike)),
+            strike=canonical_strike(_alt_sp.legs[0].strike),
             expiry=_alt_sp.legs[0].expiry,
             right=_alt_sp.legs[0].right,
             dte=int(contract.get("dte", 30)),
@@ -1898,6 +1925,7 @@ async def _execute_scan_core(
         _log.warning("SCAN %s rs_benchmark resolve failed: %s -- trend left unmeasured", scan_id, exc)
         _rs_bench = None
     _rs_misaligned: list[str] = []
+    _heston_fits: list[dict] = []
 
     # The event window score_stock will apply, echoed on the result (see
     # effective_event_window). Never allowed to fail the scan.
@@ -2007,6 +2035,7 @@ async def _execute_scan_core(
                 direction_min_trend=_direction_min_trend,
                 rs_benchmark=_rs_bench,
                 rs_misaligned=_rs_misaligned,
+                heston_fits=_heston_fits,
                 bars_generation=_bars_generation,
                 entry_cfg=_entry_config,
             )
@@ -2017,6 +2046,22 @@ async def _execute_scan_core(
     if _rs_bench is not None:
         _log.info("SCAN %s rs_benchmark: misaligned=%d of %d",
                   scan_id, len(_rs_misaligned), len(symbols))
+
+    # DECISION-23 H-2: one line per scan with the worst ACCEPTED Heston fit.
+    # heston_cache logs rejected fits only, so how poor an accepted fit was
+    # (it only has to beat one flat volatility) was recorded nowhere. WARNING,
+    # not INFO: uvicorn's default config drops `app.*` INFO (see the Heston
+    # log in heston_cache._run_calibration). Log only: no card, result,
+    # report or persisted field reads `_heston_fits`.
+    if _heston_fits:
+        _worst = max(_heston_fits, key=lambda f: f["rmse"])
+        _log.warning(
+            "SCAN %s Heston accepted fits: %d; worst rel-RMSE %.4f on %s "
+            "(%d strikes, longest %d DTE); median rel-RMSE %.4f",
+            scan_id, len(_heston_fits), _worst["rmse"], _worst["symbol"],
+            _worst["strikes"], _worst["max_dte"],
+            statistics.median(f["rmse"] for f in _heston_fits),
+        )
 
     _log.info(
         "SCAN %s data-provenance: bars_from_db=%d bars_missed=%d symbols=%d",
