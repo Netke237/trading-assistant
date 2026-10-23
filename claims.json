@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-presentation-500b85a3",
       "claimed_at": "2026-10-23T12:39:49Z",
-      "expires_at": "2026-10-23T15:41:50Z",
+      "expires_at": "2026-10-23T15:42:42Z",
       "note": "Resume approved J1 tooling / J2 presentation split",
       "task": "APP-AUDIT-PRESENTATION"
     }
