@@ -76,7 +76,7 @@ Each route is exercised across the conservative 9-state matrix templates:
 The 45 route entries in `inventory.json` correspond to:
 - 28 navigable URLs in App Router (`/dashboard`, `/settings`, `/screener/step-1-regime`, etc.).
 - 10 parallel slots under `frontend/app/(frame)/@contextRail/...`.
-- 4 layout entries (Root layout, Frame layout, Screener layout, Settings layout).
+- 4 layout entries (Root layout, Frame layout, Screener layout, Standalone chart layout).
 - 3 boundaries (`error.tsx`, `loading.tsx`, `not-found.tsx`).
 
 Direct navigation to `@contextRail/...` returns HTTP 404 because parallel slots are mounted inside parent layouts. The capture harness navigates to each of the 28 URLs and emits distinct, correctly attributed evidence records for:
