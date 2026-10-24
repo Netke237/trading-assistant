@@ -10,13 +10,13 @@
     {
       "id": "P3C-SCRIPT-WINDOWS-RUN",
       "name": "p3c_data_checks.py: Windows cp1252 crash and repo-root .env not read (from #173) (#537)",
-      "status": "planned",
+      "status": "built",
       "owner": "agent",
       "branch": "board/p3c-script-windows-run-bdea78e9",
       "tracking_issue": 537,
       "plan": "docs/superpowers/plans/2026-10-24-p3c-script-windows-run-plan.md",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "plan_stage": {
         "rounds": 1,
@@ -32,7 +32,7 @@
       },
       "size": "XS",
       "complexity": 1,
-      "completion_pct": 10,
+      "completion_pct": 80,
       "audit_history": [
         {
           "round": 1,
@@ -46,9 +46,28 @@
           "outstanding": [],
           "clean": true,
           "report": "adversarial audit round 1 log"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent f0a64e10-a4a4-44f4-b1ed-9c6e92596d11",
+          "reviewed": "git diff origin/main..HEAD (p3c_data_checks.py, test_p3c_data_checks_windows.py)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "adversarial code audit round 1 log"
         }
       ],
-      "note": "PLANNING: plan audit round 1 clean. Authoring tickets and test-first implementation."
+      "note": "BUILT: Windows encoding safety and repo-root .env resolution implemented and verified. Plan round 1 and code round 1 both clean.",
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent f0a64e10-a4a4-44f4-b1ed-9c6e92596d11 reviewed diff against origin/main; 0 gate findings."
+      }
     },
     {
       "id": "APP-AUDIT-SETTINGS-PROFILES",
