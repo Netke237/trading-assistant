@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-integration-500fa563",
       "claimed_at": "2026-10-24T18:08:18Z",
-      "expires_at": "2026-10-24T22:12:44Z",
+      "expires_at": "2026-10-24T22:23:41Z",
       "note": "Lane K cross-mode integration audit on board/app-audit-integration-500fa563",
       "task": "APP-AUDIT-INTEGRATION"
     }
