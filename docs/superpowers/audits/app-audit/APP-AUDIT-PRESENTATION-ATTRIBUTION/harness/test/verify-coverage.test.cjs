@@ -282,6 +282,9 @@ function createMinimalFixture() {
     signature_collisions: []
   };
 
+  const invSha = crypto.createHash('sha256').update(JSON.stringify(inventory)).digest('hex');
+  sourceMap.inventory_sha256 = invSha;
+
   const sampleJson = {
     purpose: 'tooling-self-test',
     url: 'http://127.0.0.1:61700/dashboard',
@@ -999,6 +1002,100 @@ test('finding 1: claiming observed-verified on a native without host_marker.elig
     assert.throws(
       () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap, evidenceRoot: tmpDir }),
       /unproven-native-host-marker/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('gate finding 1: claiming observed-verified on a component-state whose component is not mounted in census throws component-not-mounted', () => {
+  const { inventory, supplemental, sourceMap, sampleJson } = createMinimalFixture();
+  // Ensure DashboardPage is unmounted in census
+  sampleJson.census.mounted_names = [];
+  sampleJson.census.component_counts = { DashboardPage: 0 };
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-cs-unmounted-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const invBytes = JSON.stringify(inventory);
+    const expansion = expandInventory(inventory, supplemental);
+    const recon = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+
+    // Demote definition and instance rows to not-run so only the component-state row claims observed-verified
+    const defRow = recon.rows.find(r => r.id === 'surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage');
+    defRow.disposition = 'not-run';
+    defRow.reason = 'demoted-for-test';
+    delete defRow.evidence;
+
+    const instRow = recon.rows.find(r => r.id === 'instance:frontend/app/(frame)/dashboard/page.tsx::surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage');
+    instRow.disposition = 'not-run';
+    instRow.reason = 'demoted-for-test';
+    delete instRow.evidence;
+
+    // Normal component-state row claims observed-verified
+    const stateRow = recon.rows.find(r => r.id === 'instance:frontend/app/(frame)/dashboard/page.tsx::surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage::state:normal');
+    stateRow.disposition = 'observed-verified';
+    stateRow.evidence = {
+      artifact: 'dashboard.json',
+      artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
+      source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
+      route_entry_id: 'route:frontend/app/(frame)/dashboard/page.tsx',
+      state_key: 'normal',
+      explanation: 'Normal component-state claimed verified while unmounted in census'
+    };
+
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap, evidenceRoot: tmpDir }),
+      /component-not-mounted/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('gate finding 2: calling validateReconciliation with forged evidence.inventory_sha256 throws inventory-hash-mismatch without expectedInventorySha option', () => {
+  const { inventory, supplemental, sourceMap, sampleJson } = createMinimalFixture();
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-inv-sha-bypass-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const invBytes = JSON.stringify(inventory);
+    const expansion = expandInventory(inventory, supplemental);
+    const recon = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+
+    // Forge inventory_sha256 on a positive disposition row
+    const targetRow = recon.rows.find(r => r.disposition === 'observed-verified');
+    targetRow.evidence.inventory_sha256 = '0000000000000000000000000000000000000000000000000000000000000000';
+
+    // Sub-case A: sourceMap provides inventory_sha256, options.expectedInventorySha omitted
+    sourceMap.inventory_sha256 = crypto.createHash('sha256').update(invBytes).digest('hex');
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap, evidenceRoot: tmpDir }),
+      /inventory-hash-mismatch/
+    );
+
+    // Sub-case B: sourceMap omitted, inventory provides inventory_sha256, options.expectedInventorySha omitted
+    inventory.inventory_sha256 = crypto.createHash('sha256').update(invBytes).digest('hex');
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap: null, evidenceRoot: tmpDir }),
+      /inventory-hash-mismatch/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('gate finding 2: calling validateReconciliation throws missing-expected-inventory-sha when inventory baseline cannot be derived', () => {
+  const { supplemental, sampleJson } = createMinimalFixture();
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-no-inv-baseline-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const recon = { schema_version: 1, purpose: 'tooling-self-test', rows: [] };
+    assert.throws(
+      () => validateReconciliation({ inventory: null, supplemental, reconciliation: recon, sourceMap: null, evidenceRoot: tmpDir }),
+      /missing-expected-inventory-sha/
     );
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

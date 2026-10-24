@@ -319,12 +319,19 @@ function validateReconciliation(options) {
     reconciliation,
     sourceMap = null,
     evidenceRoot = path.resolve(__dirname, '..'),
-    expectedSourceSha = BASELINE,
-    expectedInventorySha = null
+    expectedSourceSha = BASELINE
   } = options;
 
   if (!reconciliation) {
     throw new Error('reconciliation object required');
+  }
+
+  const expectedInvSha = options.expectedInventorySha
+    || sourceMap?.inventory_sha256
+    || (inventory ? (options.inventoryBytes ? sha(options.inventoryBytes) : (inventory.inventory_sha256 || sha(json(inventory)))) : null);
+
+  if (!expectedInvSha) {
+    throw new Error('missing-expected-inventory-sha: cannot verify inventory baseline without inventory, sourceMap, or expectedInventorySha');
   }
 
   const expansion = expandInventory(inventory, supplemental);
@@ -512,9 +519,9 @@ function validateReconciliation(options) {
     }
 
     // Inventory SHA verification
-    if (expectedInventorySha && evidence.inventory_sha256) {
-      if (evidence.inventory_sha256 !== expectedInventorySha) {
-        throw new Error(`inventory-hash-mismatch: inventory SHA mismatch: expected ${expectedInventorySha}, got ${evidence.inventory_sha256}`);
+    if (isPositiveDisp || evidence.inventory_sha256) {
+      if (evidence.inventory_sha256 !== expectedInvSha) {
+        throw new Error(`inventory-hash-mismatch: inventory SHA mismatch: expected ${expectedInvSha}, got ${evidence.inventory_sha256}`);
       }
     }
 
@@ -587,7 +594,7 @@ function validateReconciliation(options) {
       }
 
       // 2. Normal client definition predicate
-      if (reqRow.kind === 'definition' || reqRow.kind === 'component-instance') {
+      if (reqRow.kind === 'definition' || reqRow.kind === 'component-instance' || reqRow.kind === 'component-state') {
         const def = expansion.definitions.find(d => d.id === (reqRow.definition_id || reqRow.id));
         const smDef = sourceMap?.definitions?.find(d => d.id === def?.id);
         const isClient = smDef?.environment_candidates?.includes('client') || smDef?.module_membership?.client_importable;
