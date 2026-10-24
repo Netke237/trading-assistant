@@ -1,0 +1,125 @@
+{
+  "audit_phase": "APP-AUDIT-PRESENTATION-EXECUTION",
+  "lane": "J2",
+  "target_issue": 548,
+  "parent_issue": 530,
+  "purpose": "presentation-browser-capture-provenance",
+  "source_sha": "b98b025df18268f98258c2d07678cddedb4f0b38",
+  "application_baseline": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "inventory_baseline": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "node_version": "v20.x (runtime: v22.23.2)",
+  "python_version": "Python 3.11.9",
+  "next_version": "15.5.23",
+  "react_version": "19.2.5",
+  "playwright_version": "1.51.x (runtime: 1.58.2)",
+  "chromium_version": "151.0.7922.34",
+  "chromium_executable": "C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe",
+  "timezone": "Europe/Berlin",
+  "fixed_clock_timestamp": "2026-10-24T18:59:00.000Z",
+  "build_command": "npx next build --no-mangling",
+  "lockfile_sha256": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+  "fixture_hashes": [
+    {
+      "name": "alerts",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/alerts.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "name": "config-health",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/config-health.json",
+      "sha256": "df19af56aba2b2ecddd1ad4b7e5b414eb119d24b09d4aaa57f911f10a644dc75"
+    },
+    {
+      "name": "contract-rules",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/contract-rules.json",
+      "sha256": "8532dd66f0865181f4caf0d794fd4a46c4eb0762726782a41220e2e8171d05b4"
+    },
+    {
+      "name": "event-thresholds",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/event-thresholds.json",
+      "sha256": "293ae8eb64df18a9d52617aa7d8af8117fafdcc3af560fb8a9f151576b7fa285"
+    },
+    {
+      "name": "iv-thresholds",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/iv-thresholds.json",
+      "sha256": "49f84b0ca2f1d718db544a07a482125e454c6933a33607698488d31e5d4d5266"
+    },
+    {
+      "name": "news",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/news.json",
+      "sha256": "861a664f518dd273ba70f398681d43e609115d086d3427c93f57390573dccf3b"
+    },
+    {
+      "name": "performance",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/performance.json",
+      "sha256": "a8b00c6c71856c62c21ba925d77193b0618fc662b4ccc370d5f25075bf3d16fe"
+    },
+    {
+      "name": "portfolio",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/portfolio.json",
+      "sha256": "dcefef8d6c1927c09a18a5dbb98bbc00c1a1585a52013584fac255f2ba22bc6b"
+    },
+    {
+      "name": "regime",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/regime.json",
+      "sha256": "cdbc4f3d8da05ac4f299081aae000e4c53800ba219a92081050176d92bacb46b"
+    },
+    {
+      "name": "watched-contracts",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/watched-contracts.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "name": "watchlist",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/watchlist.json",
+      "sha256": "4f153282b7eee61367c8d66991e64c03eedd47a2c02b2d8baa815986f81b660e"
+    },
+    {
+      "name": "storage-seeds",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/seeds/storage-seeds.json",
+      "sha256": "3bd31d8ff8591356178c5ed0ce57c757f5fd11f9c6113e65fa74feef45bfae9c"
+    }
+  ],
+  "harness_hashes": [
+    {
+      "name": "census",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/census.cjs",
+      "sha256": "3edb61fd0c69f3b92bb8ec0cc8b5817e28926ee0786aea2ae52676afa2a43b4b"
+    },
+    {
+      "name": "smoke",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/smoke.cjs",
+      "sha256": "a53e90850b814c338b7061c3ad446bb55d495501e22565793c58110beb126523"
+    },
+    {
+      "name": "verify-coverage",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/verify-coverage.cjs",
+      "sha256": "f5cc3bbdf120791a4cb586747e57a97c7cb6ed2fbac6e0b03f30f7b55d0983a7"
+    },
+    {
+      "name": "map-common",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/map-common.cjs",
+      "sha256": "c3fd2ff422637d1a01704e82b89dd19c710ee661ee07ce716722af9ebc33e454"
+    },
+    {
+      "name": "source-map",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/source-map.cjs",
+      "sha256": "5f895bb92371966a0354e8e8c5acf162e4fd6ae7a4141fe2cd8ad8b66b97f091"
+    },
+    {
+      "name": "target-map",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/target-map.cjs",
+      "sha256": "c3ec4dc864a557d41883cddfe1b515dc610646584cfe44b8622dc3ac131d1bea"
+    },
+    {
+      "name": "capture",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/capture.cjs",
+      "sha256": "df1d225c75b54f771cbd520810ddc461d623093f909a40405351a3f46fc9c291"
+    },
+    {
+      "name": "capture.test",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/test/capture.test.cjs",
+      "sha256": "0eca2226c86b998292e7711f92c647bf035acc6859c8eec8924e3ac9e78b2e6b"
+    }
+  ]
+}

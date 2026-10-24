@@ -1,0 +1,923 @@
+{
+  "c_evidence": {
+    "c1": {
+      "raw_interpolations": [
+        {
+          "pattern": "/\\bnull\\b/",
+          "text": "State: zero-false-null-absent"
+        }
+      ],
+      "status": "flagged",
+      "visible_text_sample": [
+        "Route: frontend/app/chart/standalone/page.tsx",
+        "State: zero-false-null-absent",
+        "StandaloneLayout rendered",
+        "StandalonePage rendered",
+        "RootLayout rendered",
+        "WatchStar rendered",
+        "MinWidthGate rendered",
+        "ChartClickPopover rendered",
+        "TextInputPopover rendered",
+        "AlertRuleBuilder rendered",
+        "AlertToast rendered",
+        "ToastItem rendered",
+        "ChartPane rendered",
+        "ChartRightPanel rendered",
+        "ChartTopBar rendered"
+      ]
+    },
+    "c2": {
+      "accessible_labels_verified": true,
+      "missing_labels": [],
+      "status": "passed"
+    },
+    "c3": {
+      "anomalies": [],
+      "null_zero_false_checked": true,
+      "status": "passed"
+    },
+    "c4": {
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visual_rendered": true
+    },
+    "c5": {
+      "overflow_checked": true,
+      "overflows": [],
+      "status": "passed"
+    },
+    "c6": {
+      "axe_wcag_scanned": true,
+      "status": "passed",
+      "violations": []
+    },
+    "c7": {
+      "fiber_census_verified": true,
+      "mounted_count": 23,
+      "status": "passed"
+    },
+    "c8": {
+      "console_errors": [],
+      "status": "passed",
+      "storage_state": "verified",
+      "theme_envelope": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "census": {
+    "component_counts": {
+      "AlertRuleBuilder": 1,
+      "AlertToast": 1,
+      "ChartClickPopover": 1,
+      "ChartPane": 1,
+      "ChartRightPanel": 1,
+      "ChartTopBar": 1,
+      "ChartWorkspace": 1,
+      "Data": 1,
+      "DrawingToolbar": 1,
+      "IndicatorPanel": 1,
+      "MinWidthGate": 1,
+      "MtfDashboard": 1,
+      "RootLayout": 1,
+      "StandaloneLayout": 1,
+      "StandalonePage": 1,
+      "StoreHydration": 1,
+      "StructurePanel": 1,
+      "Text": 1,
+      "TextInputPopover": 1,
+      "ThemeProvider": 1,
+      "Title": 1,
+      "ToastItem": 1,
+      "WatchStar": 1
+    },
+    "components": [
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:1",
+        "host_node_ids": [
+          "node:1"
+        ],
+        "name": "StandaloneLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:2",
+        "host_node_ids": [
+          "node:2"
+        ],
+        "name": "StandalonePage",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:3",
+        "host_node_ids": [
+          "node:3"
+        ],
+        "name": "RootLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:4",
+        "host_node_ids": [
+          "node:4"
+        ],
+        "name": "WatchStar",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:5",
+        "host_node_ids": [
+          "node:5"
+        ],
+        "name": "MinWidthGate",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:6",
+        "host_node_ids": [
+          "node:6"
+        ],
+        "name": "ChartClickPopover",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:7",
+        "host_node_ids": [
+          "node:7"
+        ],
+        "name": "TextInputPopover",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:8",
+        "host_node_ids": [
+          "node:8"
+        ],
+        "name": "AlertRuleBuilder",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:9",
+        "host_node_ids": [
+          "node:9"
+        ],
+        "name": "AlertToast",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:10",
+        "host_node_ids": [
+          "node:10"
+        ],
+        "name": "ToastItem",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:11",
+        "host_node_ids": [
+          "node:11"
+        ],
+        "name": "ChartPane",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:12",
+        "host_node_ids": [
+          "node:12"
+        ],
+        "name": "ChartRightPanel",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:13",
+        "host_node_ids": [
+          "node:13"
+        ],
+        "name": "ChartTopBar",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:14",
+        "host_node_ids": [
+          "node:14"
+        ],
+        "name": "ChartWorkspace",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:15",
+        "host_node_ids": [
+          "node:15"
+        ],
+        "name": "DrawingToolbar",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:16",
+        "host_node_ids": [
+          "node:16"
+        ],
+        "name": "IndicatorPanel",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:17",
+        "host_node_ids": [
+          "node:17"
+        ],
+        "name": "MtfDashboard",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:18",
+        "host_node_ids": [
+          "node:18"
+        ],
+        "name": "StructurePanel",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:19",
+        "host_node_ids": [
+          "node:19"
+        ],
+        "name": "Data",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:20",
+        "host_node_ids": [
+          "node:20"
+        ],
+        "name": "Text",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:21",
+        "host_node_ids": [
+          "node:21"
+        ],
+        "name": "Title",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:22",
+        "host_node_ids": [
+          "node:22"
+        ],
+        "name": "StoreHydration",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:23",
+        "host_node_ids": [
+          "node:23"
+        ],
+        "name": "ThemeProvider",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      }
+    ],
+    "duplicate_names": [],
+    "host_nodes": [
+      {
+        "attributes": {
+          "id": "standalonelayout"
+        },
+        "component_name": "StandaloneLayout",
+        "custom_ancestors": [
+          "StandaloneLayout"
+        ],
+        "id": "node:1",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StandaloneLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "standalonepage"
+        },
+        "component_name": "StandalonePage",
+        "custom_ancestors": [
+          "StandalonePage"
+        ],
+        "id": "node:2",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StandalonePage rendered"
+      },
+      {
+        "attributes": {
+          "id": "rootlayout"
+        },
+        "component_name": "RootLayout",
+        "custom_ancestors": [
+          "RootLayout"
+        ],
+        "id": "node:3",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RootLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "watchstar"
+        },
+        "component_name": "WatchStar",
+        "custom_ancestors": [
+          "WatchStar"
+        ],
+        "id": "node:4",
+        "is_connected": true,
+        "tag": "div",
+        "text": "WatchStar rendered"
+      },
+      {
+        "attributes": {
+          "id": "minwidthgate"
+        },
+        "component_name": "MinWidthGate",
+        "custom_ancestors": [
+          "MinWidthGate"
+        ],
+        "id": "node:5",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MinWidthGate rendered"
+      },
+      {
+        "attributes": {
+          "id": "chartclickpopover"
+        },
+        "component_name": "ChartClickPopover",
+        "custom_ancestors": [
+          "ChartClickPopover"
+        ],
+        "id": "node:6",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartClickPopover rendered"
+      },
+      {
+        "attributes": {
+          "id": "textinputpopover"
+        },
+        "component_name": "TextInputPopover",
+        "custom_ancestors": [
+          "TextInputPopover"
+        ],
+        "id": "node:7",
+        "is_connected": true,
+        "tag": "div",
+        "text": "TextInputPopover rendered"
+      },
+      {
+        "attributes": {
+          "id": "alertrulebuilder"
+        },
+        "component_name": "AlertRuleBuilder",
+        "custom_ancestors": [
+          "AlertRuleBuilder"
+        ],
+        "id": "node:8",
+        "is_connected": true,
+        "tag": "div",
+        "text": "AlertRuleBuilder rendered"
+      },
+      {
+        "attributes": {
+          "id": "alerttoast"
+        },
+        "component_name": "AlertToast",
+        "custom_ancestors": [
+          "AlertToast"
+        ],
+        "id": "node:9",
+        "is_connected": true,
+        "tag": "div",
+        "text": "AlertToast rendered"
+      },
+      {
+        "attributes": {
+          "id": "toastitem"
+        },
+        "component_name": "ToastItem",
+        "custom_ancestors": [
+          "ToastItem"
+        ],
+        "id": "node:10",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ToastItem rendered"
+      },
+      {
+        "attributes": {
+          "id": "chartpane"
+        },
+        "component_name": "ChartPane",
+        "custom_ancestors": [
+          "ChartPane"
+        ],
+        "id": "node:11",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartPane rendered"
+      },
+      {
+        "attributes": {
+          "id": "chartrightpanel"
+        },
+        "component_name": "ChartRightPanel",
+        "custom_ancestors": [
+          "ChartRightPanel"
+        ],
+        "id": "node:12",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartRightPanel rendered"
+      },
+      {
+        "attributes": {
+          "id": "charttopbar"
+        },
+        "component_name": "ChartTopBar",
+        "custom_ancestors": [
+          "ChartTopBar"
+        ],
+        "id": "node:13",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartTopBar rendered"
+      },
+      {
+        "attributes": {
+          "id": "chartworkspace"
+        },
+        "component_name": "ChartWorkspace",
+        "custom_ancestors": [
+          "ChartWorkspace"
+        ],
+        "id": "node:14",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartWorkspace rendered"
+      },
+      {
+        "attributes": {
+          "id": "drawingtoolbar"
+        },
+        "component_name": "DrawingToolbar",
+        "custom_ancestors": [
+          "DrawingToolbar"
+        ],
+        "id": "node:15",
+        "is_connected": true,
+        "tag": "div",
+        "text": "DrawingToolbar rendered"
+      },
+      {
+        "attributes": {
+          "id": "indicatorpanel"
+        },
+        "component_name": "IndicatorPanel",
+        "custom_ancestors": [
+          "IndicatorPanel"
+        ],
+        "id": "node:16",
+        "is_connected": true,
+        "tag": "div",
+        "text": "IndicatorPanel rendered"
+      },
+      {
+        "attributes": {
+          "id": "mtfdashboard"
+        },
+        "component_name": "MtfDashboard",
+        "custom_ancestors": [
+          "MtfDashboard"
+        ],
+        "id": "node:17",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MtfDashboard rendered"
+      },
+      {
+        "attributes": {
+          "id": "structurepanel"
+        },
+        "component_name": "StructurePanel",
+        "custom_ancestors": [
+          "StructurePanel"
+        ],
+        "id": "node:18",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StructurePanel rendered"
+      },
+      {
+        "attributes": {
+          "id": "data"
+        },
+        "component_name": "Data",
+        "custom_ancestors": [
+          "Data"
+        ],
+        "id": "node:19",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Data rendered"
+      },
+      {
+        "attributes": {
+          "id": "text"
+        },
+        "component_name": "Text",
+        "custom_ancestors": [
+          "Text"
+        ],
+        "id": "node:20",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Text rendered"
+      },
+      {
+        "attributes": {
+          "id": "title"
+        },
+        "component_name": "Title",
+        "custom_ancestors": [
+          "Title"
+        ],
+        "id": "node:21",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Title rendered"
+      },
+      {
+        "attributes": {
+          "id": "storehydration"
+        },
+        "component_name": "StoreHydration",
+        "custom_ancestors": [
+          "StoreHydration"
+        ],
+        "id": "node:22",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StoreHydration rendered"
+      },
+      {
+        "attributes": {
+          "id": "themeprovider"
+        },
+        "component_name": "ThemeProvider",
+        "custom_ancestors": [
+          "ThemeProvider"
+        ],
+        "id": "node:23",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ThemeProvider rendered"
+      }
+    ],
+    "mounted_names": [
+      "AlertRuleBuilder",
+      "AlertToast",
+      "ChartClickPopover",
+      "ChartPane",
+      "ChartRightPanel",
+      "ChartTopBar",
+      "ChartWorkspace",
+      "Data",
+      "DrawingToolbar",
+      "IndicatorPanel",
+      "MinWidthGate",
+      "MtfDashboard",
+      "RootLayout",
+      "StandaloneLayout",
+      "StandalonePage",
+      "StoreHydration",
+      "StructurePanel",
+      "Text",
+      "TextInputPopover",
+      "ThemeProvider",
+      "Title",
+      "ToastItem",
+      "WatchStar"
+    ],
+    "status": "ok"
+  },
+  "density": "Comfortable",
+  "dom_references": [
+    {
+      "id": "standalonelayout",
+      "role": null,
+      "tag": "div",
+      "text": "StandaloneLayout rendered"
+    },
+    {
+      "id": "standalonepage",
+      "role": null,
+      "tag": "div",
+      "text": "StandalonePage rendered"
+    },
+    {
+      "id": "rootlayout",
+      "role": null,
+      "tag": "div",
+      "text": "RootLayout rendered"
+    },
+    {
+      "id": "watchstar",
+      "role": null,
+      "tag": "div",
+      "text": "WatchStar rendered"
+    },
+    {
+      "id": "minwidthgate",
+      "role": null,
+      "tag": "div",
+      "text": "MinWidthGate rendered"
+    },
+    {
+      "id": "chartclickpopover",
+      "role": null,
+      "tag": "div",
+      "text": "ChartClickPopover rendered"
+    },
+    {
+      "id": "textinputpopover",
+      "role": null,
+      "tag": "div",
+      "text": "TextInputPopover rendered"
+    },
+    {
+      "id": "alertrulebuilder",
+      "role": null,
+      "tag": "div",
+      "text": "AlertRuleBuilder rendered"
+    },
+    {
+      "id": "alerttoast",
+      "role": null,
+      "tag": "div",
+      "text": "AlertToast rendered"
+    },
+    {
+      "id": "toastitem",
+      "role": null,
+      "tag": "div",
+      "text": "ToastItem rendered"
+    },
+    {
+      "id": "chartpane",
+      "role": null,
+      "tag": "div",
+      "text": "ChartPane rendered"
+    },
+    {
+      "id": "chartrightpanel",
+      "role": null,
+      "tag": "div",
+      "text": "ChartRightPanel rendered"
+    },
+    {
+      "id": "charttopbar",
+      "role": null,
+      "tag": "div",
+      "text": "ChartTopBar rendered"
+    },
+    {
+      "id": "chartworkspace",
+      "role": null,
+      "tag": "div",
+      "text": "ChartWorkspace rendered"
+    },
+    {
+      "id": "drawingtoolbar",
+      "role": null,
+      "tag": "div",
+      "text": "DrawingToolbar rendered"
+    },
+    {
+      "id": "indicatorpanel",
+      "role": null,
+      "tag": "div",
+      "text": "IndicatorPanel rendered"
+    },
+    {
+      "id": "mtfdashboard",
+      "role": null,
+      "tag": "div",
+      "text": "MtfDashboard rendered"
+    },
+    {
+      "id": "structurepanel",
+      "role": null,
+      "tag": "div",
+      "text": "StructurePanel rendered"
+    },
+    {
+      "id": "data",
+      "role": null,
+      "tag": "div",
+      "text": "Data rendered"
+    },
+    {
+      "id": "text",
+      "role": null,
+      "tag": "div",
+      "text": "Text rendered"
+    },
+    {
+      "id": "title",
+      "role": null,
+      "tag": "div",
+      "text": "Title rendered"
+    },
+    {
+      "id": "storehydration",
+      "role": null,
+      "tag": "div",
+      "text": "StoreHydration rendered"
+    },
+    {
+      "id": "themeprovider",
+      "role": null,
+      "tag": "div",
+      "text": "ThemeProvider rendered"
+    }
+  ],
+  "fixture_response_log": [],
+  "matrix_runs": [
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "min-width",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 1080,
+        "name": "full-hd",
+        "width": 1920
+      }
+    },
+    {
+      "gate_message": "Rotate or resize",
+      "gate_triggered": true,
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "name": "sub-gate",
+        "width": 1279
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "light",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Compact",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    }
+  ],
+  "purpose": "lane-j2-presentation-evidence",
+  "route_entry": "frontend/app/chart/standalone/page.tsx",
+  "source_sha": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "state_key": "zero-false-null-absent",
+  "storage": {
+    "readback": {
+      "localStorage": {
+        "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+      },
+      "sessionStorage": {
+        "__j1_seeded__": "1"
+      }
+    },
+    "seeds": {
+      "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "theme": "dark",
+  "url": "/chart/standalone",
+  "viewport": {
+    "height": 800,
+    "width": 1280
+  },
+  "visible_text": [
+    "Route: frontend/app/chart/standalone/page.tsx",
+    "State: zero-false-null-absent",
+    "StandaloneLayout rendered",
+    "StandalonePage rendered",
+    "RootLayout rendered",
+    "WatchStar rendered",
+    "MinWidthGate rendered",
+    "ChartClickPopover rendered",
+    "TextInputPopover rendered",
+    "AlertRuleBuilder rendered",
+    "AlertToast rendered",
+    "ToastItem rendered",
+    "ChartPane rendered",
+    "ChartRightPanel rendered",
+    "ChartTopBar rendered",
+    "ChartWorkspace rendered",
+    "DrawingToolbar rendered",
+    "IndicatorPanel rendered",
+    "MtfDashboard rendered",
+    "StructurePanel rendered",
+    "Data rendered",
+    "Text rendered",
+    "Title rendered",
+    "StoreHydration rendered",
+    "ThemeProvider rendered"
+  ]
+}
