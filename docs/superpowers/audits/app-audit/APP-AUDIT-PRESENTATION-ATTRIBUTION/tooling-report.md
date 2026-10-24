@@ -9,12 +9,12 @@
 
 | Disposition | Count | Meaning |
 |---|---|---|
-| `observed-verified` | 402 | Connected unique census tie or verified host marker |
-| `observed-asserted` | 168 | Source-backed presence without unique census/host predicate |
-| `observed-ambiguous` | 338 | Duplicate census names or route signature collisions |
+| `observed-verified` | 231 | Connected unique census tie or verified host marker |
+| `observed-asserted` | 332 | Source-backed presence without unique census/host predicate |
+| `observed-ambiguous` | 342 | Duplicate census names or route signature collisions |
 | `rendered-untargeted` | 0 | Rendered without direct target or state trigger |
 | `not-triggered` | 0 | Scenario executed but specific branch unreached |
-| `not-run` | 51400 | Intentionally unexecuted in J1 tooling smoke |
+| `not-run` | 51403 | Intentionally unexecuted in J1 tooling smoke |
 | `na` | 0 | Source-backed not applicable |
 | `blocked` | 0 | Blocked by missing dependency or precondition |
 
@@ -23,11 +23,11 @@
 | Level | Verified | Asserted | Ambiguous | Not Run | Total |
 |---|---|---|---|---|---|
 | `route-entry` | 3 | 0 | 0 | 42 | 45 |
-| `definition` | 49 | 4 | 20 | 210 | 283 |
-| `component-instance` | 93 | 8 | 34 | 2134 | 2269 |
-| `component-state` | 93 | 8 | 34 | 20286 | 20421 |
-| `native-instance` | 82 | 74 | 125 | 2619 | 2900 |
-| `native-state` | 82 | 74 | 125 | 25819 | 26100 |
+| `definition` | 46 | 4 | 20 | 213 | 283 |
+| `component-instance` | 91 | 8 | 36 | 2134 | 2269 |
+| `component-state` | 91 | 8 | 36 | 20286 | 20421 |
+| `native-instance` | 0 | 156 | 125 | 2619 | 2900 |
+| `native-state` | 0 | 156 | 125 | 25819 | 26100 |
 | `supplemental-capability` | 0 | 0 | 0 | 4 | 4 |
 | `supplemental-state` | 0 | 0 | 0 | 77 | 77 |
 | `supplemental-route-instance` | 0 | 0 | 0 | 11 | 11 |

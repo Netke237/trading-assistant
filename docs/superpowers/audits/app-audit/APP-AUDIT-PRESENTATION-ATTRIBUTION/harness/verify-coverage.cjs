@@ -486,6 +486,16 @@ function validateReconciliation(options) {
       }
     }
 
+    const isPositiveDisp = ['observed-verified', 'observed-asserted', 'observed-ambiguous', 'rendered-untargeted'].includes(disp);
+    if (isPositiveDisp) {
+      if (!evidence.artifact_sha256 || typeof evidence.artifact_sha256 !== 'string' || !evidence.artifact_sha256.trim()) {
+        throw new Error(`missing-artifact-sha256: row ${reqRow.id} with positive disposition ${disp} requires artifact_sha256 in evidence`);
+      }
+      if (!evidence.inventory_sha256 || typeof evidence.inventory_sha256 !== 'string' || !evidence.inventory_sha256.trim()) {
+        throw new Error(`missing-inventory-sha256: row ${reqRow.id} with positive disposition ${disp} requires inventory_sha256 in evidence`);
+      }
+    }
+
     // Artifact verification
     const { calculatedHash, parsed: artifact } = loadArtifact(evidence.artifact);
 
@@ -543,6 +553,20 @@ function validateReconciliation(options) {
       }
     }
 
+    // Reachability verification: definition source must be in route's runtime_reachable_modules
+    const defId = reqRow.definition_id || (reqRow.kind === 'definition' ? reqRow.id : null);
+    const def = defId ? expansion.definitions.find(d => d.id === defId) : null;
+    const routeSource = (evidence.route_entry_id ? evidence.route_entry_id.replace(/^route:/, '') : null) || artifact.route_entry;
+
+    if (def && routeSource && sourceMap?.route_entries) {
+      const smRoute = sourceMap.route_entries.find(r => r.source === routeSource || r.id === evidence.route_entry_id);
+      if (smRoute && smRoute.runtime_reachable_modules) {
+        if (!smRoute.runtime_reachable_modules.includes(def.source)) {
+          throw new Error(`definition-source-not-reachable-from-route: definition ${def.id} (source: ${def.source}) is not reachable from route ${routeSource}`);
+        }
+      }
+    }
+
     // Explanation required for asserted, ambiguous, not-triggered
     if (['observed-asserted', 'observed-ambiguous', 'not-triggered'].includes(disp)) {
       if (!evidence.explanation || typeof evidence.explanation !== 'string' || !evidence.explanation.trim()) {
@@ -582,6 +606,21 @@ function validateReconciliation(options) {
             throw new Error(`missing-census: observed-verified client component ${def.id} requires census in artifact`);
           }
           const compName = def.component;
+
+          // Reject bare name matches where multiple definitions in runtime_reachable_modules share compName
+          if (routeSource && sourceMap?.route_entries) {
+            const smRoute = sourceMap.route_entries.find(r => r.source === routeSource || r.id === evidence.route_entry_id);
+            if (smRoute && smRoute.runtime_reachable_modules) {
+              const allDefs = expansion.definitions || [];
+              const reachableMatches = allDefs.filter(d =>
+                d.component === compName && smRoute.runtime_reachable_modules.includes(d.source)
+              );
+              if (reachableMatches.length > 1) {
+                throw new Error(`ambiguous-definition-name-in-route: component name '${compName}' is shared by multiple definitions reachable from route '${routeSource}': ${reachableMatches.map(d => d.id).join(', ')}`);
+              }
+            }
+          }
+
           if (census.duplicate_names?.includes(compName) || (census.component_counts?.[compName] || 0) > 1) {
             throw new Error(`ambiguous-census-name: component '${compName}' appears multiple times in census; cannot be verified`);
           }
@@ -597,14 +636,15 @@ function validateReconciliation(options) {
         const smDef = sourceMap?.definitions?.find(d => d.id === def?.id);
         const smNative = smDef?.natives?.find(n => n.id === reqRow.native_id);
 
-        if (smNative) {
-          if (smNative.authorship === 'children-slot') {
-            throw new Error(`children-slot-cannot-be-verified: native ${reqRow.native_id} is in a children-slot; cannot earn verified credit`);
-          }
-          // Collision check
-          if (sourceMap?.signature_collisions?.some(sc => sc.signature_hash === smNative.signature_hash && sc.route_entry_id === reqRow.route_entry_id)) {
-            throw new Error(`colliding-signature-cannot-be-verified: native ${reqRow.native_id} has colliding signature in route`);
-          }
+        if (!smNative || smNative?.host_marker?.eligible !== true) {
+          throw new Error(`unproven-native-host-marker: native ${reqRow.native_id} has no reviewed host marker adapter; cannot be verified`);
+        }
+        if (smNative.authorship === 'children-slot') {
+          throw new Error(`children-slot-cannot-be-verified: native ${reqRow.native_id} is in a children-slot; cannot earn verified credit`);
+        }
+        // Collision check
+        if (sourceMap?.signature_collisions?.some(sc => sc.signature_hash === smNative.signature_hash && sc.route_entry_id === reqRow.route_entry_id)) {
+          throw new Error(`colliding-signature-cannot-be-verified: native ${reqRow.native_id} has colliding signature in route`);
         }
 
         // Host node verification
@@ -631,6 +671,19 @@ function validateReconciliation(options) {
           throw new Error(`node-reused-for-multiple-natives: node_id '${nodeId}' was already credited to native ${credited.get(nodeId)}, cannot credit ${reqRow.native_id}`);
         }
         credited.set(nodeId, reqRow.native_id);
+
+        const expectedTag = smNative?.inventory_signature?.tag || smNative?.tag || reqRow.tag;
+        if (hostNode.tag !== expectedTag) {
+          throw new Error(`host-node-tag-mismatch: expected tag '${expectedTag}', got '${hostNode.tag}' on node ${nodeId}`);
+        }
+
+        const matchesAncestor = hostNode.component_name === def?.component ||
+          (Array.isArray(hostNode.custom_ancestors) && hostNode.custom_ancestors.some(a =>
+            typeof a === 'string' ? a === def?.component : (a?.tag === def?.component || a?.name === def?.component)
+          ));
+        if (!matchesAncestor) {
+          throw new Error(`host-node-component-mismatch: host node ${nodeId} component '${hostNode.component_name}' does not match definition component '${def?.component}'`);
+        }
       }
     }
   }
@@ -659,6 +712,7 @@ function reconcileSamples(options) {
   } = options;
 
   const expansion = expandInventory(inventory, supplemental);
+  const computedInventorySha = inventorySha || sourceMap?.inventory_sha256 || (inventory ? sha(json(inventory)) : null);
 
   // Index samples by route_entry source
   const sampleByRoute = new Map();
@@ -666,6 +720,23 @@ function reconcileSamples(options) {
     if (s.data && s.data.route_entry) {
       sampleByRoute.set(s.data.route_entry, s);
     }
+  }
+
+  function isAmbiguousClientComponent(compName, census, sampleData) {
+    if (!compName) return true;
+    if (census.duplicate_names?.includes(compName) || (census.component_counts?.[compName] || 0) > 1) {
+      return true;
+    }
+    if (sourceMap?.route_entries && sampleData?.route_entry) {
+      const smR = sourceMap.route_entries.find(r => r.source === sampleData.route_entry);
+      if (smR && smR.runtime_reachable_modules) {
+        const reachableMatches = expansion.definitions.filter(d =>
+          d.component === compName && smR.runtime_reachable_modules.includes(d.source)
+        );
+        if (reachableMatches.length > 1) return true;
+      }
+    }
+    return false;
   }
 
   const rows = [];
@@ -679,15 +750,31 @@ function reconcileSamples(options) {
       const smDef = sourceMap?.definitions?.find(d => d.id === item.id);
       const compName = def?.component;
 
-      sample = sampleByRoute.get(def?.source) || null;
+      function isSampleReachable(s) {
+        if (!s || !s.data || !s.data.route_entry) return false;
+        const sRoute = s.data.route_entry;
+        if (sourceMap && sourceMap.route_entries) {
+          const smRoute = sourceMap.route_entries.find(r => r.source === sRoute);
+          if (smRoute) {
+            return Array.isArray(smRoute.runtime_reachable_modules) && smRoute.runtime_reachable_modules.includes(def?.source);
+          }
+        }
+        return def?.source === sRoute;
+      }
+
+      const directSample = sampleByRoute.get(def?.source);
+      if (directSample && isSampleReachable(directSample)) {
+        sample = directSample;
+      }
       if (!sample && compName) {
-        sample = samples.find(s => s.data?.census?.component_counts?.[compName] !== undefined) || null;
+        sample = samples.find(s => isSampleReachable(s) && s.data?.census?.component_counts?.[compName] !== undefined) || null;
       }
       if (!sample && smDef?.module_membership?.server_route_entries?.length) {
         for (const sRouteId of smDef.module_membership.server_route_entries) {
           const sSource = sRouteId.replace(/^route:/, '');
-          if (sampleByRoute.has(sSource)) {
-            sample = sampleByRoute.get(sSource);
+          const serverSample = sampleByRoute.get(sSource);
+          if (serverSample && isSampleReachable(serverSample)) {
+            sample = serverSample;
             break;
           }
         }
@@ -718,7 +805,7 @@ function reconcileSamples(options) {
           artifact: relPath,
           artifact_sha256: sampleHash,
           source_sha: sourceSha,
-          inventory_sha256: inventorySha,
+          inventory_sha256: computedInventorySha,
           route_entry_id: item.id,
           explanation: `Smoke route entry reached and rendered at ${sampleData.url}`
         }
@@ -738,12 +825,12 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id || (sampleData.route_entry ? `route:${sampleData.route_entry}` : null),
             explanation: `Server component rendered in route layout without client fiber census entry: ${compName}`
           }
         });
-      } else if (census.duplicate_names?.includes(compName) || (census.component_counts?.[compName] || 0) > 1) {
+      } else if (isAmbiguousClientComponent(compName, census, sampleData)) {
         rows.push({
           id: item.id,
           disposition: 'observed-ambiguous',
@@ -751,9 +838,9 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id || (sampleData.route_entry ? `route:${sampleData.route_entry}` : null),
-            explanation: `Component '${compName}' appears multiple times in census; runtime identity ambiguous`
+            explanation: `Component '${compName}' has ambiguous runtime identity (multiple census occurrences or shared definition name in route reachability)`
           }
         });
       } else if (census.mounted_names?.includes(compName) || (census.component_counts?.[compName] || 0) === 1) {
@@ -764,7 +851,7 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id || (sampleData.route_entry ? `route:${sampleData.route_entry}` : null),
             explanation: `Client definition uniquely mounted in fiber census: ${compName}`,
             runtime_adapter: 'module-export'
@@ -791,12 +878,12 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id,
             explanation: `Server component instance rendered in route layout: ${compName}`
           }
         });
-      } else if (census.duplicate_names?.includes(compName)) {
+      } else if (isAmbiguousClientComponent(compName, census, sampleData)) {
         rows.push({
           id: item.id,
           disposition: 'observed-ambiguous',
@@ -804,9 +891,9 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id,
-            explanation: `Instance for ambiguous duplicate component '${compName}'`
+            explanation: `Instance for ambiguous component '${compName}' (multiple census occurrences or shared definition name in route reachability)`
           }
         });
       } else if (census.mounted_names?.includes(compName) || (census.component_counts?.[compName] || 0) === 1) {
@@ -817,7 +904,7 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id,
             explanation: `Client instance mounted on reachable route: ${compName}`,
             runtime_adapter: 'module-export'
@@ -845,13 +932,13 @@ function reconcileSamples(options) {
               artifact: relPath,
               artifact_sha256: sampleHash,
               source_sha: sourceSha,
-              inventory_sha256: inventorySha,
+              inventory_sha256: computedInventorySha,
               route_entry_id: item.route_entry_id,
               state_key: 'normal',
               explanation: `Server component state asserted from normal route render: ${compName}`
             }
           });
-        } else if (census.duplicate_names?.includes(compName)) {
+        } else if (isAmbiguousClientComponent(compName, census, sampleData)) {
           rows.push({
             id: item.id,
             disposition: 'observed-ambiguous',
@@ -859,10 +946,10 @@ function reconcileSamples(options) {
               artifact: relPath,
               artifact_sha256: sampleHash,
               source_sha: sourceSha,
-              inventory_sha256: inventorySha,
+              inventory_sha256: computedInventorySha,
               route_entry_id: item.route_entry_id,
               state_key: 'normal',
-              explanation: `Normal state for ambiguous census component '${compName}'`
+              explanation: `Normal state for ambiguous component '${compName}' (multiple census occurrences or shared definition name in route reachability)`
             }
           });
         } else if (census.mounted_names?.includes(compName) || (census.component_counts?.[compName] || 0) === 1) {
@@ -873,7 +960,7 @@ function reconcileSamples(options) {
               artifact: relPath,
               artifact_sha256: sampleHash,
               source_sha: sourceSha,
-              inventory_sha256: inventorySha,
+              inventory_sha256: computedInventorySha,
               route_entry_id: item.route_entry_id,
               state_key: 'normal',
               explanation: `Normal client state mounted in self-test smoke: ${compName}`
@@ -906,7 +993,7 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id,
             explanation: 'children-slot native candidate; asserted with source/DOM evidence'
           }
@@ -919,7 +1006,7 @@ function reconcileSamples(options) {
             artifact: relPath,
             artifact_sha256: sampleHash,
             source_sha: sourceSha,
-            inventory_sha256: inventorySha,
+            inventory_sha256: computedInventorySha,
             route_entry_id: item.route_entry_id,
             explanation: 'colliding native signature on route; remains observed-ambiguous'
           }
@@ -929,19 +1016,36 @@ function reconcileSamples(options) {
         const matchedNode = hostNodes.find(n => n.is_connected && n.tag === item.tag && !creditedNodes.has(n.id));
         if (matchedNode) {
           creditedNodes.add(matchedNode.id);
-          rows.push({
-            id: item.id,
-            disposition: 'observed-verified',
-            evidence: {
-              artifact: relPath,
-              artifact_sha256: sampleHash,
-              source_sha: sourceSha,
-              inventory_sha256: inventorySha,
-              route_entry_id: item.route_entry_id,
-              node_id: matchedNode.id,
-              explanation: `Connected host DOM node ${matchedNode.id} matches unique native candidate`
-            }
-          });
+          const isMarkerEligible = smNative?.host_marker?.eligible === true;
+          if (isMarkerEligible) {
+            rows.push({
+              id: item.id,
+              disposition: 'observed-verified',
+              evidence: {
+                artifact: relPath,
+                artifact_sha256: sampleHash,
+                source_sha: sourceSha,
+                inventory_sha256: computedInventorySha,
+                route_entry_id: item.route_entry_id,
+                node_id: matchedNode.id,
+                explanation: `Connected host DOM node ${matchedNode.id} matches unique native candidate`
+              }
+            });
+          } else {
+            rows.push({
+              id: item.id,
+              disposition: 'observed-asserted',
+              evidence: {
+                artifact: relPath,
+                artifact_sha256: sampleHash,
+                source_sha: sourceSha,
+                inventory_sha256: computedInventorySha,
+                route_entry_id: item.route_entry_id,
+                node_id: matchedNode.id,
+                explanation: `Matching connected host DOM node ${matchedNode.id} found but unreviewed host marker adapter keeps disposition asserted per plan §3.D`
+              }
+            });
+          }
         } else {
           rows.push({
             id: item.id,
@@ -953,7 +1057,11 @@ function reconcileSamples(options) {
     } else if (item.kind === 'native-state') {
       if (item.state_key === 'normal') {
         const parentInst = rows.find(r => r.id === item.native_instance_id);
-        if (parentInst && parentInst.disposition === 'observed-verified') {
+        const smDef = sourceMap?.definitions?.find(d => d.id === item.definition_id);
+        const smNative = smDef?.natives?.find(n => n.id === item.native_id);
+        const isMarkerEligible = smNative?.host_marker?.eligible === true;
+
+        if (parentInst && parentInst.disposition === 'observed-verified' && isMarkerEligible) {
           rows.push({
             id: item.id,
             disposition: 'observed-verified',
@@ -962,13 +1070,14 @@ function reconcileSamples(options) {
               state_key: 'normal'
             }
           });
-        } else if (parentInst && parentInst.disposition === 'observed-asserted') {
+        } else if (parentInst && (parentInst.disposition === 'observed-asserted' || parentInst.disposition === 'observed-verified')) {
           rows.push({
             id: item.id,
             disposition: 'observed-asserted',
             evidence: {
               ...parentInst.evidence,
-              state_key: 'normal'
+              state_key: 'normal',
+              explanation: parentInst.evidence.explanation || 'unreviewed host marker adapter keeps disposition asserted per plan §3.D'
             }
           });
         } else if (parentInst && parentInst.disposition === 'observed-ambiguous') {
@@ -1008,7 +1117,7 @@ function reconcileSamples(options) {
     schema_version: 1,
     purpose: 'tooling-self-test',
     source_sha: sourceSha,
-    inventory_sha256: inventorySha,
+    inventory_sha256: computedInventorySha,
     rows
   };
 }

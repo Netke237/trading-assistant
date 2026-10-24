@@ -200,6 +200,25 @@ function createMinimalFixture() {
   };
 
   const sourceMap = {
+    route_entries: [
+      {
+        id: 'route:frontend/app/(frame)/dashboard/page.tsx',
+        source: 'frontend/app/(frame)/dashboard/page.tsx',
+        runtime_reachable_modules: [
+          'frontend/app/(frame)/dashboard/page.tsx',
+          'frontend/components/Widget/index.tsx',
+          'frontend/components/ServerBox/index.tsx'
+        ]
+      },
+      {
+        id: 'route:frontend/app/(frame)/@contextRail/dashboard/default.tsx',
+        source: 'frontend/app/(frame)/@contextRail/dashboard/default.tsx',
+        runtime_reachable_modules: [
+          'frontend/app/(frame)/@contextRail/dashboard/default.tsx',
+          'frontend/components/ServerBox/index.tsx'
+        ]
+      }
+    ],
     definitions: [
       {
         id: 'surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage',
@@ -213,13 +232,15 @@ function createMinimalFixture() {
             id: 'surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage::native:div:1',
             authorship: 'lexical-definition',
             signature_hash: 'sig-div-1',
-            signature: { tag: 'div', attributes: [], text: 'dashboard content' }
+            signature: { tag: 'div', attributes: [], text: 'dashboard content' },
+            host_marker: { eligible: true }
           },
           {
             id: 'surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage::native:span:1',
             authorship: 'lexical-definition',
             signature_hash: 'sig-span-1',
-            signature: { tag: 'span', attributes: [], text: 'label' }
+            signature: { tag: 'span', attributes: [], text: 'label' },
+            host_marker: { eligible: true }
           }
         ]
       },
@@ -235,7 +256,8 @@ function createMinimalFixture() {
             id: 'surface:frontend/components/Widget/index.tsx#Widget::native:button:1',
             authorship: 'children-slot', // children-slot native candidate
             signature_hash: 'sig-btn-1',
-            signature: { tag: 'button', attributes: [], text: 'Click me' }
+            signature: { tag: 'button', attributes: [], text: 'Click me' },
+            host_marker: { eligible: true }
           }
         ]
       },
@@ -251,7 +273,8 @@ function createMinimalFixture() {
             id: 'surface:frontend/components/ServerBox/index.tsx#ServerBox::native:aside:1',
             authorship: 'lexical-definition',
             signature_hash: 'sig-aside-1',
-            signature: { tag: 'aside', attributes: [], text: 'sidebar' }
+            signature: { tag: 'aside', attributes: [], text: 'sidebar' },
+            host_marker: { eligible: false }
           }
         ]
       }
@@ -735,6 +758,7 @@ test('mutation 9: claim a colliding/children-slot native verified must fail', ()
       artifact: 'dashboard.json',
       artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
       source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
       route_entry_id: 'route:frontend/app/(frame)/dashboard/page.tsx',
       node_id: 'node:2',
       explanation: 'claims verified despite children-slot'
@@ -767,6 +791,7 @@ test('mutation 10: forge server absence must fail', () => {
       artifact: 'dashboard.json',
       artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
       source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
       route_entry_id: 'route:frontend/app/(frame)/dashboard/page.tsx',
       explanation: 'Unproven server component claims verified'
     };
@@ -797,6 +822,7 @@ test('mutation 11: assert unsupported verified state must fail', () => {
       artifact: 'dashboard.json',
       artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
       source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
       route_entry_id: 'route:frontend/app/(frame)/dashboard/page.tsx',
       state_key: 'loading',
       explanation: 'claims loading verified'
@@ -828,6 +854,7 @@ test('mutation 12: cite another scenario/slot must fail', () => {
       artifact: 'dashboard.json', // URL page, not parallel slot!
       artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
       source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
       route_entry_id: 'route:frontend/app/(frame)/@contextRail/dashboard/default.tsx',
       explanation: 'cites wrong slot entry'
     };
@@ -875,6 +902,103 @@ test('mutation 13: corrupt artifact paths must fail', () => {
     assert.throws(
       () => validateReconciliation({ inventory, supplemental, reconciliation: reconC, sourceMap, evidenceRoot: tmpDir }),
       /not found|exist/i
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('finding 3: omitting artifact_sha256 or inventory_sha256 on a positive disposition row throws missing-artifact-sha256 / missing-inventory-sha256', () => {
+  const { inventory, supplemental, sourceMap, sampleJson } = createMinimalFixture();
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-f3-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const invBytes = JSON.stringify(inventory);
+    const expansion = expandInventory(inventory, supplemental);
+
+    // Case A: missing artifact_sha256
+    const reconA = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+    const targetA = reconA.rows.find(r => r.disposition === 'observed-verified');
+    delete targetA.evidence.artifact_sha256;
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: reconA, sourceMap, evidenceRoot: tmpDir }),
+      /missing-artifact-sha256/
+    );
+
+    // Case B: missing inventory_sha256
+    const reconB = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+    const targetB = reconB.rows.find(r => r.disposition === 'observed-verified');
+    delete targetB.evidence.inventory_sha256;
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: reconB, sourceMap, evidenceRoot: tmpDir }),
+      /missing-inventory-sha256/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('finding 2: definition whose source is not in route runtime_reachable_modules throws definition-source-not-reachable-from-route', () => {
+  const { inventory, supplemental, sourceMap, sampleJson } = createMinimalFixture();
+  sourceMap.route_entries = [
+    {
+      id: 'route:frontend/app/(frame)/dashboard/page.tsx',
+      source: 'frontend/app/(frame)/dashboard/page.tsx',
+      runtime_reachable_modules: [
+        'frontend/app/(frame)/dashboard/page.tsx'
+        // 'frontend/components/Widget/index.tsx' is NOT reachable from dashboard
+      ]
+    }
+  ];
+
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-f2-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const invBytes = JSON.stringify(inventory);
+    const expansion = expandInventory(inventory, supplemental);
+    const recon = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+
+    const widgetRow = recon.rows.find(r => r.id === 'surface:frontend/components/Widget/index.tsx#Widget');
+    widgetRow.disposition = 'observed-verified';
+    widgetRow.evidence = {
+      artifact: 'dashboard.json',
+      artifact_sha256: crypto.createHash('sha256').update(sampleBytes).digest('hex'),
+      source_sha: BASELINE,
+      inventory_sha256: crypto.createHash('sha256').update(invBytes).digest('hex'),
+      route_entry_id: 'route:frontend/app/(frame)/dashboard/page.tsx',
+      explanation: 'Unreachable widget claims verified on dashboard route'
+    };
+
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap, evidenceRoot: tmpDir }),
+      /definition-source-not-reachable-from-route/
+    );
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('finding 1: claiming observed-verified on a native without host_marker.eligible === true throws unproven-native-host-marker', () => {
+  const { inventory, supplemental, sourceMap, sampleJson } = createMinimalFixture();
+  const tmpDir = fs.mkdtempSync(path.join(__dirname, 'tmp-f1-'));
+  try {
+    const sampleBytes = JSON.stringify(sampleJson);
+    fs.writeFileSync(path.join(tmpDir, 'dashboard.json'), sampleBytes);
+    const invBytes = JSON.stringify(inventory);
+    const expansion = expandInventory(inventory, supplemental);
+    const recon = buildCleanReconciliation(expansion, tmpDir, 'dashboard.json', sampleBytes, invBytes);
+
+    const nativeRow = recon.rows.find(r => r.id.includes('::native:div:1'));
+    nativeRow.disposition = 'observed-verified';
+    const def = sourceMap.definitions.find(d => d.id === 'surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage');
+    const smNat = def.natives.find(n => n.id.includes('::native:div:1'));
+    smNat.host_marker = { eligible: false, reason: 'unreviewed' };
+
+    assert.throws(
+      () => validateReconciliation({ inventory, supplemental, reconciliation: recon, sourceMap, evidenceRoot: tmpDir }),
+      /unproven-native-host-marker/
     );
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -4,11 +4,11 @@
   "coverage_summary": {
     "blocked": 0,
     "na": 0,
-    "not-run": 51400,
+    "not-run": 51403,
     "not-triggered": 0,
-    "observed-ambiguous": 338,
-    "observed-asserted": 168,
-    "observed-verified": 402,
+    "observed-ambiguous": 342,
+    "observed-asserted": 332,
+    "observed-verified": 231,
     "rendered-untargeted": 0
   },
   "inventory_sha256": "9e52dbafe93daee199dac32b224b18913a9ffa6f5e70f85ee2584cd0d2e6fee0",
@@ -18,9 +18,9 @@
       "na": 0,
       "not-run": 2134,
       "not-triggered": 0,
-      "observed-ambiguous": 34,
+      "observed-ambiguous": 36,
       "observed-asserted": 8,
-      "observed-verified": 93,
+      "observed-verified": 91,
       "rendered-untargeted": 0
     },
     "component-state": {
@@ -28,19 +28,19 @@
       "na": 0,
       "not-run": 20286,
       "not-triggered": 0,
-      "observed-ambiguous": 34,
+      "observed-ambiguous": 36,
       "observed-asserted": 8,
-      "observed-verified": 93,
+      "observed-verified": 91,
       "rendered-untargeted": 0
     },
     "definition": {
       "blocked": 0,
       "na": 0,
-      "not-run": 210,
+      "not-run": 213,
       "not-triggered": 0,
       "observed-ambiguous": 20,
       "observed-asserted": 4,
-      "observed-verified": 49,
+      "observed-verified": 46,
       "rendered-untargeted": 0
     },
     "native-instance": {
@@ -49,8 +49,8 @@
       "not-run": 2619,
       "not-triggered": 0,
       "observed-ambiguous": 125,
-      "observed-asserted": 74,
-      "observed-verified": 82,
+      "observed-asserted": 156,
+      "observed-verified": 0,
       "rendered-untargeted": 0
     },
     "native-state": {
@@ -59,8 +59,8 @@
       "not-run": 25819,
       "not-triggered": 0,
       "observed-ambiguous": 125,
-      "observed-asserted": 74,
-      "observed-verified": 82,
+      "observed-asserted": 156,
+      "observed-verified": 0,
       "rendered-untargeted": 0
     },
     "route-entry": {
