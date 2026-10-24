@@ -7,14 +7,6 @@
       "expires_at": "2026-10-24T13:28:07Z",
       "note": "Resume abandoned J1 tooling phase from recorded branch",
       "task": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/ohlcv-alpaca-day-holes-fb0534ec",
-      "claimed_at": "2026-10-24T12:02:57Z",
-      "expires_at": "2026-10-24T15:43:21Z",
-      "note": "Root cause Alpaca missing days, add gap detector, fix writer, provide backfill plan",
-      "task": "OHLCV-ALPACA-DAY-HOLES"
     }
   ]
 }
