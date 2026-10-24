@@ -9359,7 +9359,7 @@
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/tooling-report.md",
         "pattern": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
       },
-      "note": "Plan independently clean after 2 rounds (1/0 gate findings). Resumed on board/app-audit-presentation-attribution-fed37a73. Units 1-3 completed (#531, #532, #533 closed). Code audit round 1: 3 gate findings fixed in 2cfc7173. Code audit round 2: 2 gate findings fixed in ad32e7d7. Code audit round 3: 0 gate findings, clean. Ready for self-merge PR (#529). Parent original capped history preserved.",
+      "note": "SELF-MERGE PENDING, PR #546, audited head ad32e7d7. Plan round 2 clean, code round 3 clean. Parent original capped history preserved.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
