@@ -120,6 +120,16 @@
       "name": "capture.test",
       "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/test/capture.test.cjs",
       "sha256": "0eca2226c86b998292e7711f92c647bf035acc6859c8eec8924e3ac9e78b2e6b"
+    },
+    {
+      "name": "keyboard",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/keyboard.cjs",
+      "sha256": "8749f0def2363a5ca27d167e2aa47a303ecc28356f88dc1eb32bef5b6234ed94"
+    },
+    {
+      "name": "keyboard.test",
+      "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/test/keyboard.test.cjs",
+      "sha256": "cd2098ed234524f9110779b76fe47221c785b9d2a0075e4f4cfb0ebe9cb5b5f7"
     }
   ]
 }

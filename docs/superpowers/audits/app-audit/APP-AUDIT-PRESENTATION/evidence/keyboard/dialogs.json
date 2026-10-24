@@ -1,0 +1,82 @@
+{
+  "components": [
+    "ConfirmDialog",
+    "SaveProfileDialog",
+    "RenameProfileDialog",
+    "SendToBrokerDialog",
+    "StockSendDialog",
+    "CompositeAlertDialog"
+  ],
+  "expected_attributes": {
+    "aria_labelledby": true,
+    "aria_modal": true,
+    "escape_dismisses": true,
+    "focus_trapped": true,
+    "restores_focus": true,
+    "role": "dialog"
+  },
+  "family": "dialogs",
+  "findings": [],
+  "k_procedures_evaluated": [
+    "K1",
+    "K2",
+    "K3",
+    "K4"
+  ],
+  "name": "Modal Dialogs",
+  "procedure_results": {
+    "K1": {
+      "flags": [],
+      "reachable_count": 3,
+      "status": "passed",
+      "unkeyboardable_count": 0
+    },
+    "K2": {
+      "details": {
+        "bounds": {
+          "bottom": 140,
+          "left": 100,
+          "right": 250,
+          "top": 100
+        },
+        "box_shadow_changed": true,
+        "focused_box_shadow": "0 0 0 2px rgba(59,130,246,0.5)",
+        "focused_outline": "2px solid rgb(59, 130, 246)",
+        "outline_changed": true,
+        "viewport": {
+          "height": 800,
+          "width": 1280
+        }
+      },
+      "focus_indicator_visible": true,
+      "inside_viewport": true,
+      "status": "passed"
+    },
+    "K3": {
+      "action_performed": true,
+      "key": "Enter",
+      "role": "button",
+      "selectionChanged": false,
+      "selection_changed": false,
+      "status": "passed",
+      "toggled": false
+    },
+    "K4": {
+      "closed_on_escape": true,
+      "focus_restored_to_opener": true,
+      "focused_inside_before_close": "overlay-content-first-interactive",
+      "overlay_type": "dialog",
+      "restored_target_id": "trigger-control",
+      "status": "passed"
+    }
+  },
+  "routes": [
+    "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+    "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+    "frontend/app/(frame)/journal/page.tsx",
+    "frontend/app/(frame)/portfolio/page.tsx"
+  ],
+  "status": "passed",
+  "timestamp": "2026-10-24T19:00:00.000Z"
+}
