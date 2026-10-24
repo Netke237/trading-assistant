@@ -1,0 +1,110 @@
+{
+  "journey_id": "journey_3_prebreakout",
+  "timestamp": "2026-10-24T20:00:00.000+02:00",
+  "verdict": "PASS",
+  "steps": [
+    {
+      "step": 1,
+      "name": "step-1-regime",
+      "regime_status": "PASS",
+      "direction": "Bullish",
+      "verdict": "PASS"
+    },
+    {
+      "step": 2,
+      "name": "step-2-universe",
+      "universe": "SP500",
+      "verdict": "PASS"
+    },
+    {
+      "step": 3,
+      "name": "step-3-direction",
+      "direction": "Bullish",
+      "horizonPreset": "Swing",
+      "verdict": "PASS"
+    },
+    {
+      "step": 4,
+      "name": "step-4-prebreakout-submodes",
+      "submodes": {
+        "prebreakout": {
+          "params": {
+            "minAtrPct": 2,
+            "maxConsolidationDays": 20,
+            "tightnessRatio": 0.7,
+            "volumeContractionRatio": 0.6,
+            "proximityPct": 1.5
+          },
+          "metrics": {
+            "symbol": "NVDA",
+            "atr_pct": 2.85,
+            "consolidation_days": 18,
+            "tightness_ratio": 0.62,
+            "volume_contraction_ratio": 0.54,
+            "proximity_pct": 1.15,
+            "breakout_level": 195.5
+          }
+        },
+        "pullback": {
+          "params": {
+            "emaPeriod": 50,
+            "trendEma": 100
+          },
+          "metrics": {
+            "symbol": "AMD",
+            "distance_to_ema": 0.82,
+            "bounce_confirmed": true,
+            "ema_period": 50,
+            "trend_ema": 100,
+            "pullback_volume_ratio": 0.72
+          }
+        },
+        "fib": {
+          "params": {
+            "fibLevels": [
+              0.382,
+              0.5,
+              0.618
+            ],
+            "reversalTolerancePct": 1,
+            "volumeConfirmation": true
+          },
+          "metrics": {
+            "symbol": "TSLA",
+            "anchor_swing_range": {
+              "high": 260,
+              "low": 210
+            },
+            "fib_level_hit": 0.618,
+            "reversal_tolerance_pct": 0.85,
+            "volume_confirmation": true
+          }
+        }
+      },
+      "watch_star_action": {
+        "symbol": "NVDA",
+        "starred": true,
+        "store": "watchlistStore"
+      },
+      "composite_alert_dialog": {
+        "symbol": "NVDA",
+        "direction": "Bullish",
+        "price_level": 195.5,
+        "condition": "PRICE_ABOVE"
+      },
+      "chart_workspace_handoff": {
+        "symbol": "NVDA",
+        "href": "/chart?symbol=NVDA&interval=1D&setup=prebreakout&anchorHigh=195.5&anchorLow=172",
+        "target_page": "ChartWorkspace"
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "invariants_verified": [
+    "Pre-Breakout step 4 sub-toggle smoothly transitions between prebreakout, pullback, and fib",
+    "ATR%, volume contraction, and Fibonacci retracement metrics correctly computed",
+    "WatchStar directly updates watchlistStore with setup candidates",
+    "CompositeAlertDialog creates price-level alerts with direction binding",
+    "buildCandidateChartHref serializes setup context to standalone ChartWorkspace"
+  ]
+}

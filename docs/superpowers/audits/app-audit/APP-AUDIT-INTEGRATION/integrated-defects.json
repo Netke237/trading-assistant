@@ -1,0 +1,434 @@
+[
+  {
+    "defect_id": "A-UI-RAIL-CALENDAR",
+    "originating_lane": "Lane A",
+    "title": "Soft navigation to Calendar retains prior active @contextRail slot instead of mounting root fallback",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": "#395",
+    "verification": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/findings.json (A-UI-RAIL-CALENDAR); interactive-evidence/observations.json"
+  },
+  {
+    "defect_id": "A-UI-RAIL-SETTINGS",
+    "originating_lane": "Lane A",
+    "title": "Soft navigation to Settings retains prior active @contextRail slot instead of mounting root fallback",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": "#395",
+    "verification": "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/findings.json (A-UI-RAIL-SETTINGS); interactive-evidence/observations.json"
+  },
+  {
+    "defect_id": "B-368",
+    "originating_lane": "Lane B",
+    "title": "Options millions market-cap filters are sent as dollars",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#454",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_cap_units_filter; PR #454 commit a1811c0e"
+  },
+  {
+    "defect_id": "B-369",
+    "originating_lane": "Lane B",
+    "title": "252-day VIX percentile uses 259 prior bars",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#411",
+    "verification": "backend/tests/test_regime.py::test_vix_percentile_252_window; PR #411 commit b5e665cf"
+  },
+  {
+    "defect_id": "B-370",
+    "originating_lane": "Lane B",
+    "title": "Appearance row density resets when the Settings section remounts",
+    "severity": "cosmetic",
+    "status": "resolved",
+    "remediation_reference": "#426",
+    "verification": "frontend/lib/__tests__/settingsDensity.test.ts; PR #426 commit be557e01"
+  },
+  {
+    "defect_id": "B-371",
+    "originating_lane": "Lane B",
+    "title": "Settings footer confirms Saved after a failed or unsubmitted backend save",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#500",
+    "verification": "frontend/lib/__tests__/settingsSaveFeedback.test.ts; PR #500 commit a9d138d3"
+  },
+  {
+    "defect_id": "B-372",
+    "originating_lane": "Lane B",
+    "title": "Late Settings timezone response overwrites an operator edit",
+    "severity": "degraded",
+    "status": "resolved",
+    "remediation_reference": "#415",
+    "verification": "frontend/lib/__tests__/settingsTimezoneRace.test.ts; PR #415 commit bbaf8f81"
+  },
+  {
+    "defect_id": "B-373",
+    "originating_lane": "Lane B",
+    "title": "Strategy scan stores zero override that the backend rejects",
+    "severity": "blocks-use",
+    "status": "resolved",
+    "remediation_reference": "#424",
+    "verification": "frontend/lib/__tests__/strategyScanValidation.test.ts; PR #424 commit 2d1e54c4"
+  },
+  {
+    "defect_id": "B-374",
+    "originating_lane": "Lane B",
+    "title": "Failed schedule writes change API state while disk and scheduler retain old values",
+    "severity": "degraded",
+    "status": "resolved",
+    "remediation_reference": "#463",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_schedule_rollback; PR #463 commit 84937152"
+  },
+  {
+    "defect_id": "B-375",
+    "originating_lane": "Lane B",
+    "title": "Notifications help text renders a literal Unicode escape",
+    "severity": "cosmetic",
+    "status": "resolved",
+    "remediation_reference": "#429",
+    "verification": "frontend/components/organisms/NotificationsSettings/index.test.tsx; PR #429 commit 8f2427fd"
+  },
+  {
+    "defect_id": "B-377",
+    "originating_lane": "Lane B",
+    "title": "Tuning schedule says every day despite saved weekday selection",
+    "severity": "cosmetic",
+    "status": "resolved",
+    "remediation_reference": "#416",
+    "verification": "frontend/components/organisms/StrategyTuningSettings/index.test.tsx; PR #416 commit 482d8277"
+  },
+  {
+    "defect_id": "B-380",
+    "originating_lane": "Lane B",
+    "title": "Stocks manual and scheduled requests drop universe price/cap filters",
+    "severity": "blocks-use",
+    "status": "resolved",
+    "remediation_reference": "#452",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_stock_filters_propagated; PR #452 commit 809f883e"
+  },
+  {
+    "defect_id": "B-381",
+    "originating_lane": "Lane B",
+    "title": "Malformed current-version profile crashes the Search Profile controls",
+    "severity": "blocks-use",
+    "status": "resolved",
+    "remediation_reference": "#381 / #398 / #475 / #476",
+    "verification": "frontend/lib/__tests__/searchProfilesValidation.test.ts; PR #475 commit 13f7b60a; PR #476 commit 036e2e67"
+  },
+  {
+    "defect_id": "B-382",
+    "originating_lane": "Lane B",
+    "title": "Options score-weight percent overrides are applied as raw multipliers",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#461",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_weight_units_normalized; PR #461 commit dd511abf"
+  },
+  {
+    "defect_id": "B-383",
+    "originating_lane": "Lane B",
+    "title": "Stocks requests ignore Step3 confidence threshold overrides",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#449",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_confidence_threshold_override; PR #449 commit 542fceb9"
+  },
+  {
+    "defect_id": "B-384",
+    "originating_lane": "Lane B",
+    "title": "Entry Quality controls reach requests but do not affect the trade plan",
+    "severity": "degraded",
+    "status": "resolved",
+    "remediation_reference": "#485",
+    "verification": "backend/tests/test_audit_settings_profiles_lane_b.py::test_entry_quality_override; PR #485 commit 05dc303a"
+  },
+  {
+    "defect_id": "B-385",
+    "originating_lane": "Lane B",
+    "title": "Stop percentages display fractions and clamp a typed 3 percent to 100 percent",
+    "severity": "misleading",
+    "status": "resolved",
+    "remediation_reference": "#457",
+    "verification": "frontend/lib/__tests__/premiumStop.test.ts; PR #457 commit 03d94520"
+  },
+  {
+    "defect_id": "B-386",
+    "originating_lane": "Lane B",
+    "title": "Old regime response overwrites the newer direction-aligned scan gate",
+    "severity": "blocks-use",
+    "status": "resolved",
+    "remediation_reference": "#442",
+    "verification": "frontend/lib/__tests__/barrierRace.test.ts; PR #442 commit 80b6d6ce"
+  },
+  {
+    "defect_id": "B-387",
+    "originating_lane": "Lane B",
+    "title": "Shared Run Scan confirmation is bypassed in Stocks and Pre-Breakout",
+    "severity": "degraded",
+    "status": "resolved",
+    "remediation_reference": "#420",
+    "verification": "frontend/lib/__tests__/runScanGate.test.ts; PR #420 commit be45fcf4"
+  },
+  {
+    "defect_id": "B-388",
+    "originating_lane": "Lane B",
+    "title": "Regime VIX percentile labels render incorrect ordinal suffixes",
+    "severity": "cosmetic",
+    "status": "resolved",
+    "remediation_reference": "#417",
+    "verification": "frontend/components/molecules/RegimeIndicator/index.test.tsx; PR #417 commit 3ebaa291"
+  },
+  {
+    "defect_id": "DEFECT-OPTIONS-1",
+    "originating_lane": "Lane C",
+    "title": "Fractional strike integer truncation in scan router, alternative contracts, and contracts endpoint",
+    "severity": "blocks-use",
+    "status": "residual",
+    "remediation_reference": "#162",
+    "verification": "backend/app/routers/scan.py:1280, 1297, 1434; backend/app/routers/contracts.py:127"
+  },
+  {
+    "defect_id": "DEFECT-OPTIONS-2",
+    "originating_lane": "Lane C",
+    "title": "Non-monotonic +19 point discontinuity in option contract IV scoring",
+    "severity": "misleading",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/scoring/contract_scorer.py:112-145"
+  },
+  {
+    "defect_id": "DEFECT-OPTIONS-3",
+    "originating_lane": "Lane C",
+    "title": "Heston parameter grid search boundary pinning and Feller condition violation",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/scoring/pricing.py:214-250"
+  },
+  {
+    "defect_id": "DEFECT-OPTIONS-4",
+    "originating_lane": "Lane C",
+    "title": "IEEE-754 precision noise in frontend capitalAtRisk calculation",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/components/organisms/TradeCard/index.tsx:287"
+  },
+  {
+    "defect_id": "DEFECT-OPTIONS-5",
+    "originating_lane": "Lane C",
+    "title": "Strict regex pattern matching in parseApiError defaults non-standard errors to keep",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/lib/api.ts:34-48"
+  },
+  {
+    "defect_id": "DEFECT-STOCKS-1",
+    "originating_lane": "Lane D",
+    "title": "Step 5 strategy route retained as compatibility pass-through redirect",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/app/(frame)/screener/step-5-strategy/page.tsx:1-15"
+  },
+  {
+    "defect_id": "DEFECT-STOCKS-2",
+    "originating_lane": "Lane D",
+    "title": "mean_reversion_vwap intraday bar requirement inside multi-strategy engine",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/services/strategy_engine.py:284-310"
+  },
+  {
+    "defect_id": "DEFECT-PREBREAKOUT-1",
+    "originating_lane": "Lane E",
+    "title": "Inspection inputs sizing resolution disparity in Pullback sub-mode",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:158, 218-220"
+  },
+  {
+    "defect_id": "DEFECT-PREBREAKOUT-2",
+    "originating_lane": "Lane E",
+    "title": "Asynchronous run_id capture latency in Pre-Breakout / Fib scan metadata",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx:172-185"
+  },
+  {
+    "defect_id": "DEFECT-PREBREAKOUT-3",
+    "originating_lane": "Lane E",
+    "title": "Setup-origin candidate chart backtest hydration is unsupported for Pre-Breakout and Fib setups",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/components/organisms/SetupCandidateTable/index.tsx:94-110"
+  },
+  {
+    "defect_id": "DEFECT-BROKER-1",
+    "originating_lane": "Lane F",
+    "title": "Unrouted broker position close stub (_maybe_send_close_to_broker)",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/routers/portfolio.py:73-81"
+  },
+  {
+    "defect_id": "DEFECT-BROKER-2",
+    "originating_lane": "Lane F",
+    "title": "Offline basket tracker naming in SendToBrokerDialog",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/components/organisms/SendToBrokerDialog/index.tsx:142"
+  },
+  {
+    "defect_id": "DEFECT-BROKER-3",
+    "originating_lane": "Lane F",
+    "title": "Live broker paper gateway verification requires authorized local desktop session",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/services/broker_router.py:45-60"
+  },
+  {
+    "defect_id": "DEFECT-MONITORING-1",
+    "originating_lane": "Lane G",
+    "title": "Strategy Watch client store is in-memory only without local snapshot cache",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/lib/strategyWatchStore.ts:31-77"
+  },
+  {
+    "defect_id": "DEFECT-MONITORING-2",
+    "originating_lane": "Lane G",
+    "title": "Dual-evaluation of intraday chart alert rules across scheduler and WebSocket",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/services/portfolio_alert_monitor.py:110-140"
+  },
+  {
+    "defect_id": "DEFECT-MONITORING-3",
+    "originating_lane": "Lane G",
+    "title": "Context rail fallback shims on Alerts and Strategy Watch pages",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/app/(frame)/alerts/page.tsx; frontend/app/(frame)/strategy-watch/page.tsx"
+  },
+  {
+    "defect_id": "DISP-1",
+    "originating_lane": "Lane H",
+    "title": "Confidence Metric Omitted from Validation XLSX Export",
+    "severity": "misleading",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/lib/export.ts:43-55; docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md:Section 5"
+  },
+  {
+    "defect_id": "NAV-1",
+    "originating_lane": "Lane H",
+    "title": "Calendar & Journal Fallback Context Rail Soft-Navigation Retention",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": "#395",
+    "verification": "frontend/app/(frame)/@contextRail/; docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md:Section 5"
+  },
+  {
+    "defect_id": "DEFECT-PERSIST-1",
+    "originating_lane": "Lane I",
+    "title": "Storage key naming prefix inconsistency (colon vs hyphen)",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/storage-matrix.json"
+  },
+  {
+    "defect_id": "DEFECT-PERSIST-2",
+    "originating_lane": "Lane I",
+    "title": "Absence of active cross-tab StorageEvent sync listener in Zustand stores",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/lib/watchlistStore.ts; frontend/lib/portfolioStore.ts"
+  },
+  {
+    "defect_id": "DEFECT-PERSIST-3",
+    "originating_lane": "Lane I",
+    "title": "Plaintext local credentials storage on disk",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/data/credential_store.py:28-45"
+  },
+  {
+    "defect_id": "DEFECT-PERSIST-4",
+    "originating_lane": "Lane I",
+    "title": "Dual-engine schema management (Alembic PostgreSQL vs. SQLAlchemy SQLite Base.metadata.create_all)",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "backend/app/db.py:52-70; backend/alembic/env.py"
+  },
+  {
+    "defect_id": "J-001",
+    "originating_lane": "Lane J",
+    "title": "Soft navigation to Calendar retains prior active @contextRail slot instead of mounting root fallback",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": "#395",
+    "verification": "frontend/app/(frame)/calendar/page.tsx; frontend/app/(frame)/@contextRail/default.tsx"
+  },
+  {
+    "defect_id": "J-002",
+    "originating_lane": "Lane J",
+    "title": "Soft navigation to Settings retains prior active @contextRail slot instead of mounting root fallback",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": "#395",
+    "verification": "frontend/app/(frame)/settings/page.tsx; frontend/app/(frame)/@contextRail/default.tsx"
+  },
+  {
+    "defect_id": "J-003",
+    "originating_lane": "Lane J",
+    "title": "Appearance row density selection resets visually when switching Settings sub-sections",
+    "severity": "cosmetic",
+    "status": "residual",
+    "remediation_reference": "#370",
+    "verification": "frontend/app/(frame)/settings/page.tsx; frontend/components/organisms/AppearanceSettings/index.tsx"
+  },
+  {
+    "defect_id": "J-004",
+    "originating_lane": "Lane J",
+    "title": "Settings footer confirms 'Saved' after a failed or unsubmitted backend save",
+    "severity": "misleading",
+    "status": "residual",
+    "remediation_reference": "#371",
+    "verification": "frontend/app/(frame)/settings/page.tsx:210-230; docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/settings/risk-false-saved.png"
+  },
+  {
+    "defect_id": "J-005",
+    "originating_lane": "Lane J",
+    "title": "Chart canvas lacks an accessible DOM table or ARIA text alternative for assistive inspection",
+    "severity": "degraded",
+    "status": "residual",
+    "remediation_reference": null,
+    "verification": "frontend/components/organisms/CandlestickChart/index.tsx:180-210"
+  },
+  {
+    "defect_id": "J-006",
+    "originating_lane": "Lane J",
+    "title": "Step 2 Universe market-cap filter inputs show generic '$' label without millions unit indicator",
+    "severity": "misleading",
+    "status": "residual",
+    "remediation_reference": "#368",
+    "verification": "frontend/app/(frame)/screener/step-2-universe/page.tsx:112-140"
+  }
+]

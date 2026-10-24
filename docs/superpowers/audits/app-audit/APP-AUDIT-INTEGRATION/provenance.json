@@ -1,0 +1,36 @@
+{
+  "audit_phase": "APP-AUDIT-INTEGRATION",
+  "lane": "Lane K",
+  "target_issue": 553,
+  "parent_issue": 359,
+  "programme_issue": 348,
+  "source_commit": "500fa563da47ea2dcd001b9ac1e87aa8f2c1055f",
+  "timezone": "Europe/Berlin",
+  "fixed_clock_timestamp": "2026-10-24T20:00:00.000+02:00",
+  "environment": {
+    "node_version": "v20.x",
+    "nextjs_version": "15.5.23",
+    "react_version": "19.2.5",
+    "python_version": "3.11.9",
+    "playwright_version": "1.51.x",
+    "chromium_build": "151.0.7922.34"
+  },
+  "artifact_digests": {
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/reconciliation.json": "3f63aea88b309213cff4a2397558d010033c2a1faf389cb09f8c3f2cbd0228d0",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/reconciliation.json": "4d54ca733139808b53fb4fda3bf47fea7606e684fc148a8180b8aad93645a181",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/reconciliation.json": "75f2c25079ccfeadab7ae70c3fa3a0757acc0d7e86b30e00f069e9566df7254e",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/reconciliation.json": "b4ba9cbc9b9ef67d26b30809c15d5b118bf9ac7a21814c465afeee6050e9ed48",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/reconciliation.json": "cfc6e8773f5162756feb027e51ee8c704af3dfe1ed21c9d19effeae2bfcc78b5",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/reconciliation.json": "b33ca0fd0465e9f9f8fd2795c128ee2baa1ffc6146d5aa9942cd2344ae0126c9",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/defects.json": "7c23951667201f6360c9d4f0255ea954d969ab5c15233b7a7424fc73e9fa8539",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/defects.json": "a9438a8c69c42f1e621b0b3eef195a0de42bd7cee2eb31ce784faabfc44016dd",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-STOCKS/defects.json": "3b9be601a5e7e5ffc7a1f6814d23a25725ce6b4e02459e460c89031c2c3bf281",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-PREBREAKOUT/defects.json": "6b317a0c02d420744730ae54a7e3e4deb776fb8c4737f890cf8cad49ab4acc18",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-BROKER-PORTFOLIO/defects.json": "56e35697dce09ac7ea5904001db37b3a131ef01d4aa0ae6249a61b374eed5031",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-MONITORING/defects.json": "5019dbaf2ba973da9f3c36f4ed4091673cc9a07f1aa4d4a603e50904d9a80871",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/defects.json": "a5d1ab3521b7f17be48c802f9ed03db60be8d59e52c3e85fdbe3a0b56777561a",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/defects.json": "fa37e3ae331a88046bbe5d9487d17a3ca54894414ab40a3705e8b07bd95fdf38",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-INVENTORY/findings.json": "93c67866263fe1a7a47b213c59249c160c790775999bcfa15d0ecad26d3c49ca",
+    "docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md": "a5c305af38eb7fa733d64e2e06874b52484a7c285931b795cfb5347e65e7c78e"
+  }
+}
