@@ -11,7 +11,7 @@
 ## 1. Goal, Deliverables, and Boundaries
 
 ### 1.1 Goal
-Execute the browser presentation audit and reconciliation for Lane J (#358) using the separately audited and shipped J1 attribution tooling (`APP-AUDIT-PRESENTATION-ATTRIBUTION`, PR #546). Provide an empirical, fail-closed presentation disposition or stated blocker for every Lane A inventory row across all 45 routes, 283 definitions, 2,269 component instances (20,421 state rows), 2,900 native instances (26,100 state rows), and 77 supplemental capabilities (198 requirements).
+Execute the browser presentation audit and reconciliation for Lane J (#358) using the separately audited and shipped J1 attribution tooling (`APP-AUDIT-PRESENTATION-ATTRIBUTION`, PR #546). Provide an empirical, fail-closed presentation disposition or stated blocker for every Lane A inventory row across all 45 route entries, 283 definitions, 2,269 component instances (20,421 state rows), 2,900 native instances (26,100 state rows), and all 4 supplemental capability contract levels (4 capabilities, 77 capability states, 11 route instances, and 198 route state requirements, totaling 290 supplemental rows) — bringing the grand total to exactly 52,308 inventory requirement rows.
 
 ### 1.2 Deliverables
 1. **Presentation Capture Harness & Runs:** Automated browser execution driving Playwright Chromium over the supported state/viewport/theme/density matrix across all routes, collecting C1–C8 evidence (visible text, labels, zero/null/false checks, overflow, axe-core WCAG contrast, React Fiber current census, screenshots).
@@ -30,10 +30,10 @@ Execute the browser presentation audit and reconciliation for Lane J (#358) usin
 ## 2. Infrastructure, Tooling Reuse & Provenance
 
 ### 2.1 Reused J1 Tooling
-This phase executes using the verified and shipped components from J1 (`docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/`):
+This phase executes using the verified and shipped pure library APIs from J1 (`docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/`):
 - `harness/census.cjs`: Live React 19 Fiber tree current traversal (`hostRoot.stateNode.current`), unwrapping memo/forwardRef, tracking renderless components (`KeyboardShortcuts`), and recording connected DOM node ownership.
 - `harness/smoke.cjs`: Isolated production build server (`npx next build --no-mangling`, `npx next start`), Playwright Chromium v1234 launcher, seed-once sessionStorage guard, and request interceptor.
-- `harness/verify-coverage.cjs`: Fail-closed coverage verifier checking SHA-256 hashes, source-derived target maps, reachability, and strict predicate compliance (`observed-verified` vs `observed-asserted`).
+- `harness/verify-coverage.cjs`: Fail-closed coverage verifier exporting pure functions `{ expandInventory, validateReconciliation, generateToolingReport }` checking SHA-256 hashes, source-derived target maps, reachability, and strict predicate compliance (`observed-verified` vs `observed-asserted`).
 - `source-map.json` & `target-map.json`: Authoritative native containment, client/server classification, and definition `api.*` / store dependencies.
 
 ### 2.2 Provenance Record
@@ -63,8 +63,27 @@ Each route is exercised across the conservative 9-state matrix templates:
   - Route minimum width (1200 px for Step 7 trade/position cards; 1280 px elsewhere) × 800 px.
   - Full HD: 1920 × 1080 px for `normal` and `expanded-nested`.
   - Sub-gate check: 1 px below minimum width verifying `MinWidthGate` message renders.
-- **Themes:** Dark (`bamendjou:theme = 'dark'`) and Light (`'light'`).
-- **Densities:** Comfortable (default) and Compact.
+- **Themes:**
+  - Persisted under `'bamendjou:theme'` using Zustand's `persist` JSON envelope:
+    - Dark: `JSON.stringify({ state: { theme: 'dark', density: 'Comfortable' }, version: 1 })`
+    - Light: `JSON.stringify({ state: { theme: 'light', density: 'Comfortable' }, version: 1 })`
+  - (Setting raw strings would fail `JSON.parse` in `app/layout.tsx` pre-hydration script, preventing theme switching).
+- **Densities:**
+  - Comfortable (default): `density: 'Comfortable'`
+  - Compact: `density: 'Compact'`
+
+### 3.3 Routing and Parallel Slot Attribution
+The 45 route entries in `inventory.json` correspond to:
+- 28 navigable URLs in App Router (`/dashboard`, `/settings`, `/screener/step-1-regime`, etc.).
+- 10 parallel slots under `frontend/app/(frame)/@contextRail/...`.
+- 4 layout entries (Root layout, Frame layout, Screener layout, Settings layout).
+- 3 boundaries (`error.tsx`, `loading.tsx`, `not-found.tsx`).
+
+Direct navigation to `@contextRail/...` returns HTTP 404 because parallel slots are mounted inside parent layouts. The capture harness navigates to each of the 28 URLs and emits distinct, correctly attributed evidence records for:
+1. The page route entry (e.g. `frontend/app/(frame)/dashboard/page.tsx`),
+2. The active `@contextRail` parallel slot (e.g. `frontend/app/(frame)/@contextRail/dashboard/page.tsx` or fallback `default.tsx`),
+3. The layout entries enclosing that route.
+This satisfies `slot-evidence-missing` and `route-mismatch` validation in `verify-coverage.cjs:541-550`.
 
 ---
 
@@ -95,11 +114,25 @@ Each route is exercised across the conservative 9-state matrix templates:
 - File GitHub issues under parent #358 for confirmed presentation defects.
 - Numeric/persistence anomalies recorded in `handoffs.json` and assigned to domain lanes B–I.
 
-### 5.3 Row-Level Reconciliation
-- Run `verify-coverage.cjs` across all generated evidence:
-  - Every ID across the 5 inventory levels assigned exactly one disposition: `observed-verified`, `observed-asserted`, `observed-ambiguous`, `rendered-untargeted`, `not-triggered`, `not-run`, `na`, or `blocked`.
-  - `observed-verified` requires positive proof against `source-map.json` and `target-map.json`.
-  - Compile final statistics into `tooling-report.json`, `tooling-report.md`, and `report.md`.
+### 5.3 Row-Level Reconciliation and Fail-Closed Predicates
+Lane J2 authors its own reconciliation runner script under `docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/harness/reconcile.cjs` that imports `{ expandInventory, validateReconciliation, generateToolingReport }` from `APP-AUDIT-PRESENTATION-ATTRIBUTION/harness/verify-coverage.cjs`. It maps all evidence into `reconciliation.json` and executes `validateReconciliation` with `evidenceRoot: 'docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION'`.
+
+**Strict Predicate Rules (Enforced by `verify-coverage.cjs`):**
+1. **`observed-verified` Criteria:**
+   - Only `normal` state rows for route entries and client component definitions can earn `observed-verified`.
+   - Requires unique route reachability per `source-map.json` and confirmed presence in the React Fiber current census.
+2. **`observed-asserted` Criteria:**
+   - Non-normal states (`empty`, `loading`, `failed-cancelled`, `legacy-unsupported`, `zero-false-null-absent`, `stale-async`, `reload-restart`): per `verify-coverage.cjs:586-590`, these throw `unsupported-state-predicate` if claimed as `observed-verified`. When observed in evidence, they are dispositioned as `observed-asserted` with positive artifact citation, explanation, and matching `state_key`.
+   - Native instances and native states: all 979 definitions in `source-map.json` have `host_marker.eligible !== true` (unreviewed native markers). Per `verify-coverage.cjs:607`, natives throw `unproven-native-host-marker` if claimed as `observed-verified`. They are dispositioned as `observed-asserted` with DOM tag and component ancestry evidence.
+   - Server-only components: 11 definitions without reviewed marker adapters throw `unproven-server-marker` if claimed verified; they are dispositioned as `observed-asserted`.
+   - Supplemental states and supplemental route states: per `verify-coverage.cjs:592-594`, throw `unsupported-state-predicate` if claimed verified; they are dispositioned as `observed-asserted` when observed.
+3. **Other Dispositions:**
+   - `observed-ambiguous`: collisions across definitions or unverified duplicate native signatures.
+   - `rendered-untargeted`: rendered without targeting evidence.
+   - `not-triggered`: route executed but condition not met.
+   - `not-run`: state or sub-case not executed.
+   - `blocked`: production-gated `/dev/components`, private routes, live broker/websocket dependencies.
+   - `na`: demonstrably non-applicable states with source-backed proof.
 
 ---
 
@@ -108,9 +141,9 @@ Each route is exercised across the conservative 9-state matrix templates:
 The work is organized into 3 sequential build tickets (sub-issues of #530):
 
 - **Unit 1: Full Browser Capture Suite (T1-T2)**
-  - Execute automated browser runs across all 45 routes and 9 state families using the isolated smoke harness.
+  - Execute automated browser runs across all 28 navigable URLs, generating distinct evidence for all 45 route entries (including `@contextRail` slots and layouts) across the 9 state families using the isolated smoke harness.
   - Collect C1–C8 evidence, axe-core scans, and Fiber current census outputs.
-  - Output structured JSON evidence per route/state/viewport in `evidence/`.
+  - Output structured JSON evidence per route/state/viewport in `docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/evidence/`.
 
 - **Unit 2: Keyboard Traversal & Specialized States (T3-T4)**
   - Implement and run `keyboard.cjs` executing K1–K6 across all interaction families.
@@ -118,7 +151,7 @@ The work is organized into 3 sequential build tickets (sub-issues of #530):
 
 - **Unit 3: Triage, Defect Filing, Reconciliation & Final Audit Report (T5)**
   - Generate `triage.json`, `defects.json`, and `handoffs.json`.
-  - Execute `verify-coverage.cjs` to validate all 5 inventory levels and produce `reconciliation.json`.
+  - Implement `reconcile.cjs` importing `verify-coverage.cjs` to validate all 52,308 inventory requirements and produce `reconciliation.json`.
   - Author comprehensive Lane J audit report `docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION/report.md` and `README.md`.
   - File confirmed defect issues as sub-issues of #358.
 
