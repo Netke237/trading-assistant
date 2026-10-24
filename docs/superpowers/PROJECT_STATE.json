@@ -9097,7 +9097,7 @@
           "outstanding": []
         }
       ],
-      "note": "CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings. No production code modified; probe, tests, M1/M2 data, report and recompute verified. audit_clean true; PR next. || BUILT 2026-10-24 (evidence): T1 #538 (94ab0f56) probe + data and T2 #539 (eee67410) report.md; independent recompute (8ce9289c) agreed with zero difference across all 5 verification targets. Code audit next. || Plan round 1 CLEAN (0 gate findings, agent 2ddce374): mechanism across 5 codebases and scoring_rules.yaml verified; mathematical bottleneck in compute_omm and silent gate bypass verified against live Postgres. Plan stage closed clean at round 1. Tickets T1/T2 next.",
+      "note": "SELF-MERGE PENDING, PR #540 (refs #534, does not close it), audited head 14cb6964 (code round 1 clean). Commits after the audited head are documentation-only state records. Not merged; the live PR state is authoritative. || CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings. No production code modified; probe, tests, M1/M2 data, report and recompute verified. audit_clean true; PR next. || BUILT 2026-10-24 (evidence): T1 #538 (94ab0f56) probe + data and T2 #539 (eee67410) report.md; independent recompute (8ce9289c) agreed with zero difference across all 5 verification targets. Code audit next. || Plan round 1 CLEAN (0 gate findings, agent 2ddce374): mechanism across 5 codebases and scoring_rules.yaml verified; mathematical bottleneck in compute_omm and silent gate bypass verified against live Postgres. Plan stage closed clean at round 1. Tickets T1/T2 next.",
       "code_stage": {
         "rounds": 1,
         "clean": true,
