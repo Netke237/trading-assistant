@@ -278,7 +278,7 @@ function generateReportMd(options) {
     '- **Paper Broker Routing:** Direct order execution stubs (`tradier_paper`, `ibkr_paper`, `alpaca_paper`) format limit prices, actions (`BUY`/`SELL`), and account tags with 100% adherence to schema contracts.',
     '- **Basket Booking Integrity:** Basket confirmation in `SendToBrokerDialog` strictly records `source: \'manual\'`, preventing automated re-dispatch loops.',
     '- **Persistence & Migrations:** All 8 local storage domains (`theme`, `settings`, `watchlist`, `portfolio`, `risk`, `alerts`, `drawings`, `search-profiles`) preserve state without parse crashes or key loss.',
-    '- **Remediations Verified:** 29 code defects identified in earlier lanes have been fully resolved and verified on `main` (#380, #381, #398, #411, #420, #452, #500, etc.). All residual numeric risks remain documented with tracked follow-ups.',
+    `- **Remediations Verified:** ${resolvedDefects.length} code defects identified in earlier lanes have been fully resolved and verified on \`main\` (#380, #381, #398, #411, #420, #452, #500, etc.). All residual numeric risks remain documented with tracked follow-ups.`,
     '',
     '### Verdict 2 (Presentation & Usability Gate): PASS with residual findings',
     '',

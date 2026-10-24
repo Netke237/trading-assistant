@@ -147,6 +147,8 @@ test('integrate: report.md contains exact heading # APP-AUDIT-INTEGRATION, 3 ver
   // Verdict 1 (Numeric & Persistence Gate)
   assert.match(content, /Verdict 1.*Numeric.*Persistence/i, 'must state Verdict 1');
   assert.match(content, /PASS/, 'Verdict 1 must be PASS');
+  assert.match(content, /18 code defects identified in earlier lanes have been fully resolved/, 'must cite 18 resolved defects in Verdict 1');
+  assert.ok(!content.includes('29 code defects'), 'must not misstate resolved defect count as 29');
 
   // Verdict 2 (Presentation & Usability Gate)
   assert.match(content, /Verdict 2.*Presentation.*Usability/i, 'must state Verdict 2');
