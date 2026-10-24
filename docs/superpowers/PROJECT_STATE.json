@@ -9274,7 +9274,7 @@
       "branch": "board/app-audit-presentation-attribution-fed37a73",
       "tracking_issue": 529,
       "plan": "docs/superpowers/plans/2026-10-23-app-audit-presentation-attribution-plan.md",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": true,
       "completion_pct": 70,
@@ -9306,6 +9306,23 @@
           "findings": [],
           "fixes": [],
           "outstanding": []
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent subagent bc0a7b34-e1e3-4ac9-9a69-468fcaa8640a applying bmad-review-adversarial-general",
+          "reviewed": "git diff origin/main..dff854b9 on board/app-audit-presentation-attribution-fed37a73 (38 files)",
+          "gate_findings": 3,
+          "findings": [
+            "J1-CODE-VERIFY-NATIVE-FALSE-CREDIT: native instances on observed routes credited with observed-verified solely by matching HTML tag name against any unused connected DOM node, falsely attributing TopBar Title span to unmounted EventFlag and MinWidthGate to hidden metadata div.",
+            "J1-CODE-DEF-NAME-COLLISION-FALSE-VERIFICATION: definition sample attachment in reconcileSamples matched bare component name without verifying def.source is in route runtime_reachable_modules, falsely verifying CalendarIcon from step-5-vol-events on dashboard.",
+            "J1-CODE-OPTIONAL-HASH-INVENTORY-BYPASS: cryptographic artifact_sha256 and inventory_sha256 checks were optional in validateReconciliation, allowing tampered or unhashed artifacts and unverified inventory baselines to claim observed-verified."
+          ],
+          "fixes": [
+            "2cfc7173: require host_marker.eligible === true, matching tag and component ancestry for verified natives; downgrade unreviewed natives to observed-asserted; require def.source in runtime_reachable_modules and reject collision names without export adapter; require mandatory artifact_sha256 and inventory_sha256 on positive dispositions."
+          ],
+          "outstanding": []
         }
       ],
       "verify": {
@@ -9313,10 +9330,14 @@
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/tooling-report.md",
         "pattern": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
       },
-      "note": "Plan independently clean after 2 rounds (1/0 gate findings). Resumed 2026-10-24 from abandoned d8496de6 branch on board/app-audit-presentation-attribution-fed37a73. Unit 1 #531 completed at 261b1a2d. Unit 2 #532 completed at 8709c46d. Unit 3 #533 completed at 37347516. All 41 harness and mutation tests passing; frontend typecheck clean. Tooling report, maps, and handoff ready. Code audit next. Parent original capped history preserved.",
+      "note": "Plan independently clean after 2 rounds (1/0 gate findings). Resumed on board/app-audit-presentation-attribution-fed37a73. Units 1-3 completed. Code audit round 1: 3 gate findings (false native credit, route collision matching, optional hash checks); fixed in 2cfc7173 test-first. Code round 2 next. Parent original capped history preserved.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": false
       }
     }
   ],
