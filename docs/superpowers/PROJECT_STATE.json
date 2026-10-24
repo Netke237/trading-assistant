@@ -9051,7 +9051,7 @@
     {
       "id": "REGIME-SERIES-LENGTH",
       "name": "Measure daily regime unmeasured rate and silent gate bypass across bar-series lengths (#534); options for Kenneth",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/regime-series-length-1df66ee6",
       "tracking_issue": 534,
@@ -9072,7 +9072,7 @@
       },
       "size": "M",
       "complexity": 4,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "audit_history": [
         {
           "round": 1,
@@ -9086,7 +9086,7 @@
           "outstanding": []
         }
       ],
-      "note": "Plan round 1 CLEAN (0 gate findings, agent 2ddce374): mechanism across 5 codebases and scoring_rules.yaml verified; mathematical bottleneck in compute_omm and silent gate bypass verified against live Postgres. Plan stage closed clean at round 1. Tickets T1/T2 next."
+      "note": "BUILT 2026-10-24 (evidence): T1 #538 (94ab0f56) probe + data and T2 #539 (eee67410) report.md; independent recompute (8ce9289c) agreed with zero difference across all 5 verification targets. Code audit next."
     }
   ],
   "already_shipped": [
