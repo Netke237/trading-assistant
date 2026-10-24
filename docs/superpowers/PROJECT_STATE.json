@@ -9194,7 +9194,7 @@
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/tooling-report.md",
         "pattern": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
       },
-      "note": "Plan independently clean after 2 rounds (1/0 gate findings). Resumed 2026-10-24 from abandoned d8496de6 branch on board/app-audit-presentation-attribution-2bb89258. Build order #531 then #532 then #533; #531 in progress. Code audit not started. Parent original capped history preserved.",
+      "note": "Plan independently clean after 2 rounds (1/0 gate findings). Resumed 2026-10-24 from abandoned d8496de6 branch on board/app-audit-presentation-attribution-2bb89258. Unit 1 #531 completed at 261b1a2d (Node11/11; frontend typecheck and Jest320/6012 passed). Unit 2 #532 in progress; unit3 #533 pending. Phase remains 20% until all implementation milestones hold. Code audit not started. Parent original capped history preserved.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
