@@ -1,20 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/app-audit-presentation-attribution-2bb89258",
-      "claimed_at": "2026-10-24T10:12:53Z",
-      "expires_at": "2026-10-24T13:28:07Z",
-      "note": "Resume abandoned J1 tooling phase from recorded branch",
-      "task": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
-    },
-    {
-      "agent": "claude",
-      "branch": "board/p3c-script-windows-run-bdea78e9",
-      "claimed_at": "2026-10-24T12:46:38Z",
-      "expires_at": "2026-10-24T16:23:01Z",
-      "note": "Fix Windows cp1252 crash and repo-root .env loading in p3c_data_checks.py",
-      "task": "P3C-SCRIPT-WINDOWS-RUN"
-    }
-  ]
+  "claims": []
 }
