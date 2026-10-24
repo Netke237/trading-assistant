@@ -61,7 +61,7 @@
           "report": "adversarial code audit round 1 log"
         }
       ],
-      "note": "BUILT: Windows encoding safety and repo-root .env resolution implemented and verified. Plan round 1 and code round 1 both clean.",
+      "note": "SELF-MERGE PENDING, PR #544, audited head 3c92c756. Plan round 1 and code round 1 both clean.",
       "code_stage": {
         "rounds": 1,
         "clean": true,
