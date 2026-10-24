@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/app-audit-presentation-attribution-2bb89258",
       "claimed_at": "2026-10-24T10:12:53Z",
-      "expires_at": "2026-10-24T13:25:18Z",
+      "expires_at": "2026-10-24T13:25:48Z",
       "note": "Resume abandoned J1 tooling phase from recorded branch",
       "task": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
     },
