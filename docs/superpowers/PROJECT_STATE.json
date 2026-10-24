@@ -9170,7 +9170,7 @@
     {
       "id": "APP-AUDIT-PRESENTATION",
       "name": "Lane J \u2014 verify usability and every expanded, empty, error and legacy disclosure (#358)",
-      "status": "not_started",
+      "status": "built",
       "owner": "agent",
       "branch": "board/app-audit-presentation-500b85a3",
       "tracking_issue": 358,
@@ -9189,7 +9189,7 @@
         "pattern": "APP-AUDIT-PRESENTATION",
         "note": "Pins the final Lane J presentation audit report (#358)."
       },
-      "completion_pct": 10,
+      "completion_pct": 70,
       "size": "XL",
       "complexity": 4,
       "audit_history": [
@@ -9260,7 +9260,7 @@
           ]
         }
       ],
-      "note": "Lane J presentation audit (#358). Audit/report only; frozen source bf0b3b54. PLAN STAGE AT CAP, NOT CLEAN: rounds 1-3 found 6/5/2 gate findings; round-3 fixes applied but unaudited. Stopped per audit_rule; questions to Kenneth on #358 (needs-kenneth). No tickets cut, no evidence captured. Resumed 2026-10-23: untagged recommendation A accepted on #358 and needs-kenneth cleared. Separate J1 #529 and J2 #530 created. Parent retains all capped original plan history; final acceptance awaits both child phases. No original-stage fourth round authorized or run.",
+      "note": "Lane J parent (#358). Split into J1 (#529) and J2 (#530). J1 shipped; J2 built with Units 1-3 complete (#548, #549, #550 closed). Final presentation report delivered in report.md. Code audit next on J2.",
       "split_phases": [
         "APP-AUDIT-PRESENTATION-ATTRIBUTION",
         "APP-AUDIT-PRESENTATION-EXECUTION"
@@ -9374,7 +9374,7 @@
     {
       "id": "APP-AUDIT-PRESENTATION-EXECUTION",
       "name": "J2 browser presentation audit and reconciliation (#530)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/app-audit-presentation-execution-c7c61ea2",
       "tracking_issue": 530,
@@ -9382,7 +9382,7 @@
       "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": true,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "size": "L",
       "complexity": 4,
       "plan_stage": {
@@ -9449,7 +9449,7 @@
         "pattern": "APP-AUDIT-PRESENTATION-EXECUTION",
         "note": "Pins the final Lane J presentation audit report (#530)."
       },
-      "note": "J2 browser presentation audit and reconciliation (#530). Resumed on board/app-audit-presentation-execution-c7c61ea2. Plan stage independently clean at round 3 (0 gate findings). Build units (T1-T3) next. Parent #358 original capped history preserved."
+      "note": "J2 browser presentation audit and reconciliation (#530). Units 1-3 completed (#548, #549, #550 closed). Plan stage clean at round 3. Code audit next. Parent #358 original capped history preserved."
     }
   ],
   "already_shipped": [
