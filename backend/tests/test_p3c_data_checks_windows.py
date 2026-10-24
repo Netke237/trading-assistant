@@ -32,9 +32,12 @@ def test_windows_encoding_safety(tmp_path):
     # Run helper script to populate sample fixture DB so report_symbol runs
     init_script = (
         "import sqlite3\n"
+        "from datetime import date, timedelta\n"
         f"conn = sqlite3.connect(r'{db_file}')\n"
         "conn.execute('CREATE TABLE ohlcv_daily (date TEXT, symbol TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL, adj_factor REAL, split_factor REAL, source TEXT)')\n"
-        "for i, d in enumerate(['2024-01-02', '2024-01-03', '2024-01-04']):\n"
+        "start = date(2024, 1, 1)\n"
+        "for i in range(30):\n"
+        "    d = (start + timedelta(days=i)).isoformat()\n"
         "    conn.execute('INSERT INTO ohlcv_daily VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (d, 'AAA', 100.0, 105.0, 95.0, 100.0 + i, 1000.0, 1.0, 1.0, 'alpaca'))\n"
         "conn.commit()\n"
         "conn.close()\n"
@@ -143,6 +146,7 @@ def test_discloses_source_without_password(tmp_path, monkeypatch, capsys):
     spec.loader.exec_module(mod)
 
     fake_db = tmp_path / "fake.db"
+    fake_db.touch()
     monkeypatch.setattr(mod, "resolve_url", lambda: (f"sqlite+aiosqlite:///{fake_db}", "repo-root .env"))
 
     # Mock read_sqlite so main exits 0
