@@ -1,0 +1,147 @@
+{
+  "metadata": {
+    "title": "M1 Universe Coverage & Unmeasured Rate Sweep",
+    "as_of_date": "2026-10-24",
+    "generated_at": "2026-10-24T10:52:10.197189+00:00",
+    "total_universe_symbols": 540,
+    "total_cells": 2160,
+    "horizons": [
+      "swing",
+      "position"
+    ],
+    "directions": [
+      "Bullish",
+      "Bearish"
+    ]
+  },
+  "windows": {
+    "A": {
+      "total_cells": 2160,
+      "measured": 1216,
+      "unmeasured": 944,
+      "unmeasured_rate_pct": 43.7,
+      "by_horizon": {
+        "swing": {
+          "total_cells": 1080,
+          "measured": 602,
+          "unmeasured": 478,
+          "unmeasured_rate_pct": 44.26,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 454,
+            "insufficient_series_length": 24
+          }
+        },
+        "position": {
+          "total_cells": 1080,
+          "measured": 614,
+          "unmeasured": 466,
+          "unmeasured_rate_pct": 43.15,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 442,
+            "insufficient_series_length": 24
+          }
+        }
+      },
+      "reasons": {
+        "insufficient_observations_below_min_obs": 896,
+        "insufficient_series_length": 48
+      }
+    },
+    "A_304": {
+      "total_cells": 2160,
+      "measured": 1266,
+      "unmeasured": 894,
+      "unmeasured_rate_pct": 41.39,
+      "by_horizon": {
+        "swing": {
+          "total_cells": 1080,
+          "measured": 628,
+          "unmeasured": 452,
+          "unmeasured_rate_pct": 41.85,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 450,
+            "insufficient_series_length": 2
+          }
+        },
+        "position": {
+          "total_cells": 1080,
+          "measured": 638,
+          "unmeasured": 442,
+          "unmeasured_rate_pct": 40.93,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 440,
+            "insufficient_series_length": 2
+          }
+        }
+      },
+      "reasons": {
+        "insufficient_observations_below_min_obs": 890,
+        "insufficient_series_length": 4
+      }
+    },
+    "B": {
+      "total_cells": 2160,
+      "measured": 2012,
+      "unmeasured": 148,
+      "unmeasured_rate_pct": 6.85,
+      "by_horizon": {
+        "swing": {
+          "total_cells": 1080,
+          "measured": 990,
+          "unmeasured": 90,
+          "unmeasured_rate_pct": 8.33,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 88,
+            "insufficient_series_length": 2
+          }
+        },
+        "position": {
+          "total_cells": 1080,
+          "measured": 1022,
+          "unmeasured": 58,
+          "unmeasured_rate_pct": 5.37,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 56,
+            "insufficient_series_length": 2
+          }
+        }
+      },
+      "reasons": {
+        "insufficient_observations_below_min_obs": 144,
+        "insufficient_series_length": 4
+      }
+    },
+    "C": {
+      "total_cells": 2160,
+      "measured": 2012,
+      "unmeasured": 148,
+      "unmeasured_rate_pct": 6.85,
+      "by_horizon": {
+        "swing": {
+          "total_cells": 1080,
+          "measured": 990,
+          "unmeasured": 90,
+          "unmeasured_rate_pct": 8.33,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 88,
+            "insufficient_series_length": 2
+          }
+        },
+        "position": {
+          "total_cells": 1080,
+          "measured": 1022,
+          "unmeasured": 58,
+          "unmeasured_rate_pct": 5.37,
+          "reasons": {
+            "insufficient_observations_below_min_obs": 56,
+            "insufficient_series_length": 2
+          }
+        }
+      },
+      "reasons": {
+        "insufficient_observations_below_min_obs": 144,
+        "insufficient_series_length": 4
+      }
+    }
+  }
+}
