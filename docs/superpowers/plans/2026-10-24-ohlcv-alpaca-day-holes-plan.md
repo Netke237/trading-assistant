@@ -61,17 +61,18 @@ In `backend/app/services/history_backfill.py:81` and `158`:
 
 ## 2. Design & Architecture
 
-### 2.1 Alpaca Feed Upgrade & Fallback
+### 2.1 Alpaca Feed Parameter & Targeted SIP Fetching
 In `backend/app/data/alpaca.py`:
-- Expose `feed: str | None = None` in `AlpacaClient.__init__`, `_get_bars_page`, `_fetch_all_pages`, `fetch_raw`, `fetch_adj`, `fetch_daily_bars_batch`, and `fetch_daily_bars_single`.
-- When `feed is None`, do not send `feed` query parameter to Alpaca. Alpaca v2 automatically serves `sip` (the consolidated tape) for entitled accounts (such as Kenneth's paper/live credentials), and `iex` for free-tier accounts.
-- If an explicit `feed="sip"` or default request receives HTTP 403 Forbidden (`subscription does not permit querying SIP data`), retry once with `feed="iex"` to ensure zero disruption on un-entitled developer environments.
+- Expose `feed: str = "iex"` parameter across `AlpacaClient.__init__`, `_get_bars_page`, `_fetch_all_pages`, `fetch_raw`, `fetch_adj`, `fetch_daily_bars_batch`, and `fetch_daily_bars_single`.
+- **Default remains `"iex"`:** Existing nightly ingestion and incremental classifiers remain on `feed="iex"`, completely avoiding Rule T5 (`raw_close_changed`) reference-date failures between IEX and SIP raw close prices on NYSE stocks.
+- **Targeted SIP parameter:** Callers requiring the consolidated tape (such as the backfill script `backfill_alpaca_holes.py`) explicitly pass `feed="sip"`.
+- If an explicit `feed="sip"` request receives HTTP 403 Forbidden (`subscription does not permit querying SIP data`), log a clear warning.
 
 ### 2.2 Canonical US Trading Calendar & Gap Detector
 In `backend/app/services/history_gap_detector.py`:
 - Implement a pure Python, zero-external-dependency NYSE trading calendar helper `is_nyse_trading_day(d: date) -> bool` and `get_nyse_trading_days(start: date, end: date) -> list[date]`:
   - Weekdays (Monday–Friday) excluding standard NYSE holidays:
-    - New Year's Day (Jan 1, observed Mon if Sun, Fri if Sat; if Fri Dec 31, observed that day)
+    - New Year's Day: January 1 (observed Monday if Jan 1 falls on Sunday. **Under NYSE Rule 7.2**, when Jan 1 falls on Saturday, Friday Dec 31 is **NOT** observed as a holiday; the market is open for normal trading, as confirmed on 2021-12-31).
     - Martin Luther King Jr. Day (third Monday in January)
     - Washington's Birthday / Presidents' Day (third Monday in February)
     - Good Friday (Friday before Easter Sunday, computed via Butcher's algorithm)
@@ -91,10 +92,11 @@ In `backend/app/services/history_gap_detector.py`:
   - Returns all expected NYSE trading days in the range that are absent from `dates`.
   - Excludes dates after a symbol's verified delisting date if known.
 
-### 2.3 Writer Protection Against Missing Trading Days
+### 2.3 Writer Gap Observation & Logging (Non-Breaking)
 In `backend/app/services/history_backfill.py`:
 - In `_validated(bars, start, end)` or `_single_provider_locked`:
-  - Add an optional `check_trading_calendar_gaps: bool = False` or a specific internal-gap check: if candidate bars skip an official NYSE trading day between the candidate's first and last date, log a warning or refuse incomplete candidate windows when single-provider rebuilding.
+  - Add calendar gap detection for observational reporting and logging.
+  - **No refusal on stock-specific gaps:** To avoid rejecting valid candidate histories for halted stocks, corporate mergers, or illiquid zero-volume days, calendar gaps are logged as warnings and surfaced in ingestion status metrics rather than raising `SingleProviderRefused` or aborting valid writes.
 
 ### 2.4 Gap Detector Script
 In `backend/scripts/history_gap_detector.py`:
@@ -104,11 +106,16 @@ In `backend/scripts/history_gap_detector.py`:
   - `--json-out <path>`: outputs structured JSON summary with missing day counts and symbol details.
   - Exits with 0 if no gaps found; exits with 1 if gaps exist (unless `--no-exit-code` is passed).
 
-### 2.5 Backfill Script & Kenneth Run-Book
+### 2.5 Backfill Script & Kenneth Run-Book (Safe Alpaca-Only Backfill)
 In `backend/scripts/backfill_alpaca_holes.py`:
 - Connects to Postgres, finds all symbols with `source = 'alpaca'` missing `2021-04-19`, `2021-10-25`, or `2022-03-08`.
-- For each missing date, fetches the single daily bar using Alpaca SIP (`feed="sip"`) or Tiingo/yfinance fallback if Alpaca is unavailable.
-- Validates the bar (positive OHLCV, adj_factor matching surrounding bars within 0.5% tolerance).
+- **Strict Single-Source Consistency (No Foreign Provider Splicing):**
+  - All backfilled rows use Alpaca SIP bars (`source = 'alpaca'`). Foreign provider bars (Tiingo, yfinance) are **NEVER** spliced into an Alpaca series (preventing `verified_boundary` corruption and `mixed_basis` staleness).
+- **Staleness & Precision Guards (Preventing `batch_step`):**
+  - Check that the candidate Alpaca SIP bar has positive OHLCV.
+  - To prevent triggering `batch_step` staleness (`abs(n_adj / p_adj - 1.0) > 1e-4` across differing `_fetch_date`):
+    1. Verify whether an actual cash dividend or split occurred on the missing date. When no corporate action occurred on that date, pin `adj_factor` to match the surrounding Alpaca bars (the adjacent bar's stored factor).
+    2. Pin `fetched_at` of the backfilled row to match the surrounding bars' `fetched_at` timestamp so `_fetch_date` remains uniform across the stored batch.
 - Upserts the row into `ohlcv_daily` in an atomic transaction per symbol.
 - Reports total rows inserted and re-verifies with the gap detector.
 - Includes `--dry-run` flag.
