@@ -9464,7 +9464,7 @@
         "pattern": "APP-AUDIT-PRESENTATION-EXECUTION",
         "note": "Pins the final Lane J presentation audit report (#530)."
       },
-      "note": "J2 browser presentation audit and reconciliation (#530). Units 1-3 completed (#548, #549, #550 closed). Plan round 3 clean, code round 1 clean. Parent #358 original capped history preserved."
+      "note": "SELF-MERGE PENDING, PR #551, audited head e6c233bf. J2 browser presentation audit and reconciliation (#530). Units 1-3 completed (#548, #549, #550 closed). Plan round 3 clean, code round 1 clean. Parent #358 original capped history preserved."
     }
   ],
   "already_shipped": [
