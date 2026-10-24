@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/ohlcv-alpaca-day-holes-fb0534ec",
       "claimed_at": "2026-10-24T12:02:57Z",
-      "expires_at": "2026-10-24T15:02:57Z",
+      "expires_at": "2026-10-24T15:14:25Z",
       "note": "Root cause Alpaca missing days, add gap detector, fix writer, provide backfill plan",
       "task": "OHLCV-ALPACA-DAY-HOLES"
     }
