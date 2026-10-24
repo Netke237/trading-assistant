@@ -1,0 +1,20 @@
+[
+  {
+    "symbol": "AAPL",
+    "contract": "AAPL 190C 11/20",
+    "direction": "BULLISH",
+    "entryDate": "2026-10-01",
+    "expiry": "2026-11-20",
+    "dteRemaining": 27,
+    "dteTotal": 50,
+    "entryPrice": 4.5,
+    "currentPrice": 5.8,
+    "quantity": 2,
+    "targetPrice": 7.0,
+    "stopPrice": 3.0,
+    "status": "PASS",
+    "unrealizedPnl": 260.0,
+    "unrealizedPnlPct": 28.89,
+    "recId": "rec-aapl-1"
+  }
+]
