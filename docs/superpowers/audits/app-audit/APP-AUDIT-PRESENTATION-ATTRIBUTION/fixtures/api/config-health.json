@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "checked": ["settings.yaml", "scoring_rules.yaml"],
+  "not_checked": [],
+  "pid": 1001,
+  "errors": [],
+  "warnings": [],
+  "stale": []
+}

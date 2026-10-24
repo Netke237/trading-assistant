@@ -1,0 +1,199 @@
+{
+  "completion_claim": "zero-whole-app-coverage-claim",
+  "coverage_status": "tooling-sample-only",
+  "coverage_summary": {
+    "blocked": 0,
+    "na": 0,
+    "not-run": 51403,
+    "not-triggered": 0,
+    "observed-ambiguous": 342,
+    "observed-asserted": 332,
+    "observed-verified": 231,
+    "rendered-untargeted": 0
+  },
+  "inventory_sha256": "9e52dbafe93daee199dac32b224b18913a9ffa6f5e70f85ee2584cd0d2e6fee0",
+  "level_summary": {
+    "component-instance": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 2134,
+      "not-triggered": 0,
+      "observed-ambiguous": 36,
+      "observed-asserted": 8,
+      "observed-verified": 91,
+      "rendered-untargeted": 0
+    },
+    "component-state": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 20286,
+      "not-triggered": 0,
+      "observed-ambiguous": 36,
+      "observed-asserted": 8,
+      "observed-verified": 91,
+      "rendered-untargeted": 0
+    },
+    "definition": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 213,
+      "not-triggered": 0,
+      "observed-ambiguous": 20,
+      "observed-asserted": 4,
+      "observed-verified": 46,
+      "rendered-untargeted": 0
+    },
+    "native-instance": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 2619,
+      "not-triggered": 0,
+      "observed-ambiguous": 125,
+      "observed-asserted": 156,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    },
+    "native-state": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 25819,
+      "not-triggered": 0,
+      "observed-ambiguous": 125,
+      "observed-asserted": 156,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    },
+    "route-entry": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 42,
+      "not-triggered": 0,
+      "observed-ambiguous": 0,
+      "observed-asserted": 0,
+      "observed-verified": 3,
+      "rendered-untargeted": 0
+    },
+    "supplemental-capability": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 4,
+      "not-triggered": 0,
+      "observed-ambiguous": 0,
+      "observed-asserted": 0,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    },
+    "supplemental-route-instance": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 11,
+      "not-triggered": 0,
+      "observed-ambiguous": 0,
+      "observed-asserted": 0,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    },
+    "supplemental-route-state": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 198,
+      "not-triggered": 0,
+      "observed-ambiguous": 0,
+      "observed-asserted": 0,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    },
+    "supplemental-state": {
+      "blocked": 0,
+      "na": 0,
+      "not-run": 77,
+      "not-triggered": 0,
+      "observed-ambiguous": 0,
+      "observed-asserted": 0,
+      "observed-verified": 0,
+      "rendered-untargeted": 0
+    }
+  },
+  "phase": "APP-AUDIT-PRESENTATION-ATTRIBUTION",
+  "provenance": {
+    "build_command": "npx next build --no-mangling",
+    "chromium_executable": "C:\\Users\\KENNETH\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe",
+    "chromium_version": "151.0.7922.34",
+    "fixture_hashes": [
+      {
+        "name": "alerts",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/alerts.json",
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+      },
+      {
+        "name": "config-health",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/config-health.json",
+        "sha256": "df19af56aba2b2ecddd1ad4b7e5b414eb119d24b09d4aaa57f911f10a644dc75"
+      },
+      {
+        "name": "contract-rules",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/contract-rules.json",
+        "sha256": "8532dd66f0865181f4caf0d794fd4a46c4eb0762726782a41220e2e8171d05b4"
+      },
+      {
+        "name": "event-thresholds",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/event-thresholds.json",
+        "sha256": "293ae8eb64df18a9d52617aa7d8af8117fafdcc3af560fb8a9f151576b7fa285"
+      },
+      {
+        "name": "iv-thresholds",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/iv-thresholds.json",
+        "sha256": "49f84b0ca2f1d718db544a07a482125e454c6933a33607698488d31e5d4d5266"
+      },
+      {
+        "name": "news",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/news.json",
+        "sha256": "861a664f518dd273ba70f398681d43e609115d086d3427c93f57390573dccf3b"
+      },
+      {
+        "name": "performance",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/performance.json",
+        "sha256": "a8b00c6c71856c62c21ba925d77193b0618fc662b4ccc370d5f25075bf3d16fe"
+      },
+      {
+        "name": "portfolio",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/portfolio.json",
+        "sha256": "dcefef8d6c1927c09a18a5dbb98bbc00c1a1585a52013584fac255f2ba22bc6b"
+      },
+      {
+        "name": "regime",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/regime.json",
+        "sha256": "cdbc4f3d8da05ac4f299081aae000e4c53800ba219a92081050176d92bacb46b"
+      },
+      {
+        "name": "watched-contracts",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/watched-contracts.json",
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+      },
+      {
+        "name": "watchlist",
+        "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/fixtures/api/watchlist.json",
+        "sha256": "4f153282b7eee61367c8d66991e64c03eedd47a2c02b2d8baa815986f81b660e"
+      }
+    ],
+    "lockfile_sha256": "f67a407e78e75e30f72f683116c87a4736c4bd7b1a8caeab7502d4aa52da0d4f",
+    "next_version": "15.5.23",
+    "node_version": "v22.23.2",
+    "playwright_version": "1.58.2",
+    "purpose": "tooling-self-test",
+    "python_version": "Python 3.11.9",
+    "react_version": "19.2.5",
+    "source_sha": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+    "timezone": "Europe/Berlin"
+  },
+  "purpose": "tooling-self-test",
+  "schema_version": 1,
+  "source_baseline": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "unsupported_contract": [
+    "all non-normal and supplemental state predicates fail with unsupported-state-predicate if marked verified",
+    "children-slot and colliding native signatures cannot be verified",
+    "server components without proven runtime markers downgrade to asserted",
+    "single DOM node credit rule: no node reused across multiple natives",
+    "URL alone cannot identify parallel-slot or boundary entries"
+  ]
+}
