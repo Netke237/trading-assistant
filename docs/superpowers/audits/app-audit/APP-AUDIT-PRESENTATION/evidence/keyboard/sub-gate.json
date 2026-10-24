@@ -1,0 +1,29 @@
+{
+  "audit": "sub-gate-viewports",
+  "checks": [
+    {
+      "component": "MinWidthGate",
+      "gate_message_detected": true,
+      "gate_triggered": true,
+      "height": 800,
+      "message": "Rotate or resize",
+      "min_width": 1200,
+      "status": "passed",
+      "target_route": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "width": 1199
+    },
+    {
+      "component": "MinWidthGate",
+      "gate_message_detected": true,
+      "gate_triggered": true,
+      "height": 800,
+      "message": "Rotate or resize",
+      "min_width": 1280,
+      "status": "passed",
+      "target_route": "frontend/app/(frame)/dashboard/page.tsx",
+      "width": 1279
+    }
+  ],
+  "status": "passed",
+  "total_checks": 2
+}

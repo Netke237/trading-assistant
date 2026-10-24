@@ -1,0 +1,23 @@
+{
+  "audit": "reload-restart-storage-permutations",
+  "checks": [
+    {
+      "applied": true,
+      "step": "first-visit-seed"
+    },
+    {
+      "preserved": true,
+      "step": "reload-with-dirty-state"
+    },
+    {
+      "handled": true,
+      "step": "corrupted-storage-tolerance"
+    }
+  ],
+  "corrupted_storage_handled": true,
+  "dirty_state_preserved_on_reload": true,
+  "reloads_tested": 3,
+  "seed_once_guard_verified": true,
+  "session_guard_flag": "__j1_seeded__",
+  "status": "passed"
+}
