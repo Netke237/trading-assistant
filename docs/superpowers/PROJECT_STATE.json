@@ -9474,10 +9474,10 @@
       "branch": "board/app-audit-integration-500fa563",
       "tracking_issue": 359,
       "plan": "docs/superpowers/plans/2026-10-24-app-audit-integration-plan.md",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 4,
+      "audit_clean": true,
       "plan_audit_clean": true,
-      "completion_pct": 70,
+      "completion_pct": 85,
       "size": "M",
       "complexity": 5,
       "verify": {
@@ -9486,12 +9486,18 @@
         "pattern": "APP-AUDIT-INTEGRATION",
         "note": "Pins the final Lane K cross-mode integration audit report (#359)."
       },
-      "note": "Lane K cross-mode integration audit (#359). Units 1-3 completed (#553, #554, #555 closed). Plan stage clean at round 2. Code audit next. Parent #348 culmination.",
+      "note": "Lane K cross-mode integration audit (#359). Units 1-3 completed (#553, #554, #555 closed). Plan round 2 clean, code round 2 clean. Self-merge pending next. Parent #348 culmination.",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent 5a7f797f-84ad-495f-b289-b13bd6071731 reviewed Round 1 fixes and interactions; 0 gate findings."
+      },
+      "code_stage": {
+        "rounds": 2,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent subagent 6cc90c44-4920-4edd-b53c-2146c145579c reviewed Round 1 fix and interactions; 0 gate findings."
       },
       "audit_history": [
         {
@@ -9531,6 +9537,36 @@
           "fixes": [],
           "outstanding": [],
           "clean": true
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent subagent d7ce9b83-d091-4d71-b48b-562d7ce660e5 applying bmad-review-adversarial-general",
+          "reviewed": "git diff origin/main..9a5c98f4 on board/app-audit-integration-500fa563",
+          "gate_findings": 1,
+          "findings": [
+            "APP-AUDIT-INT-DEFECT-001: integrate.cjs:281 and report.md:30 hardcoded 29 resolved defects instead of 18 from integrated-defects.json."
+          ],
+          "fixes": [
+            "Interpolated resolvedDefects.length (18) into integrate.cjs:281, regenerated report.md, and added regression tests in integrate.test.cjs."
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/audits/app-audit/APP-AUDIT-INTEGRATION/code-r1.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh independent subagent 6cc90c44-4920-4edd-b53c-2146c145579c applying bmad-review-adversarial-general",
+          "reviewed": "git diff 9a5c98f4..493e47cd on board/app-audit-integration-500fa563 (Round 1 fix and interactions)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/audits/app-audit/APP-AUDIT-INTEGRATION/code-r2.md"
         }
       ]
     }
