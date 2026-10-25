@@ -181,7 +181,7 @@ async def fetch_daily_bars_batch(
     client: AlpacaClient | None = None,
     *,
     strict_adjustments: bool = False,
-    feed: str = "sip",
+    feed: str | None = None,
 ) -> dict[str, list[dict]]:
     """Fetch daily bars for multiple symbols from Alpaca.
 
@@ -190,12 +190,13 @@ async def fetch_daily_bars_batch(
     incomplete or invalid adjustment data.
     """
     if client is None:
-        client = await get_alpaca_client(feed=feed)
+        client = await get_alpaca_client(feed=feed or "sip")
     if client is None:
         return {}
     try:
-        raw_bars = await client.fetch_raw(symbols, start, end, feed=feed)
-        adj_bars = await client.fetch_adj(symbols, start, end, feed=feed)
+        kwargs = {"feed": feed} if feed is not None else {}
+        raw_bars = await client.fetch_raw(symbols, start, end, **kwargs)
+        adj_bars = await client.fetch_adj(symbols, start, end, **kwargs)
         return _normalize_bars(raw_bars, adj_bars, strict_adjustments=strict_adjustments)
     except Exception as exc:
         logger.warning("Alpaca batch fetch failed: %s", exc)
@@ -209,7 +210,7 @@ async def fetch_daily_bars_single(
     client: AlpacaClient | None = None,
     *,
     strict_adjustments: bool = False,
-    feed: str = "sip",
+    feed: str | None = None,
 ) -> list[dict]:
     """Fetch daily bars for a single symbol from Alpaca."""
     result = await fetch_daily_bars_batch(

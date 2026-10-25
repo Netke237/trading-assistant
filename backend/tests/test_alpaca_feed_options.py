@@ -210,8 +210,8 @@ async def test_fetch_daily_bars_batch_defaults_to_sip():
     )
 
     fake_client.fetch_raw.assert_awaited_once_with(
-        ["AAPL"], date(2022, 3, 7), date(2022, 3, 8), feed="sip"
+        ["AAPL"], date(2022, 3, 7), date(2022, 3, 8)
     )
     fake_client.fetch_adj.assert_awaited_once_with(
-        ["AAPL"], date(2022, 3, 7), date(2022, 3, 8), feed="sip"
+        ["AAPL"], date(2022, 3, 7), date(2022, 3, 8)
     )
