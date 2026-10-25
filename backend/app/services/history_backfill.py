@@ -33,6 +33,7 @@ from app.services import historical_store as hs
 from app.services import history_incremental as hi
 from app.services.bars_changed import notify_bars_changed
 from app.services.history_basis import history_lock, seam_signature
+from app.services.history_gap_detector import detect_history_gaps
 
 logger = logging.getLogger(__name__)
 K = hi.NightlyKind
@@ -157,6 +158,15 @@ async def _single_provider_locked(db, symbol, start, end, providers) -> RebuildR
             for a, b in zip(dates, dates[1:]):
                 if b - a > _MAX_GAP:
                     raise ValueError(f"internal gap {a} to {b}")
+            cal_gaps = detect_history_gaps(symbol, set(dates), start=dates[0], end=dates[-1])
+            if cal_gaps:
+                logger.warning(
+                    "history: %s candidate from %s has %d missing NYSE trading day(s) (sample: %s)",
+                    symbol,
+                    provider,
+                    len(cal_gaps),
+                    [d.isoformat() for d in cal_gaps[:5]],
+                )
             shared = [row for row in existing if row[3] != provider and row[0] in candidate]
             for d, close, factor, source in shared[-_IDENTITY_DATES:]:
                 bar = candidate[d]
