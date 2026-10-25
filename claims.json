@@ -7,6 +7,14 @@
       "expires_at": "2026-10-25T07:24:01Z",
       "note": "implement Alpaca SIP feed upgrade, gap detector, and backfill script (#535)",
       "task": "OHLCV-ALPACA-DAY-HOLES"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/heston-rr-overpricing-f1b0cdfd",
+      "claimed_at": "2026-10-25T04:32:04Z",
+      "expires_at": "2026-10-25T07:32:04Z",
+      "note": "Record approved option D and evidence-stage closure for #335",
+      "task": "HESTON-RR-OVERPRICING"
     }
   ]
 }
