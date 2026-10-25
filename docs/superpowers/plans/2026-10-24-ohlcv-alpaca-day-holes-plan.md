@@ -1,8 +1,8 @@
-# OHLCV-ALPACA-DAY-HOLES — Investigation, Remediation & Gap Detector Plan (r1, 2026-10-24)
+# OHLCV-ALPACA-DAY-HOLES — Investigation, Remediation & Gap Detector Plan (r4, post-decision, 2026-10-25)
 
 **Board item:** #535 (tracking issue) · **Phase id:** `OHLCV-ALPACA-DAY-HOLES`
-**Branch:** `board/ohlcv-alpaca-day-holes-fb0534ec` (from `origin/main` at `50401982`)
-**Decision / Spec:** Issue #535 · #173 (d) Alpaca daily-bar convention folded in (Kenneth, 2026-10-24).
+**Branch:** `board/ohlcv-alpaca-day-holes-598af15f` (from `origin/main` at `56f12789`)
+**Decision / Spec:** Issue #535 · Decision `OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25` (Kenneth approved Option 1A uniform SIP feed and Option 2A full tool delivery).
 **Touches:** `backend/app/data/alpaca.py`, `backend/app/services/history_gap_detector.py`, `backend/app/services/history_backfill.py`, `backend/app/services/historical_store.py`, `backend/scripts/history_gap_detector.py`, `backend/scripts/backfill_alpaca_holes.py`, tests, `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/`.
 
 ---
@@ -33,12 +33,12 @@ params: dict = {
 `"feed": "iex"` was hardcoded in `alpaca.py`.
 - **IEX Venue Limitation:** Investors Exchange (IEX) is a single exchange venue. For NYSE-listed (Tape A/B) equities, IEX trading volume is a fraction of market volume. On 2021-04-19, 2021-10-25, and 2022-03-08, Alpaca's IEX feed recorded zero executed trades or quotes for 238–240 NYSE symbols (including SRE, A, AFL, ALL, XOM).
 - **NASDAQ Contrast:** NASDAQ-listed symbols (Tape C — e.g. AAPL, MSFT, and the NDX100 components) and high-volume sector ETFs traded heavily on IEX on those days, so they were populated without holes.
-- **SIP Consolidated Tape:** When querying Alpaca's **SIP feed** (`feed="sip"`, or omitting `feed`), Alpaca returns the consolidated tape across all US exchanges. Live API verification against Alpaca with the project's configured credentials confirms:
+- **SIP Consolidated Tape:** When querying Alpaca's **SIP feed** (`feed="sip"`), Alpaca returns the consolidated tape across all US exchanges. Live API verification against Alpaca with the project's configured credentials confirms:
   - On 2022-03-08, SRE with `feed="iex"` returns HTTP 200 with dates `['2022-03-07', '2022-03-09']` (03-08 missing).
   - On 2022-03-08, SRE with `feed="sip"` returns HTTP 200 with dates `['2022-03-07', '2022-03-08', '2022-03-09']` (volume 219,280, close $153.39, adj_factor 0.43118847).
   - On 2021-10-25, SRE with `feed="sip"` returns HTTP 200 with date `'2021-10-25'` (volume 291,146, close $130.36, adj_factor 0.42750844).
   - On 2021-04-19, SRE with `feed="sip"` returns HTTP 200 with date `'2021-04-19'` (volume 186,681, close $138.24, adj_factor 0.42050058).
-  - The project's credentials (`alpaca_paper` / `alpaca_live`) have access to SIP and succeed with HTTP 200. Omitting the `feed` parameter automatically defaults to SIP for accounts with a subscription/paper entitlement, and falls back to IEX for free keys.
+  - The project's credentials (`alpaca_paper` / `alpaca_live`) have access to SIP and succeed with HTTP 200.
 
 ### 1.3 Root Cause 2: Alpaca Date-Only `end` Convention & Timezone Boundaries
 Issue #173 (d) requested confirmation of Alpaca's daily-bar conventions:
@@ -57,16 +57,26 @@ In `backend/app/services/history_backfill.py:81` and `158`:
 - `_MAX_GAP = timedelta(days=7)`: only calendar gaps strictly greater than 7 days raise an error. A missing Tuesday (Monday to Wednesday is 2 calendar days) or Monday (Friday to Tuesday is 4 calendar days) passes through without detection.
 - In `_write_kept_prefix`: `not retained <= set(current)` verifies that the newly fetched suffix does not drop dates that already exist in the database. Because the missing days were never written into the database during initial backfill, subsequent incremental updates never flagged their absence.
 
+### 1.5 Finding HOLES-R3-01 & Kenneth Decision (2026-10-25)
+Adversarial plan audit round 3 identified finding `HOLES-R3-01`:
+If missing dates were backfilled into `ohlcv_daily` under `source = "alpaca"`, but nightly ingestion continued querying `feed="iex"`, nightly ingestion would omit those 3 dates. Under `history_incremental.py:295`:
+`if any(r[5] == "alpaca" and hs.is_settled(r[0], now) and r[0] not in current for r in rows): return _full("T4")`
+This flags Rule T4, raising `HistorySeamMismatch("current suffix omits existing retained dates")` in `history_backfill.py:282, 488`, triggering destructive full rebuilds to Tiingo/yfinance for ~44% of the universe.
+
+**Kenneth Decision (`OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25`):**
+- **Question 1: Option 1A (Approved).** Upgrade Alpaca daily bars to `feed="sip"` uniformly across both nightly ingestion and targeted backfills.
+- **Question 2: Option 2A (Approved).** Deliver the full suite: gap detector module, CLI tool, Alpaca feed update, safe backfill script, and mini-PC run-book together.
+
 ---
 
 ## 2. Design & Architecture
 
-### 2.1 Alpaca Feed Parameter & Targeted SIP Fetching
+### 2.1 Alpaca Feed Parameter & Uniform SIP Default
 In `backend/app/data/alpaca.py`:
-- Expose `feed: str = "iex"` parameter across `AlpacaClient.__init__`, `_get_bars_page`, `_fetch_all_pages`, `fetch_raw`, `fetch_adj`, `fetch_daily_bars_batch`, and `fetch_daily_bars_single`.
-- **Default remains `"iex"`:** Existing nightly ingestion and incremental classifiers remain on `feed="iex"`, completely avoiding Rule T5 (`raw_close_changed`) reference-date failures between IEX and SIP raw close prices on NYSE stocks.
-- **Targeted SIP parameter:** Callers requiring the consolidated tape (such as the backfill script `backfill_alpaca_holes.py`) explicitly pass `feed="sip"`.
-- If an explicit `feed="sip"` request receives HTTP 403 Forbidden (`subscription does not permit querying SIP data`), log a clear warning.
+- Expose `feed: str = "sip"` parameter across `AlpacaClient.__init__`, `_get_bars_page`, `_fetch_all_pages`, `fetch_raw`, `fetch_adj`, `fetch_daily_bars_batch`, and `fetch_daily_bars_single`.
+- **Default is upgraded to `"sip"`:** Both nightly ingestion and backfills query the consolidated tape (`feed="sip"`), permanently preventing venue drops and eliminating the Rule T4 `HistorySeamMismatch` rebuild loop.
+- Callers may still override with explicit `feed="iex"` if desired.
+- If an explicit `feed="sip"` request receives HTTP 403 Forbidden (`subscription does not permit querying SIP data`), log a clear warning and fall back to `"iex"`.
 
 ### 2.2 Canonical US Trading Calendar & Gap Detector
 In `backend/app/services/history_gap_detector.py`:
@@ -119,11 +129,11 @@ In `backend/scripts/backfill_alpaca_holes.py`:
 - Reports total rows inserted and re-verifies with the gap detector.
 - Includes `--dry-run` flag.
 
-Author `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/report.md` providing Kenneth with:
+Author `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/runbook.md` providing Kenneth with:
 1. Root cause findings and feed evidence.
 2. Alpaca date-only convention verification.
 3. Pre-backfill gap measurement.
-4. Step-by-step PowerShell run-book for running the backfill on the mini PC with pg_dump backup instructions.
+4. Step-by-step PowerShell run-book for running the backfill on the mini PC with `pg_dump` backup instructions.
 5. Post-backfill gap verification report.
 
 ---
@@ -131,14 +141,14 @@ Author `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/report.m
 ## 3. Build Tickets
 
 ### T1 — Alpaca Feed Configuration & Trading Calendar Gap Detector (#535.1)
-- **Role:** Implementation of Alpaca feed upgrade and NYSE exchange calendar gap detection module.
+- **Role:** Implementation of Alpaca SIP feed upgrade and NYSE exchange calendar gap detection module.
 - **Files:**
   - `backend/app/data/alpaca.py`
   - `backend/app/services/history_gap_detector.py`
   - `backend/tests/test_alpaca_feed_options.py`
   - `backend/tests/test_history_gap_detector.py`
 - **Tests first:**
-  - `test_alpaca_feed_options.py`: Test default `feed="iex"` sends `feed=iex`, explicit `feed="sip"` passes `feed=sip`, 403 logs a warning/graceful handling, and date-only `end` inclusive handling is preserved.
+  - `test_alpaca_feed_options.py`: Test default `feed="sip"` sends `feed=sip`, explicit `feed="iex"` passes `feed=iex`, 403 logs a warning/graceful handling, and date-only `end` inclusive handling is preserved.
   - `test_history_gap_detector.py`: Test Good Friday, MLK Day, Thanksgiving, Juneteenth (2022+), Hurricane Sandy, George H.W. Bush mourning are identified as non-trading days. Test 2021-04-19, 2021-10-25, 2022-03-08 are confirmed trading days. Test `detect_history_gaps` flags missing trading days accurately.
 - **Verification:** `pytest backend/tests/test_alpaca_feed_options.py backend/tests/test_history_gap_detector.py` all green. `npm run typecheck` clean.
 
@@ -159,7 +169,7 @@ Author `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/report.m
   - `backend/tests/test_backfill_alpaca_holes.py`
   - `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/m1_gaps_before.json`
   - `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/m2_gaps_after.json`
-  - `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/report.md`
+  - `docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/runbook.md`
 - **Verification:** Run `python backend/scripts/backfill_alpaca_holes.py` on local DB. Re-run `history_gap_detector.py` to confirm zero missing trading days for active universe symbols.
 
 ### T4 — Independent Numerical & Code Recompute

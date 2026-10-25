@@ -10,7 +10,7 @@
     {
       "id": "OHLCV-ALPACA-DAY-HOLES",
       "name": "OHLCV holes: 2021-04-19, 2021-10-25, and 2022-03-08 missing for ~220-240 Alpaca-sourced symbols; root cause, writer gap guard, detector, backfill run-book (#535)",
-      "status": "planned",
+      "status": "in_progress",
       "owner": "agent",
       "branch": "board/ohlcv-alpaca-day-holes-598af15f",
       "tracking_issue": 535,
@@ -20,7 +20,8 @@
       "plan_audit_clean": false,
       "plan_stage": {
         "rounds": 3,
-        "clean": false
+        "clean": false,
+        "closed_by": "OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25"
       },
       "verify": {
         "kind": "present",
@@ -96,7 +97,7 @@
           "report": "adversarial audit round 3 log"
         }
       ],
-      "note": "PLANNING: 3 adversarial plan audit rounds run (cap reached). Finding HOLES-R3-01 identified architectural choice on nightly Alpaca feed (SIP vs IEX exception). Needs Kenneth decision (#535)."
+      "note": "PLAN CLOSED by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25 (Kenneth approved Option 1A uniform SIP and Option 2A full delivery). Build stage starting."
     },
     {
       "id": "P3C-SCRIPT-WINDOWS-RUN",
@@ -11502,6 +11503,16 @@
       "answer_literal": "ok with both recommendations",
       "source": "https://github.com/Netke237/trading-assistant/issues/371#issuecomment-6307656780",
       "scope": "R3-F1 correction and its interactions; earlier3rounds remain counted. No implementation before clean plan."
+    },
+    {
+      "id": "OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25",
+      "phase": "OHLCV-ALPACA-DAY-HOLES",
+      "date": "2026-10-25",
+      "q": "OHLCV-ALPACA-DAY-HOLES plan stage 1 reached cap on finding HOLES-R3-01. Question 1: Alpaca feed selection (Option 1A uniform SIP vs Option 1B IEX with exception)? Question 2: Scope (Option 2A full detector + feed update + backfill script + run-book vs Option 2B)?",
+      "a": "Kenneth, 2026-10-25 on #535: 'agree with all recommedations' (Option 1A uniform feed='sip', Option 2A full tool and backfill delivery).",
+      "answer_literal": "agree with all recommedations ",
+      "source": "https://github.com/Netke237/trading-assistant/issues/535#issuecomment-3444458316",
+      "scope": "OHLCV-ALPACA-DAY-HOLES"
     }
   ],
   "pending_kenneth": [
