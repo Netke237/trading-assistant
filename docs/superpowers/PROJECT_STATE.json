@@ -131,7 +131,7 @@
           "report": "docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/code-r2.md"
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #566, audited head 54c44542. Plan closed by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25; code round 2 clean.",
+      "note": "SELF-MERGE PENDING, PR #566, audited head 7abd96ec. Plan closed by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25; code round 2 clean.",
       "code_stage": {
         "rounds": 2,
         "clean": true,
