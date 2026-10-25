@@ -246,16 +246,11 @@ async def backfill_symbol(
 
         target_iso = target_date.isoformat()
         raw_bar = next((b for b in raw_bars if b.get("t", "")[:10] == target_iso), None)
-        if not raw_bar and len(raw_bars) == 1:
-            raw_bar = raw_bars[0]
-
         if not raw_bar:
             logger.warning("Alpaca returned no SIP bar for %s on %s", symbol, target_date)
             continue
 
         adj_bar = next((b for b in adj_bars if b.get("t", "")[:10] == target_iso), None)
-        if not adj_bar and len(adj_bars) == 1:
-            adj_bar = adj_bars[0]
 
         # 3. Validate candidate bar
         open_val = float(raw_bar.get("o", 0) or 0)
@@ -276,7 +271,14 @@ async def backfill_symbol(
             continue
 
         # 4. Compute adj_factor
-        adj_close = float(adj_bar.get("c", close_val) or close_val) if adj_bar else close_val
+        if not adj_bar:
+            logger.warning("Alpaca returned no adjusted SIP bar for %s on %s; skipping", symbol, target_date)
+            continue
+        adj_c = adj_bar.get("c")
+        if adj_c is None or float(adj_c) <= 0:
+            logger.warning("Alpaca returned invalid adjusted close %s for %s on %s; skipping", adj_c, symbol, target_date)
+            continue
+        adj_close = float(adj_c)
         adj_factor = compute_adj_factor(close_val, adj_close)
 
         # 5. Build model with pinned fetched_at

@@ -26,6 +26,8 @@ SPECIAL_CLOSURES: set[date] = {
     date(2012, 10, 30),
     # George H.W. Bush National Day of Mourning
     date(2018, 12, 5),
+    # Jimmy Carter National Day of Mourning (January 9, 2025)
+    date(2025, 1, 9),
 }
 
 

@@ -43,7 +43,7 @@ python --version
 # Expected: Python 3.11.x
 
 # 1b. Verify Alpaca SIP feed access
-python -c "import sys, asyncio; sys.path.insert(0, 'backend'); from app.data.alpaca import get_alpaca_client; from scripts.backfill_alpaca_holes import verify_alpaca_sip_access; async def check(): c = await get_alpaca_client(feed='sip'); print('Alpaca SIP Entitlement:', await verify_alpaca_sip_access(c)); asyncio.run(check())"
+python -c "import sys, asyncio; sys.path.insert(0, 'backend'); from app.data.alpaca import get_alpaca_client; from scripts.backfill_alpaca_holes import verify_alpaca_sip_access; client = asyncio.run(get_alpaca_client(feed='sip')); print('Alpaca SIP Entitlement:', asyncio.run(verify_alpaca_sip_access(client)))"
 # Expected output: Alpaca SIP Entitlement: True
 ```
 

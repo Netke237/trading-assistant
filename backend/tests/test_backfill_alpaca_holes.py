@@ -328,3 +328,72 @@ class TestCredentialValidationAndForbidden:
         mock_client.fetch_raw.side_effect = Exception("403 Forbidden")
         res = await verify_alpaca_sip_access(mock_client)
         assert res is False
+
+
+class TestAuditFindingsEdgeCases:
+    @pytest.mark.asyncio
+    async def test_missing_adj_bar_causes_backfill_symbol_to_skip(self, test_db):
+        _, factory = test_db
+        target = date(2022, 3, 8)
+        row_0307 = make_bar_row("AAPL", date(2022, 3, 7))
+
+        async with factory() as session:
+            session.add(row_0307)
+            await session.commit()
+
+        mock_client = AsyncMock()
+        mock_client.fetch_raw.return_value = {
+            "AAPL": [{"t": "2022-03-08T05:00:00Z", "o": 150.0, "h": 155.0, "l": 149.0, "c": 153.0, "v": 1_000_000}]
+        }
+        mock_client.fetch_adj.return_value = {
+            "AAPL": []  # Missing adjusted bar
+        }
+
+        async with factory() as session:
+            res = await backfill_symbol(
+                session=session,
+                client=mock_client,
+                symbol="AAPL",
+                missing_dates=[target],
+                dry_run=False,
+            )
+            assert res["inserted"] == 0
+            assert target not in res.get("dates", [])
+
+            stmt = select(M).where(M.symbol == "AAPL", M.date == target)
+            inserted_row = (await session.execute(stmt)).scalars().first()
+            assert inserted_row is None
+
+    @pytest.mark.asyncio
+    async def test_mismatched_date_in_single_element_raw_bars_skips(self, test_db):
+        _, factory = test_db
+        target = date(2022, 3, 8)
+        row_0307 = make_bar_row("AAPL", date(2022, 3, 7))
+
+        async with factory() as session:
+            session.add(row_0307)
+            await session.commit()
+
+        mock_client = AsyncMock()
+        mock_client.fetch_raw.return_value = {
+            # Single-element bar with mismatched date (2022-03-09 instead of target 2022-03-08)
+            "AAPL": [{"t": "2022-03-09T05:00:00Z", "o": 150.0, "h": 155.0, "l": 149.0, "c": 153.0, "v": 1_000_000}]
+        }
+        mock_client.fetch_adj.return_value = {
+            "AAPL": [{"t": "2022-03-09T05:00:00Z", "c": 153.0}]
+        }
+
+        async with factory() as session:
+            res = await backfill_symbol(
+                session=session,
+                client=mock_client,
+                symbol="AAPL",
+                missing_dates=[target],
+                dry_run=False,
+            )
+            assert res["inserted"] == 0
+            assert target not in res.get("dates", [])
+
+            stmt = select(M).where(M.symbol == "AAPL", M.date == target)
+            inserted_row = (await session.execute(stmt)).scalars().first()
+            assert inserted_row is None

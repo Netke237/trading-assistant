@@ -124,6 +124,13 @@ def test_historical_unscheduled_closures():
     # George H.W. Bush National Day of Mourning: 2018-12-05
     assert not is_nyse_trading_day(date(2018, 12, 5))
 
+    # Jimmy Carter National Day of Mourning: 2025-01-09
+    assert not is_nyse_trading_day(date(2025, 1, 9))
+
+
+def test_carter_national_day_of_mourning_is_non_trading_day():
+    assert not is_nyse_trading_day(date(2025, 1, 9))
+
 
 def test_key_problematic_trading_days():
     # All 3 problem days from #535 must be confirmed as legitimate NYSE trading days
