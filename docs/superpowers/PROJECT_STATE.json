@@ -9139,13 +9139,14 @@
       "branch": "board/regime-series-length-1e4aaf11",
       "tracking_issue": 534,
       "plan": "docs/superpowers/plans/2026-10-25-regime-series-length-implementation-plan.md",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
-      "plan_audit_clean": false,
+      "plan_audit_clean": true,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
-        "closed_by": "clean"
+        "closed_by": "clean",
+        "closure_evidence": "Measurement plan round1 preserved; new implementation plan round2 independently clean at 6023b8b7 by /root/regime_implementation_plan_audit."
       },
       "verify": {
         "kind": "present",
@@ -9153,9 +9154,9 @@
         "pattern": "REGIME-SERIES-LENGTH",
         "note": "Implementation acceptance record after all build units; earlier measurement record preserved in evidence_stage."
       },
-      "size": "M",
+      "size": "L",
       "complexity": 4,
-      "completion_pct": 10,
+      "completion_pct": 20,
       "audit_history": [
         {
           "round": 1,
@@ -9178,9 +9179,20 @@
           "findings": [],
           "fixes": [],
           "outstanding": []
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "fresh independent subagent /root/regime_implementation_plan_audit applying bmad-review-adversarial-general",
+          "reviewed": "Complete approved implementation plan at 6023b8b7aae19e4d42d176b4bd02789ae5a02341 against real Options/Stocks/Analysis/Fire/MarketSentiment source; earlier merged evidence outside new review scope",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": []
         }
       ],
-      "note": "IMPLEMENTATION PLAN DRAFT 2026-10-25: approved uniform daily regime DB source/count and explicit unmeasured disclosure. Evidence PR #540 remains shipped; full measurement stage/history preserved. Next independent review is plan round 2 of 3; code review next round 2 of 3. No counter resets or extra stages. No implementation before clean plan review. Python3.11.16 and backend dependencies prepared. || EVIDENCE SHIPPED 2026-10-24: PR #540 merged at 4399e9244349d339dc62c28d9d587456740a484d (board self-merge; exact head 2c18c8a1, CI backend/frontend/Playwright all passed; verified on origin/main). #534 stays OPEN with numbered questions for Kenneth (needs-kenneth): Option 1/2/3/4. No production code modified; any chosen implementation is a new plan/build/audit phase. || SELF-MERGE PENDING, PR #540 (refs #534, does not close it), audited head 14cb6964 (code round 1 clean). Commits after the audited head are documentation-only state records. Not merged; the live PR state is authoritative. || CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings. No production code modified; probe, tests, M1/M2 data, report and recompute verified. audit_clean true; PR next. || BUILT 2026-10-24 (evidence): T1 #538 (94ab0f56) probe + data and T2 #539 (eee67410) report.md; independent recompute (8ce9289c) agreed with zero difference across all 5 verification targets. Code audit next. || Plan round 1 CLEAN (0 gate findings, agent 2ddce374): mechanism across 5 codebases and scoring_rules.yaml verified; mathematical bottleneck in compute_omm and silent gate bypass verified against live Postgres. Plan stage closed clean at round 1. Tickets T1/T2 next.",
+      "note": "IMPLEMENTATION PLAN ROUND 2 CLEAN 2026-10-25: fresh independent /root/regime_implementation_plan_audit, zero gate findings after second-pass code/exception/call-site checks. Three build units next. Re-estimated L/complexity4: shared DB protocol, three runtime reader integrations/Analysis and UI disclosure plus parity/full regression checks. Existing evidence plan1/code1 history preserved; code review next is round2 of3. || IMPLEMENTATION PLAN DRAFT 2026-10-25: approved uniform daily regime DB source/count and explicit unmeasured disclosure. Evidence PR #540 remains shipped; full measurement stage/history preserved. Next independent review is plan round 2 of 3; code review next round 2 of 3. No counter resets or extra stages. No implementation before clean plan review. Python3.11.16 and backend dependencies prepared. || EVIDENCE SHIPPED 2026-10-24: PR #540 merged at 4399e9244349d339dc62c28d9d587456740a484d (board self-merge; exact head 2c18c8a1, CI backend/frontend/Playwright all passed; verified on origin/main). #534 stays OPEN with numbered questions for Kenneth (needs-kenneth): Option 1/2/3/4. No production code modified; any chosen implementation is a new plan/build/audit phase. || SELF-MERGE PENDING, PR #540 (refs #534, does not close it), audited head 14cb6964 (code round 1 clean). Commits after the audited head are documentation-only state records. Not merged; the live PR state is authoritative. || CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings. No production code modified; probe, tests, M1/M2 data, report and recompute verified. audit_clean true; PR next. || BUILT 2026-10-24 (evidence): T1 #538 (94ab0f56) probe + data and T2 #539 (eee67410) report.md; independent recompute (8ce9289c) agreed with zero difference across all 5 verification targets. Code audit next. || Plan round 1 CLEAN (0 gate findings, agent 2ddce374): mechanism across 5 codebases and scoring_rules.yaml verified; mathematical bottleneck in compute_omm and silent gate bypass verified against live Postgres. Plan stage closed clean at round 1. Tickets T1/T2 next.",
       "code_stage": {
         "rounds": 1,
         "clean": true,
