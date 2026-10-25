@@ -1,0 +1,8 @@
+{
+  "SWING": {
+    "abs_pass_max": 40.0,
+    "abs_caution_max": 60.0,
+    "rank_pass_max": 35.0,
+    "rank_caution_max": 50.0
+  }
+}

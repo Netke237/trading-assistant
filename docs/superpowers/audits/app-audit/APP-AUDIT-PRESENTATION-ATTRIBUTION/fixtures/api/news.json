@@ -1,0 +1,20 @@
+[
+  {
+    "id": "news-1",
+    "symbol": "SPY",
+    "headline": "S&P 500 reaches new highs on tech earnings momentum",
+    "source": "SyntheticWire",
+    "timestamp": "2026-10-24T10:00:00Z",
+    "sentiment": "POSITIVE",
+    "url": "https://example.com/news/1"
+  },
+  {
+    "id": "news-2",
+    "symbol": "QQQ",
+    "headline": "Nasdaq maintains steady gains ahead of policy meeting",
+    "source": "SyntheticWire",
+    "timestamp": "2026-10-24T09:30:00Z",
+    "sentiment": "POSITIVE",
+    "url": "https://example.com/news/2"
+  }
+]
