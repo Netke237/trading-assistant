@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/regime-series-length-1e4aaf11",
       "claimed_at": "2026-10-25T09:15:12Z",
-      "expires_at": "2026-10-25T12:16:51Z",
+      "expires_at": "2026-10-25T12:25:56Z",
       "note": "Resume approved implementation after worker interruption; verify completed checks",
       "task": "REGIME-SERIES-LENGTH"
     }
