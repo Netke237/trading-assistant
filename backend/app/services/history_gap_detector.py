@@ -7,7 +7,6 @@ Saturday holiday exception, and historical unscheduled closures.
 from __future__ import annotations
 
 from datetime import date, timedelta
-from functools import lru_cache
 from typing import Iterable
 
 # Explicit historical unscheduled closures
@@ -50,9 +49,13 @@ def compute_easter_sunday(year: int) -> date:
     return date(year, month, day)
 
 
-@lru_cache(maxsize=128)
+_HOLIDAYS_CACHE: dict[int, set[date]] = {}
+
+
 def get_nyse_holidays_for_year(year: int) -> set[date]:
     """Compute all standard observed NYSE holidays falling within calendar year."""
+    if year in _HOLIDAYS_CACHE:
+        return _HOLIDAYS_CACHE[year]
     holidays: set[date] = set()
 
     # 1. New Year's Day (Jan 1)
@@ -116,6 +119,7 @@ def get_nyse_holidays_for_year(year: int) -> set[date]:
     else:
         holidays.add(dec25)
 
+    _HOLIDAYS_CACHE[year] = holidays
     return holidays
 
 
