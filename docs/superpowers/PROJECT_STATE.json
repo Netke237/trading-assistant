@@ -9009,8 +9009,8 @@
       "branch": "board/heston-rr-overpricing-f1b0cdfd",
       "tracking_issue": 335,
       "plan": "docs/superpowers/plans/2026-10-22-heston-rr-overpricing-plan.md",
-      "audit_rounds": 4,
-      "audit_clean": false,
+      "audit_rounds": 5,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "plan_stage": {
         "rounds": 3,
@@ -9025,7 +9025,7 @@
       },
       "size": "L",
       "complexity": 4,
-      "completion_pct": 95,
+      "completion_pct": 85,
       "audit_history": [
         {
           "round": 1,
@@ -9100,14 +9100,25 @@
             "report.md Status line still says the recompute has not run although its later section reports it did",
             "M2 Swing/Position horizons applied to every DTE incl. expiries a Swing scan would not pick (plan-defined; ranges reported inclusively)"
           ]
+        },
+        {
+          "round": 5,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh independent subagent /root/heston_decision_audit applying bmad-review-adversarial-general",
+          "reviewed": "git diff d8bc3eaa..392f11b6: documentation decision reconciliation and interactions with original evidence; live #335 questions/untagged approvals independently retrieved",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": []
         }
       ],
-      "note": "DECISION RECONCILIATION BUILT 2026-10-25: untagged recommendation approvals on #335 (2026-10-23 and 2026-10-25), with needs-kenneth cleared, select option D and closure after recording the answer. Documentation-only decision record; evidence remains shipped at 8e1e3b0a (PR #527). Existing audit history/counters preserved; independent documentation review pending within the existing code-stage cap. || EVIDENCE SHIPPED 2026-10-22: PR #527 merged at 8e1e3b0a80f4dd1f2dcbd26725adf6c40329844c (board self-merge; exact head a81dbc51, CI test/frontend/backend success; verified on origin/main). #335 stays OPEN with numbered questions for Kenneth (needs-kenneth): option A/B/C/D and whether the item may close. No pricing changed; any chosen change is a new plan/audit phase. || (was) SELF-MERGE PENDING, PR #527 (refs #335, does not close it), audited head 61743f70 (code round 1 clean). Commits after the audited head are documentation-only state records (96ba9976 and this one). Not merged; the live PR state is authoritative. || CODE ROUND 4 (code stage round 1 of 3): CLEAN, 0 gate findings; no app/config/frontend/fixture change; report numbers re-derived from outputs; options C/D legs, all horizons, M1 recovery sweep and rrRatio-consumer grep independently checked. audit_clean true; PR (refers to #335, does not close it) next. || Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22.",
+      "note": "DECISION RECONCILIATION AUDIT CLEAN 2026-10-25: code round 2 reviewed d8bc3eaa..392f11b6, zero gate findings; option D and closure independently matched to live untagged approvals on #335. Documentation scope/state drift/typecheck checks passed; backend/frontend tests N/A for documentation-only decision record. Exact-head PR CI pending. || DECISION RECONCILIATION BUILT 2026-10-25: untagged recommendation approvals on #335 (2026-10-23 and 2026-10-25), with needs-kenneth cleared, select option D and closure after recording the answer. Documentation-only decision record; evidence remains shipped at 8e1e3b0a (PR #527). Existing audit history/counters preserved; independent documentation review pending within the existing code-stage cap. || EVIDENCE SHIPPED 2026-10-22: PR #527 merged at 8e1e3b0a80f4dd1f2dcbd26725adf6c40329844c (board self-merge; exact head a81dbc51, CI test/frontend/backend success; verified on origin/main). #335 stays OPEN with numbered questions for Kenneth (needs-kenneth): option A/B/C/D and whether the item may close. No pricing changed; any chosen change is a new plan/audit phase. || (was) SELF-MERGE PENDING, PR #527 (refs #335, does not close it), audited head 61743f70 (code round 1 clean). Commits after the audited head are documentation-only state records (96ba9976 and this one). Not merged; the live PR state is authoritative. || CODE ROUND 4 (code stage round 1 of 3): CLEAN, 0 gate findings; no app/config/frontend/fixture change; report numbers re-derived from outputs; options C/D legs, all horizons, M1 recovery sweep and rrRatio-consumer grep independently checked. audit_clean true; PR (refers to #335, does not close it) next. || Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22.",
       "code_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "Fresh independent general-purpose subagent (agent a1e0eee3) applying bmad-review-adversarial-general reviewed git diff origin/main 61743f70 (15 files) against the plan; 0 gate findings."
+        "closure_evidence": "Fresh independent subagent /root/heston_decision_audit reviewed d8bc3eaa..392f11b6; zero gate findings. Historical code round 1 preserved; decision reconciliation is code round 2 of 3."
       },
       "decision": {
         "option": "D",
