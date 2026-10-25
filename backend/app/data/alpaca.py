@@ -24,11 +24,12 @@ _BARS_ENDPOINT = f"{_DATA_BASE}/v2/stocks/bars"
 class AlpacaClient:
     """Thin wrapper around Alpaca v2 bars endpoint."""
 
-    def __init__(self, key_id: str, secret_key: str) -> None:
+    def __init__(self, key_id: str, secret_key: str, feed: str = "sip") -> None:
         self._headers = {
             "APCA-API-KEY-ID": key_id,
             "APCA-API-SECRET-KEY": secret_key,
         }
+        self.feed = feed
 
     async def _get_bars_page(
         self,
@@ -37,20 +38,33 @@ class AlpacaClient:
         start: date,
         end: date,
         page_token: str | None,
+        feed: str | None = None,
     ) -> dict:
+        target_feed = feed if feed is not None else self.feed
+        start_str = start.strftime("%Y-%m-%d") if hasattr(start, "strftime") else str(start)[:10]
+        end_str = end.strftime("%Y-%m-%d") if hasattr(end, "strftime") else str(end)[:10]
         params: dict = {
             "symbols": ",".join(symbols),
             "timeframe": "1Day",
-            "start": start.isoformat(),
-            "end": end.isoformat(),
+            "start": start_str,
+            "end": end_str,
             "adjustment": adjustment,
-            "feed": "iex",
+            "feed": target_feed,
             "limit": 10_000,
         }
         if page_token:
             params["page_token"] = page_token
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(_BARS_ENDPOINT, headers=self._headers, params=params)
+        if resp.status_code == 403 and params.get("feed") == "sip":
+            logger.warning(
+                "Alpaca SIP feed returned 403 Forbidden (subscription does not permit SIP); falling back to IEX: %s",
+                resp.text,
+            )
+            params["feed"] = "iex"
+            self.feed = "iex"
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(_BARS_ENDPOINT, headers=self._headers, params=params)
         if resp.status_code == 429:
             retry_after = float(resp.headers.get("Retry-After", 1.0))
             raise RateLimited("429 from Alpaca", retry_after=retry_after)
@@ -58,7 +72,12 @@ class AlpacaClient:
         return resp.json()
 
     async def _fetch_all_pages(
-        self, symbols: list[str], adjustment: str, start: date, end: date
+        self,
+        symbols: list[str],
+        adjustment: str,
+        start: date,
+        end: date,
+        feed: str | None = None,
     ) -> dict[str, list[dict]]:
         result: dict[str, list] = {}
         page_token: str | None = None
@@ -66,7 +85,9 @@ class AlpacaClient:
             pt = page_token
             data = await get_governor().call(
                 "alpaca",
-                lambda _pt=pt: self._get_bars_page(symbols, adjustment, start, end, _pt),
+                lambda _pt=pt, _feed=feed: self._get_bars_page(
+                    symbols, adjustment, start, end, _pt, feed=_feed
+                ),
             )
             for sym, bars in (data.get("bars") or {}).items():
                 result.setdefault(sym, []).extend(bars)
@@ -75,19 +96,27 @@ class AlpacaClient:
                 break
         return result
 
-    async def fetch_raw(self, symbols: list[str], start: date, end: date) -> dict[str, list[dict]]:
-        return await self._fetch_all_pages(symbols, "raw", start, end)
+    async def fetch_raw(
+        self, symbols: list[str], start: date, end: date, feed: str | None = None
+    ) -> dict[str, list[dict]]:
+        return await self._fetch_all_pages(symbols, "raw", start, end, feed=feed)
 
-    async def fetch_adj(self, symbols: list[str], start: date, end: date) -> dict[str, list[dict]]:
-        return await self._fetch_all_pages(symbols, "all", start, end)
+    async def fetch_adj(
+        self, symbols: list[str], start: date, end: date, feed: str | None = None
+    ) -> dict[str, list[dict]]:
+        return await self._fetch_all_pages(symbols, "all", start, end, feed=feed)
 
 
-async def get_alpaca_client() -> AlpacaClient | None:
+async def get_alpaca_client(feed: str = "sip") -> AlpacaClient | None:
     """Return a configured AlpacaClient, or None if no keys are set."""
     for slot in ("alpaca_live", "alpaca_paper"):
         creds = credential_store.get(slot) or {}
         if creds.get("key_id") and creds.get("secret_key"):
-            return AlpacaClient(key_id=creds["key_id"], secret_key=creds["secret_key"])
+            return AlpacaClient(
+                key_id=creds["key_id"],
+                secret_key=creds["secret_key"],
+                feed=feed,
+            )
     return None
 
 
@@ -152,6 +181,7 @@ async def fetch_daily_bars_batch(
     client: AlpacaClient | None = None,
     *,
     strict_adjustments: bool = False,
+    feed: str = "sip",
 ) -> dict[str, list[dict]]:
     """Fetch daily bars for multiple symbols from Alpaca.
 
@@ -160,12 +190,12 @@ async def fetch_daily_bars_batch(
     incomplete or invalid adjustment data.
     """
     if client is None:
-        client = await get_alpaca_client()
+        client = await get_alpaca_client(feed=feed)
     if client is None:
         return {}
     try:
-        raw_bars = await client.fetch_raw(symbols, start, end)
-        adj_bars = await client.fetch_adj(symbols, start, end)
+        raw_bars = await client.fetch_raw(symbols, start, end, feed=feed)
+        adj_bars = await client.fetch_adj(symbols, start, end, feed=feed)
         return _normalize_bars(raw_bars, adj_bars, strict_adjustments=strict_adjustments)
     except Exception as exc:
         logger.warning("Alpaca batch fetch failed: %s", exc)
@@ -179,9 +209,15 @@ async def fetch_daily_bars_single(
     client: AlpacaClient | None = None,
     *,
     strict_adjustments: bool = False,
+    feed: str = "sip",
 ) -> list[dict]:
     """Fetch daily bars for a single symbol from Alpaca."""
     result = await fetch_daily_bars_batch(
-        [symbol], start, end, client=client, strict_adjustments=strict_adjustments
+        [symbol],
+        start,
+        end,
+        client=client,
+        strict_adjustments=strict_adjustments,
+        feed=feed,
     )
     return result.get(symbol, [])
