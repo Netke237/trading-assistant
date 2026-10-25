@@ -15,7 +15,7 @@
       "branch": "board/ohlcv-alpaca-day-holes-598af15f",
       "tracking_issue": 535,
       "plan": "docs/superpowers/plans/2026-10-24-ohlcv-alpaca-day-holes-plan.md",
-      "audit_rounds": 3,
+      "audit_rounds": 4,
       "audit_clean": false,
       "plan_audit_clean": false,
       "plan_stage": {
@@ -95,9 +95,34 @@
           ],
           "clean": false,
           "report": "adversarial audit round 3 log"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "subagent a0d6517f-d971-4c35-9d45-65065f704cd0",
+          "reviewed": "origin/main..HEAD at aa598459",
+          "gate_findings": 3,
+          "findings": [
+            "HOLES-CODE-01: Missing adjusted bar defaults to raw close inventing adj_factor=1.0",
+            "HOLES-CODE-02: Carter mourning closure 2025-01-09 omitted causing 533 false gaps",
+            "HOLES-CODE-03: Single-bar fallback bypasses date matching storing mismatched OHLCV"
+          ],
+          "fixes": [
+            "Require non-empty positive adjusted close, skip on missing rather than default to 1.0",
+            "Add 2025-01-09 Carter mourning to SPECIAL_CLOSURES and regenerate baseline",
+            "Remove single-bar fallback, strictly enforce target date ISO matching"
+          ],
+          "outstanding": [],
+          "clean": false,
+          "report": "docs/superpowers/measurements/2026-10-24-ohlcv-alpaca-day-holes/code-r1.md"
         }
       ],
-      "note": "BUILT: all 3 build tickets (#558, #559, #560) complete and passing. Ready for code audit."
+      "note": "BUILT: Code audit round 1 completed (3 gate findings fixed in 54c44542). Ready for code audit round 2.",
+      "code_stage": {
+        "rounds": 1,
+        "clean": false
+      }
     },
     {
       "id": "P3C-SCRIPT-WINDOWS-RUN",
