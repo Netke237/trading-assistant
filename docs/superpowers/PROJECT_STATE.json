@@ -10,7 +10,7 @@
     {
       "id": "OHLCV-ALPACA-DAY-HOLES",
       "name": "OHLCV holes: 2021-04-19, 2021-10-25, and 2022-03-08 missing for ~220-240 Alpaca-sourced symbols; root cause, writer gap guard, detector, backfill run-book (#535)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/ohlcv-alpaca-day-holes-598af15f",
       "tracking_issue": 535,
@@ -31,7 +31,7 @@
       },
       "size": "M",
       "complexity": 4,
-      "completion_pct": 10,
+      "completion_pct": 70,
       "audit_history": [
         {
           "round": 1,
@@ -97,7 +97,7 @@
           "report": "adversarial audit round 3 log"
         }
       ],
-      "note": "PLAN CLOSED by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25 (Kenneth approved Option 1A uniform SIP and Option 2A full delivery). Build stage starting."
+      "note": "BUILT: all 3 build tickets (#558, #559, #560) complete and passing. Ready for code audit."
     },
     {
       "id": "P3C-SCRIPT-WINDOWS-RUN",
