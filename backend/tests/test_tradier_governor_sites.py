@@ -283,7 +283,6 @@ def _overdrafts(gov: SpyGovernor) -> list[tuple]:
 
 # ── 1. Fire path under a saturated bucket (R3-G1) ─────────────────────────────
 @pytest.mark.parametrize("horizon,path,close", [
-    ("Swing", P_HISTORY, TRADIER_DAILY_CLOSE),
     ("Intraday", P_TIMESALES, TRADIER_INTRADAY_CLOSE),
 ])
 def test_regime_fetch_on_saturated_bucket_is_admitted_by_overdraft(env, omm, horizon, path, close):
@@ -298,6 +297,25 @@ def test_regime_fetch_on_saturated_bucket_is_admitted_by_overdraft(env, omm, hor
     ods = _overdrafts(env.gov)
     assert len(ods) == 1 and ods[0][3] is True
     assert ods[0][0] != threading.get_ident()   # in the fetch's worker thread
+
+
+@pytest.mark.parametrize("cooldown", [False, True])
+def test_daily_regime_reads_database_without_governor_admission(env, omm, monkeypatch, cooldown):
+    """Uniform daily DB history supersedes the old Swing provider fallback."""
+    calls = []
+    def read(symbol, count):
+        calls.append((symbol, count, threading.get_ident()))
+        return [{"close": 123.5}] * 800
+    monkeypatch.setattr(at, "get_daily_regime_bars_sync", read)
+    with Saturated(env.gov):
+        if cooldown:
+            env.gov.note_rate_limited("tradier", 30.0)
+        assert at._measure_trade_regime(_armed("Swing")) is None
+    assert calls[0][:2] == ("AAPL", 800)
+    assert calls[0][2] != threading.get_ident()
+    assert set(omm[-1]) == {123.5}
+    assert env.paths() == [] and env.yf_daily_calls == 0
+    assert _overdrafts(env.gov) == []
 
 
 def test_event_veto_lookup_on_saturated_bucket_gets_tradier_date_by_overdraft(env):
@@ -330,7 +348,7 @@ def test_market_is_open_on_saturated_bucket_is_admitted_by_overdraft(env):
 
 
 # ── 2. Fire path during a 429 cooldown: today's failure path, nothing sent ────
-@pytest.mark.parametrize("horizon,yf_close", [("Swing", YF_DAILY_CLOSE), ("Intraday", YF_INTRADAY_CLOSE)])
+@pytest.mark.parametrize("horizon,yf_close", [("Intraday", YF_INTRADAY_CLOSE)])
 def test_regime_fetch_during_cooldown_takes_yfinance_without_request(env, omm, monkeypatch, horizon, yf_close):
     monkeypatch.setattr(at, "_REGIME_FETCH_DEADLINE_S", 1.5)
     env.gov.note_rate_limited("tradier", 30.0)

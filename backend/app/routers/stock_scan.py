@@ -102,6 +102,7 @@ from app.services import portfolio_risk
 # exact shape match for the option one, and two copies would drift apart.
 # No cycle — contracts.py does not import this module.
 from app.routers.contracts import FirstPassageInvalidationOut
+from app.services.daily_regime_history import daily_regime_bar_count, get_daily_regime_bars
 from app.services.regime_omm import compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
 from app.services.money_config import (
@@ -911,6 +912,15 @@ def _is_index(symbol: str) -> bool:
     return symbol.upper() in _INDEX_SYMBOLS
 
 
+async def _daily_regime_history(symbol: str, count: int, horizon: str) -> list[dict]:
+    try:
+        return await get_daily_regime_bars(symbol, count)
+    except Exception as exc:
+        logger.warning("Daily regime unmeasured for %s/%s: database read failed (%s)",
+                       symbol, horizon, type(exc).__name__)
+        return []
+
+
 @dataclasses.dataclass
 class _AnalyzeCore:
     company: str
@@ -927,6 +937,7 @@ class _AnalyzeCore:
     next_event_label: str | None
     daily_bars: list[dict]
     intraday_bars: list[dict]
+    daily_regime_bars: list[dict]
     gate_flags: list[dict]
     earnings_days: int | None = None
     earnings_veto: bool = False
@@ -992,27 +1003,36 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
 
     full_cfg = _load_full_scoring_cfg()
     rcfg = _load_regime_cfg(req.horizon)
+    daily_regime_bars = await _daily_regime_history(
+        symbol, daily_regime_bar_count(full_cfg), "Swing/Position")
     regime_signal = None
     # A4b: the regime copy drops the still-forming bar; `_intraday_bars` itself
     # stays whole for the signal / backtest / chart uses below.
-    regime_bars = completed_intraday_bars(_intraday_bars) if rcfg["timeframe"] == "15min" else bars
-    if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
-        omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
-                          lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
-        if omm:
-            dh = None
-            try:
-                dh = compute_directional_hmm(regime_bars)
-            except Exception:
-                pass
-            regime_signal = {
-                "horizon": req.horizon, "timeframe": rcfg["timeframe"], "state": omm.state,
-                "p_stay": omm.p_stay, "stability": omm.stability,
-                "regime_age_days": omm.regime_age_days, "avg_regime_duration": omm.avg_regime_duration,
-                "conviction_pct": omm.conviction_pct, "conviction_label": omm.conviction_label,
-                "interpretation": omm.interpretation or "", "hmm_state": dh.state if dh else None,
-                "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
-            }
+    regime_bars = completed_intraday_bars(_intraday_bars) if rcfg["timeframe"] == "15min" else daily_regime_bars
+    try:
+        if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
+            omm = compute_omm([b["close"] for b in regime_bars], direction=req.direction,
+                              lookback=rcfg["lookback"], window=rcfg["window"], min_obs=rcfg["min_obs"])
+            if omm:
+                dh = None
+                try:
+                    dh = compute_directional_hmm(regime_bars)
+                except Exception:
+                    pass
+                regime_signal = {
+                    "horizon": req.horizon, "timeframe": rcfg["timeframe"], "state": omm.state,
+                    "p_stay": omm.p_stay, "stability": omm.stability,
+                    "regime_age_days": omm.regime_age_days, "avg_regime_duration": omm.avg_regime_duration,
+                    "conviction_pct": omm.conviction_pct, "conviction_label": omm.conviction_label,
+                    "interpretation": omm.interpretation or "", "hmm_state": dh.state if dh else None,
+                    "alignment": alignment(omm.state, dh.state if dh else None), "insufficient_data": False,
+                }
+    except Exception as exc:
+        if rcfg["timeframe"] == "15min":
+            raise
+        logger.warning("Regime unmeasured for %s/%s: computation failed (%s)", symbol, req.horizon, type(exc).__name__)
+    if rcfg["timeframe"] == "daily" and regime_signal is None:
+        logger.warning("Daily regime unmeasured for %s/%s: insufficient history or no OMM result", symbol, req.horizon)
 
     # Fundamentals — the gate already carries the bearish cautionAbove/rejectAbove
     # overrides (applied once in services/fundamentals_gate.resolve_fundamentals_gate);
@@ -1195,7 +1215,7 @@ async def _analyze_core(symbol: str, req: "StockAnalysisRequest") -> "_AnalyzeCo
         company=company or symbol, price=price, card=card, regime_signal=regime_signal,
         fundamentals=_fh, signal=signal, bt_result=bt_result, conf_val=conf_val, conf_txt=conf_txt,
         sector_rs_pct=None, next_event_days=next_event_days, next_event_label=next_event_label,
-        daily_bars=bars, intraday_bars=_intraday_bars, gate_flags=gate_flags,
+        daily_bars=bars, intraday_bars=_intraday_bars, daily_regime_bars=daily_regime_bars, gate_flags=gate_flags,
         earnings_days=earnings_days, earnings_veto=_earn_flag is not None,
         bt_hold=_bt_hold,
     )
@@ -1228,6 +1248,8 @@ def _regime_block_for_horizon(
         rbars = bars
 
     def _empty() -> "RegimeHorizonBlock":
+        if rcfg["timeframe"] == "daily":
+            logger.warning("Daily regime unmeasured for %s/%s: insufficient history or no OMM result", symbol, horizon)
         return RegimeHorizonBlock(horizon=horizon, timeframe=rcfg["timeframe"], state="Unknown",
                                   p_stay=0.0, stability="Fragile", regime_age_days=0,
                                   avg_regime_duration=0.0, conviction_pct=0,
@@ -1329,8 +1351,8 @@ async def analyze_stock(req: StockAnalysisRequest) -> StockAnalysisOut:
     (intra_blk, swing_blk, pos_blk), (sector_tile, sector_rs), backdrop = await asyncio.gather(
         asyncio.gather(
             asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Intraday", req.direction, intraday_bars),
-            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Swing",    req.direction, None),
-            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_bars, "Position", req.direction, None),
+            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_regime_bars, "Swing",    req.direction, None),
+            asyncio.to_thread(_regime_block_for_horizon, symbol, core.daily_regime_bars, "Position", req.direction, None),
         ),
         _sector_context(symbol, closes),
         _market_backdrop(),
@@ -1429,6 +1451,8 @@ async def _process_stock(
     if veto_days is None:
         veto_days = _resolve_stock_veto_days(req)
     observe_configuration("stocks.earnings_veto", {"veto_days": veto_days})
+    _daily_count = (daily_regime_bar_count(_load_full_scoring_cfg())
+                    if _load_regime_cfg(req.horizon)["timeframe"] == "daily" else None)
     async with _SCAN_SEM:
         try:
             end = date.today()
@@ -1498,37 +1522,44 @@ async def _process_stock(
                 # `intraday_bars` itself stays whole for the signal / backtest.
                 regime_bars = completed_intraday_bars(intraday_bars)
             else:
-                regime_bars = bars   # daily bars already fetched
+                regime_bars = await _daily_regime_history(symbol, _daily_count, req.horizon)
 
-            if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
-                omm = compute_omm(
-                    [b["close"] for b in regime_bars],
-                    direction=req.direction,
-                    lookback=rcfg["lookback"],
-                    window=rcfg["window"],
-                    min_obs=rcfg["min_obs"],
-                )
-                if omm:
-                    dh = None
-                    try:
-                        dh = compute_directional_hmm(regime_bars)
-                    except Exception as exc:
-                        logger.debug("HMM unavailable for %s: %s", symbol, exc)
-                    regime_signal = {
-                        "horizon": req.horizon,
-                        "timeframe": rcfg["timeframe"],
-                        "state": omm.state,
-                        "p_stay": omm.p_stay,
-                        "stability": omm.stability,
-                        "regime_age_days": omm.regime_age_days,
-                        "avg_regime_duration": omm.avg_regime_duration,
-                        "conviction_pct": omm.conviction_pct,
-                        "conviction_label": omm.conviction_label,
-                        "interpretation": omm.interpretation,
-                        "hmm_state": dh.state if dh else None,
-                        "alignment": alignment(omm.state, dh.state if dh else None),
-                        "insufficient_data": False,
-                    }
+            try:
+                if regime_bars and len(regime_bars) >= rcfg.get("min_obs", 10):
+                    omm = compute_omm(
+                        [b["close"] for b in regime_bars],
+                        direction=req.direction,
+                        lookback=rcfg["lookback"],
+                        window=rcfg["window"],
+                        min_obs=rcfg["min_obs"],
+                    )
+                    if omm:
+                        dh = None
+                        try:
+                            dh = compute_directional_hmm(regime_bars)
+                        except Exception as exc:
+                            logger.debug("HMM unavailable for %s: %s", symbol, exc)
+                        regime_signal = {
+                            "horizon": req.horizon,
+                            "timeframe": rcfg["timeframe"],
+                            "state": omm.state,
+                            "p_stay": omm.p_stay,
+                            "stability": omm.stability,
+                            "regime_age_days": omm.regime_age_days,
+                            "avg_regime_duration": omm.avg_regime_duration,
+                            "conviction_pct": omm.conviction_pct,
+                            "conviction_label": omm.conviction_label,
+                            "interpretation": omm.interpretation,
+                            "hmm_state": dh.state if dh else None,
+                            "alignment": alignment(omm.state, dh.state if dh else None),
+                            "insufficient_data": False,
+                        }
+            except Exception as exc:
+                if rcfg["timeframe"] == "15min":
+                    raise
+                logger.warning("Regime unmeasured for %s/%s: computation failed (%s)", symbol, req.horizon, type(exc).__name__)
+            if rcfg["timeframe"] == "daily" and regime_signal is None:
+                logger.warning("Daily regime unmeasured for %s/%s: insufficient history or no OMM result", symbol, req.horizon)
 
             # Fundamentals (skipped for intraday) — the gate already carries the
             # bearish overrides from services/fundamentals_gate.resolve_fundamentals_gate
@@ -1978,6 +2009,8 @@ async def _execute_stock_scan_core(
     # a universe of rejected names with nothing naming the file.
     try:
         validate_regime_block(_cfg_doc, (req.horizon,))
+        if _cfg_doc["regime"][req.horizon.lower()]["timeframe"] == "daily":
+            daily_regime_bar_count(_cfg_doc)
     except RegimeConfigError as e:
         logger.error("STOCK SCAN %s aborted on scoring_rules.yaml regime block: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))
