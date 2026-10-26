@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { TradeCard } from '..';
-import type { TradeCardData, StockExplanation, ContractExplanation } from '@/types/domain';
+import type { TradeCardData, StockExplanation, ContractExplanation, SentimentData } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({ api: {
   getStructuralStop: jest.fn(), getStockQuote: jest.fn(), getContractQuote: jest.fn(),
@@ -117,4 +117,30 @@ it.each(['0', '1'])('restores existing outer score preference %s and independent
   expect(screen.getByRole('button', { name: /Stock & contract scores/ })).toHaveAttribute('aria-expanded', 'false');
   expect(localStorage.getItem(stockKey)).toBe('0');
   expect(localStorage.getItem(contractKey)).toBe('1');
+});
+
+const measuredSentiment: SentimentData = {
+  horizon: 'Swing', timeframe: 'daily', state: 'Bull', p_stay: .876,
+  stability: 'Stable', regime_age_days: 12, avg_regime_duration: 31.5,
+  conviction_pct: 27.4, conviction_label: 'Strong conviction',
+  interpretation: 'The regime favours this trade.', alignment: 'Aligned',
+};
+
+it('shows real unmeasured sentiment by default, clears stale candidate values and respects presentation control', () => {
+  const { rerender } = render(<TradeCard data={card} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.getByText('Insufficient history or unavailable data.')).toBeVisible();
+  rerender(<TradeCard data={{ ...card, sentiment: measuredSentiment }} />);
+  expect(screen.getByText('+27.4%')).toBeVisible();
+  rerender(<TradeCard data={{ ...card, symbol: 'NEXT', sentiment: { ...measuredSentiment, insufficient_data: true } }} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.queryByText(/27.4%|State Bull|Strong conviction|OMM\/HMM/)).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, sentiment: { ...measuredSentiment, conviction_pct: 0 } }} />);
+  expect(screen.getByText('0%')).toBeVisible();
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+  rerender(<TradeCard data={card} showMarketSentiment={false} />);
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+  expect(screen.queryByText('Insufficient history or unavailable data.')).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, sentiment: measuredSentiment }} showMarketSentiment={false} />);
+  expect(screen.queryByText('+27.4%')).not.toBeInTheDocument();
 });
