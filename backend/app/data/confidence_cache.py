@@ -42,9 +42,10 @@ _TTL_SECONDS = 7 * 24 * 3600  # weekly
 # for TRADING-REVIEW-PHASE-C: T1 (historical_store._read_bars scales open/high/
 # low by adj_factor like close) and T7 (the stock trigger honours
 # trigger.setup_window_bars); b3 for STOCKS-HORIZON-P0A A4: the confidence
-# replay counts non-overlapping fires. stock_scan._backtest_key carries the
-# same token.
-BARS_BASIS_VERSION = "b3"
+# replay counts non-overlapping fires; b4 for PROVIDER-FALLBACK-FORMING-BAR
+# (#536): the Options DB-miss fallback no longer scores forming bars.
+# stock_scan._backtest_key carries the same token.
+BARS_BASIS_VERSION = "b4"
 
 # L2 SQLite path — sits in backend/data/; overridable in tests via _DB_PATH.
 # BAMENDJOU_CONFIDENCE_CACHE_DB (when set and non-empty) replaces the default.
