@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/provider-fallback-forming-bar-674c6d87",
       "claimed_at": "2026-10-31T11:55:54Z",
-      "expires_at": "2026-10-31T15:16:40Z",
+      "expires_at": "2026-10-31T16:04:03Z",
       "note": "#536 drop forming daily bar in fetch_candles_async DB-miss fallback",
       "task": "PROVIDER-FALLBACK-FORMING-BAR"
     }
