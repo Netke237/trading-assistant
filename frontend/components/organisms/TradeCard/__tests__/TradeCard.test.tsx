@@ -4397,9 +4397,9 @@ it('presentation wires each qualification panel to its unchanged result and bars
 
 it('presentation can hand market context to the page without mounting a second card', () => {
   const { rerender } = render(<TradeCard data={mockTradeCard} showMarketSentiment={false} />);
-  expect(screen.queryByText(/Market sentiment — insufficient history/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Regime: Unmeasured/)).not.toBeInTheDocument();
   rerender(<TradeCard data={mockTradeCard} />);
-  expect(screen.getByText(/Market sentiment — insufficient history/)).toBeInTheDocument();
+  expect(screen.getByText(/Regime: Unmeasured/)).toBeInTheDocument();
 });
 
 // ── TRADING-REVIEW-PHASE-C-RR (review M7, D5): full-premium R/R ─────────────

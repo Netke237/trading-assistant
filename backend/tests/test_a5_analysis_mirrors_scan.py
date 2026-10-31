@@ -39,6 +39,9 @@ def _offline(monkeypatch, *, conviction: int = -12, card_status: str = "PASS"):
         return "Test Co"
 
     monkeypatch.setattr(ss, "get_historical_bars", _fake_bars)
+    async def _daily(symbol, count):
+        return _BARS
+    monkeypatch.setattr(ss, "get_daily_regime_bars", _daily)
     monkeypatch.setattr(ss, "fetch_quotes", lambda syms: {})
     monkeypatch.setattr(ss, "fetch_company_name_async", _fake_name)
     monkeypatch.setattr(ss, "fetch_intraday_candles", lambda *a, **k: [])

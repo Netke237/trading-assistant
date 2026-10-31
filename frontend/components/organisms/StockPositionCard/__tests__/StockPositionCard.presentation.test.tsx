@@ -1,3 +1,4 @@
+import type { SentimentData } from '@/types/domain';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StockPositionCard } from '@/components/organisms/StockPositionCard';
 import { InitialStrategyTargets } from '@/components/organisms/StockPositionCard/InitialStrategyTargets';
@@ -21,7 +22,6 @@ jest.mock('@/lib/api', () => ({ api: {
   postStockOrder: jest.fn(),
 } }));
 jest.mock('@/components/organisms/StockAutoTradeArm', () => ({ StockAutoTradeArm: () => null }));
-jest.mock('@/components/molecules/MarketSentiment', () => ({ MarketSentiment: () => null }));
 jest.mock('@/components/molecules/FundamentalHealthCard', () => ({ FundamentalHealthCard: () => null }));
 
 const card = (symbol = 'AAPL', direction: 'Bullish' | 'Bearish' = 'Bullish'): PositionCardData => ({
@@ -728,4 +728,26 @@ it.each(['embedded', 'position'] as const)('%s chart link freezes the displayed 
     expect(link).toHaveAttribute('target','_blank');
     view.unmount();
   }
+});
+
+const measuredSentiment: SentimentData = {
+  horizon: 'Swing', timeframe: 'daily', state: 'Bull', p_stay: .876,
+  stability: 'Stable', regime_age_days: 12, avg_regime_duration: 31.5,
+  conviction_pct: 27.4, conviction_label: 'Strong conviction',
+  interpretation: 'The regime favours this trade.', alignment: 'Aligned',
+};
+
+it.each(['embedded', 'position'] as const)('shows real %s regime disclosure through candidate changes and preserves measured zero', async presentation => {
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation={presentation} />); });
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.getByText('Insufficient history or unavailable data.')).toBeVisible();
+  view.rerender(<StockPositionCard card={{ ...card(), sentiment: measuredSentiment }} strategyKey="pullback_ema" presentation={presentation} />);
+  expect(screen.getByText('+27.4%')).toBeVisible();
+  view.rerender(<StockPositionCard card={{ ...card('MSFT'), sentiment: { ...measuredSentiment, insufficient_data: true } }} strategyKey="pullback_ema" presentation={presentation} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.queryByText(/27.4%|State Bull|Strong conviction|OMM\/HMM/)).not.toBeInTheDocument();
+  view.rerender(<StockPositionCard card={{ ...card('MSFT'), sentiment: { ...measuredSentiment, conviction_pct: 0 } }} strategyKey="pullback_ema" presentation={presentation} />);
+  expect(screen.getByText('0%')).toBeVisible();
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
 });

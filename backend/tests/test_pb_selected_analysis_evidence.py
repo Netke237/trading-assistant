@@ -22,7 +22,7 @@ async def test_analysis_projects_card_without_changing_result(monkeypatch, direc
     card = score_stock(symbol="TEST", direction=direction, horizon=horizon, bars=bars, scoring_mode="stock")
     original = deepcopy(card.explanation)
     card.explanation = original if evidence == "valid" else None if evidence == "absent" else {"version": 999}
-    core = SimpleNamespace(card=card, company="Test Co", price=100, daily_bars=bars, intraday_bars=[], signal=None, bt_result=None, fundamentals=None, conf_val=None, conf_txt=None, regime_signal=None, next_event_days=None, next_event_label=None, earnings_days=None, earnings_veto=False, gate_flags=[{"gate":"backtest", "status":"REJECT", "detail":"No setup"}])
+    core = SimpleNamespace(card=card, company="Test Co", price=100, daily_bars=bars, daily_regime_bars=bars, intraday_bars=[], signal=None, bt_result=None, fundamentals=None, conf_val=None, conf_txt=None, regime_signal=None, next_event_days=None, next_event_label=None, earnings_days=None, earnings_veto=False, gate_flags=[{"gate":"backtest", "status":"REJECT", "detail":"No setup"}])
     async def fake_core(symbol, req): return core
     async def sector(*args): return None, None
     async def backdrop(): return None

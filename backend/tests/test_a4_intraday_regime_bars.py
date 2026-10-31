@@ -64,7 +64,8 @@ async def _scan(horizon: str, *, intraday, scoring_cfg=None, out=None):
         side_effect=intraday if isinstance(intraday, Exception) else None,
         return_value=None if isinstance(intraday, Exception) else intraday,
     )
-    with patch("app.routers.scan.fetch_candles_async"), \
+    with patch("app.routers.scan.get_daily_regime_bars", new_callable=AsyncMock, return_value=DAILY), \
+         patch("app.routers.scan.fetch_candles_async"), \
          patch("app.routers.scan.fetch_price_async", new_callable=AsyncMock, return_value=181.0), \
          patch("app.routers.scan.fetch_company_name_async", new_callable=AsyncMock, return_value="X"), \
          patch("app.routers.scan.fetch_fundamentals_calendar", new_callable=AsyncMock, return_value={}), \
@@ -125,7 +126,7 @@ async def test_options_scan_intraday_fetch_runs_under_the_scan_semaphore():
 
 
 @pytest.mark.asyncio
-async def test_options_scan_swing_stays_on_daily_bars_and_fetches_nothing_new():
+async def test_options_scan_swing_uses_daily_reader_and_never_fetches_intraday():
     omm, dhmm, fetch, _ = await _scan("Swing", intraday=INTRADAY)
     fetch.assert_not_called()
     assert set(omm.call_args.args[0]) == {181.0}
