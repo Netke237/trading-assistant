@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/regime-series-length-1e4aaf11",
-      "claimed_at": "2026-10-31T09:35:54Z",
-      "expires_at": "2026-10-31T12:35:54Z",
-      "note": "Resume #534: integrated code audit round 2 + PR",
-      "task": "REGIME-SERIES-LENGTH"
-    }
-  ]
+  "claims": []
 }
