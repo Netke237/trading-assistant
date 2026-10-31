@@ -74,7 +74,16 @@ def _is_sandbox_base(base: str) -> bool:
 
 # ── In-process caches ─────────────────────────────────────────────────────────
 # Candles: daily bars don't change within a trading session — date-keyed cache.
+# The entry holds the RAW provider rows (a today-dated bar included while the
+# session is open); fetch_candles_async trims what it returns, the sync
+# fetch_candles readers (chart, regime router, fetch_price) get them as before.
 _candles_cache: dict[str, tuple[list[dict], str]] = {}
+# PROVIDER-FALLBACK-FORMING-BAR (#536): the last_session_close() in force when
+# each _candles_cache entry was written. An entry is a snapshot from that moment,
+# and the host-date stamp alone would serve an 11:00 snapshot of a forming bar
+# at 16:30 as the closed bar; fetch_candles_async serves a hit only while the
+# cutoff still matches. Both writers record it; a missing record is a miss.
+_candles_cache_cutoff: dict[str, datetime] = {}
 
 # Company names: immutable; permanent cache for the process lifetime.
 _company_cache: dict[str, str] = {}
@@ -334,6 +343,31 @@ def _fetch_daily_yf(symbol: str) -> list[dict]:
         return []
 
 
+def _daily_bar_clock() -> datetime:
+    """Now in MARKET_TZ; a seam so tests can pin the session clock."""
+    from app.services.scheduling_tz import MARKET_TZ
+    return datetime.now(MARKET_TZ)
+
+
+def _session_cutoff(now: datetime) -> datetime:
+    """The last 16:00 ET close at which a daily bar is complete at ``now``."""
+    # lazy import: market_session imports strategy_watch_scheduler, whose chain
+    # reaches back into app.data -- a module-level import here would cycle.
+    from app.services.market_session import last_session_close
+    return last_session_close(now)
+
+
+def _completed_daily_candles(rows: list[dict], now: datetime) -> list[dict]:
+    """``rows`` without a trailing daily bar still forming at ``now``.
+
+    The repo's existing trim for ISO-date daily rows (the todays_bar_is_unclosed
+    rule, anchored in MARKET_TZ so the host's zone does not matter). It copies,
+    never mutates, so the cached raw list is safe to pass."""
+    # lazy import, same cycle as _session_cutoff.
+    from app.services.composite_trigger_evaluator import completed_daily_rows
+    return completed_daily_rows(rows, now)
+
+
 def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
     """
     Returns up to `bars` daily OHLCV bars for `symbol`, newest last.
@@ -347,6 +381,9 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
         if cached_date == date.today().isoformat() and len(data) >= bars:
             return data[-bars:]
 
+    # Read before the provider request, so the stamp written below never names
+    # a later session interval than the snapshot (PROVIDER-FALLBACK-FORMING-BAR, #536).
+    cutoff = _session_cutoff(_daily_bar_clock())
     rows: list[dict] = []
     try:
         end = date.today()
@@ -396,6 +433,7 @@ def fetch_candles(symbol: str, bars: int = 252) -> list[dict]:
 
     if rows:
         _candles_cache[symbol] = (rows, date.today().isoformat())
+        _candles_cache_cutoff[symbol] = cutoff
     return rows[-bars:]
 
 
@@ -1696,13 +1734,25 @@ async def fetch_candles_async(
     client: httpx.AsyncClient, symbol: str, bars: int = 252
 ) -> list[dict]:
     """Async variant — uses the provided AsyncClient for connection reuse.
-    Results are cached for the current calendar day (daily bars don't change intraday).
-    Falls back to yfinance when Tradier is unavailable."""
+    Falls back to yfinance when Tradier is unavailable.
+
+    Returns COMPLETED daily bars only (PROVIDER-FALLBACK-FORMING-BAR, #536):
+    a bar dated after last_session_close(now) is still forming and is dropped,
+    whether it came from the cache, Tradier or yfinance. This is the Options
+    scan's DB-miss fallback, so its candles now match the settled DB path.
+    The cache keeps the raw rows. A cached entry is served only within the
+    session-boundary interval it was written in (same host date AND same
+    cutoff); the first call after a close refetches once."""
+    # One clock read per call: the validity check, the trim and the cutoff
+    # stamped on a write all use it, so they cannot straddle 16:00.
+    now = _daily_bar_clock()
+    cutoff = _session_cutoff(now)
     cached = _candles_cache.get(symbol)
     if cached is not None:
         data, cached_date = cached
-        if cached_date == date.today().isoformat():
-            return data
+        if (cached_date == date.today().isoformat()
+                and _candles_cache_cutoff.get(symbol) == cutoff):
+            return _completed_daily_candles(data, now)
 
     rows: list[dict] = []
     try:
@@ -1746,7 +1796,8 @@ async def fetch_candles_async(
 
     if rows:
         _candles_cache[symbol] = (rows, date.today().isoformat())
-    return rows
+        _candles_cache_cutoff[symbol] = cutoff
+    return _completed_daily_candles(rows, now)
 
 
 # Lazy semaphore for candle pre-warm — wider than scan concurrency since candles are the

@@ -278,6 +278,7 @@ def _reset_market_data_caches():
     """
     from app.data import market as mkt
     mkt._candles_cache.clear()
+    mkt._candles_cache_cutoff.clear()
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
@@ -286,6 +287,7 @@ def _reset_market_data_caches():
     mkt._yf_cal_fail_until.clear()
     yield
     mkt._candles_cache.clear()
+    mkt._candles_cache_cutoff.clear()
     mkt._company_cache.clear()
     mkt._fundamentals_calendar_cache.clear()
     mkt._expirations_cache.clear()
