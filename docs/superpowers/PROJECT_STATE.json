@@ -9795,7 +9795,7 @@
     {
       "id": "PROVIDER-FALLBACK-FORMING-BAR",
       "name": "Options scan DB-miss provider fallback drops the forming daily bar (#536)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
       "branch": "board/provider-fallback-forming-bar-674c6d87",
       "tracking_issue": 536,
@@ -9811,7 +9811,7 @@
       },
       "size": "S",
       "complexity": 3,
-      "completion_pct": 25,
+      "completion_pct": 50,
       "audit_history": [
         {
           "round": 1,
@@ -9847,13 +9847,21 @@
           ]
         }
       ],
-      "note": "PLAN STAGE CLEAN 2026-10-31: plan round 2 (plan stage 2/3) 0 gate findings. Build T1 next. || PLAN ROUND 1 (plan stage 1/3) 2026-10-31: 2 gate findings (stale cached snapshot after close; persisted forming-bar confidences), both fixed in the plan. Plan round 2 next, scoped to those fixes. Not built, not audited. || PLAN WRITTEN 2026-10-31 on c8f3b8a2: read-side trim in fetch_candles_async via completed_daily_rows (todays_bar_is_unclosed rule, MARKET_TZ-anchored); cache stays raw; all 6 callers checked. Plan audit next. Not built, not audited.",
+      "note": "BUILT 2026-10-31: T1 #570 at 74e75140 (coordinator-verified red 11/1 on 51935362, green 549 targeted on Python 3.11.9; implementer full suite 10117 passed, 11 Windows-host-only failures identical on clean HEAD). Side effect named by the implementer: the b4 bump also invalidates fresh_backtest/horizon_tuning fingerprint caches once (cost only). Code audit round 1 next. Not audit-clean, not ready to merge. || PLAN STAGE CLEAN 2026-10-31: plan round 2 (plan stage 2/3) 0 gate findings. Build T1 next. || PLAN ROUND 1 (plan stage 1/3) 2026-10-31: 2 gate findings (stale cached snapshot after close; persisted forming-bar confidences), both fixed in the plan. Plan round 2 next, scoped to those fixes. Not built, not audited. || PLAN WRITTEN 2026-10-31 on c8f3b8a2: read-side trim in fetch_candles_async via completed_daily_rows (todays_bar_is_unclosed rule, MARKET_TZ-anchored); cache stays raw; all 6 callers checked. Plan audit next. Not built, not audited.",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Plan round 2 (fresh gate-auditor) reviewed 840a7c87..516069f2 plan fixes: 0 gate findings."
-      }
+      },
+      "tickets": [
+        {
+          "issue": 570,
+          "id": "T1",
+          "commit": "74e75140",
+          "status": "closed"
+        }
+      ]
     }
   ],
   "already_shipped": [
