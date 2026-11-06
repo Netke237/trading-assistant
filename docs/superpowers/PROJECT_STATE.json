@@ -6948,6 +6948,31 @@
       ]
     },
     {
+      "id": "HISTORY-INCREMENTAL-NIGHTLY-C",
+      "owner": "agent",
+      "name": "Incremental nightly, Stage C: Settings -> Data Tiingo budget + last-run line",
+      "summary": "Frontend only (decision D5): getIngestionStatus type in lib/api.ts, TiingoBudget molecule (four Tiingo limit meters used/limit with nightly stop, last ingestion run summary from the existing run counters), rendered in Settings -> Data. Plan section 5 Stage C (C1).",
+      "status": "in_progress",
+      "audit_rounds": 0,
+      "audit_clean": false,
+      "depends_on": [
+        "HISTORY-INCREMENTAL-NIGHTLY",
+        "HISTORY-INCREMENTAL-NIGHTLY-A",
+        "HISTORY-INCREMENTAL-NIGHTLY-B"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
+      "tracking_issue": 413,
+      "branch": "claude/history-incremental-c-147f51",
+      "verify": {
+        "kind": "absent",
+        "path": "frontend/components/molecules/TiingoBudget/index.tsx",
+        "pattern": "TiingoBudget",
+        "note": "PRESENCE ONLY of the Stage C molecule; flips to present when C1 is built."
+      },
+      "notes": "Stage C of the approved plan; own code-audit target, cap 3 code rounds. Started 2026-11-06 from origin/main c8f3b8a2 (Stage A PR #484 and Stage B PR #499 merged). Tickets #572 C1, #573 C2 (coordinator).",
+      "audit_history": []
+    },
+    {
       "id": "APP-AUDIT-INVENTORY",
       "name": "Lane A — whole-app surface/state inventory",
       "status": "shipped",
