@@ -1115,6 +1115,69 @@ export async function triggerIngestionNow(symbols: string[], years = 6): Promise
   return post<{ status: string; total: number }>('/api/data/ingest', { symbols, years });
 }
 
+/* ---------- Ingestion status (GET /api/data/ingest/status) ---------- */
+
+// One Tiingo budget limit, as returned by backend/app/data/tiingo_budget.py
+// usage_summary(). `nightly_stop_at` is limit minus the nightly reserve (the
+// limit itself where there is no reserve); `window` is a label such as
+// "rolling 1 h" or "rolling 31 d".
+export interface TiingoUsageEntry {
+  used: number;
+  limit: number;
+  nightly_stop_at: number;
+  window: string;
+}
+
+export type TiingoUsageKey = 'requests_per_hour' | 'requests_per_day' | 'symbols_per_month' | 'bytes_per_month';
+export type TiingoUsage = Record<TiingoUsageKey, TiingoUsageEntry>;
+
+export type IngestionRunStatus = 'idle' | 'running' | 'completed' | 'error';
+
+// The in-memory run state of backend/app/services/ingestion_job.py (_state),
+// merged by routers/ingestion.py ingest_status() with the single-provider
+// symbols and the Tiingo usage. One state serves the nightly run and a manual
+// "Run now", so it describes the last ingestion run of either kind. After a
+// backend restart `status` is 'idle' and `started_at` is null.
+export interface IngestionStatus {
+  status: IngestionRunStatus;
+  total: number;
+  done: number;
+  failed: number;
+  started_at: string | null;   // ISO UTC
+  finished_at: string | null;  // ISO UTC
+  error: string | null;
+  current_symbol?: string | null;
+  // Optional: an older backend may omit them.
+  rebuild_refused?: number;
+  single_provider_failed_symbols?: string[];
+  single_provider_updated?: number;
+  single_provider_symbols?: Record<string, { provider: string; rebuilt_at: string | null; floor_date: string | null }>;
+  // RUN_COUNTERS: absent until the first run since the backend started.
+  suffix_only?: number;
+  adjustment_changed?: number;
+  prefix_refetched?: number;
+  prefix_rescaled?: number;
+  prefix_confirmed?: number;
+  confirm_retry?: number;
+  lag_window_full?: number;
+  single_provider_recent?: number;
+  single_provider_skipped_current?: number;
+  revalidated?: number;
+  revalidation_skipped_budget?: number;
+  // null while a run is in progress (filled in at the end), and after the run
+  // when the ledger missed an attempt (value unknown).
+  tiingo_requests?: number | null;
+  tiingo_bytes?: number | null;
+  // null when the ledger can't be read (then tiingo_usage_error is set);
+  // absent on an older backend.
+  tiingo_usage?: TiingoUsage | null;
+  tiingo_usage_error?: string | null;
+}
+
+export async function getIngestionStatus(): Promise<IngestionStatus> {
+  return get<IngestionStatus>('/api/data/ingest/status');
+}
+
 export async function getLastDataRefresh(): Promise<{ last_refresh: string | null }> {
   return get<{ last_refresh: string | null }>('/api/data/ingest/last-refresh');
 }
