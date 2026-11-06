@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/provider-fallback-forming-bar-674c6d87",
-      "claimed_at": "2026-10-31T11:55:54Z",
-      "expires_at": "2026-10-31T16:21:32Z",
-      "note": "#536 drop forming daily bar in fetch_candles_async DB-miss fallback",
-      "task": "PROVIDER-FALLBACK-FORMING-BAR"
+      "branch": "claude/history-incremental-c-147f51",
+      "claimed_at": "2026-11-06T06:59:25Z",
+      "expires_at": "2026-11-06T09:59:25Z",
+      "note": "Stage C: Settings -> Data Tiingo budget + last-run line (#413)",
+      "task": "HISTORY-INCREMENTAL-NIGHTLY-C"
     }
   ]
 }
