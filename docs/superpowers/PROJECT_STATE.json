@@ -9798,9 +9798,9 @@
       "name": "Nightly: skip an unfinalized latest-day provider bar instead of rejecting the whole reply",
       "summary": "history_backfill._validated drops only the reply's latest bar when it is dated on the latest settled weekday and has an invalid price field (Yahoo has not finalised it at the 20:00 ET nightly); every other invalid bar still rejects. Fixes 85 yfinance-basis symbols (SPY included) and 61 refused rebuilds left 1-4 days stale.",
       "status": "in_progress",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
-      "plan_audit_clean": false,
+      "plan_audit_clean": true,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY-B"
       ],
@@ -9809,14 +9809,36 @@
       "branch": "board/history-latest-bar-unfinalized-30123325",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 10,
-      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges).",
+      "completion_pct": 20,
+      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges). Plan round 1 (plan stage 1) CLEAN, 0 gate findings. Build: code + tests test-first.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
         "pattern": "_unfinalized_latest",
         "note": "PRESENCE ONLY of the latest-day unfinalized-bar rule in _validated. Correctness requires tests and the independent audit."
-      }
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent a7b834a58a86addfa (bmad-review-adversarial-general) reviewed the whole plan at 1f925843 against history_backfill, historical_store, history_incremental, ingestion_job, tiingo_budget; 0 gate findings."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "gate-auditor subagent a7b834a58a86addfa (fresh, bmad-review-adversarial-general)",
+          "reviewed": "docs/superpowers/plans/2026-11-06-history-latest-bar-unfinalized-plan.md@1f925843",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": "none",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "drop rule vs every _validated caller and writer; classifier/writer agreement (empty_alpaca, T4, omits_stored, anchors); L definition across EST/EDT, weekend, holiday; tiingo_budget rolling hour, pass-2 priorities, yfinance fallback, startup_catch_up/effective_years; planned tests red-before/strict pins. Note: a draft of the fix sat in the working copy for about a minute during the audit, then was set aside; the auditor reports reviewing the plan against code at 1f925843.",
+          "scope_note": "get_bars (_get_bars_locked -> _store_bars) does not go through _validated and is unchanged by this phase."
+        }
+      ]
     }
   ],
   "already_shipped": [
