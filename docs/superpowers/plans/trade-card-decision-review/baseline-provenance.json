@@ -12,7 +12,14 @@
     "frontend/lib/portfolioStore.ts": "8803dd36d956f7de318f16e2cc8161536e5dea2c7bef117d8c12c0ea76c53d08",
     "backend/app/services/position_writer.py": "77395f6dce2ebf93a0c7a1124ee58ffa44d743b1a0ddfae8c810533c803b5991"
   },
-  "graph": [
+  "local_browser_smoke": {
+    "command": "npx playwright test --config=/tmp/trade-card-playwright.config.ts e2e/tests/trade-card-ui-followup.spec.ts --project=chromium --workers=1 --grep 1920px-dark",
+    "result": "1 passed, 19.0 seconds",
+    "browser": "/usr/bin/chromium",
+    "scope": "mocked current source only",
+    "limitation": "default Playwright bundled browser absent; used installed system Chromium via temporary config"
+  },
+  "publication_preflight_graph": [
     {
       "number": 576,
       "issue_id": 6257437530,
@@ -132,11 +139,58 @@
       "current_parent": null
     }
   ],
-  "local_browser_smoke": {
-    "command": "npx playwright test --config=/tmp/trade-card-playwright.config.ts e2e/tests/trade-card-ui-followup.spec.ts --project=chromium --workers=1 --grep 1920px-dark",
-    "result": "1 passed, 19.0 seconds",
-    "browser": "/usr/bin/chromium",
-    "scope": "mocked current source only",
-    "limitation": "default Playwright bundled browser absent; used installed system Chromium via temporary config"
+  "verified_native_children": [
+    576,
+    577,
+    578,
+    579,
+    580,
+    581,
+    582,
+    583,
+    584
+  ],
+  "verified_native_dependencies": {
+    "576": [],
+    "577": [
+      576
+    ],
+    "578": [
+      576
+    ],
+    "579": [
+      576
+    ],
+    "580": [
+      579
+    ],
+    "581": [
+      578,
+      580
+    ],
+    "582": [
+      581
+    ],
+    "583": [
+      581
+    ],
+    "584": [
+      577,
+      582,
+      583
+    ]
+  },
+  "local_state_capture": {
+    "states": [
+      "initial",
+      "calculated",
+      "stale",
+      "restored"
+    ],
+    "fixture_source": "docs/superpowers/plans/trade-card-worklogs/presentation-integration-evidence/browser-cases.cjs",
+    "capture_kind": "local source with mocked APIs",
+    "checks_passed": 15,
+    "page_errors": [],
+    "submit_arm_fire_save_requests": 0
   }
 }
