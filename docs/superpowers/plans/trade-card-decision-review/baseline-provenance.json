@@ -2,7 +2,7 @@
   "source_revision": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
   "actual_running_revision": null,
   "actual_running_url": null,
-  "running_build_comparison": "pending user-provided baseline; local fixture captures cannot establish equivalence",
+  "running_build_comparison": "USER DEFERRED: mini-PC URL/revision unknown, not verified, not an implementation blocker; no equivalence claimed",
   "source_hashes": {
     "frontend/components/organisms/TradeCard/index.tsx": "f5815e6e3fb97c39d4e5a58fb457ee93ee2cf2b2c1c5139aaabef26cfe911c5c",
     "frontend/components/organisms/TradeCard/TradeCard.module.css": "e0be91667a57756e3ef58b50efc8e0f6ce7c98793c8ca028c687a62ed4118794",
@@ -192,5 +192,19 @@
     "checks_passed": 15,
     "page_errors": [],
     "submit_arm_fire_save_requests": 0
-  }
+  },
+  "baseline_authorization": {
+    "revision": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
+    "kind": "user_authorized_pinned_current_main",
+    "date": "2026-11-07",
+    "mini_pc_comparison": "deferred_not_verified_not_blocking"
+  },
+  "source_inventory": {
+    "historical_entries": 520,
+    "source_inspected_historical_entries": 520,
+    "current_contract_supplements": 67,
+    "shared_helper_contracts": 38,
+    "runtime_preservation": "pending #584; no per-entry runtime completion claimed"
+  },
+  "source_hash_validation": "Immutable git show <application_source_revision>:<path> bytes; working-tree implementation may change. This validates baseline evidence, not current implementation."
 }
