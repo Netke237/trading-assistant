@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/trade-card-decision-review-e6cac1a0",
       "claimed_at": "2026-11-07T20:17:25Z",
-      "expires_at": "2026-11-07T23:17:32Z",
+      "expires_at": "2026-11-07T23:17:36Z",
       "note": "#575 resume; current-main baseline explicitly authorized",
       "task": "TRADE-CARD-DECISION-REVIEW"
     }
