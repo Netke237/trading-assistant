@@ -17,17 +17,21 @@ not live numerical fixtures or proof of the trader's current build. Keep all
 unique information, original status colors and controls, and preserve existing
 on-demand calculation, restoration and freshness behavior.
 
-## Baseline gate
+## Baseline gate — user decision on resume
 
-Ticket #576 must identify the running revision and compare it with inspected
-source before any dependent application implementation. The running URL/revision
-has been requested in this chat and is currently unknown. A local mocked browser
-run of `c8f3b8a2` proves only this checkout's behavior. It cannot close this gate.
-While waiting, collect source evidence, current-build captures and the proposed
-before/after register. If the actual build remains unavailable, record exactly
-what is missing, leave #576 open and stop dependent implementation. Do not infer
-equivalence from a historical screenshot. Any material source difference requires
-updating this plan and independent review within the remaining plan-stage cap.
+The user explicitly directed this chat to resume #575 using current main pinned
+at `c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b` as the implementation baseline.
+This SHA was freshly fetched on 2026-11-07. The mini-PC/running-build comparison
+is DEFERRED, not verified and not an implementation blocker. Record that decision
+on #576 and in the evidence; never claim the pinned source equals the mini-PC.
+
+Finish all source inventory work against that immutable commit: current/future
+locations, field mutability, source/units/time/state contracts, representative
+mocked captures and valuation-copy reconciliation. Once those unblocked inventory
+obligations are complete, #576 may close with its mini-PC acceptance explicitly
+deferred by the user; then proceed in dependency order. Later main merges do not
+silently change the baseline. Material implementation-plan changes still require
+independent review within the existing per-stage cap.
 
 ## Existing behavior that is load-bearing
 
@@ -66,7 +70,7 @@ Step7, BarrierRaceCard, MethodPickSelector, context, tracking dialog, order help
 the earlier mapping and integration reconciliation. Do not change app code.
 
 1. Record exact checkout SHA, source hashes, reference revisions, mocked-data
-   provenance and native ticket graph. Record the actual running build separately.
+   provenance and native ticket graph. Record the mini-PC comparison separately as user-deferred.
 2. Reconcile all 520 historical entries with current rendering regions and add
    new/changed fields, badges, tooltips, explanations, actions and conditional
    states. Record current/future location, mutability, source, units, time basis,
@@ -77,7 +81,8 @@ the earlier mapping and integration reconciliation. Do not change app code.
 4. Reconcile current-time stop-cost, Arithmetic stop valuation and barrier-time
    valuation explanations against their actual implementations. Keep each basis.
 
-Close only when the running-build comparison and complete register are evidenced.
+Close when the pinned-source register is complete and the mini-PC comparison is
+explicitly recorded as user-deferred; do not claim running-build equivalence.
 Commit: `docs(trade-card): verify information and running-build baseline`.
 
 ### #577 — identity and market context (M, complexity 3)
@@ -267,5 +272,5 @@ approval (historical breakdown 20% preserved separately); 20% exact plan approve
 50% all nine implementations exist; 70% required regressions/local checks pass;
 85% exact integrated diff independently clean; 95% exact PR head CI and merge
 conditions met; 100% verified merge plus required integrated retests. Do not
-average ticket percentages. The missing running-build comparison prevents #576
-closure and every dependent ticket regardless of plan-review outcome.
+average ticket percentages. The mini-PC comparison is explicitly user-deferred;
+complete pinned-source inventory before #576 closure and dependent work.

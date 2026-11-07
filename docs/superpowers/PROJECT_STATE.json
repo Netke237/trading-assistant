@@ -9797,10 +9797,10 @@
       "name": "Trade-card decision review and exact tracking/broker confirmation (#575)",
       "status": "in_progress",
       "owner": "agent",
-      "branch": "board/trade-card-decision-review-95403959",
+      "branch": "board/trade-card-decision-review-e6cac1a0",
       "tracking_issue": 575,
       "plan": "docs/superpowers/plans/2026-11-07-trade-card-decision-review-plan.md",
-      "audit_rounds": 2,
+      "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": true,
       "completion_pct": 20,
@@ -9838,20 +9838,35 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/plans/trade-card-decision-review/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "fresh independent subagent /root/plan_baseline_r3 applying bmad-review-adversarial-general",
+          "reviewed": "git diff 7f01f9fb -- implementation plan; baseline amendment and interactions only. SHA256 39a71d526b7ef136c2a142f151c14cca1cb3e1b62d52fd14e5822be822d1bc81",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/trade-card-decision-review/plan-r3.md"
         }
       ],
-      "note": "Native 9-child/11-dependency graph installed and verified; user-authorized publication hold cleared. Historical breakdown plan round1 preserved; expanded plan independently clean in round2 (zero gate findings). Partial #576 source baseline committed cd5d7299: 520 historical obligations retained (per-item verification remains open), 33 current inspected contracts, 35 source hashes, four visually inspected local mock captures, 16 hardened-harness checks and frontend typecheck passed. Operational pause awaiting actual trader running URL/revision; #576 remains open, dependent application work gated. Phase20%, sizeXL, complexity4; completed tickets0/9, code rounds0, audit_clean false. No application changes or merge-readiness claim.",
-      "plan_stage": {
-        "rounds": 2,
-        "clean": true,
-        "closed_by": "clean",
-        "closure_evidence": "Fresh independent plan_audit_r2 reviewed expanded architecture at c74d488c / SHA256 631e30164856c3e69555c997c5e28af64110ea8a6cee90365522af9ad1c04244; zero gate findings."
-      },
+      "note": "Resumed on user instruction with main pinned c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b; mini-PC comparison deferred, no longer blocker. Baseline amendment independently clean in plan round3; historical rounds1/2 retained, planstage closed, code0. Sourceinventory #576 finishing before dependency-ordered app implementation. Phase20%, XL, complexity4; overall code audit_clean false.",
       "code_stage": {
         "rounds": 0,
         "clean": false
       },
-      "baseline_evidence": "docs/superpowers/plans/trade-card-decision-review/README.md"
+      "baseline_evidence": "docs/superpowers/plans/trade-card-decision-review/README.md",
+      "baseline_sha": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
+      "mini_pc_comparison": "deferred by direct user instruction in this chat; not verified and no longer blocks implementation",
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent plan_baseline_r3 reviewed only user-authorized pinned-main/deferred-mini-PC amendment; zero gate findings; exact planSHA256 39a71d526b7ef136c2a142f151c14cca1cb3e1b62d52fd14e5822be822d1bc81."
+      }
     }
   ],
   "already_shipped": [
@@ -11704,6 +11719,11 @@
       "answer_literal": "agree with all recommedations ",
       "source": "https://github.com/Netke237/trading-assistant/issues/535#issuecomment-3444458316",
       "scope": "OHLCV-ALPACA-DAY-HOLES"
+    },
+    {
+      "id": "TC-REVIEW-PIN-MAIN-DEFER-MINIPC-2026-11-07",
+      "target": "TRADE-CARD-DECISION-REVIEW",
+      "decision": "User in this chat directed resume using freshly fetched main c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b as baseline, mini-PC comparison deferred in #576, finish inventory and proceed in dependency order; required independent audits retained."
     }
   ],
   "pending_kenneth": [
