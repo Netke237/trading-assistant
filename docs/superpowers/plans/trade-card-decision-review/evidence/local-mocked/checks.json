@@ -1,0 +1,26 @@
+{
+  "errors": [],
+  "posts": [
+    "/api/contracts/exit-plan",
+    "/api/contracts/structural-stop",
+    "/api/contracts/first-passage",
+    "/api/contracts/exit-plan"
+  ],
+  "results": [
+    "one AutoTradeArm owner",
+    "one selector",
+    "race shortcut records controlled method",
+    "premium-only change suppresses race shortcuts",
+    "premium-only change preserves standalone invalidation",
+    "restoring original premium stop restores same-vintage race availability",
+    "execution invalidation edit does not change separately computed Arithmetic race barrier",
+    "stock-stop move retains explicitly stale measured-against explanation",
+    "stock-stop change suppresses race shortcuts",
+    "candidate/contract switch hides old race",
+    "incoming contract cannot pick previous race",
+    "AutoTradeArm DOM owner remains mounted through ready candidate switch",
+    "legacy evidence absence remains honest on both panels",
+    "tracking distinction retained in dialog/page",
+    "no order, arm, fire or position-save request"
+  ]
+}
