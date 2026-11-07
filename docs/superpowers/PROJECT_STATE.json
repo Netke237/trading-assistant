@@ -9797,20 +9797,20 @@
       "owner": "agent",
       "name": "Nightly: skip an unfinalized latest-day provider bar instead of rejecting the whole reply",
       "summary": "history_backfill._validated drops only the reply's latest bar when it is dated on the latest settled weekday and has an invalid price field (Yahoo has not finalised it at the 20:00 ET nightly); every other invalid bar still rejects. Fixes 85 yfinance-basis symbols (SPY included) and 61 refused rebuilds left 1-4 days stale.",
-      "status": "in_progress",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "status": "built",
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY-B"
       ],
       "plan": "docs/superpowers/plans/2026-11-06-history-latest-bar-unfinalized-plan.md",
       "tracking_issue": 574,
-      "branch": "board/history-latest-bar-unfinalized-30123325",
+      "branch": "board/history-latest-bar-unfinalized-02916f86",
       "size": "M",
       "complexity": 3,
-      "completion_pct": 20,
-      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges). Plan round 1 (plan stage 1) CLEAN, 0 gate findings. Build: code + tests test-first.",
+      "completion_pct": 85,
+      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges). Plan round 1 (plan stage 1) CLEAN, 0 gate findings. Build: code + tests test-first. || TAKEN OVER 2026-11-07 on board/history-latest-bar-unfinalized-02916f86 (previous claim expired; cut from the 30123325 tip, no history rewritten). T1 #585 records the build unit committed at a232f49e before tickets were cut. CODE ROUND 2 (code stage round 1 of 3) CLEAN 2026-11-07: fresh independent gate-auditor, diff c8f3b8a2..a232f49e, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
@@ -9837,8 +9837,28 @@
           "clean": true,
           "sanity_check": "drop rule vs every _validated caller and writer; classifier/writer agreement (empty_alpaca, T4, omits_stored, anchors); L definition across EST/EDT, weekend, holiday; tiingo_budget rolling hour, pass-2 priorities, yfinance fallback, startup_catch_up/effective_years; planned tests red-before/strict pins. Note: a draft of the fix sat in the working copy for about a minute during the audit, then was set aside; the auditor reports reviewing the plan against code at 1f925843.",
           "scope_note": "get_bars (_get_bars_locked -> _store_bars) does not go through _validated and is unchanged by this phase."
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent gate-auditor subagent applying bmad-review-adversarial-general (Claude coordinator session, 2026-11-07)",
+          "reviewed": "git diff c8f3b8a2..a232f49e -- backend/ on board/history-latest-bar-unfinalized-02916f86: _validated in backend/app/services/history_backfill.py + backend/tests/test_history_latest_bar_unfinalized.py, whole target, against docs/superpowers/plans/2026-11-06-history-latest-bar-unfinalized-plan.md",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "adj_factor still strict on the latest bar (field loop continues); duplicate/mixed/unknown-source checks still count the dropped bar; later weekend bar rejects; L across EST/EDT/weekend/holiday; every caller (_single_provider_locked, _write_window/classify_single_provider_window, _write_kept_prefix/classify_nightly_symbol, full path, refresh_adjustments, ingestion_job) refuses on a stored L or writes window_verified_through = L-1 and refetches L; only _validated output is stored; tests 47 pass on HEAD, 28/47 fail on origin/main backend (Python 3.11.9).",
+          "below_gate_noted": "U6, U7, U8 and W3 also fail on main though the plan says they pin unchanged behaviour (on main the earlier 'invalid open' check fires first); test-assertion only, below the gate, not fixed."
         }
-      ]
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent (bmad-review-adversarial-general) reviewed git diff origin/main..a232f49e -- backend/ (origin/main = c8f3b8a2, already merged) against the plan; 0 gate findings."
+      }
     }
   ],
   "already_shipped": [
