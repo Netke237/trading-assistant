@@ -9840,7 +9840,7 @@
           "report": "docs/superpowers/plans/trade-card-decision-review/plan-r2.md"
         }
       ],
-      "note": "Native 9-child/11-dependency graph installed and verified; user-authorized publication hold cleared. Historical breakdown plan round1 preserved; expanded implementation plan independently clean in round2 (zero gate findings). Phase 20%, size XL, complexity4; implementation0/9, code rounds0, audit_clean false. #576 actual running revision/URL comparison remains required; local source captures do not establish equivalence.",
+      "note": "Native 9-child/11-dependency graph installed and verified; user-authorized publication hold cleared. Historical breakdown plan round1 preserved; expanded plan independently clean in round2 (zero gate findings). Partial #576 source baseline committed cd5d7299: 520 historical obligations retained (per-item verification remains open), 33 current inspected contracts, 35 source hashes, four visually inspected local mock captures, 16 hardened-harness checks and frontend typecheck passed. Operational pause awaiting actual trader running URL/revision; #576 remains open, dependent application work gated. Phase20%, sizeXL, complexity4; completed tickets0/9, code rounds0, audit_clean false. No application changes or merge-readiness claim.",
       "plan_stage": {
         "rounds": 2,
         "clean": true,
@@ -9850,7 +9850,8 @@
       "code_stage": {
         "rounds": 0,
         "clean": false
-      }
+      },
+      "baseline_evidence": "docs/superpowers/plans/trade-card-decision-review/README.md"
     }
   ],
   "already_shipped": [
