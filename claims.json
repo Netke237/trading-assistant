@@ -20,7 +20,7 @@
       "agent": "claude",
       "branch": "board/trade-card-decision-review-95403959",
       "claimed_at": "2026-11-07T12:11:32Z",
-      "expires_at": "2026-11-07T15:13:42Z",
+      "expires_at": "2026-11-07T15:18:02Z",
       "note": "#575 publication wiring and implementation; explicitly authorized in chat",
       "task": "TRADE-CARD-DECISION-REVIEW"
     }
