@@ -9810,7 +9810,7 @@
       "size": "M",
       "complexity": 3,
       "completion_pct": 85,
-      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges). Plan round 1 (plan stage 1) CLEAN, 0 gate findings. Build: code + tests test-first. || TAKEN OVER 2026-11-07 on board/history-latest-bar-unfinalized-02916f86 (previous claim expired; cut from the 30123325 tip, no history rewritten). T1 #585 records the build unit committed at a232f49e before tickets were cut. CODE ROUND 2 (code stage round 1 of 3) CLEAN 2026-11-07: fresh independent gate-auditor, diff c8f3b8a2..a232f49e, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7.",
+      "notes": "Started 2026-11-06 from a side-session brief (parent session of #413). Plan drafted; plan audit pending. Brief: never merge (Kenneth merges). Plan round 1 (plan stage 1) CLEAN, 0 gate findings. Build: code + tests test-first. || TAKEN OVER 2026-11-07 on board/history-latest-bar-unfinalized-02916f86 (previous claim expired; cut from the 30123325 tip, no history rewritten). T1 #585 records the build unit committed at a232f49e before tickets were cut. CODE ROUND 2 (code stage round 1 of 3) CLEAN 2026-11-07: fresh independent gate-auditor, diff c8f3b8a2..a232f49e, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7. || SELF-MERGE PENDING, PR #587 (Closes #574), audited head a232f49e (code round 2 clean). Commits after the audited head are documentation-only state/audit records. Not merged; main record unchanged (c8f3b8a2); the live PR state is authoritative.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
@@ -9858,7 +9858,8 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent gate-auditor subagent (bmad-review-adversarial-general) reviewed git diff origin/main..a232f49e -- backend/ (origin/main = c8f3b8a2, already merged) against the plan; 0 gate findings."
-      }
+      },
+      "pr": 587
     }
   ],
   "already_shipped": [
