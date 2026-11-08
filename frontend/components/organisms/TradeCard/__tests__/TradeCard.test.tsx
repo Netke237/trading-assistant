@@ -265,14 +265,18 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
-  it('places the folded score group directly between identity and Fundamental Health', () => {
+  // #577 moved Fundamental Health up, directly beneath Market Sentiment and
+  // ahead of the identity; the folded scores still follow the identity.
+  it('places Fundamental Health before identity and the folded score group directly after identity', () => {
     render(<TradeCard data={mockTradeCard} />);
     const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
     const group = toggle.closest('section')!;
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
-    expect(group.previousElementSibling).toContainElement(screen.getByTestId('symbol-header'));
-    expect(group.nextElementSibling).toHaveTextContent('Fundamental Health');
+    const identity = group.previousElementSibling!;
+    expect(identity).toContainElement(screen.getByTestId('symbol-header'));
+    expect(identity.previousElementSibling).toHaveTextContent('Fundamental Health');
+    expect(group.nextElementSibling).not.toHaveTextContent('Fundamental Health');
     expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
     expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
     const panels = within(group).getAllByTestId('score-panel');
@@ -4391,7 +4395,8 @@ it('presentation wires each qualification panel to its unchanged result and bars
     qualification: { card: mockTradeCard, kind: 'contract' }, total: mockTradeCard.contractScore,
     confidence: mockTradeCard.contractConfidence,
   });
-  expect(screen.getByText('$190 Call · 2026-05-15')).toBeInTheDocument();
+  expect(screen.getByText('$190 Call')).toBeInTheDocument();
+  expect(screen.getByText('Expires 15 May 2026')).toBeInTheDocument();
   expect(screen.getByText(mockTradeCard.contract)).toBeInTheDocument();
 });
 

@@ -655,6 +655,31 @@
   margin-top: var(--space-2);
 }
 
+/* #577 — selected contract identity under the symbol row: strike, call/put
+   and an expiry with its year, plus each leg of a multi-leg spread. Wraps at
+   narrow widths instead of overflowing. */
+.contractHeadline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contractHeadlineMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+.spreadIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+}
+
 .headerCard .detailsCell {
   min-width: 0;
   overflow-wrap: anywhere;

@@ -177,6 +177,24 @@ function formatHHMM(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+const EXPIRY_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-05-15" → "15 May 2026": day, month name and year, so the expiry
+ *  cannot be misread (05/15 drops the year; 05/06 swaps day and month by
+ *  locale). Pure text formatting of the YYYY-MM-DD string — no Date object,
+ *  so no timezone can shift the day. Anything that is not a valid ISO date is
+ *  returned unchanged rather than given a fabricated year. */
+function readableExpiry(expiry: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expiry);
+  if (!m) return expiry;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return expiry;
+  return `${day} ${EXPIRY_MONTHS[month - 1]} ${m[1]}`;
+}
+
+const rightLabel = (right: 'C' | 'P') => (right === 'C' ? 'Call' : 'Put');
+
 function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_high' | null | undefined): string {
   if (source === 'order_block') return 'Structural stop — Order Block';
   if (source === 'swing_low') return 'Structural stop — Swing Low';
@@ -188,6 +206,10 @@ interface TradeCardProps {
   data: TradeCardData;
   /** Step 7 renders this context once above candidate navigation. */
   showMarketSentiment?: boolean;
+  /** Step 7 renders Fundamental Health once, directly beneath its page-level
+   *  Market Sentiment (#577). Default true keeps the standalone card's
+   *  Market Sentiment → Fundamental Health → identity order. */
+  showFundamentalHealth?: boolean;
   /** Controlled selector may render in the page execution panel. Undefined
    *  retains standalone placement; null waits for the page DOM anchor. All
    *  method state and effects remain owned by this single TradeCard. */
@@ -399,6 +421,7 @@ function isRealFailure(controller: AbortController, deadline: RequestDeadline): 
 export function TradeCard({
   data,
   showMarketSentiment = true,
+  showFundamentalHealth = true,
   decisionTarget,
   recId: propRecId,
   onSendToBroker,
@@ -2240,12 +2263,17 @@ export function TradeCard({
   const chosenProbability = chosenArithmetic?.probability ?? chosenMc?.probability;
   const chosenModel = chosenArithmetic?.rrModel ?? chosenLadder?.pricingMethod
     ?? ((chosenMc || chosenRace) && firstPassage?.race?.ivSolved === true ? 'BS repriced (IV-derived)' : null);
+  // Same condition and name the Spread Legs panel below uses, so the identity
+  // headline and the panel describe a spread identically.
+  const multiLegs = data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 ? data.legs : null;
+  const spreadName = data.spreadType === 'bear_put' ? 'Bear Put Spread' : 'Bear Call Spread';
   const summaryPrice = (value: number | null | undefined, unit: string) => value != null && Number.isFinite(value) && value >= 0
     ? `$${value.toFixed(2)} ${unit}` : 'Unavailable';
 
   return (
     <div data-presentation="options-v2" className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
+      {showFundamentalHealth && <FundamentalHealthCard f={data.fundamentals} compact />}
       {/* 1. Header */}
       <section className={styles.headerCard} aria-label="Selected stock and contract">
         <div className={styles.headerRow}>
@@ -2276,6 +2304,33 @@ export function TradeCard({
             </Tooltip>
           )}
         </div>
+        {/* #577 — the contract, readable at a glance beside the symbol:
+            strike, call/put and an expiry that carries its year. A
+            multi-leg spread also names itself and every leg. The same
+            snapshot values stay in Contract Details and Spread Legs below. */}
+        <div role="group" aria-label="Contract identity" className={styles.contractHeadline}>
+          <Text size={11} tone="dim">Selected contract</Text>
+          <div className={styles.contractHeadlineMain}>
+            {data.contractDetails ? (
+              <>
+                <Data size={18} weight={500}>{`$${data.contractDetails.strike} ${rightLabel(data.contractDetails.right)}`}</Data>
+                <Text size={14} weight={500}>{`Expires ${readableExpiry(data.contractDetails.expiry)}`}</Text>
+              </>
+            ) : (
+              <Data size={18} weight={500}>{data.contract}</Data>
+            )}
+          </div>
+          {multiLegs && (
+            <div className={styles.spreadIdentity}>
+              <Text size={12} weight={500}>{spreadName}</Text>
+              {multiLegs.map((leg, i) => (
+                <Data key={i} size={12}>
+                  {`${leg.action === 'BUY' ? 'Buy' : 'Sell'} ${leg.qty} × $${leg.strike} ${rightLabel(leg.right)} · Expires ${readableExpiry(leg.expiry)}`}
+                </Data>
+              ))}
+            </div>
+          )}
+        </div>
         <Text size={11} tone="secondary" className={styles.snapshotNote}>Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.</Text>
         <div className={styles.identityFacts}>
           <div>
@@ -2283,10 +2338,6 @@ export function TradeCard({
             <Text size={11} tone="secondary">Backtested confidence: {data.confidence == null ? 'not supplied' : `${data.confidence}%`}</Text>
           </div>
           <div className={styles.contractIdentity}>
-            <Text size={11} tone="dim">Selected contract</Text>
-            <Text size={16} weight={500}>{data.contractDetails
-              ? `$${data.contractDetails.strike} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'} · ${data.contractDetails.expiry}`
-              : data.contract}</Text>
             <Data size={11}>{data.contract}</Data>
             <Text size={12}>Contract score {data.contractScore}/100 · {data.contractConfidence}</Text>
             {data.contractDetails && <Text size={11} tone="secondary">${data.contractDetails.mid.toFixed(2)} mid / share · {data.contractDetails.dte}d DTE · ${car.toFixed(0)} CaR</Text>}
@@ -2413,7 +2464,6 @@ export function TradeCard({
           />
         </div>
       </CollapsibleSection>
-      <FundamentalHealthCard f={data.fundamentals} compact />
 
       <div className={styles.grid}>
 

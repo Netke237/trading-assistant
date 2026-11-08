@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Title, Text } from '@/components/primitives';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
+import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { quoteWarning } from '@/lib/quoteWarning';
@@ -1506,6 +1507,13 @@ export default function Step7Page() {
       </div>
 
       {effectiveCard && <MarketSentiment s={effectiveCard.sentiment} compact />}
+      {/* #577 — Fundamental Health directly beneath Market Sentiment, once.
+          It keeps the lifetime it had inside the TradeCard: mounted exactly
+          when the card is (not while a selected contract's plan is still
+          being prepared), fed from the same card object the TradeCard gets. */}
+      {effectiveCard && !(isOverride && !planReady) && (
+        <FundamentalHealthCard f={(cardForDisplay ?? effectiveCard).fundamentals} compact />
+      )}
 
       <CandidateNav
         symbols={symbols}
@@ -1554,6 +1562,7 @@ export default function Step7Page() {
           ) : (
             <TradeCard
               showMarketSentiment={false}
+              showFundamentalHealth={false}
               onRrStaleChange={onRrStaleChange}
               data={cardForDisplay ?? effectiveCard}
               recId={recIdMap[effectiveCard.symbol]}
