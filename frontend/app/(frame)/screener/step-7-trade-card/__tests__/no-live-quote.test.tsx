@@ -21,6 +21,12 @@ import type { TradeCardData, MethodPick, PortfolioPosition } from '@/types/domai
  * 2026-09-25-p1b1-step7-save-first-core-plan.md §5, A4 and X1).
  */
 
+/* #583 — every direct send here is now a server review, a confirmation and a
+ * dispatch, and these tests run up to two sends across a navigation. Measured
+ * alone they finish well inside the 5 s default; under the full parallel run
+ * they ran out of it ("Exceeded timeout of 5000 ms", a different test each run). */
+jest.setTimeout(15_000);
+
 jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn(),

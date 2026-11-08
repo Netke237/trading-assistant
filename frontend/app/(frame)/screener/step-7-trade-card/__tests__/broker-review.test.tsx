@@ -209,6 +209,24 @@ describe('#583 — the broker receives exactly the reviewed request', () => {
     const [, init] = persistCalls()[0]!;
     expect((init!.headers as Record<string, string>)['X-Review-Fingerprint']).toBe(previewOf(previewBodies()[0]!).fingerprint);
     expect(persistBodies()[0]).toEqual(previewBodies()[0]);
+    // A direct send never touches the auto-trade path.
+    expect(api.armAutoTrade).not.toHaveBeenCalled();
+    expect(api.fireAutoTrade).not.toHaveBeenCalled();
+  });
+
+  it('a market order to another broker is posted exactly as shown, with no limit', async () => {
+    (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-2', status: 'Submitted', broker: 'tradier_paper', deduped: false });
+    await renderPage();
+    await openReview('MKT', /tradier paper/i);
+    const shown = exactRequest();
+    expect(confirmBtn()).toHaveTextContent(/^Send to Tradier Paper — Market 1$/);
+    expect(persistCalls()).toHaveLength(0);
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
+    const [sent] = (api.postOptionOrder as jest.Mock).mock.calls[0];
+    expect(JSON.stringify(sent)).toBe(shown);
+    expect(sent).toMatchObject({ broker: 'tradier_paper', order_type: 'MKT', limit_price: null, quantity: 1 });
+    expect(persistBodies()[0]).toMatchObject({ orderType: 'MKT', orderLimitPrice: null });
   });
 
   it('the server\'s normalised quantity is what is reviewed and sent', async () => {
@@ -250,9 +268,11 @@ describe('#583 — the broker receives exactly the reviewed request', () => {
     expect(api.postOptionOrder).not.toHaveBeenCalled();
     expect(api.deletePortfolioPosition).not.toHaveBeenCalled();
     expect(confirmBtn()).toHaveTextContent(/Limit 2 @ \$2\.50$/);
+    const reReviewed = exactRequest();
 
     fireEvent.click(confirmBtn());
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
+    expect(JSON.stringify((api.postOptionOrder as jest.Mock).mock.calls[0][0])).toBe(reReviewed);
     const [a, b] = persistBodies();
     expect(a!.recId).toBe(b!.recId);
     expect((api.postOptionOrder as jest.Mock).mock.calls[0][0]).toMatchObject({
@@ -299,6 +319,190 @@ describe('#583 — the broker receives exactly the reviewed request', () => {
     expect(confirmBtn()).toBeDisabled();
     expect(confirmBtn()).toHaveTextContent(/^Send to IBKR Paper/);
     expect(api.postOptionOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('#583 — nothing later rebuilds or bypasses the reviewed request', () => {
+  it('a quantity edit after review blocks the send until the review is refreshed', async () => {
+    await renderPage();
+    await openReview();
+    editField('Contracts', '3');
+    await waitFor(() => expect(reviewRegion().getByText(/Changed since this review/)).toBeInTheDocument());
+    expect(confirmBtn()).toBeDisabled();
+    expect(confirmBtn()).toHaveTextContent(/Limit 1 @ \$2\.50$/);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+  });
+
+  it('a quote that lands after the review changes nothing in the shown or posted request', async () => {
+    let lateContract!: (v: unknown) => void;
+    let lateStock!: (v: unknown) => void;
+    (api.getContractQuote as jest.Mock).mockReturnValueOnce(new Promise((r) => { lateContract = r; }));
+    (api.getStockQuote as jest.Mock).mockReturnValueOnce(new Promise((r) => { lateStock = r; }));
+    await renderPage();
+    await openReview();
+    const shown = exactRequest();
+    await act(async () => {
+      lateContract({ quoteLive: true, price: 9.9, delta: 0.45, theta: -0.09, ivRank: 45, spread: 0.1, volume: 100 });
+      lateStock({ price: 188 });
+    });
+    await settle();
+    expect(exactRequest()).toBe(shown);
+    expect(confirmBtn()).toBeEnabled();
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
+    expect(JSON.stringify((api.postOptionOrder as jest.Mock).mock.calls[0][0])).toBe(shown);
+  });
+
+  it('a global premium-stop change after review does not rewrite the reviewed lines', async () => {
+    previewReply = (body) => ({
+      ok: true, status: 200,
+      json: async () => previewOf(body, {}, {
+        differences: [{ field: 'premiumStop', requested: null, effective: 0.6, reason: 'exposure_resize' }],
+      }),
+    });
+    await renderPage();
+    await openReview();
+    const premiumLine = () => reviewRegion().getByText('Premium stop', { selector: 'dt' }).nextElementSibling?.textContent;
+    const before = premiumLine();
+    expect(before).toMatch(/60/);
+    act(() => { useSettingsStore.setState({ premiumStopPct: 0.25 } as any); });
+    await settle();
+    expect(premiumLine()).toBe(before);
+  });
+
+  it('an earnings veto that arrives while the review is open refuses the send', async () => {
+    await renderPage();
+    await openReview();
+    act(() => {
+      useScanStore.setState((s: any) => ({
+        scanResult: { ...s.scanResult, candidates: s.scanResult.candidates.map((c: TradeCardData) => ({ ...c, earningsVeto: true })) },
+      }) as any);
+    });
+    await settle();
+    const stillOpen = screen.queryByRole('button', { name: /^Send to / });
+    if (stillOpen) fireEvent.click(stillOpen);
+    await settle();
+    expect(persistCalls()).toHaveLength(0);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+  });
+
+  it('a second click on the final action saves and sends once', async () => {
+    let releaseSave!: () => void;
+    const held = new Promise<void>((r) => { releaseSave = r; });
+    persistReply = (body) => ({ ok: true, status: 201, json: async () => { await held; return body; } });
+    await renderPage();
+    await openReview();
+    const confirm = confirmBtn();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(confirm).toBeDisabled());
+    fireEvent.click(confirm);
+    await act(async () => { releaseSave(); });
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(persistCalls()).toHaveLength(1);
+    expect(api.postOptionOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigating away while the server review is pending opens no review on the other card', async () => {
+    let answer!: (r: Reply) => void;
+    const pending = new Promise<Reply>((r) => { answer = r; });
+    const asFetch = global.fetch as jest.Mock;
+    const original = asFetch.getMockImplementation()!;
+    asFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/portfolio/preview')) return pending;
+      return original(url, init);
+    });
+    await renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limit = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limit).toBeEnabled());
+    fireEvent.click(limit);
+    await waitFor(() => expect(previewBodies()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+    await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+    await act(async () => { answer(echoPreview(previewBodies()[0]!)); });
+    await settle();
+    expect(screen.queryByRole('region', { name: 'Broker order review' })).not.toBeInTheDocument();
+    expect(persistCalls()).toHaveLength(0);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('#583 — a refused or unreachable server review writes nothing', () => {
+  async function clickPlaceLimit() {
+    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    const limit = await screen.findByRole('button', { name: /place limit @/i });
+    await waitFor(() => expect(limit).toBeEnabled());
+    fireEvent.click(limit);
+  }
+
+  it.each([
+    [422, 'Exceeds the premium cap.', /No order was sent — Exceeds the premium cap\.$/],
+    [409, 'A position for AAA already exists', /already tracked in Portfolio/],
+  ])('preview %i: no save, no order, no note', async (status, detail, banner) => {
+    previewReply = () => ({ ok: false, status: status as number, json: async () => ({ detail }) });
+    await renderPage();
+    await clickPlaceLimit();
+    expect(await screen.findByText(banner as RegExp)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Broker order review' })).not.toBeInTheDocument();
+    expect(persistCalls()).toHaveLength(0);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(useDirectSendNotesStore.getState().notes).toHaveLength(0);
+  });
+
+  it('preview unreachable: no save, no order, no note', async () => {
+    previewReply = () => { throw new TypeError('Failed to fetch'); };
+    await renderPage();
+    await clickPlaceLimit();
+    expect(await screen.findByText(/No order was sent — the server review could not be reached\./)).toBeInTheDocument();
+    expect(persistCalls()).toHaveLength(0);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(useDirectSendNotesStore.getState().notes).toHaveLength(0);
+  });
+
+  it('a 412 without a usable new review still sends nothing', async () => {
+    persistReply = () => ({ ok: false, status: 412, json: async () => ({ detail: { code: 'review_required', preview: {} } }) });
+    await renderPage();
+    await openReview();
+    fireEvent.click(confirmBtn());
+    expect(await screen.findByText(/No order was sent — HTTP 412\./)).toBeInTheDocument();
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+    expect(api.deletePortfolioPosition).not.toHaveBeenCalled();
+  });
+});
+
+describe('#583 — retry identity', () => {
+  it('a rejected send was never placed: the next review is a new saved row and a new attempt', async () => {
+    (api.postOptionOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'ORD-R', status: 'Rejected', broker: 'ibkr_paper' });
+    await renderPage();
+    await openReview();
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+    await settle();
+    await openReview();
+    await waitFor(() => expect(previewBodies()).toHaveLength(2));
+    expect(previewBodies()[1]!.recId).not.toBe(previewBodies()[0]!.recId);
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(2));
+    const [first, second] = (api.postOptionOrder as jest.Mock).mock.calls.map((c) => c[0]);
+    expect(second.attempt_id).not.toBe(first.attempt_id);
+    expect(second.saved_rec_id).toBe(previewBodies()[1]!.recId);
+  });
+
+  it('an unknown outcome cannot be resent under a new identity: the contract is already tracked', async () => {
+    (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await renderPage();
+    await openReview();
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(useDirectSendNotesStore.getState().notes).toHaveLength(1));
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: /place limit @/i }));
+    expect(await screen.findByText(/already tracked in Portfolio/)).toBeInTheDocument();
+    expect(previewBodies()).toHaveLength(1);
+    expect(api.postOptionOrder).toHaveBeenCalledTimes(1);
   });
 });
 

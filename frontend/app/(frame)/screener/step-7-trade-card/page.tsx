@@ -148,6 +148,9 @@ interface BrokerReviewState {
   livePrice: number | null;
   /** The live mid when the probe confirmed one, for the estimate line. */
   marketMid: number | null;
+  /** The global premium stop the draft was built with: the reviewed lines keep
+   *  reading it, so a later Settings change cannot rewrite what was reviewed. */
+  globalPremiumStopPct: number | null;
   draft: SubmissionDraft;
   /** The stamped position: previewed, then POSTed unchanged. Its recId is the saved-row identity. */
   pos: PortfolioPosition;
@@ -1156,6 +1159,7 @@ export default function Step7Page() {
         account: settingsAccountFor(broker),
         contracts, livePrice,
         marketMid: freshQuote?.quoteLive === true ? freshQuote.price : null,
+        globalPremiumStopPct,
         draft, pos, preview,
         request: captureBrokerRequest(route.order, preview.position.contracts ?? contracts, recId),
         changedSinceReview: null,
@@ -1205,7 +1209,7 @@ export default function Step7Page() {
             ...review,
             preview: next,
             request: captureBrokerRequest(route.order, next.position.contracts ?? contracts, recId),
-            changedSinceReview: changedSince(review.preview, next, pos, globalPremiumStopPct),
+            changedSinceReview: changedSince(review.preview, next, pos, review.globalPremiumStopPct),
           });
         } else {
           setOrderError(`${label}: No order was sent — the server values changed since your review. Review it again.`);
@@ -1767,7 +1771,7 @@ export default function Step7Page() {
                       quantityNote: qtyDiff ? reasonText(qtyDiff.reason) : null,
                       marketMid: review.marketMid,
                       savedEntry: review.preview.position.entryPrice,
-                      lines: reviewLines(review.pos, review.preview, globalPremiumStopPct),
+                      lines: reviewLines(review.pos, review.preview, review.globalPremiumStopPct),
                       changedSinceReview: review.changedSinceReview,
                     }}
                     stale={brokerReviewStaleness(review)}
