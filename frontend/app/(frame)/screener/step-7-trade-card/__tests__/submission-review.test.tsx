@@ -10,6 +10,16 @@ import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { ExitPlan, MethodPick, TradeCardData } from '@/types/domain';
 
+
+/** #583 — a direct send opens the server review first; its final action saves
+ *  and sends. A send refused before the review (a gate, a quote warning)
+ *  opens none, and nothing is clicked. */
+async function confirmReview() {
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
+}
+
 /*
  * #581 (TC-REVIEW-06) — the Step 7 review renders the SAME draft the send
  * paths stamp and submit: actual Exit Plan settings (never a calculation's
@@ -176,6 +186,7 @@ describe('#581 Step 7 submission review', () => {
     const btn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
     const [order] = (api.postOptionOrder as jest.Mock).mock.calls[0];
     expect(order).toMatchObject({ quantity: 3, order_type: 'LMT', limit_price: 2.71, option_symbol: 'AAA|150|2026-05-15|C' });

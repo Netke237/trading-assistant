@@ -77,6 +77,11 @@ const originalFetch = global.fetch;
 function installFetch() {
   global.fetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     const u = String(url);
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      // #583 — the server review of a direct send: the request echoed as the would-be row.
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
     if (u.endsWith('/api/portfolio') && init?.method === 'POST') {
       callLog.push('persist');
       return persistReply(JSON.parse(String(init.body)));
@@ -143,6 +148,12 @@ async function send(kind: 'LMT' | 'MKT' = 'LMT') {
 async function sendAndSettle(kind: 'LMT' | 'MKT' = 'LMT') {
   await send(kind);
   await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  // #583 — confirm the server review when the send opened one.
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) {
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  }
   await settle();
 }
 

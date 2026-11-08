@@ -21,8 +21,15 @@ import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { quoteWarning } from '@/lib/quoteWarning';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import type { ReviewedTrackingOrder, TrackingPreview, TrackingSubmitResult } from '@/lib/trackingReview';
+import { changedSince, differenceFor, reasonText, reviewLines } from '@/lib/trackingReview';
 import { SubmissionReview } from '@/components/organisms/SubmissionReview';
-import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
+import { BrokerOrderReview } from '@/components/organisms/BrokerOrderReview';
+import { BrokerOrderOutcome } from '@/components/organisms/BrokerOrderOutcome';
+import {
+  captureBrokerRequest, responseFacts,
+  type BrokerResponseFacts, type CapturedBrokerRequest, type DirectOrderOutcome,
+} from '@/lib/brokerReview';
+import { usePortfolioStore, persistPosition, applyPersistedPosition, previewPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { selectCardEdits } from '@/lib/cardEdits';
@@ -30,6 +37,7 @@ import { logAudit } from '@/lib/audit';
 import { StatusBadge } from '@/components/atoms/StatusBadge';
 import type {
   TradeCardData, StructuralStop, FirstPassageEstimate, FirstPassageContext, ExitPlan, MaxLossOverride, MethodPick,
+  PortfolioPosition,
 } from '@/types/domain';
 import { BrokerPicker }      from '@/components/organisms/BrokerPicker';
 import { AutoTradeArm }      from '@/components/organisms/AutoTradeArm';
@@ -37,8 +45,8 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
 import { useSettingsStore } from '@/lib/settingsStore';
 import {
-  buildSubmissionDraft, stampPosition, orderAtQuantity, optionSymbolFor, submissionToken,
-  type SubmissionInputs,
+  buildSubmissionDraft, stampPosition, optionSymbolFor, submissionToken, submissionDifferences,
+  type SubmissionDraft, type SubmissionInputs,
 } from '@/lib/submissionDraft';
 import {
   checkInvalidation, MISSING_INVALIDATION_MESSAGE, MISSING_INVALIDATION_TITLE,
@@ -111,6 +119,41 @@ async function removeTrackedRow(recId: string, notFoundIsFinal: boolean): Promis
 
 function addDirectNote(n: Parameters<ReturnType<typeof useDirectSendNotesStore.getState>['addNote']>[0]): void {
   useDirectSendNotesStore.getState().addNote(n);
+}
+
+/** #583 — the account id entered in Settings → Brokers for a broker, or null.
+ *  Display only: the server sends with the credentials it has stored. */
+function settingsAccountFor(broker: string): string | null {
+  const s = useSettingsStore.getState();
+  const id = broker === 'ibkr_paper' ? s.ibkrPaper.accountId
+    : broker === 'tradier_paper' ? s.tradierPaper.accountId
+    : broker === 'tastytrade_paper' ? s.tastytradePaper.accountId
+    : '';
+  return id && id.trim() !== '' ? id.trim() : null;
+}
+
+/** #583 — one open broker review: everything captured when it was built. The
+ *  confirmation posts `request` itself and saves `pos` under
+ *  `preview.fingerprint`; neither is rebuilt afterwards. */
+interface BrokerReviewState {
+  orderType: 'LMT' | 'MKT';
+  contractKey: string;
+  label: string;
+  broker: string;
+  brokerLabel: string;
+  account: string | null;
+  /** The quantity the card asked for. */
+  contracts: number;
+  /** The quote the draft was built from (the staleness check reuses it). */
+  livePrice: number | null;
+  /** The live mid when the probe confirmed one, for the estimate line. */
+  marketMid: number | null;
+  draft: SubmissionDraft;
+  /** The stamped position: previewed, then POSTed unchanged. Its recId is the saved-row identity. */
+  pos: PortfolioPosition;
+  preview: TrackingPreview;
+  request: Readonly<CapturedBrokerRequest>;
+  changedSinceReview: string[] | null;
 }
 
 /* #581 — `positionFromOrder` (Track basket's builder) moved to
@@ -432,6 +475,10 @@ export default function Step7Page() {
   // Carries the contract label: a direct send's result can land after Prev/Next.
   const [paperOrderId,   setPaperOrderId]     = useState<{ label: string; id: string } | null>(null);
   const directNotes = useDirectSendNotesStore((s) => s.notes);
+  // #583 — the open review of a direct send, and the last send's outcome
+  // (only the facts its broker response supplied). Per card, like paperOrderId.
+  const [brokerReview,   setBrokerReview]     = useState<BrokerReviewState | null>(null);
+  const [orderOutcome,   setOrderOutcome]     = useState<DirectOrderOutcome | null>(null);
   const [orderError,     setOrderError]       = useState<string | null>(null);
   // A LIST, not one slot. Both writers below used to call `setSizeAdjustedNote`
   // on the same string state, so an order that was BOTH size-reduced and had
@@ -574,7 +621,11 @@ export default function Step7Page() {
   }, [active, setSelectedSymbol]);
 
   // Clear paper order feedback when the user navigates to a different candidate.
-  useEffect(() => { setPaperOrderId(null); setOrderError(null); setSaveNotes([]); }, [active]);
+  useEffect(() => {
+    setPaperOrderId(null); setOrderError(null); setSaveNotes([]);
+    // #583 — a review belongs to the card it was built for; leaving it closes it.
+    setBrokerReview(null); setOrderOutcome(null);
+  }, [active]);
 
   const addPosition = usePortfolioStore((s) => s.addPosition);
   const incrementDaily = useRiskStore((s) => s.incrementDaily);
@@ -985,17 +1036,27 @@ export default function Step7Page() {
   const globalPremiumStopPct = useSettingsStore((s) => s.premiumStopPct);
 
   /* P1b-i (P1-CARD-SAVE-FIRST-SEND-TRIMMED-2026-09-25). Place Limit and Right
-   * Now — Market are ONE function. It SAVES the position first and only then
+   * Now — Market are ONE flow. It SAVES the position first and only then
    * sends the order, at the quantity the save approved. The old order (send,
    * then save) left a live broker order untracked whenever the save was
    * refused -- P1a's 5-contract cap made that refusal routine.
+   *
+   * #583 (TC-REVIEW-08) splits it in two. `reviewDirectOrder` probes the quote,
+   * builds the #581 draft, and asks the server what the save WOULD store
+   * (#582 `previewPosition`, which writes nothing). The review shows that row
+   * beside the CAPTURED broker request (`captureBrokerRequest`: the draft's
+   * order at the server's quantity, plus `attempt_id`/`saved_rec_id`). Only
+   * `confirmBrokerReview` writes: it saves the reviewed body with the reviewed
+   * fingerprint (a changed resolution answers 412 and writes nothing), then
+   * posts the captured object itself. Nothing rebuilds the request after the
+   * review; a change to the card, quantity or broker makes it stale.
    *
    * Every branch that may leave a Portfolio row with no order behind it, or an
    * order whose status is unknown, pushes a persistent note
    * (`directSendNotesStore`) that outlives this card, and every message names
    * the contract: Prev/Next stay enabled during a send, so a result can land on
    * another candidate's screen. */
-  async function placeDirectOrder(orderType: 'LMT' | 'MKT') {
+  async function reviewDirectOrder(orderType: 'LMT' | 'MKT') {
     const card = effectiveCard;
     if (!card || !selectedBroker || isBearishUnvalidated(card.direction)) return;
     // Fix #3 (review). An earnings veto refuses the ORDER, not just the button.
@@ -1016,9 +1077,14 @@ export default function Step7Page() {
     const broker = selectedBroker;
     const blocked = directOrderBlock(orderType, broker);
     if (blocked) { setOrderError(blocked); return; }
+    // A refresh of an open review for the same contract keeps its recId: nothing
+    // was saved under it, and the saved-row identity stays stable to the send.
+    const previous = brokerReview;
+    setBrokerReview(null);
     const setPlacing = orderType === 'LMT' ? setLimitPlacing : setMarketPlacing;
     setPlacing(true);
     setPaperOrderId(null);
+    setOrderOutcome(null);
     let label = card.contract;
     try {
       const keyAtSend = contractKeyFor(card);
@@ -1048,18 +1114,17 @@ export default function Step7Page() {
       // Floored defensively: `?? 1` alone only catches null/undefined, not 0,
       // and the backend rejects quantity:0 with an opaque 422.
       const contracts = Math.max(1, orderContractsBySymbol[card.symbol] ?? 1);
-      // Every card-derived order argument is computed BEFORE the save, so a
-      // throw here happens before anything is written.
-      // #581 — the SAME draft builder the review renders, fed the send-time
-      // quote; the saved position and the broker order are this draft's.
+      const livePrice = freshQuote?.price ?? null;
+      // Every card-derived order argument is computed BEFORE anything is
+      // written. #581 — the SAME draft builder the review renders, fed the
+      // send-time quote; the saved position and the broker order are this draft's.
       const draft = buildSubmissionDraft(
-        submissionInputsFor(card, contracts, freshQuote?.price ?? null),
+        submissionInputsFor(card, contracts, livePrice),
         { broker, globalPremiumStopPct },
       );
       const route = draft.direct![orderType === 'LMT' ? 'limit' : 'market'];
-      const limitPrice = route.order.limit_price;
-      const pos = stampPosition(route.position, { entryDate: todayISO(), orderedAt: nowISOLocal(), recId: generateRecId() });
-      const recId = pos.recId;
+      const recId = previous && previous.contractKey === keyAtSend ? previous.pos.recId : generateRecId();
+      const pos = stampPosition(route.position, { entryDate: todayISO(), orderedAt: nowISOLocal(), recId });
 
       // The backend would 409 anyway; refusing locally means a SAVE-UNCONFIRMED
       // note can only ever point at a row THIS send created.
@@ -1069,11 +1134,85 @@ export default function Step7Page() {
       }
 
       // Audit round 1, F1: the save carries the order it precedes, so the
-      // server judges the D5 premium cap at what this order can PAY -- the
-      // edited limit when it is above the mid, the ask for a market order --
-      // and not at `pos.entryPrice`, the mid it stores. `limitPrice` is the
-      // very value the order below posts.
-      const saved = await persistPosition(pos, undefined, { orderType, limitPrice });
+      // server judges the D5 premium cap at what this order can PAY. The
+      // preview resolves exactly the body the confirmation will POST.
+      const reviewed = await previewPosition(pos, undefined, { orderType, limitPrice: route.order.limit_price });
+      if (currentContractKeyRef.current !== keyAtSend || selectionEpochRef.current !== selectionAtSend) return;
+      if (reviewed.kind === 'network') {
+        setOrderError(`${label}: No order was sent — the server review could not be reached.`);
+        return;
+      }
+      if (reviewed.kind === 'rejected') {
+        // The create's own refusal, raised by the preview: nothing was written.
+        const detail = reviewed.detail;
+        setOrderError(/already exists/.test(detail)
+          ? `${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`
+          : `${label}: No order was sent — ${detail.replace(/\.$/, '')}.`);
+        return;
+      }
+      const preview = reviewed.preview;
+      setBrokerReview({
+        orderType, contractKey: keyAtSend, label, broker, brokerLabel,
+        account: settingsAccountFor(broker),
+        contracts, livePrice,
+        marketMid: freshQuote?.quoteLive === true ? freshQuote.price : null,
+        draft, pos, preview,
+        request: captureBrokerRequest(route.order, preview.position.contracts ?? contracts, recId),
+        changedSinceReview: null,
+      });
+    } catch (e) {
+      // Pre-save work only: nothing was written, no order sent.
+      setOrderError(`${label}: No order was sent — ${String(e)}`);
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  /** #583 — the confirmation: save the reviewed body under the reviewed
+   *  fingerprint, then post the captured request, unchanged. */
+  async function confirmBrokerReview() {
+    const review = brokerReview;
+    const card = effectiveCard;
+    if (!review || !card || limitPlacing || marketPlacing) return;
+    // The button is disabled while stale; this protects the ORDER.
+    if (brokerReviewStaleness(review).length > 0) return;
+    if (!selectedBroker || isBearishUnvalidated(card.direction)) return;
+    if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
+    if (!checkInvalidation(invalidationFor(card))) return;
+    if (!checkMethodPick(methodPickFor(card))) return;
+    const { orderType, label, brokerLabel, pos, contracts, request } = review;
+    const recId = pos.recId;
+    setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
+    setPaperOrderId(null);
+    setOrderOutcome(null);
+    const setPlacing = orderType === 'LMT' ? setLimitPlacing : setMarketPlacing;
+    setPlacing(true);
+    try {
+      if (usePortfolioStore.getState().positions.some((p) => p.contract === pos.contract)) {
+        setBrokerReview(null);
+        setOrderError(`${label}: No order was sent — a position for this contract is already tracked in Portfolio. Close or edit that one instead.`);
+        return;
+      }
+      const saved = await persistPosition(pos, undefined, { orderType, limitPrice: request.limit_price }, review.preview.fingerprint);
+      if (saved.reviewRequired) {
+        // 412: the server's current resolution differs from the reviewed one.
+        // NOTHING was saved and nothing is sent; the trader reviews the new
+        // values (same recId, so the same saved-row identity) and confirms again.
+        const next = saved.reviewRequired;
+        const route = review.draft.direct![orderType === 'LMT' ? 'limit' : 'market'];
+        if (currentContractKeyRef.current === review.contractKey) {
+          setBrokerReview({
+            ...review,
+            preview: next,
+            request: captureBrokerRequest(route.order, next.position.contracts ?? contracts, recId),
+            changedSinceReview: changedSince(review.preview, next, pos, globalPremiumStopPct),
+          });
+        } else {
+          setOrderError(`${label}: No order was sent — the server values changed since your review. Review it again.`);
+        }
+        return;
+      }
+      setBrokerReview(null);
       // Unconfirmed: offline; a bare gateway 5xx (no JSON detail, so the create
       // may still be running); or a 2xx whose body did not parse (the page
       // cannot know whether the server resized). No order is sent. The create
@@ -1106,6 +1245,22 @@ export default function Step7Page() {
       // after the save may reach the outer catch, which would leave a saved row
       // with no note.
       const orderQty = saved.adjustedQty ?? contracts;
+      const recorded = { quantity: orderQty, entryPrice: saved.entryPrice ?? null };
+      // #583 — THE NORMALIZATION GATE. The captured request carries the
+      // quantity the trader reviewed. A save at any other quantity is not what
+      // was reviewed: no order is sent, the row (provably orderless) is
+      // removed, and the trader reviews again.
+      if (orderQty !== request.quantity) {
+        const why = `${label}: NO order was sent — Portfolio saved ${orderQty} contract${orderQty === 1 ? '' : 's'} but ${request.quantity} ${request.quantity === 1 ? 'was' : 'were'} reviewed.`;
+        try {
+          await removeTrackedRow(recId, true);
+          setOrderError(`${why} The saved row was removed; review the order again.`);
+        } catch {
+          setOrderError(why);
+          addDirectNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null });
+        }
+        return;
+      }
       const keepRow = (why: string, orderId: string | null) => {
         // Note FIRST, row second: a throw can never leave a row without its note.
         addDirectNote({ recId, kind: 'order-unknown', label, brokerLabel, orderId });
@@ -1123,27 +1278,34 @@ export default function Step7Page() {
       };
       try {
         let outcome: DirectOutcome;
+        let facts: BrokerResponseFacts | null = null;
         try {
-          // The draft's order, at the quantity the save approved.
-          const res = await api.postOptionOrder(orderAtQuantity(route.order, orderQty));
+          // THE CAPTURED REQUEST, posted as reviewed: same object, same bytes.
+          const res = await api.postOptionOrder(request);
+          facts = responseFacts(res);
           outcome = classifyDirectFailure({ response: res });
         } catch (e) {
           outcome = classifyDirectFailure({ thrown: e });
         }
+        const report = (verdict: DirectOrderOutcome['verdict'], row: DirectOrderOutcome['recorded']) =>
+          setOrderOutcome({ label, brokerLabel, request, response: facts, verdict, recorded: row });
 
         if (outcome.verdict === 'delete') {
           // Provably never received by the broker: remove the saved row.
           try {
             await removeTrackedRow(recId, true);
             setOrderError(`${label}: Order NOT placed: ${outcome.why}. The tracked position was removed.`);
+            report('delete', null);
           } catch {
             setOrderError(`${label}: Order NOT placed: ${outcome.why}.`);
             addDirectNote({ recId, kind: 'not-removed', label, brokerLabel, orderId: null });
+            report('delete', recorded);
           }
           return;
         }
         if (outcome.verdict === 'keep') {
           keepRow(outcome.why, outcome.orderId);
+          report('keep', recorded);
           return;
         }
 
@@ -1160,6 +1322,7 @@ export default function Step7Page() {
           setOrderError(`${label}: Order placed (ID ${orderId}) but the local view failed to update: ${String(e)}`);
         }
         setPaperOrderId({ label, id: orderId });
+        report('placed', recorded);
       } catch (e) {
         // Unreachable by design (every call above is guarded); if it is ever
         // reached, the order's fate is unknown and the row stays with a note.
@@ -1173,8 +1336,23 @@ export default function Step7Page() {
     }
   }
 
-  const placeLimitPaper = () => placeDirectOrder('LMT');
-  const placeMarketNow  = () => placeDirectOrder('MKT');
+  /** #583 — the material fields that changed since the review was captured,
+   *  judged by rebuilding the draft from the CURRENT card, quantity and broker
+   *  with the review's captured quote (a later quote alone never invalidates
+   *  or rebuilds it). Non-empty disables the send until a refresh. */
+  function brokerReviewStaleness(review: BrokerReviewState): string[] {
+    if (!effectiveCard || contractKeyFor(effectiveCard) !== review.contractKey) return ['contract'];
+    if (selectedBroker !== review.broker) return ['broker'];
+    if (!planReady) return ['plan'];
+    const current = buildSubmissionDraft(
+      submissionInputsFor(effectiveCard, Math.max(1, orderContractsBySymbol[effectiveCard.symbol] ?? 1), review.livePrice),
+      { broker: selectedBroker, globalPremiumStopPct },
+    );
+    return submissionDifferences(review.draft, current);
+  }
+
+  const placeLimitPaper = () => reviewDirectOrder('LMT');
+  const placeMarketNow  = () => reviewDirectOrder('MKT');
 
   /** A note's Remove button (P1B1-MINIMAL-REMOVE-2026-09-25): confirm, then
    *  hard-DELETE exactly that note's rec_id -- never "the ${label} position". */
@@ -1573,6 +1751,33 @@ export default function Step7Page() {
                   {marketPlacing ? 'Placing…' : 'Right Now — Market'}
                 </button>
               </div>
+              {/* #583 — the destination-specific review. Nothing is saved or
+                * sent until its final action, which posts the request shown. */}
+              {brokerReview && (() => {
+                const review = brokerReview;
+                const qtyDiff = differenceFor(review.preview, 'qty');
+                return (
+                  <BrokerOrderReview
+                    data={{
+                      label: review.label,
+                      brokerLabel: review.brokerLabel,
+                      account: review.account,
+                      request: review.request,
+                      requestedQuantity: review.contracts,
+                      quantityNote: qtyDiff ? reasonText(qtyDiff.reason) : null,
+                      marketMid: review.marketMid,
+                      savedEntry: review.preview.position.entryPrice,
+                      lines: reviewLines(review.pos, review.preview, globalPremiumStopPct),
+                      changedSinceReview: review.changedSinceReview,
+                    }}
+                    stale={brokerReviewStaleness(review)}
+                    busy={limitPlacing || marketPlacing}
+                    onConfirm={() => { void confirmBrokerReview(); }}
+                    onCancel={() => setBrokerReview(null)}
+                    onRefresh={() => { void reviewDirectOrder(review.orderType); }}
+                  />
+                );
+              })()}
               {/* Fix #3 (review). Said, not merely disabled; independent of the
                 * stop / pick refusals below for the same reason they are
                 * independent of each other. */}
@@ -1623,6 +1828,7 @@ export default function Step7Page() {
                 </Text>
               )}
               {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+              {orderOutcome && <BrokerOrderOutcome outcome={orderOutcome} />}
               {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
                 * Hiding it also hid Disarm for a strategy already armed; the
                 * veto now refuses Arm / Fire now inside the component, and the

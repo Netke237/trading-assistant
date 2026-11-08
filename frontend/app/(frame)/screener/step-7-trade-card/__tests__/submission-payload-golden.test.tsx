@@ -12,6 +12,16 @@ import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
+
+/** #583 — a direct send opens the server review first; its final action saves
+ *  and sends. A send refused before the review (a gate, a quote warning)
+ *  opens none, and nothing is clicked. */
+async function confirmReview() {
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
+}
+
 /*
  * #581 — OUTBOUND PAYLOAD PARITY GUARD.
  *
@@ -26,6 +36,15 @@ import type { TradeCardData, MethodPick } from '@/types/domain';
  * `recId`, `orderedAt`, `entryDate` (and the optimistic row's
  * `syncPendingSince` and `syncedAt`). Key ORDER is preserved by the mask, so the comparison is
  * of the serialized string, not a deep-equal that would ignore order.
+ *
+ * #583 — the ONE intended change since: a direct send's broker order now
+ * carries its saved row's durable attempt identity, `attempt_id`
+ * (`opt-<recId>`) and `saved_rec_id` (`<recId>`), appended after `tif`. Both
+ * derive from the random recId, so both are masked, and the orders are masked
+ * like the other captures. The three `optionOrders` entries were re-recorded
+ * for exactly those two keys; every other byte (the order fields, every
+ * Portfolio POST body, every store row) is unchanged. A direct send now
+ * passes through the broker review, whose confirmation POSTs the same body.
  */
 
 jest.mock('@/lib/api', () => ({
@@ -73,7 +92,7 @@ function makeCard(symbol: string, mid = 2.5): TradeCardData {
   };
 }
 
-const MASKED = new Set(['recId', 'orderedAt', 'entryDate', 'syncPendingSince', 'syncedAt']);
+const MASKED = new Set(['recId', 'orderedAt', 'entryDate', 'syncPendingSince', 'syncedAt', 'attempt_id', 'saved_rec_id']);
 function mask(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(mask);
   if (value && typeof value === 'object') {
@@ -90,7 +109,7 @@ function capture(): Record<string, string> {
   const calls = (global.fetch as jest.Mock).mock.calls
     .filter(([u, init]) => String(u).endsWith('/api/portfolio') && init?.method === 'POST')
     .map(([, init]) => JSON.stringify(mask(JSON.parse(String(init.body)))));
-  const orders = (api.postOptionOrder as jest.Mock).mock.calls.map(([req]) => JSON.stringify(req));
+  const orders = (api.postOptionOrder as jest.Mock).mock.calls.map(([req]) => JSON.stringify(mask(req)));
   const rows = usePortfolioStore.getState().positions.map((p) => JSON.stringify(mask(p)));
   return { portfolioPosts: JSON.stringify(calls), optionOrders: JSON.stringify(orders), storeRows: JSON.stringify(rows) };
 }
@@ -188,6 +207,7 @@ async function direct(kind: 'LMT' | 'MKT', broker: RegExp) {
   const btn = await screen.findByRole('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
+  await confirmReview();
   await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
 }
