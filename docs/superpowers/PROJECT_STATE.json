@@ -218,7 +218,7 @@
     {
       "id": "APP-AUDIT-SETTINGS-PROFILES",
       "name": "Lane B — Verify scan controls, saved Search Profiles and configuration saves (#350)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/audits/app-audit/APP-AUDIT-SETTINGS-PROFILES/plan.md",
       "branch": "board/app-audit-settings-profiles-03d8b275",
       "tracking_issue": 350,
@@ -299,12 +299,13 @@
       "completion_pct": 100,
       "size": "XL",
       "complexity": 5,
-      "note": "SELF-MERGE PENDING, PR #526, audited head e8867532. Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled. Code stage round 3 clean."
+      "note": "SELF-MERGE PENDING, PR #526, audited head e8867532. Lane B scan controls, saved Search Profiles and configuration saves audit (#350). All 25 defect remediation phases verified merged on main (ancestor 81e01277). Final Lane A requirement join reconciled. Code stage round 3 clean. || SHIPPED, reconciled 2026-11-08: PR #526 merged at 70d0069b. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "70d0069b8532a7ff03abfc5a7d4d6b6b60b23e4e"
     },
     {
       "id": "APP-AUDIT-BROKER-PORTFOLIO",
       "name": "Lane F — Broker payloads, risk gates and Portfolio reconciliation (#354)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-broker-portfolio-plan.md",
       "branch": "board/app-audit-broker-portfolio-c4b17ff3",
       "tracking_issue": 354,
@@ -496,12 +497,13 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 5,
-      "note": "SELF-MERGE PENDING, PR #493, audited head 900a1e0e. Lane F Broker & Portfolio reconciliation report, artifacts, and verification suites published (#354). Plan round 3 clean, code round 3 clean."
+      "note": "SELF-MERGE PENDING, PR #493, audited head 900a1e0e. Lane F Broker & Portfolio reconciliation report, artifacts, and verification suites published (#354). Plan round 3 clean, code round 3 clean. || SHIPPED, reconciled 2026-11-08: PR #493 merged at acd94a1d. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "acd94a1d879f8ade40cc60e5dfb6c31f7c1dcb5c"
     },
     {
       "id": "APP-AUDIT-B-ENTRY-OVERRIDES",
       "name": "Entry Quality controls reach requests but do not affect the trade plan (#384)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-b-entry-overrides-384",
       "tracking_issue": 384,
@@ -575,12 +577,13 @@
           "report": "docs/superpowers/audits/APP-AUDIT-B-ENTRY-OVERRIDES/code-r1.md"
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #485, audited head 5385b744. Entry Quality controls reach requests but do not affect the trade plan (#384). Plan round 2 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #485, audited head 5385b744. Entry Quality controls reach requests but do not affect the trade plan (#384). Plan round 2 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #485 merged at 05dc303a. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "05dc303a743a28043b1b4c330629e491538019ec"
     },
     {
       "id": "APP-AUDIT-B-PROFILE-WRITE-FAILURE",
       "name": "Failed Search Profile writes leave changed profiles active until reload (#398)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-b-profile-write-failure-513f936a",
       "tracking_issue": 398,
@@ -636,12 +639,14 @@
           "clean": true,
           "report": "docs/superpowers/audits/APP-AUDIT-B-PROFILE-WRITE-FAILURE/code-r1.md"
         }
-      ]
+      ],
+      "merge_commit": "036e2e67ad68b754583f4cd4301045a6bcbf0c44",
+      "note": "SHIPPED, reconciled 2026-11-08: PR #476 merged at 036e2e67. Earlier text in this field that says not merged or pending predates that merge."
     },
     {
       "id": "APP-AUDIT-B-PROFILE-VALIDATION",
       "name": "Malformed current-version profile crashes Search Profile controls (#381)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-b-profile-validation-0d83ab07",
       "tracking_issue": 381,
@@ -726,12 +731,14 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "docs/superpowers/audits/APP-AUDIT-B-PROFILE-VALIDATION/code-r3.md"
-      }
+      },
+      "merge_commit": "13f7b60a35ababb5237ef2eb7f726997bc1fa8a3",
+      "note": "SHIPPED, reconciled 2026-11-08: PR #475 merged at 13f7b60a. Earlier text in this field that says not merged or pending predates that merge."
     },
     {
       "id": "APP-AUDIT-MONITORING",
       "name": "Lane G — verify Watchlist, alerts, Strategy Watch and scheduled automation (#355)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-monitoring-7fb31a2c",
       "tracking_issue": 355,
@@ -873,12 +880,13 @@
           "report": "docs/superpowers/audits/APP-AUDIT-MONITORING/code-r2.md"
         }
       ],
-      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Plan clean in round 3, code clean in round 2. All 124 tests pass, typecheck clean, zero drift."
+      "note": "Lane G Watchlist / Alerts / Strategy Watch / Scheduled automation audit (#355). Plan clean in round 3, code clean in round 2. All 124 tests pass, typecheck clean, zero drift. || SHIPPED, reconciled 2026-11-08: PR #474 merged at 0e3d6148. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "0e3d61485e170b5811da77f1f819c787777aa7f4"
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT",
       "name": "Lane E — verify Pre-Breakout, Fibonacci and Pullback end to end (#353)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-prebreakout-b4f0d823",
       "tracking_issue": 353,
@@ -898,7 +906,7 @@
         "pattern": "APP-AUDIT-PREBREAKOUT",
         "note": "Pins the final Pre-Breakout audit report for Lane E (#353)."
       },
-      "completion_pct": 80,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
       "audit_history": [
@@ -958,18 +966,19 @@
           "report": "docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r2.md"
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #473, audited head 9f12528c. Lane E Pre-Breakout reconciliation report and verification suites (#353). Plan round 2 clean, code round 2 clean.",
+      "note": "SELF-MERGE PENDING, PR #473, audited head 9f12528c. Lane E Pre-Breakout reconciliation report and verification suites (#353). Plan round 2 clean, code round 2 clean. || SHIPPED, reconciled 2026-11-08: PR #473 merged at 90969cf9. Earlier text in this field that says not merged or pending predates that merge.",
       "code_stage": {
         "rounds": 2,
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent f7ccf1a2-7e2c-4176-890d-7962b692ca9f reviewed Round 1 fixes (Finding F-1 remediation) and interactions; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-PREBREAKOUT/code-r2.md"
-      }
+      },
+      "merge_commit": "90969cf9c70a355cc73c9aa2f4c896abb183d714"
     },
     {
       "id": "APP-AUDIT-PERSISTENCE",
       "name": "Lane I — cross-store migrations, reloads, restarts and data recovery audit (#357)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-persistence-93803ca0",
       "tracking_issue": 357,
@@ -1076,12 +1085,13 @@
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent 97e5f667-a3e2-45d2-a8f7-8c3ce80dd624 reviewed diff 3582fc91..38da086c; 0 gate findings; report docs/superpowers/audits/APP-AUDIT-PERSISTENCE/code-r2.md"
       },
-      "note": "SELF-MERGE PENDING, PR #471, audited head aeed0c7b. Lane I persistence audit report docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/report.md (#357). Plan round 2 clean, code round 2 clean."
+      "note": "SELF-MERGE PENDING, PR #471, audited head aeed0c7b. Lane I persistence audit report docs/superpowers/audits/app-audit/APP-AUDIT-PERSISTENCE/report.md (#357). Plan round 2 clean, code round 2 clean. || SHIPPED, reconciled 2026-11-08: PR #471 merged at b9a4e087. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "b9a4e087ff26013cace4d97bbab769bb9b890c52"
     },
     {
       "id": "APP-AUDIT-ANALYTICS-DATA",
       "name": "Lane H — Analysis, Chart, Dashboard, Calendar, Journal, and Validation data (#356)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-analytics-data-plan.md",
       "branch": "board/app-audit-analytics-data-3acabd5c",
       "tracking_issue": 356,
@@ -1194,15 +1204,16 @@
         "pattern": "APP-AUDIT-ANALYTICS-DATA reconciliation report",
         "note": "Pins the reconciliation report for Analytics & Data audit (#356)."
       },
-      "completion_pct": 80,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 4,
-      "note": "SELF-MERGE PENDING, PR #470, audited head 6c933421. Lane H reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md (#356). Plan round 3 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #470, audited head 6c933421. Lane H reconciliation report docs/superpowers/audits/app-audit/APP-AUDIT-ANALYTICS-DATA/report.md (#356). Plan round 3 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #470 merged at e1ccbab8. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "e1ccbab832429aed016fe3c9fd2e888d1a5c0ed6"
     },
     {
       "id": "APP-AUDIT-RAIL-DESTINATION-PARITY",
       "name": "Calendar and Settings retain the previous context rail (#395)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-rail-destination-parity-plan.md",
@@ -1250,15 +1261,16 @@
         "pattern": "CalendarDefaultRail",
         "note": "Pins CalendarDefaultRail in frontend/app/(frame)/@contextRail/calendar/default.tsx."
       },
-      "completion_pct": 80,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #466, audited head 79408111. Context rail destination parity on soft and hard navigation (#395, #464). Plan round 1 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #466, audited head 79408111. Context rail destination parity on soft and hard navigation (#395, #464). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #466 merged at e5be63a1. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "e5be63a1fa97b95c354f34075676281845bd6385"
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-ROLLBACK",
       "name": "Failed schedule writes change API state while disk and scheduler retain old values (#374)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-schedule-rollback-plan.md",
@@ -1309,12 +1321,13 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "SELF-MERGE PENDING, PR #463, audited head a4fbb1c6. Atomic schedule store rollback across all 4 stores (#374, #462). Plan round 1 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #463, audited head a4fbb1c6. Atomic schedule store rollback across all 4 stores (#374, #462). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #463 merged at 84937152. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "8493715214b88b92cb25c318f1b521ed34b7be04"
     },
     {
       "id": "APP-AUDIT-B-WEIGHT-UNITS",
       "name": "Options score-weight percent overrides are applied as raw multipliers (#382)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-weight-units-plan.md",
@@ -1381,12 +1394,13 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "SELF-MERGE PENDING, PR #461, audited head d2c4c0f1. Normalize score-weight percent overrides across scan requests (#382, #460). Plan round 3 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #461, audited head d2c4c0f1. Normalize score-weight percent overrides across scan requests (#382, #460). Plan round 3 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #461 merged at dd511abf. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "dd511abff828c68349afc428156f3b5228b82500"
     },
     {
       "id": "APP-AUDIT-B-STOP-PERCENT-UNITS",
       "name": "Stop percentages display fractions and clamp typed 3 percent to 100 percent (#385)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-app-audit-b-stop-percent-units-plan.md",
@@ -1434,16 +1448,17 @@
         "pattern": "key: .rr_bullish_invalidation_pct..*scale: 100",
         "note": "Pins scale: 100 on rr_bullish_invalidation_pct in page.tsx."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #457, audited head 9b9033bd. Scale stop percentage units and bounds in Step 3 (#385, #456). Plan round 1 clean, code round 1 clean.",
-      "pull_request": 457
+      "note": "SELF-MERGE PENDING, PR #457, audited head 9b9033bd. Scale stop percentage units and bounds in Step 3 (#385, #456). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #457 merged at 03d94520. Earlier text in this field that says not merged or pending predates that merge.",
+      "pull_request": 457,
+      "merge_commit": "03d945201d4c92f95dfa527bf4b76a811a95edaa"
     },
     {
       "id": "APP-AUDIT-B-STOCK-FILTERS",
       "name": "Stocks manual and scheduled requests drop universe price/cap filters (#380)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-stock-filters-plan.md",
@@ -1494,7 +1509,8 @@
       "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "Audit clean: Round 1 code audit clean (0 gate findings). Ready for PR and self-merge."
+      "note": "Audit clean: Round 1 code audit clean (0 gate findings). Ready for PR and self-merge. || SHIPPED, reconciled 2026-11-08: PR #452 merged at 809f883e. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "809f883ef7615ca9a9c80d2bdc32ce1201e58dfe"
     },
     {
       "id": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
@@ -3646,7 +3662,7 @@
     {
       "id": "CONTRACT-LIQUIDITY-DTE",
       "name": "Contract liquidity rules: volume stops being a hard reject by default (PRD FR-25), one merged liquidity soft flag",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 7,
       "audit_clean": true,
       "depends_on": [],
@@ -3656,9 +3672,11 @@
         "pattern": "min_volume",
         "note": "PRESENCE ONLY of the LAST ticket's (T3) new Jest test. Replaced the defect marker (min_volume: 50 in contract_rules.yaml) because T1 removes it while T2/T3 are still to come. Fix 1's backend default and fix 2 are pinned by plan section 4's tests and mutations."
       },
-      "note": "2026-10-11 ROUND 7 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff origin/main(48ff4ce9)..fbc63b39 -- backend frontend llm-contexts docs/search-profiles PROJECT_STATE.json vs plan r6: validator guard and merged flag exactly as planned (score arithmetic untouched; only soft_fail_count moves status; blockers/components/hard_bounds consistent); every edited test compared with main and still guarding; own mutations (YAML back to 50 -> 5 red; flags split -> 7 red); full backend 7791 passed / 9 skipped / 0 failed (Python 3.11), targeted Jest 14 suites / 124 tests, tsc clean; seed JSON == RAW at both revisions, only the six Loose values + updatedAt changed, xlsx only the planned cells; PROJECT_STATE vs main = this entry, one decision, active_phase/_note only; measurement script read-only. 0 GATE FINDINGS. Built, NOT merged; PR next. || 2026-10-11 BUILT, all build tickets closed: #210 T1 c8bf22e6 (backend fixes 1+2; red as predicted; full backend 7791 passed / 9 skipped / 0 failed on Python 3.11; mutations 1/3/4/5 each red; 13 measured failures handled per plan section 4; label-mode test's second soft miss is iv_rank 56, live score 48, because the plan's delta/spread examples drop below CAUTION as the plan audit noted), #211 T2 83b78829 (seed profiles: 12 JSON values, RAW == JSON byte for byte, xlsx J-column + 4 legend cells only, README :23/:125), #212 T3 4060b36b (presets 50 -> 0 on all 7 horizon keys, Step 3 wording only; red 7/8, mutation 2 red; typecheck clean, Jest 231 suites / 4942 tests). Logged, not fixed: xlsx legend A20 still says 'off-hours sentinel'; xlsx columns J-R carry a percent format (pre-existing); README:69-71 date sentence stale; preferred_volume_min hint says 'Daily'; test_contract_explanation snapshot test's volume_too_low negative is now always true at floor 0. Code round 7 (code round 1 of 3) next. || 2026-10-11 ROUND 6 (new-stage plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = plan r6 at f1a5097d vs contract_validator.py (whole), contract_rules.yaml, market.py chain builders + quote_liveness.py + augment.py, auto_trader.py:685-743/:2660-2760, scan.py, contracts.py, config_health.py, Step 3/6/7 frontend, resolveOptionsScanRequest, statusTooltips, parsePipelineDiagnostics, seed profiles, the four test files, state.py probe. Reproduced the 13-failure probe (13 failed / 7763 passed / 9 skipped) on a scratch worktree; confirmed the section-0 closure of the round-5 finding on main; ran the section-4 fixtures (AAPL shape PASS 68.8; one-axis case 43.8; liquidity score 30) and traced all five mutations. 0 GATE FINDINGS; new plan stage closed. Below-gate (for T1): neither example the plan gives for re-fixturing test_label_mode_flag_does_not_count_as_a_soft_failure keeps the live card at CAUTION (delta 0.25-0.29 -> 40.9, spread just above 8% -> 39.9); the implementer must pick another second soft miss. Tickets next. || 2026-10-10 NEW PLAN STAGE (decision CONTRACT-LIQUIDITY-DTE-REFRESH-STAGE-2026-10-10, Kenneth's option (a) on #161). Taken from the Board on board/contract-liquidity-dte-3c0a1edd (cut from bed0ab4f, main 48ff4ce9 merged). Plan refreshed to r6: line refs re-based; the round-5 gate finding re-derived against main (NO-LIVE-QUOTE removed the fabricated spread, rejects non-live rows in the scan, gates auto-trade fire and Step 7 direct send), so no merge hold remains; fixes 1+2 unchanged; the 13 backend tests the fixes break measured on a scratch copy and each given a disposition; three tickets. Rounds number continuously: round 6 = new-stage plan round 1 of 3. state.py cannot model a 5-round first stage plus a second stage, so its hard-cap line for this phase is RETAINED AND EXPLAINED, not silenced (as for NO-LIVE-QUOTE's scoped caps). Plan round 6 next. || RESCUED TO MAIN 2026-10-02 (LEDGER-RESCUE-CONTRACT-LIQUIDITY-DTE): this record existed only on claude/contract-liquidity-dte (tip bed0ab4f); its claim was erased by the claims.json\\r bug that CLAIMS-WINDOWS-CRLF fixes. Ledger + plan document only -- no code moved; the build stays on that branch under decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30. Nobody holds a claim on it now. || Plan docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md r5, NOT audited clean. Kenneth answered section 6 (decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30). Plan round 1: 3H/7M/6L fixed (r2). Round 2: 6H/6M/8L, all highs in the off-hours quote fix, which Kenneth split out to phase NO-LIVE-QUOTE (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30); r3 is fixes 1+2 only. Round 3: 1H/5M/5L fixed (r4), incl. an accepted after-close residual (fabricated-spread rows with volume 1-49 now pass; closed by NO-LIVE-QUOTE). Round 4: 1H/4M/7L fixed (r5). Round 5 (2026-09-30): 1 gate-level finding NOT fixed -- the after-close residual reaches auto-trade (scan.py:2036 PASS trigger, armable Step 7 cards, _market_is_open is a price probe) and Step 7 direct send; 9 below-gate items logged in plan section 7. HARD CAP reached (plan stage 5 rounds, cap 3). Kenneth closed the plan stage (decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30): build now, MERGE HELD until NO-LIVE-QUOTE lands. Code stage starts at round 6 (code round 1 of 3).",
+      "note": "2026-10-11 ROUND 7 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff origin/main(48ff4ce9)..fbc63b39 -- backend frontend llm-contexts docs/search-profiles PROJECT_STATE.json vs plan r6: validator guard and merged flag exactly as planned (score arithmetic untouched; only soft_fail_count moves status; blockers/components/hard_bounds consistent); every edited test compared with main and still guarding; own mutations (YAML back to 50 -> 5 red; flags split -> 7 red); full backend 7791 passed / 9 skipped / 0 failed (Python 3.11), targeted Jest 14 suites / 124 tests, tsc clean; seed JSON == RAW at both revisions, only the six Loose values + updatedAt changed, xlsx only the planned cells; PROJECT_STATE vs main = this entry, one decision, active_phase/_note only; measurement script read-only. 0 GATE FINDINGS. Built, NOT merged; PR next. || 2026-10-11 BUILT, all build tickets closed: #210 T1 c8bf22e6 (backend fixes 1+2; red as predicted; full backend 7791 passed / 9 skipped / 0 failed on Python 3.11; mutations 1/3/4/5 each red; 13 measured failures handled per plan section 4; label-mode test's second soft miss is iv_rank 56, live score 48, because the plan's delta/spread examples drop below CAUTION as the plan audit noted), #211 T2 83b78829 (seed profiles: 12 JSON values, RAW == JSON byte for byte, xlsx J-column + 4 legend cells only, README :23/:125), #212 T3 4060b36b (presets 50 -> 0 on all 7 horizon keys, Step 3 wording only; red 7/8, mutation 2 red; typecheck clean, Jest 231 suites / 4942 tests). Logged, not fixed: xlsx legend A20 still says 'off-hours sentinel'; xlsx columns J-R carry a percent format (pre-existing); README:69-71 date sentence stale; preferred_volume_min hint says 'Daily'; test_contract_explanation snapshot test's volume_too_low negative is now always true at floor 0. Code round 7 (code round 1 of 3) next. || 2026-10-11 ROUND 6 (new-stage plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = plan r6 at f1a5097d vs contract_validator.py (whole), contract_rules.yaml, market.py chain builders + quote_liveness.py + augment.py, auto_trader.py:685-743/:2660-2760, scan.py, contracts.py, config_health.py, Step 3/6/7 frontend, resolveOptionsScanRequest, statusTooltips, parsePipelineDiagnostics, seed profiles, the four test files, state.py probe. Reproduced the 13-failure probe (13 failed / 7763 passed / 9 skipped) on a scratch worktree; confirmed the section-0 closure of the round-5 finding on main; ran the section-4 fixtures (AAPL shape PASS 68.8; one-axis case 43.8; liquidity score 30) and traced all five mutations. 0 GATE FINDINGS; new plan stage closed. Below-gate (for T1): neither example the plan gives for re-fixturing test_label_mode_flag_does_not_count_as_a_soft_failure keeps the live card at CAUTION (delta 0.25-0.29 -> 40.9, spread just above 8% -> 39.9); the implementer must pick another second soft miss. Tickets next. || 2026-10-10 NEW PLAN STAGE (decision CONTRACT-LIQUIDITY-DTE-REFRESH-STAGE-2026-10-10, Kenneth's option (a) on #161). Taken from the Board on board/contract-liquidity-dte-3c0a1edd (cut from bed0ab4f, main 48ff4ce9 merged). Plan refreshed to r6: line refs re-based; the round-5 gate finding re-derived against main (NO-LIVE-QUOTE removed the fabricated spread, rejects non-live rows in the scan, gates auto-trade fire and Step 7 direct send), so no merge hold remains; fixes 1+2 unchanged; the 13 backend tests the fixes break measured on a scratch copy and each given a disposition; three tickets. Rounds number continuously: round 6 = new-stage plan round 1 of 3. state.py cannot model a 5-round first stage plus a second stage, so its hard-cap line for this phase is RETAINED AND EXPLAINED, not silenced (as for NO-LIVE-QUOTE's scoped caps). Plan round 6 next. || RESCUED TO MAIN 2026-10-02 (LEDGER-RESCUE-CONTRACT-LIQUIDITY-DTE): this record existed only on claude/contract-liquidity-dte (tip bed0ab4f); its claim was erased by the claims.json\\r bug that CLAIMS-WINDOWS-CRLF fixes. Ledger + plan document only -- no code moved; the build stays on that branch under decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30. Nobody holds a claim on it now. || Plan docs/superpowers/plans/2026-09-30-contract-liquidity-dte-plan.md r5, NOT audited clean. Kenneth answered section 6 (decision CONTRACT-LIQUIDITY-DTE-ANSWERS-2026-09-30). Plan round 1: 3H/7M/6L fixed (r2). Round 2: 6H/6M/8L, all highs in the off-hours quote fix, which Kenneth split out to phase NO-LIVE-QUOTE (decision CONTRACT-LIQUIDITY-DTE-SPLIT-2026-09-30); r3 is fixes 1+2 only. Round 3: 1H/5M/5L fixed (r4), incl. an accepted after-close residual (fabricated-spread rows with volume 1-49 now pass; closed by NO-LIVE-QUOTE). Round 4: 1H/4M/7L fixed (r5). Round 5 (2026-09-30): 1 gate-level finding NOT fixed -- the after-close residual reaches auto-trade (scan.py:2036 PASS trigger, armable Step 7 cards, _market_is_open is a price probe) and Step 7 direct send; 9 below-gate items logged in plan section 7. HARD CAP reached (plan stage 5 rounds, cap 3). Kenneth closed the plan stage (decision CONTRACT-LIQUIDITY-DTE-MERGE-HOLD-2026-09-30): build now, MERGE HELD until NO-LIVE-QUOTE lands. Code stage starts at round 6 (code round 1 of 3). || SHIPPED, reconciled 2026-11-08: PR #213 merged at 4ecfdf0f. Earlier text in this field that says not merged or pending predates that merge.",
       "tracking_issue": 161,
-      "branch": "board/contract-liquidity-dte-3c0a1edd"
+      "branch": "board/contract-liquidity-dte-3c0a1edd",
+      "completion_pct": 100,
+      "merge_commit": "4ecfdf0f6e67bf4b7eddd7ece589955a9feb0c64"
     },
     {
       "id": "NO-LIVE-QUOTE",
@@ -4608,7 +4626,7 @@
     {
       "id": "NUMERIC-API-INPUTS",
       "name": "Reject NaN/Infinity at the API boundary: JSON guard for untyped payloads, allow_inf_nan=False on the request models, route-wide ratchet test",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "depends_on": [],
@@ -4624,7 +4642,7 @@
         "pattern": "class NonFiniteJsonGuard",
         "note": "PRESENCE ONLY: the T1 JSON boundary guard exists. Behaviour is pinned by the T1-T3 tests."
       },
-      "note": "2026-10-10 board #164: BUILT on board/numeric-api-inputs-54c0ddc4, NOT MERGED, AUDIT CLEAN. Plan round 1 clean; code round 1 (round 2 overall): 2 gate findings F1/F2, fixed in 5c459b71; code round 2 (round 3 overall): zero gate findings. Tickets #197 T1 (e42006a), #198 T2 (a6fd5ea), #199 T3 (86f6b95); origin/main merged in d4e2f86a. Full backend on Python 3.11 at 5c459b71: 7776 passed, 9 skipped, 0 failed (BAMENDJOU_TELEGRAM_* unset: with them set in this container, test_notifications.py::test_telegram_skips_when_not_configured fails, an environment leak unrelated to this phase).",
+      "note": "2026-10-10 board #164: BUILT on board/numeric-api-inputs-54c0ddc4, NOT MERGED, AUDIT CLEAN. Plan round 1 clean; code round 1 (round 2 overall): 2 gate findings F1/F2, fixed in 5c459b71; code round 2 (round 3 overall): zero gate findings. Tickets #197 T1 (e42006a), #198 T2 (a6fd5ea), #199 T3 (86f6b95); origin/main merged in d4e2f86a. Full backend on Python 3.11 at 5c459b71: 7776 passed, 9 skipped, 0 failed (BAMENDJOU_TELEGRAM_* unset: with them set in this container, test_notifications.py::test_telegram_skips_when_not_configured fails, an environment leak unrelated to this phase). || SHIPPED, reconciled 2026-11-08: PR #205 merged at 48ff4ce9. Earlier text in this field that says not merged or pending predates that merge.",
       "audit_history": [
         {
           "round": 1,
@@ -4672,12 +4690,14 @@
       "plan_stage": {
         "rounds": 1,
         "closed_by": "clean"
-      }
+      },
+      "completion_pct": 100,
+      "merge_commit": "48ff4ce9ba29687039408cf62ab04be4864c46e3"
     },
     {
       "id": "FLAKY-TESTS-FIX",
       "name": "Deterministic test suites: Heston timeout test always cleans up (26A); explicit timeout for the long Step 7 ORDER-UNKNOWN test (26B); 26D confirmed on main",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "depends_on": [],
@@ -4689,12 +4709,14 @@
         "pattern": "\\}, 15_000\\)",
         "note": "PRESENCE ONLY of the LAST ticket's (T2) explicit timeout; T1's try/finally is pinned by the plan's red/green evidence."
       },
-      "note": "2026-10-10 ROUND 2 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff origin/main(48ff4ce9)..668aa766 (4 files) vs the plan: git diff -w shows only try:/finally: in the Heston timeout test, all 11 patches, 3 assertions and the 0.4 s ceiling unchanged, every exit path reaches the cleanup, forced-ceiling run in a scratch worktree = 1 failed / 20 passed (neighbours pass); Jest timeout on the right it(), nothing else changed, file 51/51; PROJECT_STATE.json vs origin/main = one phase added, NUMERIC-API-INPUTS byte-identical, only active_phase/_note otherwise; state.py exit 0. 0 GATE FINDINGS. Coordinator runs on the merged tree: backend (Python 3.11) 7775 passed / 9 skipped / 1 failed -- tests/test_notifications.py::TestTelegram::test_telegram_skips_when_not_configured, environmental (this container sets BAMENDJOU_TELEGRAM_* for board notifications and send_telegram falls back to them; the file passes 6/6 with them unset; not this diff, reported to Kenneth); frontend typecheck clean, Jest 230 suites / 4934 tests. Built, NOT merged; PR next. || 2026-10-10 BUILT, all build tickets closed: #206 T1 f55a96c3 (try/finally; red: forced ceiling failure gave 3 failures incl. assert 3 == (5 - 1) and 'Task was destroyed but it is pending!'; green: only the forced test fails; file 48 passed), #207 T2 f0536ea8 (15_000 ms timeout; red reproduced under 12 busy loops: Exceeded timeout of 5000 ms; green under the same load 51/51; typecheck clean; Jest 230 suites / 4934 tests). T3: test_shortlist.py 19 passed with all outbound traffic routed to a dead proxy (FIX-26D holds on main). Logged, not fixed (outside the plan): test 21b in the same Step 7 file also timed out once under load. Plan round 1 note: the auditor launched before a /clear also returned 0 gate findings on the same plan content; counted as one round. Full backend suite and code round 1 next. || 2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = plan 63a6ef4c vs test_scan_endpoint.py L962-1296 + scan.py L362/L400-424/L1006-1016, direct-send-save-first.test.tsx L420-458 + jest config, test_shortlist.py L74-92, the ticket-26 evidence and this entry's probe (0 matches today). 0 GATE FINDINGS; plan stage closed. Build T1-T2 next. || 2026-10-10 taken from the Board (#160) on board/flaky-tests-fix-fec8e2c9 from main e765cf4f. Plan written (ticket-26 evidence: 26A + 26B in scope; 26D already on main; 26C fonts and 26E session-start venv out of scope, reported to Kenneth). Plan round 1 next.",
+      "note": "2026-10-10 ROUND 2 (code round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = git diff origin/main(48ff4ce9)..668aa766 (4 files) vs the plan: git diff -w shows only try:/finally: in the Heston timeout test, all 11 patches, 3 assertions and the 0.4 s ceiling unchanged, every exit path reaches the cleanup, forced-ceiling run in a scratch worktree = 1 failed / 20 passed (neighbours pass); Jest timeout on the right it(), nothing else changed, file 51/51; PROJECT_STATE.json vs origin/main = one phase added, NUMERIC-API-INPUTS byte-identical, only active_phase/_note otherwise; state.py exit 0. 0 GATE FINDINGS. Coordinator runs on the merged tree: backend (Python 3.11) 7775 passed / 9 skipped / 1 failed -- tests/test_notifications.py::TestTelegram::test_telegram_skips_when_not_configured, environmental (this container sets BAMENDJOU_TELEGRAM_* for board notifications and send_telegram falls back to them; the file passes 6/6 with them unset; not this diff, reported to Kenneth); frontend typecheck clean, Jest 230 suites / 4934 tests. Built, NOT merged; PR next. || 2026-10-10 BUILT, all build tickets closed: #206 T1 f55a96c3 (try/finally; red: forced ceiling failure gave 3 failures incl. assert 3 == (5 - 1) and 'Task was destroyed but it is pending!'; green: only the forced test fails; file 48 passed), #207 T2 f0536ea8 (15_000 ms timeout; red reproduced under 12 busy loops: Exceeded timeout of 5000 ms; green under the same load 51/51; typecheck clean; Jest 230 suites / 4934 tests). T3: test_shortlist.py 19 passed with all outbound traffic routed to a dead proxy (FIX-26D holds on main). Logged, not fixed (outside the plan): test 21b in the same Step 7 file also timed out once under load. Plan round 1 note: the auditor launched before a /clear also returned 0 gate findings on the same plan content; counted as one round. Full backend suite and code round 1 next. || 2026-10-10 ROUND 1 (plan round 1 of 3): CLEAN. Fresh independent gate auditor (general-purpose subagent applying bmad-review-adversarial-general), scope = plan 63a6ef4c vs test_scan_endpoint.py L962-1296 + scan.py L362/L400-424/L1006-1016, direct-send-save-first.test.tsx L420-458 + jest config, test_shortlist.py L74-92, the ticket-26 evidence and this entry's probe (0 matches today). 0 GATE FINDINGS; plan stage closed. Build T1-T2 next. || 2026-10-10 taken from the Board (#160) on board/flaky-tests-fix-fec8e2c9 from main e765cf4f. Plan written (ticket-26 evidence: 26A + 26B in scope; 26D already on main; 26C fonts and 26E session-start venv out of scope, reported to Kenneth). Plan round 1 next. || SHIPPED, reconciled 2026-11-08: PR #209 merged at bb3b4382. Earlier text in this field that says not merged or pending predates that merge.",
       "plan_stage": {
         "rounds": 1,
         "closed_by": "clean"
       },
-      "branch": "board/flaky-tests-fix-fec8e2c9"
+      "branch": "board/flaky-tests-fix-fec8e2c9",
+      "completion_pct": 100,
+      "merge_commit": "bb3b43821ab727b9fd8e0767c055d7c0541ad4c7"
     },
     {
       "id": "AGENT-SELF-MERGE",
@@ -6895,7 +6917,7 @@
       "owner": "agent",
       "name": "Incremental nightly, Stage B: incremental writer",
       "summary": "Window-anchor state columns (B0), pure nightly classifier T1-T6 + RESCALE/CONFIRM/REVALIDATE (B1), incremental update_history branches + Tiingo-only anchored recent window (B2), two-pass nightly run with Tiingo priority queue and run counters (B3). Plan sections 2 and 5 Stage B.",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "depends_on": [
@@ -6911,7 +6933,7 @@
         "pattern": "revalidation_skipped_budget",
         "note": "PRESENCE ONLY of the B3 run counters in the two-pass nightly. Correctness requires tests and the independent stage audit."
       },
-      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified. B2 #496 8c819eb6 and B3 #497 9560e7f2 committed and coordinator-verified (B2 full suite 9684 passed, baseline only). Built, NOT audited: code audit pending (#498). Code stage: round 1 R1-F1 fixed 084a8283; round 2 R2-F1 fixed 047eae25; round 3 CLEAN (3 of 3 code rounds).",
+      "notes": "Stage B of the approved plan; own code-audit target, cap 3 code rounds. Kenneth's go 2026-10-21 (relayed by the parent session: 'spawn new session to start B'; in this session after merging #484: 'Start the Stage B build from origin/main'). Branch cut from origin/main 5c41d96a. Tickets #494 B0, #495 B1, #496 B2, #497 B3, #498 B4 (coordinator). Decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19 (D1-a, D2-a, D3 90/10, D4), HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19, HISTORY-INCREMENTAL-TIINGO-FREE-2026-10-21. B0 #494 30787e34 and B1 #495 4f6087e4 committed and coordinator-verified. B2 #496 8c819eb6 and B3 #497 9560e7f2 committed and coordinator-verified (B2 full suite 9684 passed, baseline only). Built, NOT audited: code audit pending (#498). Code stage: round 1 R1-F1 fixed 084a8283; round 2 R2-F1 fixed 047eae25; round 3 CLEAN (3 of 3 code rounds). || SHIPPED, reconciled 2026-11-08: PR #499 merged at 70e48af2. Earlier text in this field that says not merged or pending predates that merge.",
       "audit_history": [
         {
           "round": 1,
@@ -6963,7 +6985,9 @@
             "RunUsage docstring mentions child tasks with no current use"
           ]
         }
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "70e48af266210928540518f9a7a1d7ea2232f34f"
     },
     {
       "id": "APP-AUDIT-INVENTORY",
@@ -7379,7 +7403,7 @@
     {
       "id": "APP-AUDIT-B-THEME-SYNC",
       "name": "Theme changes synchronize across tabs in ThemeProvider",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-theme-sync-plan.md",
@@ -7433,7 +7457,9 @@
         "note": "Pins cross-tab theme synchronization helper in theme.ts."
       },
       "pull_request": 419,
-      "note": "SELF-MERGE PENDING, PR #419, audited head 8b2df6cca4838770db5891fb000db3b42c05b381. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required."
+      "note": "SELF-MERGE PENDING, PR #419, audited head 8b2df6cca4838770db5891fb000db3b42c05b381. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required. || SHIPPED, reconciled 2026-11-08: PR #419 merged at 280f556f. Earlier text in this field that says not merged or pending predates that merge.",
+      "completion_pct": 100,
+      "merge_commit": "280f556f2b0f41866428de38493840e465543677"
     },
     {
       "id": "HISTORY-INGEST-GAPS",
@@ -7446,12 +7472,12 @@
       ],
       "summary": "Class-share tickers in Tiingo/yfinance spelling, single-provider failure reasons in the ingest status and log, and the startup staleness reference (SPY) in the nightly universe.",
       "name": "History ingestion gaps (#114 follow-ups)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "branch": "claude/elated-jemison-c30f32",
       "plan": "docs/superpowers/plans/2026-10-16-history-ingest-gaps-plan.md",
-      "notes": "Built. Plan round 1 clean at dc8dc94b. Code round 1 (round 2) clean at 452eed96 over the whole integrated change 880c8441..452eed96. Full backend suite at 452eed96 (Python 3.11.9, Windows): 9340 passed, 11 skipped, 6 failed + 1 error, all Windows baseline that fails identically on unchanged main 880c8441 (test_atomic_yaml x3, test_payload_persistence_atomicity credential-permission x3, test_historical_store_settle test_19). NOT MERGED: PR for Kenneth to review and merge; the live effect (BRK.B/BF.B rebuilt, O's refusal reason visible, SPY fresh after an idle night) is confirmed only by the next mini-PC nightly run.",
+      "notes": "Built. Plan round 1 clean at dc8dc94b. Code round 1 (round 2) clean at 452eed96 over the whole integrated change 880c8441..452eed96. Full backend suite at 452eed96 (Python 3.11.9, Windows): 9340 passed, 11 skipped, 6 failed + 1 error, all Windows baseline that fails identically on unchanged main 880c8441 (test_atomic_yaml x3, test_payload_persistence_atomicity credential-permission x3, test_historical_store_settle test_19). NOT MERGED: PR for Kenneth to review and merge; the live effect (BRK.B/BF.B rebuilt, O's refusal reason visible, SPY fresh after an idle night) is confirmed only by the next mini-PC nightly run. || SHIPPED, reconciled 2026-11-08: PR #390 merged at f08e4dfc. Earlier text in this field that says not merged or pending predates that merge.",
       "verify": {
         "kind": "present",
         "path": "backend/app/data/provider_symbols.py",
@@ -7490,7 +7516,9 @@
             "SPY first in the nightly universe takes one slot of the 50-symbol hourly Tiingo budget (plan intent)"
           ]
         }
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "f08e4dfcfeded53690b522a90db3185c9bd2dd98"
     },
     {
       "id": "APP-AUDIT-B-RUN-GATE",
@@ -7787,7 +7815,7 @@
     {
       "id": "APP-AUDIT-B-REGIME-RACE",
       "name": "Old regime response overwrites the newer direction-aligned scan gate (#386)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-regime-race-plan.md",
@@ -7865,16 +7893,17 @@
         "pattern": "applyRegimeResponse",
         "note": "Pins the shared latest-regime-fetch guard used by Steps 1-3."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 4,
-      "note": "SELF-MERGE PENDING, PR #442, audited head 3b573df6. Newest applied /api/regime response owns the shared gate; Steps 1-3 send one request shape (#386, #440). Plan round 2 clean, code round 1 clean. Browser retest PASS in all three modes.",
-      "pull_request": 442
+      "note": "SELF-MERGE PENDING, PR #442, audited head 3b573df6. Newest applied /api/regime response owns the shared gate; Steps 1-3 send one request shape (#386, #440). Plan round 2 clean, code round 1 clean. Browser retest PASS in all three modes. || SHIPPED, reconciled 2026-11-08: PR #442 merged at 80b6d6ce. Earlier text in this field that says not merged or pending predates that merge.",
+      "pull_request": 442,
+      "merge_commit": "80b6d6cef41a23d4b5be74c385c493fc577b1cbc"
     },
     {
       "id": "UNRESOLVED-SAVE-UX",
       "name": "Unresolved-save UX: dismiss after 404 (#171)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-unresolved-save-ux-plan.md",
@@ -7932,16 +7961,17 @@
         "pattern": "removeTrackedRow\\(note\\.recId, true\\)",
         "note": "Pins that 404 is treated as final when removing unconfirmed saves."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "S",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #458, audited head 853771e6. 404 is treated as final on unconfirmed-save removal, deleting note cleanly and clearing ownership lock (#171). Plan round 1 clean, code round 1 clean.",
-      "pull_request": 458
+      "note": "SELF-MERGE PENDING, PR #458, audited head 853771e6. 404 is treated as final on unconfirmed-save removal, deleting note cleanly and clearing ownership lock (#171). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #458 merged at 48164439. Earlier text in this field that says not merged or pending predates that merge.",
+      "pull_request": 458,
+      "merge_commit": "48164439ec100ec58d471ffedfb5966d04c9fedd"
     },
     {
       "id": "STOCKS-CUSTOM-UNIVERSE",
       "name": "Stocks scan ignores current Custom universe and reuses stale scan context (#343)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-stocks-custom-universe-plan.md",
@@ -8040,15 +8070,16 @@
       "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "Plan 3 rounds clean, code 1 round clean (0 gate findings). PR ready.",
-      "pull_request": null
+      "note": "Plan 3 rounds clean, code 1 round clean (0 gate findings). PR ready. || SHIPPED, reconciled 2026-11-08: PR #472 merged at e5a9d269. Earlier text in this field that says not merged or pending predates that merge.",
+      "pull_request": null,
+      "merge_commit": "e5a9d2692a70f77a338843de2ff24bc49d3f73a9"
     },
     {
       "id": "INGEST-SKIP-EXCLUDED",
       "owner": "agent",
       "name": "Nightly ingestion skips scope:scan exclusions",
       "summary": "ingestion_universe() (nightly + startup catch-up) drops universe_exclusions.yaml scope:scan symbols (ended feeds / acquired); scope:evidence kept; SPY always first; fails open; manual POST /api/data/ingest unchanged.",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 1,
       "audit_clean": true,
       "branch": "claude/ingest-skip-excluded-efd46479",
@@ -8062,7 +8093,7 @@
         "pattern": "def _without_scan_exclusions",
         "note": "PRESENCE ONLY of the filter helper. Behaviour pinned by tests/test_ingest_skip_excluded.py and the independent audit."
       },
-      "notes": "Requested by Kenneth 2026-10-21 in chat (drop the acquired/delisted Tiingo-only symbols from the nightly; on the free tier each one wastes a Tiingo request). Implemented test-first by a ticket-implementer subagent at 050c783d (10 new tests, 8 red before; full suite 9392 passed, Windows-baseline failures only). Code round 1 CLEAN. Real config: 537 -> 514 symbols, 23 scope:scan dropped, all 13 scope:evidence kept. Not merged; for Kenneth to review.",
+      "notes": "Requested by Kenneth 2026-10-21 in chat (drop the acquired/delisted Tiingo-only symbols from the nightly; on the free tier each one wastes a Tiingo request). Implemented test-first by a ticket-implementer subagent at 050c783d (10 new tests, 8 red before; full suite 9392 passed, Windows-baseline failures only). Code round 1 CLEAN. Real config: 537 -> 514 symbols, 23 scope:scan dropped, all 13 scope:evidence kept. Not merged; for Kenneth to review. || SHIPPED, reconciled 2026-11-08: PR #459 merged at 68758d62. Earlier text in this field that says not merged or pending predates that merge.",
       "audit_history": [
         {
           "round": 1,
@@ -8078,14 +8109,16 @@
             "scope:scan symbols with a live feed (ANSS/SGEN serving another company) no longer get the nightly checked full-window update; already excluded from every scan"
           ]
         }
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "68758d629a658f9d965fb72c22d1a810d2a59c89"
     },
     {
       "id": "DHR-EVIDENCE-EXCLUSION",
       "owner": "agent",
       "name": "DHR scope:evidence exclusion after the yfinance stop-gap",
       "summary": "universe_exclusions.yaml: DHR scope:evidence (2016-07-05 yfinance spin-off jump); tests pin 38 entries.",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "branch": "claude/dhr-evidence-exclusion-03ca67ab",
@@ -8098,7 +8131,7 @@
         "pattern": "^  DHR:\\s+\\{scope: evidence",
         "note": "PRESENCE ONLY of the DHR entry."
       },
-      "notes": "Code round 1: 1 finding (D1-F1) fixed by correcting the header comment; code round 2 CLEAN. Not merged; PR for Kenneth.",
+      "notes": "Code round 1: 1 finding (D1-F1) fixed by correcting the header comment; code round 2 CLEAN. Not merged; PR for Kenneth. || SHIPPED, reconciled 2026-11-08: PR #465 merged at 5096fcef. Earlier text in this field that says not merged or pending predates that merge.",
       "audit_history": [
         {
           "round": 1,
@@ -8126,14 +8159,16 @@
             "/api/regime/series with a hand-passed limit >= ~1880 and chart/historical display paths can show 2016 DHR bars; not claimed covered by the comment"
           ]
         }
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "5096fcef7ac44308df7ef26515065db47527dbe6"
     },
     {
       "id": "BACKEND-LAN-BIND",
       "owner": "agent",
       "name": "Backend bind and CORS origins from .env (live app dark after a 127.0.0.1 restart)",
       "summary": "start-backend.bat reads BAMENDJOU_BACKEND_BIND from the root .env (default 127.0.0.1) and its kill loop also stops 0.0.0.0/BIND_HOST listeners; CORS_EXTRA_ORIGINS adds explicit LAN origins, '*' refused. Recovers stash c857febc.",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-backend-lan-bind-plan.md",
@@ -8185,7 +8220,9 @@
           "report": "docs/superpowers/audits/BACKEND-LAN-BIND/code-r1.md"
         }
       ],
-      "notes": "Requested by Kenneth in chat 2026-10-21. Not merged; PR for Kenneth. After merge, pull main into C:\\GitHub\trading-assistant; the next start-backend.bat restart binds per .env (already BAMENDJOU_BACKEND_BIND=0.0.0.0)."
+      "notes": "Requested by Kenneth in chat 2026-10-21. Not merged; PR for Kenneth. After merge, pull main into C:\\GitHub\trading-assistant; the next start-backend.bat restart binds per .env (already BAMENDJOU_BACKEND_BIND=0.0.0.0). || SHIPPED, reconciled 2026-11-08: PR #483 merged at 3cd38f00. Earlier text in this field that says not merged or pending predates that merge.",
+      "completion_pct": 100,
+      "merge_commit": "3cd38f00b5489930eb12c12107c6a5521ca05c2a"
     },
     {
       "id": "DECISION-34-WATCH-DELIVERY-RESIDUALS",
@@ -8560,7 +8597,7 @@
     {
       "id": "APP-AUDIT-STOCKS",
       "name": "Lane D — Stocks scan, strategies, backtests and position numbers (#352)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-22-app-audit-stocks-plan.md",
       "branch": "board/app-audit-stocks-6564657f",
       "tracking_issue": 352,
@@ -8644,12 +8681,13 @@
       "completion_pct": 100,
       "size": "XL",
       "complexity": 4,
-      "note": "Lane D Stocks scan, strategies, backtests and position numbers reconciliation report, artifacts, and verification suites published (#352). Plan round 2 clean, code round 1 clean."
+      "note": "Lane D Stocks scan, strategies, backtests and position numbers reconciliation report, artifacts, and verification suites published (#352). Plan round 2 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: PR #506 merged at 536da5f9. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "536da5f9e74e63e44900d53ae7663c60b9ed1a4c"
     },
     {
       "id": "APP-AUDIT-OPTIONS",
       "name": "Options numbers, contracts and reports audit",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan_stage": {
@@ -8694,7 +8732,7 @@
         "board item #351",
         "programme #348 lane C"
       ],
-      "notes": "SELF-MERGE PENDING, PR #507, audited head a46df1fd. Lane C Options scores, contracts, reports and trade-card numbers (#351). Plan round 1 clean, code round 1 clean. 359 tests passed, 0 failed, typecheck clean. 5 defects cataloged.",
+      "notes": "SELF-MERGE PENDING, PR #507, audited head a46df1fd. Lane C Options scores, contracts, reports and trade-card numbers (#351). Plan round 1 clean, code round 1 clean. 359 tests passed, 0 failed, typecheck clean. 5 defects cataloged. || SHIPPED, reconciled 2026-11-08: PR #507 merged at dccf3058. Earlier text in this field that says not merged or pending predates that merge.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-OPTIONS/report.md",
@@ -8705,12 +8743,14 @@
         376,
         378,
         379
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "dccf30583e572ff46120eab0d575453b69211297"
     },
     {
       "id": "SEARCH-PROFILES-RECAL-OPTIONS",
       "name": "Recalibrate the 18 Options search profiles (after #121 and #161) (#187)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-22-search-profiles-recal-options-plan.md",
       "branch": "board/search-profiles-recal-options-20a39a3a",
       "tracking_issue": 187,
@@ -8768,12 +8808,13 @@
       "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete."
+      "note": "Code stage clean after 1 round (continuous round 3). 18 Options search profiles recalibrated to schema v5, harness + runbook complete. || SHIPPED, reconciled 2026-11-08: PR #508 merged at f61399ad. Earlier text in this field that says not merged or pending predates that merge.",
+      "merge_commit": "f61399add872107585d826b1f844aa354549d520"
     },
     {
       "id": "OPTIONS-CONTRACT-FLOOR-OVERRIDE",
       "name": "Step 3 Options underlying-score contract floor override",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan_stage": {
@@ -8834,7 +8875,7 @@
         "board item #389",
         "open question #8"
       ],
-      "notes": "SELF-MERGE PENDING, PR #513, audited head bc5c49f0. Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean.",
+      "notes": "SELF-MERGE PENDING, PR #513, audited head bc5c49f0. Step 3 Options underlying-score contract floor override (#389). Plan and code audits clean. || SHIPPED, reconciled 2026-11-08: PR #513 merged at 6f5b8517. Earlier text in this field that says not merged or pending predates that merge.",
       "verify": {
         "kind": "present",
         "path": "backend/app/scoring/contract_validator.py",
@@ -8845,7 +8886,9 @@
         509,
         510,
         511
-      ]
+      ],
+      "completion_pct": 100,
+      "merge_commit": "6f5b8517838172273cbc1da42b30be429227d450"
     },
     {
       "id": "EXACT-STRIKE",
@@ -8885,7 +8928,7 @@
     {
       "id": "SETUP-BACKTEST-CHART",
       "name": "SETUP-BACKTEST-CHART: backtest curve on Chart for Pre-Breakout and Fib Pullback (#391)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-22-setup-backtest-chart-plan.md",
       "branch": "board/setup-backtest-chart-4777cda7",
       "tracking_issue": 391,
@@ -8897,10 +8940,10 @@
         "pattern": "test_setup_backtest_chart",
         "note": "PRESENCE ONLY of setup backtest chart tests (#391)."
       },
-      "completion_pct": 98,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
-      "note": "SELF-MERGE PENDING, PR #514, audited head 6aa0d66a. Plan stage clean after 1 round. Code stage clean after 2 rounds (continuous round 3). Implementation complete and verified clean; all 3 CI checks passed on exact head.",
+      "note": "SELF-MERGE PENDING, PR #514, audited head 6aa0d66a. Plan stage clean after 1 round. Code stage clean after 2 rounds (continuous round 3). Implementation complete and verified clean; all 3 CI checks passed on exact head. || SHIPPED, reconciled 2026-11-08: PR #514 merged at c0328c56. Earlier text in this field that says not merged or pending predates that merge.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -8941,12 +8984,13 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent 3d9cddb9-7314-4424-a0a5-91a2093e211a reviewed diff 3ca330ff..HEAD (539236f2 and 6aa0d66a); 0 gate findings; report docs/superpowers/audits/SETUP-BACKTEST-CHART/code-r2.md"
-      }
+      },
+      "merge_commit": "c0328c56c029bc51fdd0e2db1cf3eb5fb069c747"
     },
     {
       "id": "WATCHLIST-RESIDUALS",
       "name": "WATCHLIST-RESIDUALS: Watchlist validation and refresh residuals (#168)",
-      "status": "built",
+      "status": "shipped",
       "plan": "docs/superpowers/plans/2026-10-22-watchlist-residuals-plan.md",
       "branch": "board/watchlist-residuals-45225aff",
       "tracking_issue": 168,
@@ -8958,10 +9002,10 @@
         "pattern": "test_oversized_strike_isolation",
         "note": "PRESENCE ONLY of test_oversized_strike_isolation (#168)."
       },
-      "completion_pct": 90,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 4,
-      "note": "Plan 1 + code 1 rounds clean (0 gate findings). PR #519 open, self-merge pending CI.",
+      "note": "Plan 1 + code 1 rounds clean (0 gate findings). PR #519 open, self-merge pending CI. || SHIPPED, reconciled 2026-11-08: PR #519 merged at 11bfea11. Earlier text in this field that says not merged or pending predates that merge.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -8993,7 +9037,8 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent 65695e43-9c8e-4d19-a9de-1d60ccf341b1 reviewed diff origin/main..HEAD; 0 gate findings; report docs/superpowers/audits/WATCHLIST-RESIDUALS/code-r1.md"
-      }
+      },
+      "merge_commit": "11bfea1189b28a125e6abee9c52944369cfdd658"
     },
     {
       "id": "DECISION-23-HESTON-EVIDENCE",
@@ -9060,7 +9105,7 @@
     {
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
       "name": "Stale-tab Settings edit overwrites unrelated saved values (#400)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 5,
       "audit_clean": true,
       "plan_stage": {
@@ -9161,7 +9206,7 @@
         "board item #400",
         "remediation from #350"
       ],
-      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Code audit round 2 clean (0 gate findings). Self-merge pending CI.",
+      "notes": "Stale-tab Settings edit overwrites unrelated saved values (#400). Code audit round 2 clean (0 gate findings). Self-merge pending CI. || SHIPPED, reconciled 2026-11-08: PR #525 merged at 81e01277. Earlier text in this field that says not merged or pending predates that merge.",
       "verify": {
         "kind": "present",
         "path": "frontend/lib/settingsStore.ts",
@@ -9169,8 +9214,9 @@
         "note": "Verify presence of syncSettingsFromStorage in settingsStore.ts"
       },
       "tickets": [],
-      "completion_pct": 98,
-      "note": "SELF-MERGE PENDING, PR #525, audited head b6874f67. Plan 3 clean, code 2 clean (continuous round 5). All tests passing."
+      "completion_pct": 100,
+      "note": "SELF-MERGE PENDING, PR #525, audited head b6874f67. Plan 3 clean, code 2 clean (continuous round 5). All tests passing.",
+      "merge_commit": "81e0127737f90dc15dfb0a376ea3c7b56fd0d998"
     },
     {
       "id": "HESTON-RR-OVERPRICING",
