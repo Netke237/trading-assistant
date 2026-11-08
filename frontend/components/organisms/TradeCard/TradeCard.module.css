@@ -621,6 +621,13 @@
 .methodGrid .ladderCard > div { display: contents; }
 .methodGrid .ladderCard > div > .methodSlot { padding: 0 var(--space-4); }
 
+/* #584 — a Ladder row sets a source note and a pricing badge beside its values.
+   At comparison width those two took all the row and `.targetMain` (basis 0)
+   got none, so the values overlapped. The values take the first line; the note
+   and badge wrap beneath them. */
+.methodGrid .targetRow { flex-wrap: wrap; }
+.methodGrid .targetMain { flex: 1 1 100%; }
+
 .methodSlot {
   display: flex;
   flex-direction: column;
