@@ -9797,7 +9797,7 @@
       "name": "Trade-card decision review and exact tracking/broker confirmation (#575)",
       "status": "in_progress",
       "owner": "agent",
-      "branch": "board/trade-card-decision-review-e6cac1a0",
+      "branch": "board/trade-card-decision-review-179b9130",
       "tracking_issue": 575,
       "plan": "docs/superpowers/plans/2026-11-07-trade-card-decision-review-plan.md",
       "audit_rounds": 3,
@@ -9853,7 +9853,7 @@
           "report": "docs/superpowers/plans/trade-card-decision-review/plan-r3.md"
         }
       ],
-      "note": "Pinned-main sourceinventory576 completed/closed at61ea1103:520 contracts,67 supplements,38helpers,61 immutable sourcehashes; localchecks pass. Mini-PC comparison user-deferred/unverified/nonblocking. Starting577 in dependencyorder; buildtickets1/9closed. Plan3clean/code0 history preserved; phase20%,XL,complexity4; overall code audit_clean false.",
+      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified.",
       "code_stage": {
         "rounds": 0,
         "clean": false
@@ -9876,10 +9876,52 @@
           "complexity": 3
         },
         "577": {
-          "status": "in_progress",
-          "completion_pct": 20,
+          "status": "closed_verified_github",
+          "commit": "3d0bc89f",
+          "completion_pct": 70,
           "size": "M",
           "complexity": 3
+        },
+        "578": {
+          "status": "closed_verified_github",
+          "commit": "03399e13",
+          "completion_pct": 70,
+          "size": "M",
+          "complexity": 3
+        },
+        "579": {
+          "status": "closed_verified_github",
+          "commit": "e183355e",
+          "completion_pct": 70,
+          "size": "M",
+          "complexity": 4
+        },
+        "580": {
+          "status": "closed_verified_github",
+          "commit": "d538f27b",
+          "completion_pct": 70,
+          "size": "L",
+          "complexity": 4
+        },
+        "581": {
+          "status": "closed_verified_github",
+          "commit": "c58bdd64",
+          "completion_pct": 70,
+          "size": "L",
+          "complexity": 4
+        },
+        "582": {
+          "status": "closed_verified_github",
+          "commit": "7aab5720",
+          "completion_pct": 70,
+          "size": "L",
+          "complexity": 4
+        },
+        "583": {
+          "status": "in_progress",
+          "completion_pct": 20,
+          "size": "L",
+          "complexity": 4
         }
       }
     }
