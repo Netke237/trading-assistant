@@ -76,11 +76,13 @@ const echo = (body: Record<string, unknown>) => Promise.resolve({ ok: true, stat
 /** #582 — Track basket confirms only server-reviewed rows. The review
  *  (POST /api/portfolio/preview) is answered with the request echoed as the
  *  would-be saved row; every other request goes to `inner`. */
+/** #583 — fields the server preview resolves differently (e.g. a resize). */
+let previewPatch: Record<string, unknown> = {};
 function withPreview(inner: typeof fetch): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
       const body = JSON.parse(String(init.body));
-      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' , ...previewPatch }, differences: [], ...('qty' in previewPatch ? { adjustedQty: previewPatch.qty } : {}) }) };
     }
     return (inner as unknown as (u: string, i?: RequestInit) => Promise<unknown>)(url, init);
   }) as unknown as typeof fetch;
@@ -151,6 +153,11 @@ async function send(kind: 'LMT' | 'MKT' = 'LMT') {
   const btn = await screen.findByRole('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
+  // #583 — the server review opens first; its final action saves and sends.
+  // A refusal before the review (e.g. a contract already tracked) opens none.
+  await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
 }
 
 /** Send, then wait until the send has fully finished (both buttons enabled). */
@@ -192,6 +199,7 @@ beforeEach(() => {
   resetStores();
   jest.clearAllMocks();
   callLog = [];
+  previewPatch = {};
   persistReply = echo;
   getReplies = [];
   (api.getStockQuote as jest.Mock).mockResolvedValue({ price: 150 });
@@ -285,6 +293,7 @@ describe('P1b-i — save first, then send', () => {
   });
 
   it('5. the order goes out at the quantity the save approved', async () => {
+    previewPatch = { qty: 2 };
     persistReply = (body) => Promise.resolve({ ok: true, status: 201, json: async () => ({ ...body, qty: 2, adjustedQty: 2 }) });
     await renderPage();
     fireEvent.click(screen.getByLabelText('Edit Contracts'));
@@ -543,6 +552,7 @@ describe('P1b-i — the green line and the entry price', () => {
     const order = deferred<{ order_id: string; status: string }>();
     (api.postOptionOrder as jest.Mock).mockReturnValue(order.promise);
     persistReply = (body) => Promise.resolve({ ok: true, status: 201, json: async () => ({ ...body, adjustedQty: 2 }) });
+    previewPatch = { qty: 2 };
     await renderPage();
     await send();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalled());

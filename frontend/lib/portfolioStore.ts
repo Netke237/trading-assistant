@@ -502,6 +502,20 @@ export function parsePreview(x: unknown): TrackingPreview | null {
   };
 }
 
+/** Audit round 1, F1 — the order a direct send's save precedes. Create-only
+ *  transport, never a field of the position. */
+export interface DirectOrderTransport { orderType: 'LMT' | 'MKT'; limitPrice: number | null }
+
+/** The create body: the position, plus the order it precedes when there is
+ *  one. ONE builder for the preview and the confirmation (#583), so the two
+ *  bodies cannot differ. */
+function createPayload(p: PortfolioPosition, portfolioValue: number, order?: DirectOrderTransport): Record<string, unknown> {
+  return {
+    ...toBackendPayload(p, portfolioValue),
+    ...(order ? { orderType: order.orderType, orderLimitPrice: order.limitPrice } : {}),
+  };
+}
+
 export type PreviewOutcome =
   | { kind: 'ok'; preview: TrackingPreview }
   | { kind: 'rejected'; detail: string }
@@ -511,12 +525,19 @@ export type PreviewOutcome =
  *  request (the same `toBackendPayload` body the confirmation sends). The
  *  server writes nothing. A 409/422 is the create's own refusal, reported as
  *  `rejected` with its detail. */
-export async function previewPosition(p: PortfolioPosition, portfolioValue = accountValue()): Promise<PreviewOutcome> {
+export async function previewPosition(
+  p: PortfolioPosition,
+  portfolioValue = accountValue(),
+  /** #583 — the order a direct send's save precedes, exactly as
+   *  `persistPosition` sends it, so the preview resolves (and fingerprints)
+   *  the body the confirmation will POST. Omitted for Track basket. */
+  order?: DirectOrderTransport,
+): Promise<PreviewOutcome> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+      body: JSON.stringify(createPayload(p, portfolioValue, order)),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -656,16 +677,20 @@ export async function persistPosition(
    *  (`portfolio_risk.premium_cap_basis`: max(mid, limit) for LMT, the ask for
    *  MKT), not at the stored mid. Create-only transport, never a field of the
    *  position. Omitted means no order follows (judged at the mid). */
-  order?: { orderType: 'LMT' | 'MKT'; limitPrice: number | null },
-): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
+  order?: DirectOrderTransport,
+  /** #583 — the fingerprint of the server preview the trader confirmed, sent
+   *  as `X-Review-Fingerprint`; the body is unchanged. A current resolution
+   *  that differs answers 412 and writes nothing, and `reviewRequired` carries
+   *  the new preview. Omitted: the create exactly as before. */
+  reviewFingerprint?: string,
+): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null; reviewRequired?: TrackingPreview }> {
   try {
-    const payload = {
-      ...toBackendPayload(p, portfolioValue),
-      ...(order ? { orderType: order.orderType, orderLimitPrice: order.limitPrice } : {}),
-    };
+    const payload = createPayload(p, portfolioValue, order);
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: reviewFingerprint != null
+        ? { 'Content-Type': 'application/json', [REVIEW_FINGERPRINT_HEADER]: reviewFingerprint }
+        : { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (res.ok) {
@@ -691,6 +716,13 @@ export async function persistPosition(
       };
     }
     const body = await res.json().catch(() => ({}));
+    if (reviewFingerprint != null && res.status === 412) {
+      const detail = (body as { detail?: { code?: unknown; preview?: unknown } } | null)?.detail;
+      const preview = detail && detail.code === 'review_required' ? parsePreview(detail.preview) : null;
+      if (preview) {
+        return { ok: false, detail: 'The server-resolved values changed since they were reviewed.', reviewRequired: preview };
+      }
+    }
     return { ok: false, detail: errorDetail(body, res.status) };
   } catch {
     // Backend unreachable. Do NOT report ok:true here — nothing was actually
