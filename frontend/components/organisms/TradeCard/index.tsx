@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Text, Data } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
@@ -445,6 +445,11 @@ interface TradeCardProps {
    *  pattern `onFirstPassageChange` needs buys nothing here. */
   initialMethodPick?: MethodPick | null;
   onMethodPickChange?: (pick: MethodPick | null) => void;
+  /** #581 — the page's submission review (`SubmissionReview`), rendered in
+   *  the Final Recommendation in place of the "Execution …" echo rows, so the
+   *  actual settings appear once, from the request the send paths submit.
+   *  Absent (standalone card), the echo rows render instead. */
+  submissionReview?: ReactNode;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -536,6 +541,7 @@ export function TradeCard({
   onMaxLossOverrideChange,
   initialMethodPick = null,
   onMethodPickChange,
+  submissionReview,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -2380,6 +2386,22 @@ export function TradeCard({
   const chosenPremium = chosenArithmetic?.contractPrice ?? chosenMc?.optionPrice ?? chosenRace?.targetOptionPrice ?? chosenLadder?.estimatedOptionPrice;
   const chosenDays = chosenArithmetic?.expectedDays ?? chosenMc?.expectedDays ?? chosenRace?.daysTarget;
   const chosenProbability = chosenArithmetic?.probability ?? chosenMc?.probability;
+  // #581 — the chosen row's full-position estimated dollar outcome, by the
+  // SAME formula and premium basis its own method table prints (Arithmetic:
+  // matched calculation premium; Monte Carlo: the estimate's echoed/captured
+  // premium, integer cents). Gross, before costs; never a fill. No other row
+  // has a matched premium basis, so it says unavailable rather than invent one.
+  const quantityValidForOutcome = Number.isFinite(overlay.contracts) && overlay.contracts >= 0;
+  const chosenOutcome: string = chosenArithmetic
+    ? arithmeticPremium == null ? 'Unavailable — calculation premium basis missing'
+      : Number.isFinite(chosenArithmetic.contractPrice) && chosenArithmetic.contractPrice >= 0 && quantityValidForOutcome
+        ? `$${((chosenArithmetic.contractPrice - arithmeticPremium) * overlay.contracts * 100).toFixed(2)}` : 'Unavailable'
+    : chosenMc
+      ? mcPremium == null || !(mcPremium > 0) ? 'Unavailable — estimate premium basis missing'
+        : Number.isFinite(chosenMc.optionPrice) && chosenMc.optionPrice >= 0 && quantityValidForOutcome
+          ? `$${((Math.round(Number(chosenMc.optionPrice.toFixed(2)) * 100) - Math.round(mcPremium * 100)) * overlay.contracts).toFixed(2)}` : 'Unavailable'
+      : chosenRace ? 'Unavailable — Barrier Race reports edge per contract (see the Barrier Race card)'
+        : 'Unavailable — no matched calculation premium basis';
   const chosenModel = chosenArithmetic?.rrModel ?? chosenLadder?.pricingMethod
     ?? ((chosenMc || chosenRace) && firstPassage?.race?.ivSolved === true ? 'BS repriced (IV-derived)' : null);
   // Same condition and name the Spread Legs panel below uses, so the identity
@@ -3491,18 +3513,30 @@ export function TradeCard({
                   <KV label={chosenRace ? 'Allocated target-first probability' : 'Independent target probability before expiry'} value={chosenRace ? `${weightPercents(chosenRace)[0]}%` : chosenProbability != null && Number.isFinite(chosenProbability) && chosenProbability >= 0 && chosenProbability <= 1 ? `${(chosenProbability * 100).toFixed(0)}%` : 'Unavailable'} mono />
                   <KV label="Conditional target median" value={chosenDays != null && Number.isFinite(chosenDays) && chosenDays >= 0 ? chosenRace ? `~${days(chosenDays)} (calendar days)` : `~${Math.round(chosenDays)} calendar days` : 'Unavailable'} mono />
                   <KV label="Result pricing model" value={chosenModel || 'Unavailable — no result model evidence'} />
+                  <KV label="Estimated dollar outcome (full position, before costs)" value={chosenOutcome} mono />
                 </>}
                 <KV label="Judged on basis" value={methodPick.stopBasis === 'premium' ? 'Premium stop' : 'Stock stop'} />
                 <KV label="Decision timestamp" value={methodPick.pickedAt} mono />
               </>}
               <KV label="Applicable quantity" value={`${overlay.contracts} entered contracts × 100 shares; selected-contract full exit${chosenLadder?.contractsToSell != null ? `; ladder rung allocation ${chosenLadder.contractsToSell} contracts` : ''}`} />
               {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis; not whole-spread quantities or risk.</Text>}
-              <Text size={10} tone="dim">Execution fields below are the current order inputs. Selection does not synchronize them. Stock-stop and premium-stop alerts remain independent.</Text>
-              <KV label="Execution order / limit" value={`${data.entry.orderType} / ${summaryPrice(overlay.entryLimit, '/share')}`} mono />
-              <KV label="Execution stock stop" value={summaryPrice(overlay.invalidation, 'stock')} mono />
-              <KV label="Execution premium stop" value={effectivePremiumStop != null ? summaryPrice(effectivePremiumStop, '/share') : `Global ${Number((globalPremiumStopPct * 100).toFixed(2))}% — resolved against fill`} mono />
-              <KV label="Execution time exit" value={`${TIME_STOP_DTE} DTE`} mono />
+              {submissionReview === undefined && <>
+                <Text size={10} tone="dim">Execution fields below are the current order inputs. Selection does not synchronize them. Stock-stop and premium-stop alerts remain independent.</Text>
+                <KV label="Execution order / limit" value={`${data.entry.orderType} / ${summaryPrice(overlay.entryLimit, '/share')}`} mono />
+                <KV label="Execution stock stop" value={summaryPrice(overlay.invalidation, 'stock')} mono />
+                {/* #581 — on the SAME basis the Exit Plan and the send paths use:
+                    an untouched premium stop sends nothing, so the global applies
+                    against the fill (also in the tiny-premium read-only case); a
+                    touched one is the kept dollar amount. Never the display-only
+                    live-mid or scan-seed dollar figure. */}
+                <KV label="Execution premium stop" value={premiumStopTouched && overlay.premiumStop != null && overlay.premiumStop > 0
+                  ? `${summaryPrice(overlay.premiumStop, '/share')} · pinned`
+                  : `Global ${Number((globalPremiumStopPct * 100).toFixed(2))}% — resolved against fill`} mono />
+                <KV label="Execution time exit" value={`${TIME_STOP_DTE} DTE`} mono />
+              </>}
             </section>
+            {/* #581 — the actual settings, once, from the submitted request. */}
+            {submissionReview}
             {recommendationUnavailable && (
               <Text size={11} tone="caution">Selected method results unavailable — run its calculation if needed, then choose an exit method again.</Text>
             )}
