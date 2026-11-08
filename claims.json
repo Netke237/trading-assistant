@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "docs/reconcile-unrecorded-phases-07e26b5f",
-      "claimed_at": "2026-11-08T20:29:01Z",
-      "expires_at": "2026-11-08T23:29:01Z",
-      "note": "One docs PR recording 33 verified phases as shipped",
-      "task": "STATE-RECONCILE-33-2026-11-08"
-    }
-  ]
+  "claims": []
 }
