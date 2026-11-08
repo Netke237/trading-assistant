@@ -3,15 +3,9 @@
     {
       "agent": "claude",
       "branch": "board/trade-card-decision-review-5f119477",
-      "claimed_at": "2026-11-08T12:17:13Z",
-      "expires_at": "2026-11-08T17:38:44Z",
-      "note": "#575 reassigned back by Kenneth in chat 2026-11-08 (from codex 179b9130)",
-      "previous": [
-        {
-          "branch": "board/trade-card-decision-review-179b9130",
-          "claimed_at": "2026-11-08T11:05:14Z"
-        }
-      ],
+      "claimed_at": "2026-11-08T18:05:43Z",
+      "expires_at": "2026-11-08T21:05:43Z",
+      "note": "#575 merge of PR #594 on Kenneth's instruction",
       "task": "TRADE-CARD-DECISION-REVIEW"
     }
   ]
