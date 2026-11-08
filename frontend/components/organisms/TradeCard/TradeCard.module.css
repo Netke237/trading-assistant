@@ -61,10 +61,6 @@
   grid-column: 1 / -1;
 }
 
-.targetsCard {
-  grid-column: 1 / -1;
-}
-
 .targetsTable {
   display: flex;
   flex-direction: column;
@@ -579,13 +575,58 @@
   height: 0;
 }
 
-/* Stack methods according to the card's usable width, including the frame rail. */
-.methodGrid {
+/* #580 — one results area for the three profit-target methods. */
+.methodResults {
   grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.methodResultsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Open cards sit side by side where they fit (by the card's usable width,
+   including the frame rail); extra cards wrap below and a narrow card stacks.
+   Each card spans the same four rows (header, basis, stop, targets) through
+   subgrid, so cards sharing a row have equal height and aligned slots. */
+.methodGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: var(--space-4);
-  align-items: start;
+  align-items: stretch;
+}
+
+.methodCardSlot { display: contents; }
+.methodCardSlot[hidden] { display: none; }
+
+.methodGrid .methodCard {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  row-gap: var(--space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+/* The Ladder's collapsible body joins its card's rows; its padding moves to
+   the slots because a `display: contents` box draws none. */
+.methodGrid .ladderCard { padding-bottom: var(--space-4); }
+.methodGrid .ladderCard > div { display: contents; }
+.methodGrid .ladderCard > div > .methodSlot { padding: 0 var(--space-4); }
+
+.methodSlot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .grid > *,
@@ -767,27 +808,10 @@
   gap: var(--space-2);
 }
 
-/* All returned Arithmetic targets share a single comparison and calculation basis. */
-.arithmeticSection { grid-column: 1 / -1; min-width: 0; }
+/* Method basis/stop facts: label above value, wrapping by available width. */
 .arithmeticBasis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   gap: var(--space-3);
 }
 .arithmeticBasis > div { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
-.arithmeticTableScroll { overflow-x: auto; }
-.arithmeticTable { width: 100%; border-collapse: collapse; text-align: left; }
-.arithmeticTable th, .arithmeticTable td {
-  padding: var(--space-3);
-  vertical-align: top;
-  border-bottom: 1px solid var(--border-subtle);
-  min-width: 95px;
-}
-.arithmeticTable th:first-child { min-width: 200px; max-width: 290px; }
-.arithmeticTable tbody th > span, .arithmeticTable td > span { display: block; }
-.arithmeticTable tbody th > span + span { margin-top: var(--space-2); }
-.arithmeticTable tbody th { font-weight: 400; }
-.arithmeticTable tbody tr:last-child > * { border-bottom: 0; }
-
-/* Keep the complete MC basis and all target comparisons readable at desktop widths. */
-.monteCarloSection { grid-column: 1 / -1; min-width: 0; }

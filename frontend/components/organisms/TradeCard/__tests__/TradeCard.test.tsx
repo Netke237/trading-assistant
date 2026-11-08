@@ -119,11 +119,11 @@ describe('TradeCard', () => {
     localStorage.clear();
   });
 
-  it('shows one initial ladder ahead of order inputs and preserves restored collapse preference', () => {
+  it('shows one ladder in the profit-target methods area and preserves restored collapse preference', () => {
     const { unmount } = render(<TradeCard data={mockTradeCard} />);
     const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
-    const order = screen.getByRole('region', { name: 'Order inputs & risk budget' });
-    expect(ladder.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // #580: the Ladder joined Arithmetic and Monte Carlo in one results area.
+    expect(screen.getByRole('region', { name: 'Profit-target methods' })).toContainElement(ladder);
     expect(screen.getAllByRole('button', { name: 'Edit target stock price for TP1' })).toHaveLength(1);
     expect(within(ladder).getByText(/Scan-plan targets and stored option estimates/)).toBeInTheDocument();
     unmount();

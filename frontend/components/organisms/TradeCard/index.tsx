@@ -9,6 +9,8 @@ import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { AlternativeContractRow } from '@/components/molecules/AlternativeContractRow';
 import { MethodPickSelector } from '@/components/molecules/MethodPickSelector';
 import type { MethodPickOption } from '@/components/molecules/MethodPickSelector';
+import { MethodCompareSelector } from '@/components/molecules/MethodCompareSelector';
+import type { ComparedMethod } from '@/components/molecules/MethodCompareSelector';
 import { MarketSentiment } from '@/components/molecules/MarketSentiment';
 import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthCard';
 import { InlineChartPanel } from '@/components/organisms/InlineChartPanel';
@@ -612,6 +614,10 @@ export function TradeCard({
    *  `maxLossOverride` above is. Local state rather than the prop read directly
    *  so a click paints immediately instead of waiting for a store round trip. */
   const [methodPick, setMethodPick] = useState<MethodPick | null>(initialMethodPick);
+  /** #580 — which method cards are open side by side. Display only and
+   *  deliberately separate from `methodPick`: never persisted, never sent,
+   *  never read by a calculation, an override or the send path. */
+  const [comparedMethods, setComparedMethods] = useState<ComparedMethod[]>(['arithmetic', 'monte_carlo', 'ladder']);
   // Display-only memory prevents an invalidated pick from showing another
   // method's latest results. Reset with the candidate/scan, or a new choice.
   const [recommendationInvalidated, setRecommendationInvalidated] = useState(false);
@@ -2353,6 +2359,9 @@ export function TradeCard({
   const arithmeticPremium = arithmeticCost?.basis === 'bs_today'
     && arithmeticCost.stopPrice === exitPlan?.stop.price
     ? arithmeticCost.premium : null;
+  // #580 — the Arithmetic card's current-time stop-cost readout obeys the SAME
+  // matched rule: only a bs_today block priced at this plan's own stop.
+  const arithmeticStopCost = arithmeticPremium != null ? arithmeticCost : null;
 
   // Recover result evidence with the selector's price pair. A changed row
   // cannot lend new probability/model data to a recorded older target.
@@ -2576,64 +2585,6 @@ export function TradeCard({
       </CollapsibleSection>
 
       <div className={styles.grid}>
-
-        <CollapsibleSection
-          title="Fixed % Ladder Plan"
-          storageKey="bamendjou:tradecard-ladder-collapsed"
-          className={styles.fullWidth}
-        >
-          <section aria-label="Fixed ladder targets" className={`${styles.planCard} ${styles.targetsCard}`}>
-            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
-            <Text size={10} tone="dim">Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices and calculation results are shown separately below.</Text>
-            <Text size={10} tone="dim">Dollar outcomes compare each alternative exit with the editable entry limit, using displayed premiums rounded to cents. Full-position exits and rung allocations are separate; do not add alternative outcomes.</Text>
-            <Text size={10} tone="dim">R/R risk: full premium (no protective stop order).</Text>
-            {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
-            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
-            <div className={styles.targetsTable}>
-              {data.exit.targets.map((t, i) => (
-                <EditableTargetRow
-                  key={t.id ?? i}
-                  target={t}
-                  index={i}
-                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
-                  entryLimit={overlay.entryLimit}
-                  // The R:R risk leg: overlay.entryLimit, the full premium
-                  // (Phase C RR, D5). Both legs stay on the SCAN basis -- its
-                  // reward leg is estimatedOptionPrice - entryLimit -- so a
-                  // live mid is never divided into a scan-mid reward.
-                  premiumStop={ladderRisk}
-                  // The backend's ratio only when it was computed on the same
-                  // basis at the same entry. A saved pre-RR candidate
-                  // ('premium_stop' / 'stock_stop' / absent) is recomputed,
-                  // which is exact: estimatedOptionPrice does not depend on
-                  // the risk basis.
-                  authoritativeRr={data.exit.rrRiskBasis === 'full_premium' && overlay.entryLimit === data.entry.limit ? t.rrContribution : undefined}
-                  data={data}
-                  onStockPriceChange={(v) => {
-                    const next = [...overlay.targets];
-                    next[i] = v;
-                    patch({ targets: next });
-                  }}
-                  totalContracts={overlay.contracts}
-                />
-              ))}
-            </div>
-          </section>
-
-          {/* The "Risk / Reward" readout that stood here is gone: its risk leg
-               was premium x a fixed percentage, so premium cancelled and the
-               ratio reduced to the typed target % over the typed stop % — the
-               same number on every contract. The Barrier Race card's
-               stock-stop R:R replaces it with one that actually discriminates.
-               overlay.premiumStop itself is UNTOUCHED: it is the premium-stop
-               alert level and the race's third barrier. It is no longer the
-               rrContribution risk denominator — that is the full premium
-               (Phase C RR, D5). (computeEditedRR and isDirty were named
-               here too until the Ladder-default copy of the "Projected R/R"
-               readout went as well — that readout was their only caller, so
-               both are gone. The field's remaining reasons stand on their
-               own.) */}
-        </CollapsibleSection>
 
         <section className={styles.handling} aria-label="Order inputs &amp; risk budget">
           <Text size={16} weight={600}>Order inputs &amp; risk budget</Text>
@@ -3114,25 +3065,59 @@ export function TradeCard({
 
         </section>
 
-        <div className={styles.methodGrid}>
-        {/* Arithmetic Profit Target (Feature 3) — the primary method, expanded
-             by default, alongside Monte Carlo when the card has enough width. */}
-        <section className={`${styles.planCard} ${styles.arithmeticSection}`} aria-label="Arithmetic Profit Target">
-          <div className={styles.scoreCardHeader}>
-            <Text size={14} weight={600}>Arithmetic Profit Target</Text>
-            <Text size={11} tone="secondary">{data.direction}</Text>
+        {/* TC-REVIEW-05 (#580) — the three profit-target methods in ONE results
+             area. Showing or comparing cards is display only: it never runs a
+             calculation, never sets `methodPick` (the Final Recommendation's
+             control below owns that) and never writes an order/exit field.
+             Every card is kept mounted and only hidden, so a hidden card keeps
+             its results, edits and freshness exactly as they were. Each card
+             lays out the same slots in the same order — basis, stop, targets —
+             and the target rows list option premium, dollar outcome, stock
+             target, probability and time in Monte Carlo's order. */}
+        <section className={styles.methodResults} aria-label="Profit-target methods">
+          <div className={styles.methodResultsHead}>
+            <Text size={16} weight={600}>Profit-target methods</Text>
+            <MethodCompareSelector value={comparedMethods} onChange={setComparedMethods} />
           </div>
-          <div className={styles.arithmeticBasis}>
-            <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
-            <KV label={arithmeticLiveStockPrice != null ? 'Latest calculation-input stock reference' : 'Scan stock reference'} value={`$${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}`} mono />
-            <KV label="Calculation premium used" value={arithmeticPremium != null ? `$${arithmeticPremium.toFixed(2)}/share` : 'Unavailable — calculation premium basis missing'} mono />
-            <KV label="Shared computed stock stop" value={exitPlan ? `$${exitPlan.stop.price.toFixed(2)} · ${exitPlan.stop.source}` : 'Not yet computed'} mono />
+          <Text size={10} tone="dim">
+            Showing or comparing methods is display only: it does not run a calculation, choose the
+            Final Recommendation method or change the order and exit fields. Each card keeps its own
+            source, valuation basis and freshness; the methods are independent and can disagree.
+          </Text>
+        <div className={styles.methodGrid} data-compare-count={comparedMethods.length}>
+        {/* Arithmetic Profit Target (Feature 3) — the primary method. */}
+        <div className={styles.methodCardSlot} data-method-card="arithmetic" hidden={!comparedMethods.includes('arithmetic')}>
+        <section className={`${styles.planCard} ${styles.methodCard}`} aria-label="Arithmetic Profit Target">
+          <div className={styles.methodSlot} data-slot="header">
+            <div className={styles.scoreCardHeader}>
+              <Text size={14} weight={600}>Arithmetic Profit Target</Text>
+              <Text size={11} tone="secondary">{data.direction}</Text>
+            </div>
           </div>
-          <Text size={10} tone="dim">Stored calculation stock entry: unavailable in the returned plan. The reference above is the scan or latest calculation input; Check structure can also refresh it.</Text>
-          <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − calculation's echoed premium) × quantity × 100, from displayed cent-rounded prices, before commissions; not a fill or guaranteed profit.`}</Text>
-          {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
-          <Text size={10} tone="dim">Risk reference: selected-contract full premium; stop-loss sizing remains separately shown with its scan-mid basis in Order inputs & risk budget. Ratios describe stock geometry, not guaranteed option R:R. Independent of the other profit-target methods on this page; they can disagree. The computed stock stop is shared by every returned target and does not replace execution invalidation.</Text>
-          <div className={styles.structuralStop}>
+          <div className={styles.methodSlot} data-slot="basis">
+            <div className={styles.arithmeticBasis}>
+              <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
+              <KV label={arithmeticLiveStockPrice != null ? 'Latest calculation-input stock reference' : 'Scan stock reference'} value={`$${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}`} mono />
+              <KV label="Calculation premium used" value={arithmeticPremium != null ? `$${arithmeticPremium.toFixed(2)}/share` : 'Unavailable — calculation premium basis missing'} mono />
+            </div>
+            <Text size={10} tone="dim">Stored calculation stock entry: unavailable in the returned plan. The reference above is the scan or latest calculation input; Check structure can also refresh it.</Text>
+            <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − calculation's echoed premium) × quantity × 100, from displayed cent-rounded prices, before commissions; not a fill or guaranteed profit.`}</Text>
+            {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
+            <Text size={10} tone="dim">Risk reference: selected-contract full premium; stop-loss sizing remains separately shown with its scan-mid basis in Order inputs & risk budget. Ratios describe stock geometry, not guaranteed option R:R. Independent of the other profit-target methods on this page; they can disagree. The computed stock stop is shared by every returned target and does not replace execution invalidation.</Text>
+          </div>
+          <div className={styles.methodSlot} data-slot="stop">
+            <Text size={11} weight={500}>Calculated stop (shared by every returned target)</Text>
+            <div className={styles.arithmeticBasis}>
+              <KV field="stock-stop" label="Calculated stock stop" value={exitPlan ? `$${exitPlan.stop.price.toFixed(2)} · ${exitPlan.stop.source}` : 'Not yet computed'} mono />
+              <KV field="stop-value" label="Current-time stop-cost value at stop" value={arithmeticStopCost ? `$${arithmeticStopCost.valueAtStop.toFixed(2)}/share` : exitPlan ? 'Unavailable — no stop-cost estimate on the calculation premium basis' : 'Not yet computed'} mono />
+              <KV field="stop-loss" label="Current-time stop-cost loss" value={arithmeticStopCost ? `$${arithmeticStopCost.loss.toFixed(2)}/share` : exitPlan ? 'Unavailable — no stop-cost estimate on the calculation premium basis' : 'Not yet computed'} mono />
+            </div>
+            {exitPlan && (
+              <Text size={10} tone="dim">{`${arithmeticLiveStockPrice != null ? 'Calculated this session' : 'Restored Arithmetic calculation'}${exitPlan.computedAt ? ` · ${formatHHMM(exitPlan.computedAt)}` : ''}.`}</Text>
+            )}
+            <Text size={10} tone="dim">{"Current-time stop-cost: Black-Scholes at the calculated stop with today's days to expiry (no elapsed time), on the calculation's echoed premium, per share. It is a different basis from the Arithmetic contract value at stop in Structure & Stops and from the Barrier Race's barrier-time repricing. The calculated stop does not replace the Exit Plan's execution invalidation."}</Text>
+          </div>
+          <div className={`${styles.methodSlot} ${styles.structuralStop}`} data-slot="targets">
             <button type="button" className={styles.btn} onClick={computeExitPlan} disabled={exitPlanLoading || !data.contractDetails}>
               <Text size={12} weight={500}>{exitPlanLoading ? 'Computing arithmetic plan…' : 'Compute Arithmetic Plan'}</Text>
             </button>
@@ -3140,51 +3125,62 @@ export function TradeCard({
             {!exitPlan && <Text size={12} tone="dim">Target estimates — not yet computed —</Text>}
             {exitPlan && exitPlan.targets.length === 0 && <Text size={12} tone="dim">No target estimates returned.</Text>}
             {exitPlan && exitPlan.targets.length > 0 && (
-              <div className={styles.arithmeticTableScroll}>
-                <table className={styles.arithmeticTable} aria-label="Arithmetic target comparison">
-                  <thead><tr>
-                    {['Stock ratio / geometry', 'Arithmetic stock target', 'Effective stock target', 'Option premium', 'Estimated dollar outcome', 'Probability before expiry', 'Conditional median time', 'Pricing model'].map((label) => <th key={label} scope="col"><Text size={10} tone="secondary" weight={400}>{label}</Text></th>)}
-                  </tr></thead>
-                  <tbody>{exitPlan.targets.map((t, i) => {
-                    const compareState = targetCompareState(t);
-                    const priceAvailable = Number.isFinite(t.contractPrice) && t.contractPrice >= 0;
-                    const outcome = arithmeticPremium != null && priceAvailable && Number.isFinite(overlay.contracts) && overlay.contracts >= 0
-                      ? (t.contractPrice - arithmeticPremium) * overlay.contracts * 100 : null;
-                    return <tr key={`${t.rrRatio}-${i}`}>
-                      <th scope="row">
-                        <Text size={12} weight={500}>{t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}</Text>
+              <div className={styles.targetsTable} role="list" aria-label="Arithmetic target comparison">
+                {exitPlan.targets.map((t, i) => {
+                  const compareState = targetCompareState(t);
+                  const priceAvailable = Number.isFinite(t.contractPrice) && t.contractPrice >= 0;
+                  const outcome = arithmeticPremium != null && priceAvailable && Number.isFinite(overlay.contracts) && overlay.contracts >= 0
+                    ? (t.contractPrice - arithmeticPremium) * overlay.contracts * 100 : null;
+                  return (
+                    <div className={styles.targetRow} role="listitem" data-target-row key={`${t.rrRatio}-${i}`}>
+                      <div className={styles.targetMain}>
+                        <div className={styles.targetId}>
+                          <Text size={12} weight={600}>{t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}</Text>
+                        </div>
                         <Text size={10} tone={compareState === 'beyond' ? 'caution' : 'dim'}>
                           {t.qualityReasons.includes('target_capped') ? 'Bearish target capped at the price floor. ' : ''}{targetCompareLabel(compareState)}
                         </Text>
+                        <div className={styles.resultColumns}>
+                          <div className={styles.targetValues}>
+                            <KV field="option" label="Option premium" value={priceAvailable ? `$${t.contractPrice.toFixed(2)}` : 'Unavailable'} mono />
+                            <KV field="outcome" label="Estimated dollar outcome" value={outcome != null ? `$${outcome.toFixed(2)}` : arithmeticPremium == null ? 'Unavailable — calculation premium basis missing' : 'Unavailable'} mono />
+                            <KV field="stock" label="Resolved stock target (used for valuation)" value={Number.isFinite(t.price) ? `$${t.price.toFixed(2)}` : 'Unavailable'} mono />
+                            <KV field="model" label="Pricing model" value={t.rrModel || 'Unavailable'} />
+                          </div>
+                          <div className={styles.probabilityColumn}>
+                            <KV field="probability" label="Probability before expiry" value={Number.isFinite(t.probability) && t.probability >= 0 && t.probability <= 1 ? `${(t.probability * 100).toFixed(0)}%` : 'Unavailable'} mono />
+                            <KV field="time" label="Conditional median time" value={t.expectedDays != null && Number.isFinite(t.expectedDays) && t.expectedDays >= 0 ? `~${Math.round(t.expectedDays)} calendar days` : 'Unavailable — no conditional median'} mono />
+                          </div>
+                        </div>
                         <details className={styles.methodDetails}>
-                          <summary>Target geometry</summary>
+                          <summary>Original target, snap geometry and pricing</summary>
+                          <KV label="Original arithmetic stock target" value={Number.isFinite(t.arithmeticPrice) ? `$${t.arithmeticPrice.toFixed(2)}` : 'Unavailable'} mono />
                           <KV label="Target source" value={t.tpSource} />
                           <KV label="Quality" value={t.qualityGood ? 'Good' : 'Caution'} />
                           <Text size={10} tone="dim">{t.qualityReasons.length ? t.qualityReasons.join(' · ') : 'No quality warnings'}</Text>
                           <KV label="Nearest structural level" value={t.structuralPrice != null ? `$${t.structuralPrice.toFixed(2)}` : 'No structural stop found'} mono />
                           <KV label="Distance" value={t.distanceDollar != null ? `$${t.distanceDollar.toFixed(2)}` : '—'} mono />
                           <KV label="Tolerance" value={`$${t.toleranceDollar.toFixed(2)}`} mono />
+                          <Text size={10} tone="dim">{"The resolved stock target is the original arithmetic target, or a structural level when it was snapped within tolerance (see target source). The option premium is the returned per-share price at the resolved target from the pricing model shown; the dollar outcome subtracts the echoed calculation premium and scales by entered quantity × 100."}</Text>
                         </details>
-                      </th>
-                      <td><Data size={12}>{Number.isFinite(t.arithmeticPrice) ? `$${t.arithmeticPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
-                      <td><Data size={12}>{Number.isFinite(t.price) ? `$${t.price.toFixed(2)}` : 'Unavailable'}</Data><Text size={10} tone="dim">{t.tpSource}</Text></td>
-                      <td><Data size={12}>{priceAvailable ? `$${t.contractPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
-                      <td><Data size={12}>{outcome != null ? `$${outcome.toFixed(2)}` : arithmeticPremium == null ? 'Unavailable — calculation premium basis missing' : 'Unavailable'}</Data></td>
-                      <td><Data size={12}>{Number.isFinite(t.probability) && t.probability >= 0 && t.probability <= 1 ? `${(t.probability * 100).toFixed(0)}%` : 'Unavailable'}</Data></td>
-                      <td><Data size={12}>{t.expectedDays != null && Number.isFinite(t.expectedDays) && t.expectedDays >= 0 ? `~${Math.round(t.expectedDays)} calendar days` : 'Unavailable — no conditional median'}</Data></td>
-                      <td><Text size={11}>{t.rrModel || 'Unavailable'}</Text></td>
-                    </tr>;
-                  })}</tbody>
-                </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
+        </div>
 
         {/* Monte Carlo Profit Target (Feature 2 — renamed from "Profit Targets") */}
-        <section className={`${styles.planCard} ${styles.monteCarloSection}`} aria-label="Monte Carlo Profit Target">
+        <div className={styles.methodCardSlot} data-method-card="monte_carlo" hidden={!comparedMethods.includes('monte_carlo')}>
+        <section className={`${styles.planCard} ${styles.methodCard}`} aria-label="Monte Carlo Profit Target">
+          <div className={styles.methodSlot} data-slot="header">
           <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
           <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
+          </div>
+          <div className={styles.methodSlot} data-slot="basis">
           <div className={styles.arithmeticBasis}>
             <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
             <KV label="Scan stock reference" value={`$${data.price.toFixed(2)}`} mono />
@@ -3198,6 +3194,8 @@ export function TradeCard({
           <Text size={11} tone="secondary">GBM simulated stock paths · Black-Scholes option repricing.</Text>
           <Text size={10} tone="dim">{`Simulation uses calendar-day steps to expiry. Current selected-contract metadata: ${data.contractDetails?.dte ?? 'unavailable'} DTE; saved run DTE is unavailable in the stored context. Probability means target premium touched before expiry, even if a stop is also reached. Median time is conditional on target hits, in calendar days; independent target probabilities can sum past 100%.`}</Text>
           <Text size={10} tone="dim">{`Current inherited holding/repricing settings (not saved run inputs): ${horizonPreset ?? 'backend default'}; hold minimum ${holdMin ?? 'default'}, maximum ${holdMax ?? 'default'} trading days. These are separate from the expiry simulation horizon.`}</Text>
+          </div>
+          <div className={styles.methodSlot} data-slot="stop">
           <Text size={11} tone="secondary">Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.</Text>
           {/* #579: the race barriers are simulation INPUTS and the execution
               fields are the position's actual settings. Two labelled groups,
@@ -3216,6 +3214,8 @@ export function TradeCard({
               ? premiumStopTouched && overlay.premiumStop != null ? `$${overlay.premiumStop.toFixed(2)}/share · pinned` : `Global loss allowance: ${Number((globalPremiumStopPct * 100).toFixed(2))}% (fill-derived)`
               : effectivePremiumStop != null ? `$${effectivePremiumStop.toFixed(2)}/share${premiumStopTouched ? ' · override' : showsGlobalOnLiveMid ? ` · global ${Number((globalPremiumStopPct * 100).toFixed(2))}%` : ' · scan seed'}` : 'Unavailable'} mono />
           </div>
+          </div>
+          <div className={styles.methodSlot} data-slot="targets">
           <Text size={10} tone="dim">Independent stock-stop touch probability and time remain in the Barrier Race disclosure. T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
           <div className={styles.targetPctRow}>
             {(['t1', 't2', 't3'] as const).map((key) => (
@@ -3335,9 +3335,94 @@ export function TradeCard({
               moved there too, for the same reason.
             </Text>
           )}
+          </div>
         </section>
-
         </div>
+
+        {/* Fixed % Ladder Plan — the same slots as the other two cards. Its
+             collapse toggle and persisted preference are unchanged; the card
+             body's slots join the comparison grid's rows (see the CSS). */}
+        <div className={styles.methodCardSlot} data-method-card="ladder" hidden={!comparedMethods.includes('ladder')}>
+        <CollapsibleSection
+          title="Fixed % Ladder Plan"
+          storageKey="bamendjou:tradecard-ladder-collapsed"
+          className={`${styles.methodCard} ${styles.ladderCard}`}
+        >
+          <div className={styles.methodSlot} data-slot="basis">
+            <Text size={14} weight={600}>Sell-to-Close Plan</Text>
+            <Text size={10} tone="dim">Fixed-formula ladder — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <div className={styles.arithmeticBasis}>
+              <KV label="Editable order entry (outcome and R:R basis)" value={`$${overlay.entryLimit.toFixed(2)}/share`} mono />
+            </div>
+            <Text size={10} tone="dim">R/R risk: full premium (no protective stop order).</Text>
+          </div>
+          <div className={styles.methodSlot} data-slot="stop">
+            <Text size={11} weight={500}>Actual Exit Plan settings (shared, not Ladder calculations)</Text>
+            <div className={styles.arithmeticBasis}>
+              <KV field="stock-stop" label="Exit Plan stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)} stock` : 'Not computed — re-run the scan'} mono />
+              <KV field="option-stop" label="Exit Plan premium-stop option threshold" value={exitPremium.remainingShare} mono />
+            </div>
+            <Text size={10} tone="dim">Source: shared Exit Plan Invalidation field — the execution stock stop, set in Order inputs &amp; risk budget.</Text>
+            <Text size={10} tone="dim">{`Source: shared Exit Plan Premium stop — premium basis ${exitPremium.basis} minus loss ${exitPremium.lossShare}; the option value at which the premium-stop alert fires.`}</Text>
+            <div className={styles.arithmeticBasis}>
+              <KV field="stop-value" label="Ladder option value at stock stop" value="Not calculated — the Ladder does not price its stock stop" />
+              <KV field="stop-loss" label="Ladder loss at stock stop" value="Not calculated — the Ladder does not price its stock stop" />
+              <KV field="probability" label="Stock-stop probability" value="Not supplied" />
+              <KV field="time" label="Stock-stop time" value="Not supplied" />
+            </div>
+          </div>
+          <section aria-label="Fixed ladder targets" className={styles.methodSlot} data-slot="targets">
+            <Text size={10} tone="dim">Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices are shown in the Final Recommendation below.</Text>
+            <Text size={10} tone="dim">Dollar outcomes compare each alternative exit with the editable entry limit, using displayed premiums rounded to cents. Full-position exits and rung allocations are separate; do not add alternative outcomes.</Text>
+            {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
+            <div className={styles.targetsTable}>
+              {data.exit.targets.map((t, i) => (
+                <EditableTargetRow
+                  key={t.id ?? i}
+                  target={t}
+                  index={i}
+                  editedStockPrice={overlay.targets[i] ?? t.targetPrice ?? t.stockPrice}
+                  entryLimit={overlay.entryLimit}
+                  // The R:R risk leg: overlay.entryLimit, the full premium
+                  // (Phase C RR, D5). Both legs stay on the SCAN basis -- its
+                  // reward leg is estimatedOptionPrice - entryLimit -- so a
+                  // live mid is never divided into a scan-mid reward.
+                  premiumStop={ladderRisk}
+                  // The backend's ratio only when it was computed on the same
+                  // basis at the same entry. A saved pre-RR candidate
+                  // ('premium_stop' / 'stock_stop' / absent) is recomputed,
+                  // which is exact: estimatedOptionPrice does not depend on
+                  // the risk basis.
+                  authoritativeRr={data.exit.rrRiskBasis === 'full_premium' && overlay.entryLimit === data.entry.limit ? t.rrContribution : undefined}
+                  data={data}
+                  onStockPriceChange={(v) => {
+                    const next = [...overlay.targets];
+                    next[i] = v;
+                    patch({ targets: next });
+                  }}
+                  totalContracts={overlay.contracts}
+                />
+              ))}
+            </div>
+          </section>
+
+          {/* The "Risk / Reward" readout that stood here is gone: its risk leg
+               was premium x a fixed percentage, so premium cancelled and the
+               ratio reduced to the typed target % over the typed stop % — the
+               same number on every contract. The Barrier Race card's
+               stock-stop R:R replaces it with one that actually discriminates.
+               overlay.premiumStop itself is UNTOUCHED: it is the premium-stop
+               alert level and the race's third barrier. It is no longer the
+               rrContribution risk denominator — that is the full premium
+               (Phase C RR, D5). (computeEditedRR and isDirty were named
+               here too until the Ladder-default copy of the "Projected R/R"
+               readout went as well — that readout was their only caller, so
+               both are gone. The field's remaining reasons stand on their
+               own.) */}
+        </CollapsibleSection>
+        </div>
+        </div>
+        </section>
 
         {/* Barrier Race (barrier-race spec section 3.2) — its own card, directly
              below Monte Carlo, off the SAME simulation and the same click. It
@@ -3679,7 +3764,7 @@ function EditableTargetRow({
   const label = target.id ? target.id.toUpperCase() : `T${index + 1}`;
 
   return (
-    <div className={`${styles.targetRow} ${statusClass}`}>
+    <div className={`${styles.targetRow} ${statusClass}`} data-target-row>
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600} tone={rowTone}>{label}</Text>
@@ -3690,8 +3775,17 @@ function EditableTargetRow({
             </span>
           )}
         </div>
+        {/* #580 — Monte Carlo's field order: option premium, dollar outcomes,
+            stock target, then probability and time (which the Ladder does not
+            supply). Same values and conditions as before; only the order. */}
+        <div className={styles.resultColumns}>
         <div className={styles.targetValues}>
-          <div className={styles.kvRow}>
+          {estOptionPrice > 0 && (
+            <KV field="option" label="Est. option (per share)" value={`$${estOptionPrice.toFixed(2)}`} mono tone={rowTone} />
+          )}
+          <KV field="outcome" label={`Full-position outcome (${totalContracts} contracts × 100 shares)`} value={dollarOutcome(totalContracts)} mono tone={rowTone} />
+          <KV field="outcome-rung" label={target.contractsToSell !== undefined ? `Rung outcome (${target.contractsToSell} contracts × 100 shares)` : 'Rung outcome (allocation unavailable)'} value={target.contractsToSell !== undefined ? dollarOutcome(target.contractsToSell) : 'Unavailable'} mono tone={rowTone} />
+          <div className={styles.kvRow} data-field="stock">
             <Text size={12} tone="secondary">Stock price</Text>
             {editing ? (
               <input
@@ -3724,17 +3818,17 @@ function EditableTargetRow({
               </span>
             )}
           </div>
-          {estOptionPrice > 0 && (
-            <KV label="Est. option" value={`$${estOptionPrice.toFixed(2)}`} mono tone={rowTone} />
-          )}
           {estOptionPrice > 0 && entryLimit > 0 && premiumStop > 0 && (
-            <KV label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
+            <KV field="rr" label="R:R" value={`${rr.toFixed(1)}x`} mono tone={rr < 0 ? 'reject' : undefined} />
           )}
-          <KV label={`Full-position outcome (${totalContracts} contracts × 100 shares)`} value={dollarOutcome(totalContracts)} mono tone={rowTone} />
-          <KV label={target.contractsToSell !== undefined ? `Rung outcome (${target.contractsToSell} contracts × 100 shares)` : 'Rung outcome (allocation unavailable)'} value={target.contractsToSell !== undefined ? dollarOutcome(target.contractsToSell) : 'Unavailable'} mono tone={rowTone} />
           {target.contractsToSell !== undefined && (
-            <KV label="Contracts" value={`${target.contractsToSell}`} mono />
+            <KV field="contracts" label="Contracts" value={`${target.contractsToSell}`} mono />
           )}
+        </div>
+        <div className={styles.probabilityColumn}>
+          <KV field="probability" label="Probability before expiry" value="Not supplied" />
+          <KV field="time" label="Conditional median time" value="Not supplied" />
+        </div>
         </div>
         {isScaleOut && target.contractsToSell !== undefined && (
           <Text size={11} tone="caution">
@@ -4100,14 +4194,18 @@ function KV({
   value,
   mono,
   tone,
+  field,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   tone?: 'pass' | 'caution' | 'reject';
+  /** #580 — names the comparable field (option, outcome, stock, probability,
+   *  time, …) so the three method cards keep one field order. Markup only. */
+  field?: string;
 }) {
   return (
-    <div className={styles.kvRow}>
+    <div className={styles.kvRow} data-field={field}>
       <Text size={12} tone="secondary">{label}</Text>
       {mono
         ? <Data size={13} weight={500} tone={tone}>{value}</Data>
@@ -4183,25 +4281,27 @@ function ProfitTargetRow({
           : '—';
 
   return (
-    <div className={styles.targetRow}>
+    <div className={styles.targetRow} data-target-row>
       <div className={styles.targetMain}>
         <div className={styles.targetId}>
           <Text size={12} weight={600}>{label}</Text>
         </div>
         <div className={styles.resultColumns}>
         <div className={styles.targetValues}>
-          <KV label="Option premium" value={optionAvailable ? `$${target.optionPrice.toFixed(2)}` : 'Unavailable'} mono />
-          <KV label="Estimated dollar outcome" value={outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'} mono />
+          <KV field="option" label="Option premium" value={optionAvailable ? `$${target.optionPrice.toFixed(2)}` : 'Unavailable'} mono />
+          <KV field="outcome" label="Estimated dollar outcome" value={outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'} mono />
           <KV
+            field="stock"
             label="Stock-price equivalent (display approximation)"
             value={target.stockPrice == null ? 'not reachable' : Number.isFinite(target.stockPrice) ? `$${target.stockPrice.toFixed(2)}` : 'Unavailable'}
             mono
           />
-          <KV label="Structural level found" value={structuralLevelValue} mono />
+          <KV field="structural" label="Structural level found" value={structuralLevelValue} mono />
         </div>
         <div className={styles.probabilityColumn}>
-          <KV label="Probability before expiry" value={Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'} mono />
+          <KV field="probability" label="Probability before expiry" value={Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'} mono />
           <KV
+            field="time"
             label="Conditional median time"
             value={target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)} calendar days` : 'Unavailable — no conditional median'}
             mono
