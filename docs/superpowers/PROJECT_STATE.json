@@ -9795,15 +9795,15 @@
     {
       "id": "TRADE-CARD-DECISION-REVIEW",
       "name": "Trade-card decision review and exact tracking/broker confirmation (#575)",
-      "status": "in_progress",
+      "status": "built",
       "owner": "agent",
-      "branch": "board/trade-card-decision-review-179b9130",
+      "branch": "board/trade-card-decision-review-5f119477",
       "tracking_issue": 575,
       "plan": "docs/superpowers/plans/2026-11-07-trade-card-decision-review-plan.md",
       "audit_rounds": 3,
       "audit_clean": false,
       "plan_audit_clean": true,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "size": "XL",
       "complexity": 4,
       "verify": {
@@ -9853,7 +9853,7 @@
           "report": "docs/superpowers/plans/trade-card-decision-review/plan-r3.md"
         }
       ],
-      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified.",
+      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified. || 2026-11-08: reassigned to Claude by Kenneth in chat (twice: from codex e6cac1a0, then from codex 179b9130 after Claude's claim lapsed during a usage-limit outage); continued on board/trade-card-decision-review-5f119477, no history rewritten. All 9 build tickets closed and coordinator-verified: full Jest 6207/6209 (2 machine-locale failures), backend full run at 7aab5720 10126 passed (known Windows set only), final register 625/625. BUILT, code audit not started; audit_clean false; 70%; not ready to merge.",
       "code_stage": {
         "rounds": 0,
         "clean": false
@@ -9876,50 +9876,50 @@
           "complexity": 3
         },
         "577": {
-          "status": "closed_verified_github",
+          "status": "closed",
           "commit": "3d0bc89f",
-          "completion_pct": 70,
           "size": "M",
           "complexity": 3
         },
         "578": {
-          "status": "closed_verified_github",
+          "status": "closed",
           "commit": "03399e13",
-          "completion_pct": 70,
           "size": "M",
           "complexity": 3
         },
         "579": {
-          "status": "closed_verified_github",
-          "commit": "e183355e",
-          "completion_pct": 70,
+          "status": "closed",
+          "commit": "7fa7771b+e183355e",
           "size": "M",
           "complexity": 4
         },
         "580": {
-          "status": "closed_verified_github",
+          "status": "closed",
           "commit": "d538f27b",
-          "completion_pct": 70,
           "size": "L",
           "complexity": 4
         },
         "581": {
-          "status": "closed_verified_github",
+          "status": "closed",
           "commit": "c58bdd64",
-          "completion_pct": 70,
           "size": "L",
           "complexity": 4
         },
         "582": {
-          "status": "closed_verified_github",
-          "commit": "7aab5720",
-          "completion_pct": 70,
+          "status": "closed",
+          "commit": "91d7c20f+7aab5720",
           "size": "L",
           "complexity": 4
         },
         "583": {
-          "status": "in_progress",
-          "completion_pct": 20,
+          "status": "closed",
+          "commit": "4e28cb16+28f5425a",
+          "size": "L",
+          "complexity": 4
+        },
+        "584": {
+          "status": "closed",
+          "commit": "b8d66ab4",
           "size": "L",
           "complexity": 4
         }
