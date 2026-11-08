@@ -9864,7 +9864,7 @@
     {
       "id": "TRADE-CARD-DECISION-REVIEW",
       "name": "Trade-card decision review and exact tracking/broker confirmation (#575)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/trade-card-decision-review-5f119477",
       "tracking_issue": 575,
@@ -9872,7 +9872,7 @@
       "audit_rounds": 4,
       "audit_clean": true,
       "plan_audit_clean": true,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "XL",
       "complexity": 4,
       "verify": {
@@ -9936,7 +9936,7 @@
           "below_gate_noted": "JSON-null broker order id: tradier_paper.py:149 and ibkr_paper.py:175 yield 'None', backend records outcome-unknown, frontend directOrder.ts:105 accepts it so the status reads placed with no ORDER-UNKNOWN note. Status label only: no wrong number, nothing persisted differs. Logged against main, not fixed in branch."
         }
       ],
-      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified. || 2026-11-08: reassigned to Claude by Kenneth in chat (twice: from codex e6cac1a0, then from codex 179b9130 after Claude's claim lapsed during a usage-limit outage); continued on board/trade-card-decision-review-5f119477, no history rewritten. All 9 build tickets closed and coordinator-verified: full Jest 6207/6209 (2 machine-locale failures), backend full run at 7aab5720 10126 passed (known Windows set only), final register 625/625. BUILT, code audit not started; audit_clean false; 70%; not ready to merge. || CODE ROUND 4 (code stage round 1 of 3) CLEAN 2026-11-08: fresh independent gate-auditor, diff f391522e..06e68752, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7. || SELF-MERGE PENDING, PR #594 (Closes #575; supersedes #592, #588, #586), audited head 06e68752 (code round 4 clean). Commits after the audited head are documentation-only state/audit records. Not merged; the live PR state is authoritative.",
+      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified. || 2026-11-08: reassigned to Claude by Kenneth in chat (twice: from codex e6cac1a0, then from codex 179b9130 after Claude's claim lapsed during a usage-limit outage); continued on board/trade-card-decision-review-5f119477, no history rewritten. All 9 build tickets closed and coordinator-verified: full Jest 6207/6209 (2 machine-locale failures), backend full run at 7aab5720 10126 passed (known Windows set only), final register 625/625. BUILT, code audit not started; audit_clean false; 70%; not ready to merge. || CODE ROUND 4 (code stage round 1 of 3) CLEAN 2026-11-08: fresh independent gate-auditor, diff f391522e..06e68752, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7. || SELF-MERGE PENDING, PR #594 (Closes #575; supersedes #592, #588, #586), audited head 06e68752 (code round 4 clean). Commits after the audited head are documentation-only state/audit records. Not merged; the live PR state is authoritative. || SHIPPED 2026-11-08: PR #594 merged at f1bd0091 on Kenneth's instruction in chat, from verified head a6a972d9 (audited 06e68752 + the self-merge-pending state record only). CI on that head was green after the one allowed re-run: the first attempt's frontend job failed in npm run build inside next/font's Google Fonts fetch, after all 6209 Jest tests passed; the diff touches no font, layout, Next config or dependency file. NOT verified: mini-PC comparison (deferred by Kenneth), Postgres locking (judged by reading; tests run on SQLite), real brokers (mocked).",
       "code_stage": {
         "rounds": 1,
         "clean": true,
@@ -10009,7 +10009,8 @@
           "complexity": 4
         }
       },
-      "pr": 594
+      "pr": 594,
+      "merge_commit": "f1bd0091fbd74a56edd087c234d6e80940b4f8f0"
     }
   ],
   "already_shipped": [
