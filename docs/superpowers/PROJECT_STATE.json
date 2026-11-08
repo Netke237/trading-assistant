@@ -155,7 +155,7 @@
     {
       "id": "P3C-SCRIPT-WINDOWS-RUN",
       "name": "p3c_data_checks.py: Windows cp1252 crash and repo-root .env not read (from #173) (#537)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/p3c-script-windows-run-bdea78e9",
       "tracking_issue": 537,
@@ -177,7 +177,7 @@
       },
       "size": "XS",
       "complexity": 1,
-      "completion_pct": 80,
+      "completion_pct": 100,
       "audit_history": [
         {
           "round": 1,
@@ -206,13 +206,14 @@
           "report": "adversarial code audit round 1 log"
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #544, audited head 3c92c756. Plan round 1 and code round 1 both clean.",
+      "note": "SELF-MERGE PENDING, PR #544, audited head 3c92c756. Plan round 1 and code round 1 both clean. || SHIPPED, reconciled 2026-11-08: implementation PR #544 merged at 49e18c0e. This record was stranded in docs PR #545, which conflicted with main and is replaced by this reconciliation.",
       "code_stage": {
         "rounds": 1,
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent f0a64e10-a4a4-44f4-b1ed-9c6e92596d11 reviewed diff against origin/main; 0 gate findings."
-      }
+      },
+      "merge_commit": "49e18c0e857e107ab370f08b3e3a1628ada92ffd"
     },
     {
       "id": "APP-AUDIT-SETTINGS-PROFILES",
@@ -1498,7 +1499,7 @@
     {
       "id": "APP-AUDIT-B-CONFIDENCE-OVERRIDE",
       "name": "Stocks requests ignore Step3 confidence threshold overrides (#383)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-confidence-override-plan.md",
@@ -1555,15 +1556,16 @@
         "pattern": "confidence_caution_below: confidenceGate\\.enabled \\? confidenceGate\\.cautionBelow : undefined",
         "note": "Defect marker: confidence_caution_below copied directly from confidenceGate.cautionBelow instead of respecting scanOverrides."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "Code round 1 clean. Ready for PR and CI."
+      "note": "Code round 1 clean. Ready for PR and CI. || SHIPPED, reconciled 2026-11-08: implementation PR #449 merged at 542fceb9. This record was stranded in docs PR #450, which conflicted with main and is replaced by this reconciliation.",
+      "merge_commit": "542fceb99a5a3ce19edd4d96ce8a91db6ad201a4"
     },
     {
       "id": "APP-AUDIT-PREBREAKOUT-IDENTITY-CLICK",
       "name": "Pre-Breakout identity-cell whitespace swallows candidate selection clicks (#364)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-prebreakout-identity-click-plan.md",
@@ -1620,15 +1622,16 @@
         "pattern": "styles.identity} aria-label=.*onClick=\\{event => event\\.stopPropagation\\(\\)\\}",
         "note": "Defect marker: stopPropagation on styles.identity cell container swallowing selection clicks."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "S",
       "complexity": 2,
-      "note": "Code round 1 clean. Ready for PR and CI."
+      "note": "Code round 1 clean. Ready for PR and CI. || SHIPPED, reconciled 2026-11-08: implementation PR #446 merged at 30d0e94e. This record was stranded in docs PR #447, which conflicted with main and is replaced by this reconciliation.",
+      "merge_commit": "30d0e94e722ec51cf775de52adb22dc4ab1c61d8"
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-RECOVERY",
       "name": "Saving after invalid scan schedule YAML overwrites the only recovery bytes (#401)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-schedule-recovery-plan.md",
@@ -1701,15 +1704,16 @@
         "pattern": "def _backup_corrupt",
         "note": "Pins corrupt YAML recovery protection in ScanScheduleStore in scan_schedule_store.py."
       },
-      "completion_pct": 90,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 4,
-      "note": "Code round 1 clean. Ready for PR."
+      "note": "Code round 1 clean. Ready for PR. || SHIPPED, reconciled 2026-11-08: implementation PR #443 merged at acfcde26. This record was stranded in docs PR #444, which conflicted with main and is replaced by this reconciliation.",
+      "merge_commit": "acfcde2683f79bf5539108b37273c57a07a3a6bb"
     },
     {
       "id": "APP-AUDIT-B-TIMEZONE-LOAD-FAILURE",
       "name": "An unavailable timezone readback displays an editable default without an error (#404)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-timezone-load-failure-plan.md",
@@ -1784,16 +1788,17 @@
         "pattern": "timezone-load-error",
         "note": "Pins timezone load error marker in OperatorTimezoneSection in settings/page.tsx."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "S",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #438, audited head dbd5a475. Handle timezone initial-load failure and protect unconfirmed default (#404, #437). Plan round 2 clean, code round 1 clean.",
-      "pull_request": 438
+      "note": "SELF-MERGE PENDING, PR #438, audited head dbd5a475. Handle timezone initial-load failure and protect unconfirmed default (#404, #437). Plan round 2 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #438 merged at 6dd96dc6. This record was stranded in docs PR #439, which conflicted with main and is replaced by this reconciliation.",
+      "pull_request": 438,
+      "merge_commit": "6dd96dc67fd54b3d6099ff496551267345c2ff97"
     },
     {
       "id": "APP-AUDIT-B-ORPHANED-SCHEDULE-PROFILE",
       "name": "A schedule with a missing profile visually selects a different saved profile (#403)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-orphaned-schedule-profile-plan.md",
@@ -1850,16 +1855,17 @@
         "pattern": "isProfileMissing",
         "note": "Pins isProfileMissing check in ScheduleEntryRow in settings/page.tsx."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "S",
       "complexity": 2,
-      "note": "SELF-MERGE PENDING, PR #435, audited head 426d4a2c07ef27be636bb26a9785fbbfd31e9766. Display explicit missing profile option for orphaned schedule references (#403, #434). Plan round 1 clean, code round 1 clean.",
-      "pull_request": 435
+      "note": "SELF-MERGE PENDING, PR #435, audited head 426d4a2c07ef27be636bb26a9785fbbfd31e9766. Display explicit missing profile option for orphaned schedule references (#403, #434). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #435 merged at 1d9b5b8e. This record was stranded in docs PR #436, which conflicted with main and is replaced by this reconciliation.",
+      "pull_request": 435,
+      "merge_commit": "1d9b5b8e7d6df35c742f5899c3630cc9c087af9a"
     },
     {
       "id": "APP-AUDIT-B-SCHEDULE-FEEDBACK",
       "name": "Scheduled scan failures and unresolvable profile selections give no explanation (#402)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-schedule-feedback-plan.md",
@@ -1916,16 +1922,17 @@
         "pattern": "schedule-entry-error",
         "note": "Pins schedule entry error display in settings/page.tsx."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #432, audited head 57032944111be1ce42484a0d970e70a75f858fa7. Surface feedback for schedule update, validation, delete and profile errors (#402, #431). Plan round 1 clean, code round 1 clean.",
-      "pull_request": 432
+      "note": "SELF-MERGE PENDING, PR #432, audited head 57032944111be1ce42484a0d970e70a75f858fa7. Surface feedback for schedule update, validation, delete and profile errors (#402, #431). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #432 merged at f7ef94c4. This record was stranded in docs PR #433, which conflicted with main and is replaced by this reconciliation.",
+      "pull_request": 432,
+      "merge_commit": "f7ef94c46d0da01c17052fa54ebe8ffb0bf34450"
     },
     {
       "id": "APP-AUDIT-B-NOTIFICATION-TEXT",
       "name": "Notifications help text renders literal Unicode escape (#375)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-app-audit-b-notification-text-plan.md",
@@ -1982,16 +1989,17 @@
         "pattern": "Passwords are write-only — leave blank",
         "note": "Pins literal em dash in Notifications SectionIntro blurb without unicode escape."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "XS",
       "complexity": 1,
-      "note": "SELF-MERGE PENDING, PR #429, audited head bc832b0c90e29758d62ddd97df1434fb55a16f94. Render readable em dash in Notifications help text (#375, #428). Plan round 1 clean, code round 1 clean.",
-      "pull_request": 429
+      "note": "SELF-MERGE PENDING, PR #429, audited head bc832b0c90e29758d62ddd97df1434fb55a16f94. Render readable em dash in Notifications help text (#375, #428). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #429 merged at 8f2427fd. This record was stranded in docs PR #430, which conflicted with main and is replaced by this reconciliation.",
+      "pull_request": 429,
+      "merge_commit": "8f2427fd9cee625e98b3c54da51f177426c532fe"
     },
     {
       "id": "APP-AUDIT-B-DENSITY",
       "name": "Appearance row density resets when the Settings section remounts",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-density-plan.md",
@@ -2060,7 +2068,9 @@
         "note": "Pins the persisted density field on ThemeState in theme.ts."
       },
       "pull_request": 426,
-      "note": "SELF-MERGE PENDING, PR #426, audited head 09665182e01df3f707f185ef3db1fa3114d59f7c. Persist Appearance row density across section remount/reload (#370). Plan round 1 clean, code round 2 clean."
+      "note": "SELF-MERGE PENDING, PR #426, audited head 09665182e01df3f707f185ef3db1fa3114d59f7c. Persist Appearance row density across section remount/reload (#370). Plan round 1 clean, code round 2 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #426 merged at be557e01. This record was stranded in docs PR #427, which conflicted with main and is replaced by this reconciliation.",
+      "completion_pct": 100,
+      "merge_commit": "be557e01a762086a6401d4987c0eeca5d29115fc"
     },
     {
       "id": "A",
@@ -3541,7 +3551,7 @@
     {
       "id": "MEAS-MARKET-DATA-MEASUREMENT",
       "name": "MEAS: measurement protocol (run-book, exact scan bodies, measurement-day runner, results sheet) so Kenneth can run market-hours scans on >= 2 days and a later session proposes bearish floors / confidence / min_stock_score / min_mult / IV thresholds under pre-registered rules (Q20, Q28)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 9,
       "audit_clean": true,
       "depends_on": [],
@@ -3552,7 +3562,7 @@
         "pattern": "^MEAS-ALL-PROPOSALS-ANSWERED$",
         "note": "2026-10-01 ROUND 9 = CODE ROUND 3 CLEAN (fresh reviewer, scoped to 4cdc26f..4eb20c7): zero gate-level findings. Confirmed: hard kill during end_checks leaves core_status running -> day fails plan 5; core_status set to core_complete only after end_checks, failure text on any unwound exit; cmd_ivabs never writes core_status and keeps it on reload; atomic manifest write; no path overwrites an existing core manifest (cmd_core refuses an existing folder; --run-tag writes its own); plan 5 [R8], PROTOCOL and RESULTS-SHEET consistent. KIT AUDIT-CLEAN ON BRANCH claude/bold-ride-7nf8wj, NOT MERGED -- merge only with Kenneth's approval. After merge: Kenneth tags the freeze and runs core days per PROTOCOL.md (>= 2 valid days); a later session proposes values under the pre-registered rules; config changes only after Kenneth approves. || 2026-10-01 ROUND 8 = CODE ROUND 2 (fresh reviewer, scoped to fe7f900..4cdc26f) NOT CLEAN -- 1 gate-level, CONFIRMED by a scratch hard-kill test: the round-7 record claimed PROTOCOL/RESULTS-SHEET require status core_complete, but no validity rule keyed on status; a process killed without unwinding (cmd window closed, power loss) during the end checks left 8 clean bases, no flags, no day_invalid and status 'running' -> a day passing plan 5. FIXED (this commit): runner writes core_status (running -> core_complete only after end_checks; failure text on any unwound exit; ivabs never touches it); plan 5 [R8], PROTOCOL step 2 and RESULTS-SHEET require core_status == core_complete. Re-run of the kill test: core_status 'running' -> invalid. Confirmed true by the reviewer (do not re-derive): local checks before the snapshot, snapshot failure = flag after validity checks; every Python-level exit writes day_invalid; start copy/snapshot/O1 13:15 check inside the try; atomic manifest writes; ivabs refuses unless core_complete and keeps its flags separate; A-block baseline cannot hide a core-period config change; C6 no_liquidity_detail scope correct. NEXT: code round 3 (round 9, last before the per-stage cap) on this fix only. || 2026-10-01 ROUND 7 FIXES APPLIED (plan header B10, B11): end checks run local-first and the snapshot last (failure = flag snapshot_failed), any unfinished core block writes day_invalid core_block_not_completed (Ctrl+C included), an unfinished A-block is unusable; O1 start re-checked at 13:15; A-block judged against config_ivabs_start; C6 secondary skips a missing liquidityDetail; PROTOCOL: merge then tag, switch to the tag on later days, second window, restore-check --run-tag. Scratch: 75 runner tests, 47/47 mutations killed (incl. the reviewer's two surviving mutants: 20% iv_source_mismatch threshold, base-only late flag). NEXT: round 8 (code round 2). || 2026-10-01 ROUND 7 = CODE ROUND 1 on build bcb9891 NOT CLEAN (1 gate-level, fresh reviewer, verified with a scratch test): a Stop/crash inside the end-of-block checks (_finish runs the network snapshot FIRST, then the config-hash, health/pid and universe checks) leaves 8 clean bases, empty flags and no day_invalid, so a day whose config changed or whose backend restarted passes plan section 5 / PROTOCOL validity (status is not part of the rule). Fix: local checks before the snapshot, a failed end snapshot is a flag, any non-complete exit writes day_invalid, PROTOCOL/RESULTS-SHEET require status core_complete. Below-gate (12): PROTOCOL says a pre-O1 stop leaves no folder (false: start snapshot/copy after mkdir, outside try); KeyboardInterrupt leaves status running; 13:00-13:15 window checked at command not at O1; A-block config compared to core start; restore-check --run-tag missing in PROTOCOL; run-book sequencing (merge before tag, be on the tag on later days); second cmd window needs PY/PYTHONUTF8; iv_source_mismatch 20% threshold not pinned (mutant 0.99 survives); late_for_comparison base-only scope not pinned; stale probe test; C6 secondary check false-flags a missing liquidityDetail; untracked new backend/app files invisible to the freeze (accepted). || 2026-10-01 BUILT TO v6 (code round pending): runner (FROZEN_PATHS backend/app minus sp500.csv [U1], config health start/end + pid, contract_rules check per options scan, truncated flag + original_count + applied cap, no envelope for a truncated scan, pair_excluded per C-scan, ivabs_usable + ivabs_flags, sp500.csv sha256 per block -> INVALID:universe_changed_during_run, crashed status on a non-Stop exception), Position bodies additive_adx_pass 25, PROTOCOL.md, RESULTS-SHEET.md, README pointer. [U1] universe-file fix reported by Kenneth from the parallel ccr-3ec55775-kgawjr round-5 run (sp500.csv is rewritten at runtime by sp500_update_service; freezing it refused every day after day 1). Scratch tests (not committed, plan section 9): 64 runner tests on a fake HTTP server + throwaway git repo, 13 body tests against ScanRequest/StockScanRequest and PARAM_DEFAULTS_PER_HORIZON; 39 mutations each killed by a named assertion. PROBE [B8]: plan section 8 asked for kind present on the runner, but state.py reads a found pattern as BUILT while this phase must stay in_progress until the days run and Kenneth answers the proposals, so it would be permanent drift. The probe is ABSENT until RESULTS-SHEET.md carries the line MEAS-ALL-PROPOSALS-ANSWERED (written only once every proposal row has Kenneth's answer). PRESENCE ONLY; the runner guards are pinned by the scratch tests, not by this probe. || 2026-10-01 PLAN STAGE CLOSED (decision MEAS-ROUND6-FIX-AND-CLOSE-PLAN-2026-09-30, Kenneth: 'ok lets apply the fix'): the round-6 gate finding is fixed in plan section 6 -- a valid day counts toward the >= 2 days only if an untruncated O-scan of that horizon contributed a deduplicated rank row (stock_basis == \"rank\") [G1a, round-6 fix]. No round 7: the plan is not audited clean; code rounds on the runner build review the result. This note does NOT clear the state.py hard-cap banner (acknowledgement is deliberately not a route): it clears when a code round comes back clean or the branch merges. NEXT: build the runner + request bodies to v6, fold in the cheap round-6 below-gate items, code rounds until clean. || 2026-09-30 PLAN ROUND 6 (decision MEAS-G1-FIX-A-ROUND-6-2026-09-30, scoped to the fix delta) NOT CLEAN -- STOPPED FOR KENNETH, no round 7 without his call. Fix (a) applied at fd6209c (edits marked [G1a] in the plan header, 4.10, 6, 7, 9): a truncated O1-O4/A1/A2 scan feeds no IV rule (rank cuts, preferred_iv_rank_max, max_iv_rank, iv_rank_threshold/ivAbsThreshold reports), excluded by manifest scan_id before dedup, listed as 'not used: truncated'. Fresh reviewer confirmed in code: G1 closed at row level; cap ranking scan.py:1884-1888, clamp :1870, original_count/shortlist_truncated :1889-1890 and schemas:918-919; iv_rank_too_high raised in validate_contract before the cap; S-scan counters before the stock cap; exclusion-before-dedup sound. ONE gate-level finding, verified: the new [G1a] floor sentence in section 6 lets a valid day count toward the >= 2 days if an untruncated O-scan contributed 'a row' -- any basis. A day with only absolute/none rows (allowed below the 20% iv_source_mismatch flag, or a whole degraded scan) would count, so all >= 30 rank rows could come from one day. Proposed fix (NOT applied): 'contributed a deduplicated rank row (stock_basis == \"rank\")'. Below-gate (logged, not fixed): one direction truncated every day -> horizon cut from the other direction only (print per-direction row counts); truncated A-scan uses up the single A-block without being repeatable; section 2 max_iv_rank row still says 'truncation count'; iv_rank_too_high count should be names whose reason contains it, not the bracketed number; header 'grades iv_rank against iv_rank_pass_max' is rank-basis only; cap value in 'original_count -> cap' comes from the body, not a ScanResult field; analysis-side exclusion not pinned by a test (analysis rules are not runner code); min_mult table still reads a truncated base (accepted under (a)). || ABSENT until the run-book exists (it must carry the percentile-source-off step via BAMENDJOU_CREDS_PATH). PRESENCE ONLY once written; the runner's guards are pinned by scratch fake-server tests, not by this probe."
       },
-      "note": "2026-10-14 DAY-2 READING RECORDED FOR MERGE (claim MEAS-MARKET-DATA-MEASUREMENT, board/meas-market-data-measurement-11d464ec, cut from board/meas-market-data-measurement-497fae4a @ da274ec, origin/main merged): day-2 scans folder + plan section 7 reading (82e8a8f6) + independent recomputation (f808df49, 0 numeric mismatches); RESULTS-SHEET proposal table now carries Kenneth's 2026-10-11 answers (decision MEAS-DAY2-ANSWERS-2026-10-11) and MEAS-ALL-PROPOSALS-ANSWERED. Docs/data only: no config or code change (min_stock_score 45 already on main via OPTIONS-UNDERLYING-FLOOR-45). Status built (unmerged). Day-2 reading audit: independent adversarial round(s) pending, numbered continuously from 10, cap three for this reading stage. Further days are MEAS-EXTRA-DAYS (#189) via the isolated runner. || PREVIOUS: 2026-10-03 DAY 1 OF >= 2 RECORDED (claim MEAS-MARKET-DATA-MEASUREMENT, claude/inspiring-heisenberg-e3gug3; brings in claude/meas-day-2026-10-01, Kenneth's run + its plan section 7 reading). Day 2026-10-01 is VALID on meas-freeze-1 (61a03e49): 8 bases, core_status core_complete, no flags, no day_invalid, no truncation, no C-scan skipped. Regime +20 Choppy Fragile VIX 17.0 MIXED. The A-block also ran that day and is USABLE, so no later day NEEDS steps 3-7. But its Swing half (A2) fell in the expiry gap below (0 candidates), so the report's Swing absolute-IV sample is empty. Under plan section 5 a later A-block would not replace this usable one; using one needs Kenneth to amend section 5, and even a non-gap A2 may return 0 candidates. Every figure was recomputed from the raw result files with separate code, and all match (RESULTS-SHEET 'Independent check'). NEW OBSERVATION, not a rule: O3 lost 213 of 347 names and O4 45 of 112 to 'no option chain'. The Swing window 10-30 DTE fetches 16-40 DTE (floor hold_max+1, tolerance 10). Oct 16 (15 DTE) and Nov 20 (50 DTE) both fell outside it, so monthly-only names had no expiry. Of O3's 213: 193 got a chain in a Position scan the same day (calendar), 10 had no chain in the Position window 46-100 DTE either (baseline), 10 undetermined. For O4: 32 / 6 / 7. The gap repeats around every monthly: weekdays 2026-10-01..10-09 (ALL of the week of 10-05), 11-05/06, 12-03/04, 12-31..2027-01-08, 2027-02-04/05. Day validity is unaffected. Day 2's date does NOT affect S1-S4, the Position C-scans or the Position IV rows; it DOES affect O3/O4 candidates, their min_mult inputs, their iv_rank_too_high and 40/50/60 line reports, and the pooled Swing IV rank rows (a gap day 10-05..10-09 matches day 1's weekly-listed-only population; from 10-12 the populations mix). Kenneth's choice. NO PROPOSAL: every rule needs >= 2 valid days, and the IV floor needs >= 30 rank rows per horizon (now Swing 3, Position 5), so the IV rules need many more than 2 days. AUDIT: round 1 (fresh reviewer, bmad-review-adversarial-general, branch diff vs main at 7a03239) NOT CLEAN, 0 blocking / 5 should-fix / 4 nits, all fixed: the gap is recurring, not one window; calendar vs baseline attribution; A2 was hit by the gap; the min_mult inputs come from the result files, not the funnel rows; bullish line counts and spread rates change nothing at the tag (spreads are built for bearish only); the scope of the independent-check claim; the config-start copies are LF while the manifest hashes CRLF; A1 added to the min_mult table; the O2 baseline and wording. ROUND 2 (fresh reviewer, at 574cad3) NOT CLEAN, 0 blocking / 3 should-fix / 8 nits, all fixed: the A-block repeat advice contradicted section 5; the baseline column overstated 'any DTE' (Position window 46-100); 'every rule computes within one day' was false, so the day-2 trade-off is now stated; gap list end stated; cache/A2 corroboration; baseline wording; min_mult listing note; S rates to 2 decimals; A1/A2 iv_too_high 22/6; bearish funnel rows record fundamentals_reject_above 80; 'regime_direction'. Out of scope, pre-existing: plan section 7 cites a PROTOCOL 'Derived rows' section that does not exist, and README calls regime a score-gate cause, against section 7. ROUND 3 (fresh reviewer, at 75739c9, gate: factual errors or wording leading Kenneth to a wrong action) NOT CLEAN, 0 blocking / 1 should-fix / 3 nits. Should-fix: the round-2 sentence 'A2 ... with an empty cache ... fetched the lists again' was wrong, because A1 had re-fetched 186 of the 213 lists minutes earlier in the restarted process (A2 fetched 27). The conclusion stands and the mechanism is now stated correctly. Nits fixed: iv_too_high 22/6 counts names hit on only some strikes; O3/O4 line and iv_rank_too_high reports added to 'affected'. Nit not changed: the A1/A2 funnel rows carry the 13:00 regime snapshot (VIX 17.0, not 16.4 at 14:34), and each row names its file. Round 3 is the cap (3 rounds). Kenneth, 2026-10-03, chose 'Round 4 on the fix only': one fresh round scoped to the round-3 delta (75739c9..this commit); merge to main if clean, otherwise stop and report. ROUND 4 (fresh reviewer, scoped 75739c9..ad013c3) NOT CLEAN, 0 blocking / 1 should-fix / 4 nits. Should-fix: the round-3 rewording 'no name was removed by [iv_too_high] alone' does not follow from per-reason counts (19 of 28 names are provably not, 9 are undecidable); the claim is removed, and the sheet now says the counts cannot show it. Nits fixed: 'A2 fetched at least the other 27'; the restart came before A1 (A1 and A2 shared that process); this note's 'affected' list now includes the line and iv_rank_too_high reports. Nit not changed: the spread build rate follows from 'their candidates'. Kenneth, 2026-10-03, chose option 1: MERGE NOW with the round-4 fix applied and not re-audited (decision MEAS-DAY1-MERGE-AFTER-ROUND-4-2026-10-03). Every number in the day reading has matched in all 4 rounds; every finding from round 3 on was in sentences added by this session's own fixes. Then Kenneth runs day 2 per PROTOCOL.md (core block only), ideally in a different regime (|d conviction| >= 15, |d VIX| >= 5, a different regime_direction, or both state and stability different), so min_mult can be shown. || KIT MERGED TO MAIN 2026-10-01 (--no-ff, Kenneth: 'Merge'). Phase stays in_progress until the measurement days are run and values proposed. || 2026-09-30 PLAN ROUND 5 (the one confirmation round, decision MEAS-V6-REFRESH-ONE-ROUND-2026-09-30) NOT CLEAN -- STOPPED FOR KENNETH, per that decision no round 6 without his call. Claim taken over from ccr-3ec55775-kgawjr by Kenneth's reassignment; work continues on claude/bold-ride-7nf8wj. Fresh reviewer on the v6 delta (R1-R9 + [v6] sections) at 65390c7; R1-R9 mechanisms all verified against code. ONE gate-level finding, re-verified here: (G1) plan section 4.10 keeps a TRUNCATED options base valid, so O1-O4 still feed the IV rank-cut proposals (iv_rank_pass_max, iv_rank_caution_max, preferred_iv_rank_max). Since the cap now ranks before cutting by finalStatus -> stockScore -> contractScore (routers/scan.py:1885-1889, clamp 50 at :1870) and stockScore includes the options vol rule that grades iv_rank against iv_rank_pass_max/iv_rank_caution_max (scoring/stock_scorer.py _rule_vol), the kept 50 are biased toward pass-band IV and the cut names (reason string only, no volDetail) are the high-IV ones -> the quantile rule runs on an IV-censored sample -> wrong proposed IV cut. v5's universe-order cut was roughly IV-neutral; v6 changed that premise. Proposed fix (NOT applied, awaiting Kenneth): a truncated base contributes no rows to the IV rules and is named in the IV result's not-used list (or: exclude a truncated O-base from every rule reading candidate rows, like a C-pair). Below-gate (logged, not fixed): config/health ok=false on any warning stops the run (false stop only); stale empty right after restart by construction (sha256 + restart checklist cover it); tracked backend/app/data/sp500.csv under the frozen tree makes an S&P update stop the run; ScanResult.contract_rules computed before DTE widening (base/C5/C6 checks unaffected); contract_rules values serialise as floats (JSON equality holds); pre-direction exceptions stay in entered (bounded by 2% INVALID:errors, v5 behaviour); top-level body fields still compared to 09-18 (handled by section 6 attribution). || 2026-09-30 PLAN v6 WRITTEN (decision MEAS-V6-REFRESH-ONE-ROUND-2026-09-30), branch ccr-3ec55775-kgawjr: v5 re-derived against main 4c52000, nine deltas R1-R9 at the top of the plan -- R1 freeze all of backend/app/ (+ the two measured YAMLs; strategy_params.yaml hashed, S-rules pool only same-hash days); R2 both shortlist caps now rank before the cut and list cut names ('Shortlist cap:'), truncated pairs excluded; R3 direction gate split measured/unmeasured (stock failed_direction vs failed_direction_unmeasured; options failed_direction sums both, split by reason prefix), floor rate = measured removals / measured entrants; R4 Position bodies additive_adx_pass 20 -> 25 (today's default = YAML); R5 ScanResult.contract_rules is the primary override-reached proof (bases {}, C5 {min_stock_score:35}, C6 four liquidity keys 0); R6 GET /api/config/health at start/end (stale measured file / pid change -> INVALID); R7 min_mult table uses the two-sided ramp, options column labelled fire-ramp-on-scan-reading (options cards not conviction-sized); R8 line refs re-pinned; R9 logged to open_questions (Step-3 min_stock_score leaks into options overrides). Runner and bodies NOT yet changed (build stage). NEXT: plan round 5 (the one confirmation round) on the v6 delta. || RESCUED 2026-09-30 by WP0-HOUSEKEEPING from claude/clever-goldberg-ssmf4z, which was never merged and was not in main's ledger at all. The phase entry and decisions MEAS-PLAN-CAP-DECISIONS-2026-09-25 / MEAS-ROUND4-FIXES-2026-09-25 are copied VERBATIM from that branch's tip (d4c6db1d), as is its one closed_questions item (MEAS plan cap, answered by MEAS-PLAN-CAP-DECISIONS-2026-09-25); the plan, run_measurement_day.py and the eight protocol-requests bodies are brought to main unchanged in the same commit. STALE SINCE 2026-09-25, re-check before any measurement day: files in the runner's FROZEN_PATHS (run_measurement_day.py: routers/scan.py, routers/stock_scan.py, scoring/stock_scorer.py, scoring/contract_validator.py, scoring/signal_confidence.py, services/strategy_engine.py, services/strategy_backtest.py, data/market.py, plus the gated config) have changed since the branch's base -- `git log --no-merges 91e6725e..origin/main -- <FROZEN_PATHS>` lists them (at WP0 time, main 599b9da2, verified: P3a, P3b [config only], P3c, P4b T5, W2-INTERVAL, DOCC-1 [code and config], DOCC-2, the shortlist-rank-dte-floor commits ec712489/4038be5c/0b417818, STOCK-SHORTLIST-RANK, STEP6-SCAN-CONTRACT-RULES, REGIME-SIZING-AUDIT r1-r4 [stock_scan.py]). The freeze tag meas-freeze-1 the runner defaults to was never created. Nothing here is audited beyond what the branch recorded (4 plan rounds, none clean; v5 unaudited). || 2026-09-25 KENNETH APPROVED THE ROUND-4 FIXES ('Yes apply', decision MEAS-ROUND4-FIXES-2026-09-25); applied to the plan as v5 (GL-1 pooled preferred_iv_rank_max, GL-2 C5 stockScore band [35,55), GL-3 direction scope). v5 is UNAUDITED. state.py flags the hard cap (4 rounds declared, none clean) -- expected, clears only by a clean round or Kenneth's call. NEXT: ask Kenneth whether v5 gets one confirmation round or goes to build (PROTOCOL.md, RESULTS-SHEET.md, runner fixes for the 18 below-gate items, code round). || 2026-09-25 PLAN ROUND 4 (FINAL, per MEAS-PLAN-CAP-DECISIONS-2026-09-25) NOT CLEAN -- STOPPED FOR KENNETH. Plan v4 (e1b7c6a) applied the decision (freeze tag meas-freeze-1 on gate code + scoring/contract_rules, 09-18 reference only, IV credit/debit lines report-only, A-block one day) and fixed round-3 G1/G2/G3/G5 + the below-gate list; the auditor confirmed all of those in place. Runner updated to v4; scratch tests recreated (76 pass, 40 mutants all killed on named assertions; not committed). Round 4 gate-level (all 3 verified against code): (GL-1) preferred_iv_rank_max is ONE global key (contract_rules.yaml:69) but the plan computes it per horizon -> two proposals, no tie-break; (GL-2) C5 attribution does not require the added name's C5 stockScore to lie in [35,55): live-IV re-scoring between O1 and C5 (~15 min) can lift a 53 to 56 and count drift as a gate effect, which feeds the proposed median; (GL-3) plan says every proposed value applies to both directions, but scoring_rules.yaml has separate bullish_min_trend/bearish_min_trend and the floor rule moves bearish only. Proposed fixes (not applied, awaiting Kenneth): GL-1 pool both horizons for preferred_iv_rank_max against preferred_iv_abs_max (or report-only); GL-2 require 35 <= C5 stockScore < 55, else drift (same band idea for C6 report); GL-3 scope the both-directions sentence to confidence_reject_below and min_stock_score, floor rule moves bearish_min_trend only. 18 below-gate items logged in the round record (probe regex indent 8->4 spaces; stopCostStatus has no REJECT tier; quality-bar median uses the paired base; one options exception invalidates a day; unfrozen gate-shaping files; tag not verified post-P3a; auto-trade check time-of-check only; other schedulers unchecked; spread-build report should be O1/O3/A only; truncated-scan handling; C6 missing liquidityDetail false flag; stock entered counts exceptions; runner non-Stop exceptions leave status running; post-core config change invalidating core day; O1 window checked on command not O1; risk_rules.yaml portfolio_value copied; REC-20260907 mislabelled; line refs off by a few). PROTOCOL.md / RESULTS-SHEET.md not written. No measurement day before P3a merges. || PREVIOUS: 2026-09-25 KENNETH ANSWERED THE CAP (decision MEAS-PLAN-CAP-DECISIONS-2026-09-25): freeze on a post-P3a tag, 09-18 reference only, both IV credit/debit lines report-only (A-block one day), round 4 allowed as the FINAL plan round. NEXT: plan v4 applying those + fixing round-3 G1 (never copy gitignored settings.yaml/schedule YAMLs into the day folder -- secrets), G2 (IV dedup key includes stock_basis), G3 (C6 checks only volume_too_low/open_interest_too_low + liquidityDetail preferred_*==0), G5 (floor rules evaluated step-down, step-up, else keep; entered==0 -> not enough data) and the round-3 below-gate list; update the runner + scratch tests; then plan round 4. || 2026-09-25 PLAN STAGE AT THE 3-ROUND CAP, NOT CLEAN -- STOPPED FOR KENNETH. Plan rounds: r1 11 gate-level (Swing bodies on Position params, trend lattice, uncomputable counterfactuals, min_mult on market conviction, no value rules, IV-source/config/timing guards) -> v2; r2 6 gate-level (shortlist cap drops names in universe order, C-scan drift, config check vs runtime-written YAML, wrong IV quantity for credit/debit lines, duplicate rows, both-direction gates) -> v3; r3 6 gate-level: (G1) runner copies gitignored settings.yaml (smtp_password/bot_token) into the day folder that is meant to be committed -- MUST be fixed before any run; (G2) IV dedup drops A-block rows; (G3) C6 'override reached validator' test false-positives on too_many_soft_failures from non-liquidity soft flags; (G4) no code freeze between days while P3a changes stock_scorer/stock_scan gates; (G5) direction-floor keep/step-up rules overlap; (G6) iv_rank_threshold 'median' rule would chase the day's vol regime. G4 and G6 need Kenneth's decision. Built so far (unaudited, nothing run): protocol-requests/*.json, run_measurement_day.py (62 scratch tests, mutation-checked). PROTOCOL.md and RESULTS-SHEET.md not written. None of the 9 MEAS backlog entries can close before the measurement days run.",
+      "note": "2026-10-14 DAY-2 READING RECORDED FOR MERGE (claim MEAS-MARKET-DATA-MEASUREMENT, board/meas-market-data-measurement-11d464ec, cut from board/meas-market-data-measurement-497fae4a @ da274ec, origin/main merged): day-2 scans folder + plan section 7 reading (82e8a8f6) + independent recomputation (f808df49, 0 numeric mismatches); RESULTS-SHEET proposal table now carries Kenneth's 2026-10-11 answers (decision MEAS-DAY2-ANSWERS-2026-10-11) and MEAS-ALL-PROPOSALS-ANSWERED. Docs/data only: no config or code change (min_stock_score 45 already on main via OPTIONS-UNDERLYING-FLOOR-45). Status built (unmerged). Day-2 reading audit: independent adversarial round(s) pending, numbered continuously from 10, cap three for this reading stage. Further days are MEAS-EXTRA-DAYS (#189) via the isolated runner. || PREVIOUS: 2026-10-03 DAY 1 OF >= 2 RECORDED (claim MEAS-MARKET-DATA-MEASUREMENT, claude/inspiring-heisenberg-e3gug3; brings in claude/meas-day-2026-10-01, Kenneth's run + its plan section 7 reading). Day 2026-10-01 is VALID on meas-freeze-1 (61a03e49): 8 bases, core_status core_complete, no flags, no day_invalid, no truncation, no C-scan skipped. Regime +20 Choppy Fragile VIX 17.0 MIXED. The A-block also ran that day and is USABLE, so no later day NEEDS steps 3-7. But its Swing half (A2) fell in the expiry gap below (0 candidates), so the report's Swing absolute-IV sample is empty. Under plan section 5 a later A-block would not replace this usable one; using one needs Kenneth to amend section 5, and even a non-gap A2 may return 0 candidates. Every figure was recomputed from the raw result files with separate code, and all match (RESULTS-SHEET 'Independent check'). NEW OBSERVATION, not a rule: O3 lost 213 of 347 names and O4 45 of 112 to 'no option chain'. The Swing window 10-30 DTE fetches 16-40 DTE (floor hold_max+1, tolerance 10). Oct 16 (15 DTE) and Nov 20 (50 DTE) both fell outside it, so monthly-only names had no expiry. Of O3's 213: 193 got a chain in a Position scan the same day (calendar), 10 had no chain in the Position window 46-100 DTE either (baseline), 10 undetermined. For O4: 32 / 6 / 7. The gap repeats around every monthly: weekdays 2026-10-01..10-09 (ALL of the week of 10-05), 11-05/06, 12-03/04, 12-31..2027-01-08, 2027-02-04/05. Day validity is unaffected. Day 2's date does NOT affect S1-S4, the Position C-scans or the Position IV rows; it DOES affect O3/O4 candidates, their min_mult inputs, their iv_rank_too_high and 40/50/60 line reports, and the pooled Swing IV rank rows (a gap day 10-05..10-09 matches day 1's weekly-listed-only population; from 10-12 the populations mix). Kenneth's choice. NO PROPOSAL: every rule needs >= 2 valid days, and the IV floor needs >= 30 rank rows per horizon (now Swing 3, Position 5), so the IV rules need many more than 2 days. AUDIT: round 1 (fresh reviewer, bmad-review-adversarial-general, branch diff vs main at 7a03239) NOT CLEAN, 0 blocking / 5 should-fix / 4 nits, all fixed: the gap is recurring, not one window; calendar vs baseline attribution; A2 was hit by the gap; the min_mult inputs come from the result files, not the funnel rows; bullish line counts and spread rates change nothing at the tag (spreads are built for bearish only); the scope of the independent-check claim; the config-start copies are LF while the manifest hashes CRLF; A1 added to the min_mult table; the O2 baseline and wording. ROUND 2 (fresh reviewer, at 574cad3) NOT CLEAN, 0 blocking / 3 should-fix / 8 nits, all fixed: the A-block repeat advice contradicted section 5; the baseline column overstated 'any DTE' (Position window 46-100); 'every rule computes within one day' was false, so the day-2 trade-off is now stated; gap list end stated; cache/A2 corroboration; baseline wording; min_mult listing note; S rates to 2 decimals; A1/A2 iv_too_high 22/6; bearish funnel rows record fundamentals_reject_above 80; 'regime_direction'. Out of scope, pre-existing: plan section 7 cites a PROTOCOL 'Derived rows' section that does not exist, and README calls regime a score-gate cause, against section 7. ROUND 3 (fresh reviewer, at 75739c9, gate: factual errors or wording leading Kenneth to a wrong action) NOT CLEAN, 0 blocking / 1 should-fix / 3 nits. Should-fix: the round-2 sentence 'A2 ... with an empty cache ... fetched the lists again' was wrong, because A1 had re-fetched 186 of the 213 lists minutes earlier in the restarted process (A2 fetched 27). The conclusion stands and the mechanism is now stated correctly. Nits fixed: iv_too_high 22/6 counts names hit on only some strikes; O3/O4 line and iv_rank_too_high reports added to 'affected'. Nit not changed: the A1/A2 funnel rows carry the 13:00 regime snapshot (VIX 17.0, not 16.4 at 14:34), and each row names its file. Round 3 is the cap (3 rounds). Kenneth, 2026-10-03, chose 'Round 4 on the fix only': one fresh round scoped to the round-3 delta (75739c9..this commit); merge to main if clean, otherwise stop and report. ROUND 4 (fresh reviewer, scoped 75739c9..ad013c3) NOT CLEAN, 0 blocking / 1 should-fix / 4 nits. Should-fix: the round-3 rewording 'no name was removed by [iv_too_high] alone' does not follow from per-reason counts (19 of 28 names are provably not, 9 are undecidable); the claim is removed, and the sheet now says the counts cannot show it. Nits fixed: 'A2 fetched at least the other 27'; the restart came before A1 (A1 and A2 shared that process); this note's 'affected' list now includes the line and iv_rank_too_high reports. Nit not changed: the spread build rate follows from 'their candidates'. Kenneth, 2026-10-03, chose option 1: MERGE NOW with the round-4 fix applied and not re-audited (decision MEAS-DAY1-MERGE-AFTER-ROUND-4-2026-10-03). Every number in the day reading has matched in all 4 rounds; every finding from round 3 on was in sentences added by this session's own fixes. Then Kenneth runs day 2 per PROTOCOL.md (core block only), ideally in a different regime (|d conviction| >= 15, |d VIX| >= 5, a different regime_direction, or both state and stability different), so min_mult can be shown. || KIT MERGED TO MAIN 2026-10-01 (--no-ff, Kenneth: 'Merge'). Phase stays in_progress until the measurement days are run and values proposed. || 2026-09-30 PLAN ROUND 5 (the one confirmation round, decision MEAS-V6-REFRESH-ONE-ROUND-2026-09-30) NOT CLEAN -- STOPPED FOR KENNETH, per that decision no round 6 without his call. Claim taken over from ccr-3ec55775-kgawjr by Kenneth's reassignment; work continues on claude/bold-ride-7nf8wj. Fresh reviewer on the v6 delta (R1-R9 + [v6] sections) at 65390c7; R1-R9 mechanisms all verified against code. ONE gate-level finding, re-verified here: (G1) plan section 4.10 keeps a TRUNCATED options base valid, so O1-O4 still feed the IV rank-cut proposals (iv_rank_pass_max, iv_rank_caution_max, preferred_iv_rank_max). Since the cap now ranks before cutting by finalStatus -> stockScore -> contractScore (routers/scan.py:1885-1889, clamp 50 at :1870) and stockScore includes the options vol rule that grades iv_rank against iv_rank_pass_max/iv_rank_caution_max (scoring/stock_scorer.py _rule_vol), the kept 50 are biased toward pass-band IV and the cut names (reason string only, no volDetail) are the high-IV ones -> the quantile rule runs on an IV-censored sample -> wrong proposed IV cut. v5's universe-order cut was roughly IV-neutral; v6 changed that premise. Proposed fix (NOT applied, awaiting Kenneth): a truncated base contributes no rows to the IV rules and is named in the IV result's not-used list (or: exclude a truncated O-base from every rule reading candidate rows, like a C-pair). Below-gate (logged, not fixed): config/health ok=false on any warning stops the run (false stop only); stale empty right after restart by construction (sha256 + restart checklist cover it); tracked backend/app/data/sp500.csv under the frozen tree makes an S&P update stop the run; ScanResult.contract_rules computed before DTE widening (base/C5/C6 checks unaffected); contract_rules values serialise as floats (JSON equality holds); pre-direction exceptions stay in entered (bounded by 2% INVALID:errors, v5 behaviour); top-level body fields still compared to 09-18 (handled by section 6 attribution). || 2026-09-30 PLAN v6 WRITTEN (decision MEAS-V6-REFRESH-ONE-ROUND-2026-09-30), branch ccr-3ec55775-kgawjr: v5 re-derived against main 4c52000, nine deltas R1-R9 at the top of the plan -- R1 freeze all of backend/app/ (+ the two measured YAMLs; strategy_params.yaml hashed, S-rules pool only same-hash days); R2 both shortlist caps now rank before the cut and list cut names ('Shortlist cap:'), truncated pairs excluded; R3 direction gate split measured/unmeasured (stock failed_direction vs failed_direction_unmeasured; options failed_direction sums both, split by reason prefix), floor rate = measured removals / measured entrants; R4 Position bodies additive_adx_pass 20 -> 25 (today's default = YAML); R5 ScanResult.contract_rules is the primary override-reached proof (bases {}, C5 {min_stock_score:35}, C6 four liquidity keys 0); R6 GET /api/config/health at start/end (stale measured file / pid change -> INVALID); R7 min_mult table uses the two-sided ramp, options column labelled fire-ramp-on-scan-reading (options cards not conviction-sized); R8 line refs re-pinned; R9 logged to open_questions (Step-3 min_stock_score leaks into options overrides). Runner and bodies NOT yet changed (build stage). NEXT: plan round 5 (the one confirmation round) on the v6 delta. || RESCUED 2026-09-30 by WP0-HOUSEKEEPING from claude/clever-goldberg-ssmf4z, which was never merged and was not in main's ledger at all. The phase entry and decisions MEAS-PLAN-CAP-DECISIONS-2026-09-25 / MEAS-ROUND4-FIXES-2026-09-25 are copied VERBATIM from that branch's tip (d4c6db1d), as is its one closed_questions item (MEAS plan cap, answered by MEAS-PLAN-CAP-DECISIONS-2026-09-25); the plan, run_measurement_day.py and the eight protocol-requests bodies are brought to main unchanged in the same commit. STALE SINCE 2026-09-25, re-check before any measurement day: files in the runner's FROZEN_PATHS (run_measurement_day.py: routers/scan.py, routers/stock_scan.py, scoring/stock_scorer.py, scoring/contract_validator.py, scoring/signal_confidence.py, services/strategy_engine.py, services/strategy_backtest.py, data/market.py, plus the gated config) have changed since the branch's base -- `git log --no-merges 91e6725e..origin/main -- <FROZEN_PATHS>` lists them (at WP0 time, main 599b9da2, verified: P3a, P3b [config only], P3c, P4b T5, W2-INTERVAL, DOCC-1 [code and config], DOCC-2, the shortlist-rank-dte-floor commits ec712489/4038be5c/0b417818, STOCK-SHORTLIST-RANK, STEP6-SCAN-CONTRACT-RULES, REGIME-SIZING-AUDIT r1-r4 [stock_scan.py]). The freeze tag meas-freeze-1 the runner defaults to was never created. Nothing here is audited beyond what the branch recorded (4 plan rounds, none clean; v5 unaudited). || 2026-09-25 KENNETH APPROVED THE ROUND-4 FIXES ('Yes apply', decision MEAS-ROUND4-FIXES-2026-09-25); applied to the plan as v5 (GL-1 pooled preferred_iv_rank_max, GL-2 C5 stockScore band [35,55), GL-3 direction scope). v5 is UNAUDITED. state.py flags the hard cap (4 rounds declared, none clean) -- expected, clears only by a clean round or Kenneth's call. NEXT: ask Kenneth whether v5 gets one confirmation round or goes to build (PROTOCOL.md, RESULTS-SHEET.md, runner fixes for the 18 below-gate items, code round). || 2026-09-25 PLAN ROUND 4 (FINAL, per MEAS-PLAN-CAP-DECISIONS-2026-09-25) NOT CLEAN -- STOPPED FOR KENNETH. Plan v4 (e1b7c6a) applied the decision (freeze tag meas-freeze-1 on gate code + scoring/contract_rules, 09-18 reference only, IV credit/debit lines report-only, A-block one day) and fixed round-3 G1/G2/G3/G5 + the below-gate list; the auditor confirmed all of those in place. Runner updated to v4; scratch tests recreated (76 pass, 40 mutants all killed on named assertions; not committed). Round 4 gate-level (all 3 verified against code): (GL-1) preferred_iv_rank_max is ONE global key (contract_rules.yaml:69) but the plan computes it per horizon -> two proposals, no tie-break; (GL-2) C5 attribution does not require the added name's C5 stockScore to lie in [35,55): live-IV re-scoring between O1 and C5 (~15 min) can lift a 53 to 56 and count drift as a gate effect, which feeds the proposed median; (GL-3) plan says every proposed value applies to both directions, but scoring_rules.yaml has separate bullish_min_trend/bearish_min_trend and the floor rule moves bearish only. Proposed fixes (not applied, awaiting Kenneth): GL-1 pool both horizons for preferred_iv_rank_max against preferred_iv_abs_max (or report-only); GL-2 require 35 <= C5 stockScore < 55, else drift (same band idea for C6 report); GL-3 scope the both-directions sentence to confidence_reject_below and min_stock_score, floor rule moves bearish_min_trend only. 18 below-gate items logged in the round record (probe regex indent 8->4 spaces; stopCostStatus has no REJECT tier; quality-bar median uses the paired base; one options exception invalidates a day; unfrozen gate-shaping files; tag not verified post-P3a; auto-trade check time-of-check only; other schedulers unchecked; spread-build report should be O1/O3/A only; truncated-scan handling; C6 missing liquidityDetail false flag; stock entered counts exceptions; runner non-Stop exceptions leave status running; post-core config change invalidating core day; O1 window checked on command not O1; risk_rules.yaml portfolio_value copied; REC-20260907 mislabelled; line refs off by a few). PROTOCOL.md / RESULTS-SHEET.md not written. No measurement day before P3a merges. || PREVIOUS: 2026-09-25 KENNETH ANSWERED THE CAP (decision MEAS-PLAN-CAP-DECISIONS-2026-09-25): freeze on a post-P3a tag, 09-18 reference only, both IV credit/debit lines report-only (A-block one day), round 4 allowed as the FINAL plan round. NEXT: plan v4 applying those + fixing round-3 G1 (never copy gitignored settings.yaml/schedule YAMLs into the day folder -- secrets), G2 (IV dedup key includes stock_basis), G3 (C6 checks only volume_too_low/open_interest_too_low + liquidityDetail preferred_*==0), G5 (floor rules evaluated step-down, step-up, else keep; entered==0 -> not enough data) and the round-3 below-gate list; update the runner + scratch tests; then plan round 4. || 2026-09-25 PLAN STAGE AT THE 3-ROUND CAP, NOT CLEAN -- STOPPED FOR KENNETH. Plan rounds: r1 11 gate-level (Swing bodies on Position params, trend lattice, uncomputable counterfactuals, min_mult on market conviction, no value rules, IV-source/config/timing guards) -> v2; r2 6 gate-level (shortlist cap drops names in universe order, C-scan drift, config check vs runtime-written YAML, wrong IV quantity for credit/debit lines, duplicate rows, both-direction gates) -> v3; r3 6 gate-level: (G1) runner copies gitignored settings.yaml (smtp_password/bot_token) into the day folder that is meant to be committed -- MUST be fixed before any run; (G2) IV dedup drops A-block rows; (G3) C6 'override reached validator' test false-positives on too_many_soft_failures from non-liquidity soft flags; (G4) no code freeze between days while P3a changes stock_scorer/stock_scan gates; (G5) direction-floor keep/step-up rules overlap; (G6) iv_rank_threshold 'median' rule would chase the day's vol regime. G4 and G6 need Kenneth's decision. Built so far (unaudited, nothing run): protocol-requests/*.json, run_measurement_day.py (62 scratch tests, mutation-checked). PROTOCOL.md and RESULTS-SHEET.md not written. None of the 9 MEAS backlog entries can close before the measurement days run. || SHIPPED, reconciled 2026-11-08: implementation PR #409 merged at 2ce67640. This record was stranded in docs PR #410, which conflicted with main and is replaced by this reconciliation.",
       "branch": "board/meas-market-data-measurement-1090d5f3",
       "day2_reading_audit": {
         "scope": "Day-2 reading only (docs/data): scans/2026-10-09 evidence, plan section 7 rows (iv-basis-samples.jsonl, scan-funnel.jsonl), RESULTS-SHEET day-2 section, two-day reading and proposal table with Kenneth's answers. Separate from the kit audit (rounds 1-9, clean), as the day-1 reading was (decision MEAS-DAY1-MERGE-AFTER-ROUND-4-2026-10-03).",
@@ -3574,7 +3584,9 @@
           }
         ]
       },
-      "self_merge": "SELF-MERGE PENDING (Kenneth #121 'Merge' 2026-10-14 and option 1-a 2026-10-15): new PR superseding #319, audited head ef87badd (day-2 reading round 1 clean) + docs-only state records + origin/main merge e2c7c789 whose only conflict was PROJECT_STATE.json. Pending attempt only, not merged."
+      "self_merge": "SELF-MERGE PENDING (Kenneth #121 'Merge' 2026-10-14 and option 1-a 2026-10-15): new PR superseding #319, audited head ef87badd (day-2 reading round 1 clean) + docs-only state records + origin/main merge e2c7c789 whose only conflict was PROJECT_STATE.json. Pending attempt only, not merged.",
+      "completion_pct": 100,
+      "merge_commit": "2ce676401d6cd34c2c8b5f2de10c31a5e42e9764"
     },
     {
       "id": "DOCC-5-TOPBAR-BANNER",
@@ -4844,7 +4856,7 @@
     {
       "id": "TRADIER-GOVERNOR",
       "name": "Every Tradier HTTP call through the governor's rate limiter, with a shared 429/Retry-After cooldown (NO-LIVE-QUOTE ticket TG-1)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 8,
       "audit_clean": true,
       "depends_on": [],
@@ -4861,7 +4873,7 @@
         "pattern": "def admit_sync",
         "note": "PRESENCE ONLY: T1's sync admission exists. Behaviour pinned by the T1-T4 tests."
       },
-      "note": "SELF-MERGE PENDING, PR #228, audited head8d543755a6ad4885db233d1c755f9a5a82fa86f4. Phase remainsbuilt and audit_cleantrue; merge only after all exact-headCI checks pass and ownership/mergeability conditions hold. || 2026-10-12 CODE STAGE CLEAN at round8(code2): /root/code_audit_2 zero gate findings, scopeverified0c1e46fa..8d543755,87independenttests+8manualprobespassed. R7-G1 closed. Statusbuilt/unmerged; PR/CI next. || 2026-10-12 R7-G1 fix8d543755 implemented by fresh /root/fix_r7:57focusedpasses, typecheckclean; actualSQLite manual/auto accounting regressions red2fail2pass -> green. Code round8(code2) now reviews only fix and interactions; audit_clean remainsfalse. || 2026-10-12 resumed after usage interruption: T4 0c1e46fa focused1passed; cold101/expiration-warm81/all-cache-warm21 calls over20synthetic all-survivor symbols. Code round7(code1) completed NOT CLEAN,1gateR7-G1; fix underway. Local backend7925passed11skipped5failed1error: four unchanged atomic-YAML Windows semantics failures, missingtime.tzset in unchanged historical test, one new0.5s stock-quote timing assertion(0.61s). Focused317passed5timingfailures; bareHTTPclient construction0.532-1.312s. Frontend4938passed12failed5suites(locale/timing), zero frontenddiff; typecheckpassed. Exact-headCI required. || 2026-10-11 explicit user reassignment to this chat: recovered 537a7baa on board/tradier-governor-933676cd. T3 independent implementer verification and T4 measurement pending; full suites running locally on Python3.11.9. Code audit NOT STARTED; existing counters/stages preserved. || 2026-10-11 resume: T1 1822b9f3/T2 5bb55e82 implemented, T3 68a51420/b5b32671 verification running, T4 #218 measurement underway. Main072ec44b integrated at cc482395 (PROJECT_STATE-only conflicts resolved preserving main and Tradier records). Plan second stage clean at round6; code audit NOT STARTED. Historical plan-stage checker warning retained (approved second stage not modeled); no counters reset. || 2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Kenneth chose to build despite state.py's single-plan-stage false alarm (decision TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11). Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead').",
+      "note": "SELF-MERGE PENDING, PR #228, audited head8d543755a6ad4885db233d1c755f9a5a82fa86f4. Phase remainsbuilt and audit_cleantrue; merge only after all exact-headCI checks pass and ownership/mergeability conditions hold. || 2026-10-12 CODE STAGE CLEAN at round8(code2): /root/code_audit_2 zero gate findings, scopeverified0c1e46fa..8d543755,87independenttests+8manualprobespassed. R7-G1 closed. Statusbuilt/unmerged; PR/CI next. || 2026-10-12 R7-G1 fix8d543755 implemented by fresh /root/fix_r7:57focusedpasses, typecheckclean; actualSQLite manual/auto accounting regressions red2fail2pass -> green. Code round8(code2) now reviews only fix and interactions; audit_clean remainsfalse. || 2026-10-12 resumed after usage interruption: T4 0c1e46fa focused1passed; cold101/expiration-warm81/all-cache-warm21 calls over20synthetic all-survivor symbols. Code round7(code1) completed NOT CLEAN,1gateR7-G1; fix underway. Local backend7925passed11skipped5failed1error: four unchanged atomic-YAML Windows semantics failures, missingtime.tzset in unchanged historical test, one new0.5s stock-quote timing assertion(0.61s). Focused317passed5timingfailures; bareHTTPclient construction0.532-1.312s. Frontend4938passed12failed5suites(locale/timing), zero frontenddiff; typecheckpassed. Exact-headCI required. || 2026-10-11 explicit user reassignment to this chat: recovered 537a7baa on board/tradier-governor-933676cd. T3 independent implementer verification and T4 measurement pending; full suites running locally on Python3.11.9. Code audit NOT STARTED; existing counters/stages preserved. || 2026-10-11 resume: T1 1822b9f3/T2 5bb55e82 implemented, T3 68a51420/b5b32671 verification running, T4 #218 measurement underway. Main072ec44b integrated at cc482395 (PROJECT_STATE-only conflicts resolved preserving main and Tradier records). Plan second stage clean at round6; code audit NOT STARTED. Historical plan-stage checker warning retained (approved second stage not modeled); no counters reset. || 2026-10-11 board #169: PLAN STAGE 2 CLEAN at plan round 6 (rounds 4-6 under decision TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10: R4-G1 fixed r5, R5-G1/R5-G2 fixed r6, round 6 zero gate findings). First stage: rounds 1-3 capped not clean (R3-G1), superseded by the overdraft redesign. Plan r6 at 6562920f. Kenneth chose to build despite state.py's single-plan-stage false alarm (decision TRADIER-GOVERNOR-BUILD-DESPITE-STATE-CHECK-2026-10-11). Tickets next; no code written. Scan slowdown pre-accepted by Kenneth ('ok Go ahead'). || SHIPPED, reconciled 2026-11-08: implementation PR #228 merged at bf62d5db. This record was stranded in docs PR #229, which conflicted with main and is replaced by this reconciliation.",
       "audit_history": [
         {
           "round": 1,
@@ -4993,7 +5005,9 @@
         "decision": "TRADIER-GOVERNOR-NEW-PLAN-STAGE-2026-10-10",
         "note": "scripts/state.py models one plan stage per target (rounds 1..3); this field records the second stage Kenneth opened. Code rounds will be numbered from round 7 (code round 1)."
       },
-      "pull_request": "https://github.com/Netke237/trading-assistant/pull/228"
+      "pull_request": "https://github.com/Netke237/trading-assistant/pull/228",
+      "completion_pct": 100,
+      "merge_commit": "bf62d5dbb4d8053ca628dc9c6c82354e797293d5"
     },
     {
       "id": "BROKER-PATH-RESIDUALS",
@@ -5496,7 +5510,7 @@
     {
       "id": "PREBREAKOUT-PRESENTATION-V2",
       "name": "Approved Pre-Breakout/Pullback/Fib ranking layout, preserved evidence and same-run diagnostics",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "depends_on": [
@@ -5595,7 +5609,7 @@
         "closed_by": "clean",
         "closure_evidence": "Code round 2 (phase round 4) fresh independent auditor, git diff c2315dd..11d1549 (R3-1 fix and interactions), zero gate findings; audited head 11d1549"
       },
-      "note": "2026-10-14 #258–266 built; code audit clean after code round 2 (phase rounds: plan 1-2 clean, code 3 one finding fixed, code 4 clean). Audited head 11d1549. Plan2 clean; original plan1 and separate layout revision1 preserved. PR and self-merge gate next. #150/PR224 untouched/open.",
+      "note": "2026-10-14 #258–266 built; code audit clean after code round 2 (phase rounds: plan 1-2 clean, code 3 one finding fixed, code 4 clean). Audited head 11d1549. Plan2 clean; original plan1 and separate layout revision1 preserved. PR and self-merge gate next. #150/PR224 untouched/open. || SHIPPED, reconciled 2026-11-08: implementation PR #304 merged at f655b7e2. This record was stranded in docs PR #306, which conflicted with main and is replaced by this reconciliation.",
       "implementation_tickets": [
         {
           "issue": 258,
@@ -5656,7 +5670,9 @@
         "state": "state.py no drift"
       },
       "pr": 304,
-      "self_merge": "SELF-MERGE PENDING, PR #304, audited head 11d1549 (code round 2 clean). Pending attempt only, not merged; main record unchanged until a verified merge."
+      "self_merge": "SELF-MERGE PENDING, PR #304, audited head 11d1549 (code round 2 clean). Pending attempt only, not merged; main record unchanged until a verified merge.",
+      "completion_pct": 100,
+      "merge_commit": "f655b7e2de717e6975688469ca6eb92a2aafe81c"
     },
     {
       "id": "MEAS-LIVE-DB-ISOLATION",
@@ -6586,12 +6602,12 @@
       ],
       "summary": "Rebuild seam-refused symbols from one provider (17y history, stale SPY) and keep them current from that provider.",
       "name": "Single-provider history rebuild",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "branch": "board/history-single-provider-rebuild-1096bfbb",
       "plan": "docs/superpowers/plans/2026-10-15-history-single-provider-rebuild-plan.md",
-      "notes": "Built. Plan round 1 clean at 1e1790f9. Code round 1 clean at 07c25fce, round 2 clean at 4ffa9b4a (Alembic join 35c19d72ef80), round 3 clean at 536e34fe (merge of origin/main c2fbae35). Reassigned by Kenneth from the Grok board worker to claude/history-single-provider-rebuild-069d7a on 2026-10-15; work continues on board/history-single-provider-rebuild-1096bfbb. PR #341 supersedes #332 (contains every #332 commit). SELF-MERGE PENDING, PR #341, audited head 536e34fe25a01b43035bd3f7a48642f57977b456. The mini-PC run (acceptance 3 and 4) stays open after the code merges.",
+      "notes": "Built. Plan round 1 clean at 1e1790f9. Code round 1 clean at 07c25fce, round 2 clean at 4ffa9b4a (Alembic join 35c19d72ef80), round 3 clean at 536e34fe (merge of origin/main c2fbae35). Reassigned by Kenneth from the Grok board worker to claude/history-single-provider-rebuild-069d7a on 2026-10-15; work continues on board/history-single-provider-rebuild-1096bfbb. PR #341 supersedes #332 (contains every #332 commit). SELF-MERGE PENDING, PR #341, audited head 536e34fe25a01b43035bd3f7a48642f57977b456. The mini-PC run (acceptance 3 and 4) stays open after the code merges. || SHIPPED, reconciled 2026-11-08: implementation PR #341 merged at a999b274. This record was stranded in docs PR #344, which conflicted with main and is replaced by this reconciliation.",
       "verify": {
         "kind": "present",
         "path": "backend/app/services/history_backfill.py",
@@ -6712,7 +6728,9 @@
         "pr": 341,
         "audited_head": "536e34fe25a01b43035bd3f7a48642f57977b456",
         "note": "SELF-MERGE PENDING, PR #341, audited head 536e34fe25a01b43035bd3f7a48642f57977b456. Waiting for CI on the head carrying this record; merge only with --match-head-commit after all board.md step 7 conditions are re-checked. Not a merged result."
-      }
+      },
+      "completion_pct": 100,
+      "merge_commit": "a999b27499bf5bb4e049fcb7f874c5e2e71db7bf"
     },
     {
       "id": "HISTORY-INCREMENTAL-NIGHTLY",
@@ -7300,7 +7318,7 @@
     {
       "id": "APP-AUDIT-B-TUNING-HINT",
       "name": "Strategy tuning schedule cadence hint reflects selected weekdays",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-tuning-hint-plan.md",
@@ -7354,7 +7372,9 @@
         "note": "Pins formatScheduleCadence in settings/page.tsx ScheduleSection hint."
       },
       "pull_request": 416,
-      "note": "SELF-MERGE PENDING, PR #416, audited head 800c58ce2ce186f47dcc0c59d35f12d16b7d2b12. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required."
+      "note": "SELF-MERGE PENDING, PR #416, audited head 800c58ce2ce186f47dcc0c59d35f12d16b7d2b12. Actual main record preserved; built, not shipped. Local checks green; exact pending-record head CI required. || SHIPPED, reconciled 2026-11-08: implementation PR #416 merged at 482d8277. This record was stranded in docs PR #418, which conflicted with main and is replaced by this reconciliation.",
+      "completion_pct": 100,
+      "merge_commit": "482d827750e3c467636de8170bc494378c40f409"
     },
     {
       "id": "APP-AUDIT-B-THEME-SYNC",
@@ -7533,7 +7553,7 @@
     {
       "id": "DECISION-25-DISABLED-E2E",
       "name": "Mocked 7-Step Screener Flow & RANK-Basis Volatility E2E",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 2,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-20-e2e-coverage-plan.md",
@@ -7587,12 +7607,14 @@
         "pattern": "IV rank ≤ 34 → PASS",
         "note": "Presence probe for RANK-basis test case in iv-basis-rendering.spec.ts"
       },
-      "note": "SELF-MERGE PENDING, PR #422, audited head 52d36ff4. Rewrites mocked 7-step screener flow for current step order (#175) and adds RANK-basis smoke E2E coverage (#176). Plan round 1 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #422, audited head 52d36ff4. Rewrites mocked 7-step screener flow for current step order (#175) and adds RANK-basis smoke E2E coverage (#176). Plan round 1 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #422 merged at 3ef4a9ef. This record was stranded in docs PR #423, which conflicted with main and is replaced by this reconciliation.",
+      "completion_pct": 100,
+      "merge_commit": "3ef4a9ef1885c18694640dfb7a8e631618b68a14"
     },
     {
       "id": "APP-AUDIT-B-STRATEGY-VALIDATION",
       "name": "Reject invalid Settings strategy scan overrides (#373)",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 3,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-19-app-audit-b-strategy-validation-plan.md",
@@ -7663,11 +7685,12 @@
         "pattern": "assertStrategyScanOverrides",
         "note": "Presence only; tests and independent audit establish behavior."
       },
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "M",
       "complexity": 3,
-      "note": "SELF-MERGE PENDING, PR #424, audited head 5bdc20618c03ac2e4a79dcb35dfd512f2e3cee54. Validates strategy overrides across editing, storage and requests (#373, #421). Plan round 2 clean, code round 1 clean.",
-      "pull_request": 424
+      "note": "SELF-MERGE PENDING, PR #424, audited head 5bdc20618c03ac2e4a79dcb35dfd512f2e3cee54. Validates strategy overrides across editing, storage and requests (#373, #421). Plan round 2 clean, code round 1 clean. || SHIPPED, reconciled 2026-11-08: implementation PR #424 merged at 2d1e54c4. This record was stranded in docs PR #425, which conflicted with main and is replaced by this reconciliation.",
+      "pull_request": 424,
+      "merge_commit": "2d1e54c4f4f3867da090028d0b84fbbfaeb64f31"
     },
     {
       "id": "APP-AUDIT-B-CAP-UNITS",
@@ -8167,7 +8190,7 @@
     {
       "id": "DECISION-34-WATCH-DELIVERY-RESIDUALS",
       "name": "Per-channel watch delivery residuals & repeated stuck-alert policy",
-      "status": "built",
+      "status": "shipped",
       "audit_rounds": 4,
       "audit_clean": true,
       "plan": "docs/superpowers/plans/2026-10-21-decision-34-watch-delivery-residuals-plan.md",
@@ -8179,7 +8202,7 @@
         "pattern": "def _apply_cross_watch_proof\\(",
         "note": "PRESENCE probe for cross-watch proof delivery logic in strategy_watch_evaluator.py."
       },
-      "notes": "Addresses ticket 34 / issue #178 residuals decided by Kenneth on 2026-10-15: cross-watch delivery proof for two stuck alerts in a row, Gmail recipient check in ready_channels, and test gaps (M25, M33, test_strategy_watch_router.py:176).",
+      "notes": "Addresses ticket 34 / issue #178 residuals decided by Kenneth on 2026-10-15: cross-watch delivery proof for two stuck alerts in a row, Gmail recipient check in ready_channels, and test gaps (M25, M33, test_strategy_watch_router.py:176). || SHIPPED, reconciled 2026-11-08: implementation PR #486 merged at 54160b82. This record was stranded in docs PR #492, which conflicted with main and is replaced by this reconciliation.",
       "plan_stage": {
         "rounds": 3,
         "clean": true,
@@ -8262,7 +8285,9 @@
         "closed_by": "clean",
         "closure_evidence": "docs/superpowers/audits/DECISION-34-WATCH-DELIVERY-RESIDUALS/code-r1.md"
       },
-      "note": "SELF-MERGE PENDING, PR #486, audited head 923d34fa. Reconcile per-channel watch delivery and stuck-alert policy (#178). Plan round 3 clean, code round 1 clean."
+      "note": "SELF-MERGE PENDING, PR #486, audited head 923d34fa. Reconcile per-channel watch delivery and stuck-alert policy (#178). Plan round 3 clean, code round 1 clean.",
+      "completion_pct": 100,
+      "merge_commit": "54160b827e2804ce2d04afdf279629643ed5b119"
     },
     {
       "id": "APP-AUDIT-B-SAVE-FEEDBACK",
@@ -8973,7 +8998,7 @@
     {
       "id": "DECISION-23-HESTON-EVIDENCE",
       "name": "Heston hygiene (#174): forward-intrinsic floor, narrowed integration catch with an honest Black-Scholes fallback label, one per-scan worst-accepted-fit log line, missing rejected-fit log test",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/decision-23-heston-evidence-af6b702a",
       "tracking_issue": 174,
@@ -8994,7 +9019,7 @@
       },
       "size": "M",
       "complexity": 4,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "audit_history": [
         {
           "round": 1,
@@ -9023,13 +9048,14 @@
           "outstanding": []
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #521, audited head 12006163 (code round 1 clean). Commits after the audited head are documentation-only state records (63e7a82d and this one). Not merged; the live PR state is authoritative. || CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings -- every heston_price-dependent number traced (only reward_risk and the calibration objective; Step 7 recompute passes no Heston params), floor is a true lower bound, fell_back never labelled Heston, ladder references unaffected, H-2 log-only, 13 re-pointed test patches reach the code. Local checks on 12006163: backend Python 3.11.17 10011 passed / 9 skipped / 3 container-config deselected; frontend typecheck clean (frontend untouched). audit_clean true; PR next. || BUILT 2026-10-22: H-1 #517 (cb0b133b + golden-test hardening 3fc020a3) and H-2 #518 (61960273) built, coordinator-verified, closed; origin/main merged (9920ba2a, PROJECT_STATE.json conflict only). Code audit round 1 (code stage 1 of 3) next. || Plan round 1 CLEAN (0 gate findings): floor proven a valid lower bound; 34,020-call probe raised no exception; every heston_price caller handles propagation; collector counts only card-reaching heston_grid fits. Size re-estimated L -> M. Tickets next. || Kenneth #174: Q1 A, Q2 B, Q3 A (#335 separate). Covers part of task_backlog HESTON-HYGIENE. Plan r1 drafted 2026-10-22; independent plan audit next.",
+      "note": "SELF-MERGE PENDING, PR #521, audited head 12006163 (code round 1 clean). Commits after the audited head are documentation-only state records (63e7a82d and this one). Not merged; the live PR state is authoritative. || CODE ROUND 2 (code stage round 1 of 3): CLEAN, 0 gate findings -- every heston_price-dependent number traced (only reward_risk and the calibration objective; Step 7 recompute passes no Heston params), floor is a true lower bound, fell_back never labelled Heston, ladder references unaffected, H-2 log-only, 13 re-pointed test patches reach the code. Local checks on 12006163: backend Python 3.11.17 10011 passed / 9 skipped / 3 container-config deselected; frontend typecheck clean (frontend untouched). audit_clean true; PR next. || BUILT 2026-10-22: H-1 #517 (cb0b133b + golden-test hardening 3fc020a3) and H-2 #518 (61960273) built, coordinator-verified, closed; origin/main merged (9920ba2a, PROJECT_STATE.json conflict only). Code audit round 1 (code stage 1 of 3) next. || Plan round 1 CLEAN (0 gate findings): floor proven a valid lower bound; 34,020-call probe raised no exception; every heston_price caller handles propagation; collector counts only card-reaching heston_grid fits. Size re-estimated L -> M. Tickets next. || Kenneth #174: Q1 A, Q2 B, Q3 A (#335 separate). Covers part of task_backlog HESTON-HYGIENE. Plan r1 drafted 2026-10-22; independent plan audit next. || SHIPPED, reconciled 2026-11-08: implementation PR #521 merged at 9e2641ac. This record was stranded in docs PR #522, which conflicted with main and is replaced by this reconciliation.",
       "code_stage": {
         "rounds": 1,
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent general-purpose subagent (agent afb26f80) applying bmad-review-adversarial-general reviewed git diff origin/main 12006163 (9 files) against plan sections 1-3 (G1-G4); 0 gate findings."
-      }
+      },
+      "merge_commit": "9e2641ac67b63b5f8df4c35a3f5213408a696fb8"
     },
     {
       "id": "APP-AUDIT-B-SETTINGS-LOST-UPDATE",
@@ -9149,7 +9175,7 @@
     {
       "id": "HESTON-RR-OVERPRICING",
       "name": "Measure how calibrated Heston fits inflate R/R on Options cards, then numbered options for Kenneth (#335); no pricing change in this phase",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/heston-rr-overpricing-f1b0cdfd",
       "tracking_issue": 335,
@@ -9170,7 +9196,7 @@
       },
       "size": "L",
       "complexity": 4,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "audit_history": [
         {
           "round": 1,
@@ -9258,7 +9284,7 @@
           "outstanding": []
         }
       ],
-      "note": "SELF-MERGE PENDING, PR #561, audited head 392f11b6 (decision reconciliation code round 2 clean). Evidence already shipped via PR #527 at 8e1e3b0a; actual main record preserved. Decision D recorded; completion awaits verified merge/closure. || DECISION RECONCILIATION AUDIT CLEAN 2026-10-25: code round 2 reviewed d8bc3eaa..392f11b6, zero gate findings; option D and closure independently matched to live untagged approvals on #335. Documentation scope/state drift/typecheck checks passed; backend/frontend tests N/A for documentation-only decision record. Exact-head PR CI pending. || DECISION RECONCILIATION BUILT 2026-10-25: untagged recommendation approvals on #335 (2026-10-23 and 2026-10-25), with needs-kenneth cleared, select option D and closure after recording the answer. Documentation-only decision record; evidence remains shipped at 8e1e3b0a (PR #527). Existing audit history/counters preserved; independent documentation review pending within the existing code-stage cap. || EVIDENCE SHIPPED 2026-10-22: PR #527 merged at 8e1e3b0a80f4dd1f2dcbd26725adf6c40329844c (board self-merge; exact head a81dbc51, CI test/frontend/backend success; verified on origin/main). #335 stays OPEN with numbered questions for Kenneth (needs-kenneth): option A/B/C/D and whether the item may close. No pricing changed; any chosen change is a new plan/audit phase. || (was) SELF-MERGE PENDING, PR #527 (refs #335, does not close it), audited head 61743f70 (code round 1 clean). Commits after the audited head are documentation-only state records (96ba9976 and this one). Not merged; the live PR state is authoritative. || CODE ROUND 4 (code stage round 1 of 3): CLEAN, 0 gate findings; no app/config/frontend/fixture change; report numbers re-derived from outputs; options C/D legs, all horizons, M1 recovery sweep and rrRatio-consumer grep independently checked. audit_clean true; PR (refers to #335, does not close it) next. || Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22.",
+      "note": "SELF-MERGE PENDING, PR #561, audited head 392f11b6 (decision reconciliation code round 2 clean). Evidence already shipped via PR #527 at 8e1e3b0a; actual main record preserved. Decision D recorded; completion awaits verified merge/closure. || DECISION RECONCILIATION AUDIT CLEAN 2026-10-25: code round 2 reviewed d8bc3eaa..392f11b6, zero gate findings; option D and closure independently matched to live untagged approvals on #335. Documentation scope/state drift/typecheck checks passed; backend/frontend tests N/A for documentation-only decision record. Exact-head PR CI pending. || DECISION RECONCILIATION BUILT 2026-10-25: untagged recommendation approvals on #335 (2026-10-23 and 2026-10-25), with needs-kenneth cleared, select option D and closure after recording the answer. Documentation-only decision record; evidence remains shipped at 8e1e3b0a (PR #527). Existing audit history/counters preserved; independent documentation review pending within the existing code-stage cap. || EVIDENCE SHIPPED 2026-10-22: PR #527 merged at 8e1e3b0a80f4dd1f2dcbd26725adf6c40329844c (board self-merge; exact head a81dbc51, CI test/frontend/backend success; verified on origin/main). #335 stays OPEN with numbered questions for Kenneth (needs-kenneth): option A/B/C/D and whether the item may close. No pricing changed; any chosen change is a new plan/audit phase. || (was) SELF-MERGE PENDING, PR #527 (refs #335, does not close it), audited head 61743f70 (code round 1 clean). Commits after the audited head are documentation-only state records (96ba9976 and this one). Not merged; the live PR state is authoritative. || CODE ROUND 4 (code stage round 1 of 3): CLEAN, 0 gate findings; no app/config/frontend/fixture change; report numbers re-derived from outputs; options C/D legs, all horizons, M1 recovery sweep and rrRatio-consumer grep independently checked. audit_clean true; PR (refers to #335, does not close it) next. || Independent recompute (plan section 3, agent a7fd6804, own code, shipped functions only) AGREES with zero difference on M1 counts, 3 Heston cards, 3 M2 cells, 3 M3 fits and option B count; all 326 fits recalibrated and matched. recompute.md committed. Code audit next. || BUILT 2026-10-22 (evidence): T1 #523 (0ddecde3) M1-M3 and T2 #524 (dd375af9) options + report.md; no backend/app, frontend or config change. Independent recompute (plan section 3) and code audit next. Bookkeeping: plan round 3 was clean (0 gate findings, agent a656b5ee); its earlier record commit said '0 findings' rather than the canonical 'clean', so this commit restates it. || Plan round 3 CLEAN (0 gate findings): replay date pin and cache clearing close R2-F1/F2; no other clock or cache alters chain rows. Plan stage closed clean at round 3. Tickets T1/T2 next. || Plan round 2: 2 gate findings (M3 replay date and cache), fixed; plan round 3 (last of the plan-stage cap) next. || Plan round 1: 7 gate findings, all fixed; plan round 2 (fixes only) next. || Kenneth #174 Q3 A. Evidence phase only; ends with needs-kenneth questions. Plan r1 drafted 2026-10-22. || SHIPPED, reconciled 2026-11-08: implementation PR #561 merged at f777fa28. This record was stranded in docs PR #562, which conflicted with main and is replaced by this reconciliation.",
       "code_stage": {
         "rounds": 2,
         "clean": true,
@@ -9274,7 +9300,8 @@
           "https://github.com/Netke237/trading-assistant/issues/335#issuecomment-6393368110"
         ],
         "evidence_merge_sha": "8e1e3b0a80f4dd1f2dcbd26725adf6c40329844c"
-      }
+      },
+      "merge_commit": "f777fa2885e84ce14da5ec765541030817b31afc"
     },
     {
       "id": "REGIME-SERIES-LENGTH",
@@ -9491,7 +9518,7 @@
     {
       "id": "APP-AUDIT-PRESENTATION-ATTRIBUTION",
       "name": "J1 conservative attribution tooling and verifier (#529)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-presentation-attribution-fed37a73",
       "tracking_issue": 529,
@@ -9499,7 +9526,7 @@
       "audit_rounds": 5,
       "audit_clean": true,
       "plan_audit_clean": true,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
       "audit_history": [
@@ -9581,7 +9608,7 @@
         "path": "docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/tooling-report.md",
         "pattern": "APP-AUDIT-PRESENTATION-ATTRIBUTION"
       },
-      "note": "SELF-MERGE PENDING, PR #546, audited head ad32e7d7. Plan round 2 clean, code round 3 clean. Parent original capped history preserved.",
+      "note": "SELF-MERGE PENDING, PR #546, audited head ad32e7d7. Plan round 2 clean, code round 3 clean. Parent original capped history preserved. || SHIPPED, reconciled 2026-11-08: implementation PR #546 merged at b98b025d. This record was stranded in docs PR #547, which conflicted with main and is replaced by this reconciliation.",
       "plan_stage": {
         "rounds": 2,
         "closed_by": "clean"
@@ -9591,12 +9618,13 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent subagent afd5559e-5916-42cd-a8d9-5c53bb073645 reviewed Round 2 fixes and interactions; 0 gate findings; report docs/superpowers/audits/app-audit/APP-AUDIT-PRESENTATION-ATTRIBUTION/code-r3.md"
-      }
+      },
+      "merge_commit": "b98b025df18268f98258c2d07678cddedb4f0b38"
     },
     {
       "id": "APP-AUDIT-PRESENTATION-EXECUTION",
       "name": "J2 browser presentation audit and reconciliation (#530)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/app-audit-presentation-execution-c7c61ea2",
       "tracking_issue": 530,
@@ -9604,7 +9632,7 @@
       "audit_rounds": 4,
       "audit_clean": true,
       "plan_audit_clean": true,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "size": "L",
       "complexity": 4,
       "plan_stage": {
@@ -9686,7 +9714,8 @@
         "pattern": "APP-AUDIT-PRESENTATION-EXECUTION",
         "note": "Pins the final Lane J presentation audit report (#530)."
       },
-      "note": "SELF-MERGE PENDING, PR #551, audited head e6c233bf. J2 browser presentation audit and reconciliation (#530). Units 1-3 completed (#548, #549, #550 closed). Plan round 3 clean, code round 1 clean. Parent #358 original capped history preserved."
+      "note": "SELF-MERGE PENDING, PR #551, audited head e6c233bf. J2 browser presentation audit and reconciliation (#530). Units 1-3 completed (#548, #549, #550 closed). Plan round 3 clean, code round 1 clean. Parent #358 original capped history preserved. || SHIPPED, reconciled 2026-11-08: implementation PR #551 merged at 500fa563. This record was stranded in docs PR #552, which conflicted with main and is replaced by this reconciliation.",
+      "merge_commit": "500fa563da47ea2dcd001b9ac1e87aa8f2c1055f"
     },
     {
       "id": "APP-AUDIT-INTEGRATION",
