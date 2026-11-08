@@ -10200,7 +10200,7 @@
         "pattern": "UNUSABLE_ORDER_IDS",
         "note": "PRESENCE ONLY of the shared unusable-id set. Correctness requires tests and the independent audit."
       },
-      "note": "Taken 2026-11-08 from Board #151 on Kenneth's instruction. Plan round 1 CLEAN. T1 #599 built at f3e8402f. Code round 2 (code stage round 1) CLEAN, 0 gate findings, audited head 5b77cca9.",
+      "note": "Taken 2026-11-08 from Board #151 on Kenneth's instruction. Plan round 1 CLEAN. T1 #599 built at f3e8402f. Code round 2 (code stage round 1) CLEAN, 0 gate findings, audited head 5b77cca9. SELF-MERGE PENDING, PR #600, audited head 5b77cca9. Not merged; the live PR state is authoritative.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -10230,7 +10230,8 @@
         "clean": true,
         "closed_by": "clean",
         "closure_evidence": "Fresh independent gate-auditor subagent (bmad-review-adversarial-general) reviewed git diff origin/main..5b77cca9 -- frontend (merge-base 239b4cb2) against the plan and #593; 0 gate findings; 6 affected suites, 130 tests passed. Could not verify a real broker reply (none sent)."
-      }
+      },
+      "pr": 600
     }
   ],
   "already_shipped": [
