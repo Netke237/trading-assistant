@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "docs/reconcile-october-state-records-3874becb",
+      "claimed_at": "2026-11-08T19:27:03Z",
+      "expires_at": "2026-11-08T22:27:03Z",
+      "note": "One docs PR recording 21 stranded October phases as shipped",
+      "task": "STATE-RECONCILE-2026-11-08"
+    }
+  ]
 }
