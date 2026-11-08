@@ -407,7 +407,7 @@ export default function BarrierRaceCard({
         <div className={styles.assumptions}>
           <Text size={10} tone="dim">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
           <Text size={10} tone="dim">Medians are conditional on the outcome</Text>
-          <Text size={10} tone="dim">Repriced at the median barrier day</Text>
+          <Text size={10} tone="dim">Stock stop repriced once (touch median or fallback day)</Text>
           <Text size={10} tone="dim">IV unchanged at the barriers</Text>
           <Text size={10} tone="dim">Edge before commissions</Text>
         </div>
@@ -448,14 +448,21 @@ export default function BarrierRaceCard({
               leaves this card pointing a reader at a row that is nowhere on the
               page. */}
           <Text size={10} tone="dim">
-            Priced at each barrier&apos;s own median day, so time decay is included.
+            The stock-stop value is repriced once, at one horizon shared by every target: the
+            median day over all paths that ever touch the stock stop, measured on its own (not the
+            per-outcome medians), or the configured holding-period fallback when that median is
+            unavailable, capped before expiry. It is priced with the time to expiry left on that
+            day, so time decay is included.
             {stopCostShown ? (
               <>
                 {' '}For the immediate figure — what this stop costs if it is hit right now —
                 see &ldquo;Max loss if the stop is hit&rdquo; in Structure &amp; Stops.
-                The two differ by time decay AND by pricing model: that one is a
-                delta-linear estimate at today&apos;s price, capped at the premium, while these
-                are repriced by the simulation. Both are correct; naming only the decay sent a
+                The two differ by time decay AND can differ by volatility input: both are
+                Black-Scholes prices at the stop, but that one uses today&apos;s full time to expiry
+                (no time decay), its loss is not capped, and it takes the supplied implied
+                volatility or one solved from the mid, while these use the time left at the
+                repricing day and the volatility the simulation solved from the mid (or its
+                fallback). Both are correct; naming only the decay sent a
                 hand-checker looking for a difference decay alone cannot account for.
               </>
             ) : null}

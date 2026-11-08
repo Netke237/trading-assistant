@@ -512,7 +512,33 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
     // The reason the two figures differ is what makes the comparison usable —
     // naming only decay sent a hand-checker looking for a difference decay
     // alone cannot account for.
-    expect(screen.getByText(/time decay AND by pricing model/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/time decay AND can differ by volatility input/),
+    ).toBeInTheDocument();
+  });
+
+  // #579: the copy has to say how each figure is actually computed. The
+  // immediate figure is compute_stop_cost — Black-Scholes at the stop with
+  // today's unchanged time to expiry, loss not capped — and the race's stock
+  // stop is repriced ONCE, at reprice_horizon.resolve_reprice_days' single
+  // horizon (the standalone stop-touch median, else the configured fallback,
+  // capped before expiry). The old copy claimed neither.
+  it('states the stop valuation bases the backend actually uses', () => {
+    const { container } = renderCard({ stopCostShown: true });
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/delta-linear/);
+    expect(text).not.toMatch(/capped at the premium/);
+    expect(text).not.toMatch(/each barrier's own median day/);
+    expect(text).not.toMatch(/Repriced at the median barrier day/);
+    expect(text).toMatch(
+      /both are Black-Scholes prices at the stop, but that one uses today's full time to expiry \(no time decay\), its loss is not capped/,
+    );
+    expect(text).toMatch(
+      /The stock-stop value is repriced once, at one horizon shared by every target: the median day over all paths that ever touch the stock stop/,
+    );
+    expect(text).toMatch(/or the configured holding-period fallback when that median is unavailable/);
+    expect(text).toMatch(/capped before expiry/);
+    expect(screen.getByText('Stock stop repriced once (touch median or fallback day)')).toBeInTheDocument();
   });
 
   it('says nothing about it when that readout is not rendered', () => {
@@ -521,7 +547,7 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
     // The line the paragraph always carries is still there — only the
     // cross-reference is conditional.
     expect(
-      screen.getByText(/Priced at each barrier's own median day/),
+      screen.getByText(/The stock-stop value is repriced once, at one horizon shared by every target/),
     ).toBeInTheDocument();
   });
 
