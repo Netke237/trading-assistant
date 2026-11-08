@@ -10014,7 +10014,7 @@
     {
       "id": "PROVIDER-FALLBACK-FORMING-BAR",
       "name": "Options scan DB-miss provider fallback drops the forming daily bar (#536)",
-      "status": "built",
+      "status": "shipped",
       "owner": "agent",
       "branch": "board/provider-fallback-forming-bar-c801fd9a",
       "tracking_issue": 536,
@@ -10030,7 +10030,7 @@
       },
       "size": "S",
       "complexity": 3,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "audit_history": [
         {
           "round": 1,
@@ -10099,7 +10099,8 @@
         "clean": true,
         "closed_by": "clean"
       },
-      "pr": 590
+      "pr": 590,
+      "merge_commit": "ebfe0808b4841c6a6374df16afbda0bc4c008a6d"
     }
   ],
   "already_shipped": [
