@@ -2,10 +2,16 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/trade-card-decision-review-179b9130",
-      "claimed_at": "2026-11-08T11:05:14Z",
-      "expires_at": "2026-11-08T14:16:02Z",
-      "note": "Resume remaining broker review and integrated verification tickets",
+      "branch": "board/trade-card-decision-review-5f119477",
+      "claimed_at": "2026-11-08T12:17:13Z",
+      "expires_at": "2026-11-08T15:17:13Z",
+      "note": "#575 reassigned back by Kenneth in chat 2026-11-08 (from codex 179b9130)",
+      "previous": [
+        {
+          "branch": "board/trade-card-decision-review-179b9130",
+          "claimed_at": "2026-11-08T11:05:14Z"
+        }
+      ],
       "task": "TRADE-CARD-DECISION-REVIEW"
     }
   ]
