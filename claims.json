@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/provider-fallback-forming-bar-c801fd9a",
       "claimed_at": "2026-11-07T22:01:16Z",
-      "expires_at": "2026-11-08T01:59:56Z",
+      "expires_at": "2026-11-08T03:41:48Z",
       "note": "#536 resume (claim expired); bring in main, self-merge PR #571",
       "task": "PROVIDER-FALLBACK-FORMING-BAR"
     },
