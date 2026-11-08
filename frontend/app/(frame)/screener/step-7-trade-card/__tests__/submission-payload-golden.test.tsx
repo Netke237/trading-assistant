@@ -111,6 +111,20 @@ afterAll(() => {
   }
 });
 
+
+/** #582 — Track basket confirms only server-reviewed rows. The review
+ *  (POST /api/portfolio/preview) is answered with the request echoed as the
+ *  would-be saved row; every other request goes to `inner`. */
+function withPreview(inner: typeof fetch): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
+    return (inner as unknown as (u: string, i?: RequestInit) => Promise<unknown>)(url, init);
+  }) as unknown as typeof fetch;
+}
+
 const originalFetch = global.fetch;
 function setup(cards: TradeCardData[], liveMid: number) {
   act(() => {
@@ -138,13 +152,13 @@ function setup(cards: TradeCardData[], liveMid: number) {
   });
   (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'ORD-1', status: 'submitted', broker: 'ibkr_paper' });
   (api.getAutoTradeStatus as jest.Mock).mockResolvedValue({ armed: false });
-  global.fetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+  global.fetch = withPreview(jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
       const body = { ...JSON.parse(String(init.body)), premiumStopPct: null };
       return { ok: true, status: 201, json: async () => body };
     }
     return { ok: true, json: async () => ({}) };
-  }) as unknown as typeof fetch;
+  }) as unknown as typeof fetch);
 }
 
 async function renderPage() {

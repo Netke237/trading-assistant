@@ -14,6 +14,7 @@ import { stripLegacyIvFields } from '@/lib/ivBasis';
 import { validationMessages } from '@/lib/pydanticError';
 import { premiumStopDropReason, premiumStopIsSubCent, type PremiumStopDropReason } from '@/lib/premiumStop';
 import { premiumStopPctFromDollars } from '@/lib/barrierRace';
+import { savedDifferences, type PreviewDifference, type TrackingPreview } from '@/lib/trackingReview';
 
 type BackendPosition = {
   id: string;
@@ -190,6 +191,26 @@ export function withServerEntry<T extends PortfolioPosition>(row: T, entry: numb
   };
 }
 
+export interface AddPositionOptions {
+  skipPost?: boolean;
+  review?: { fingerprint: string; preview: TrackingPreview };
+}
+
+export interface AddPositionResult {
+  ok: boolean;
+  status: 'ok' | 'rejected' | 'pending' | 'review_required';
+  detail?: string;
+  adjustedQty?: number;
+  premiumStopDropped?: number;
+  premiumStopDropReason?: PremiumStopDropReason;
+  premiumStopKeptPct?: number;
+  preview?: TrackingPreview;
+  savedDiffers?: string[];
+}
+
+/** Every create without `review` can only answer ok / rejected / pending. */
+export type UnreviewedAddResult = Omit<AddPositionResult, 'status' | 'preview' | 'savedDiffers'> & { status: 'ok' | 'rejected' | 'pending' };
+
 interface PortfolioStoreState {
   positions: PortfolioPosition[];
   /** Last backend rejection of a save, for the UI to surface. Null when clean. */
@@ -231,7 +252,18 @@ interface PortfolioStoreState {
    *  instead (a TIGHTER stop than requested). Undefined means nothing was
    *  dropped. Without it the basket path could not report the fallback at all
    *  -- see the note in step-7-trade-card's handleSubmit. */
-  addPosition:    (p: PortfolioPosition, opts?: { skipPost?: boolean }) => Promise<{ ok: boolean; status: 'ok' | 'rejected' | 'pending'; detail?: string; adjustedQty?: number; premiumStopDropped?: number; premiumStopDropReason?: PremiumStopDropReason; premiumStopKeptPct?: number }>;
+  /** #582 — `opts.review` is a Track basket CONFIRMATION: the POST carries
+   *  `X-Review-Fingerprint`, and the outcome adds `'review_required'` (the
+   *  server's current resolution differs; nothing was saved, the optimistic row
+   *  is rolled back, `preview` is the new resolution). A confirmed save adopts
+   *  the COMPLETE saved row at once (local-only metadata kept). A 409 is
+   *  resolved by recId against the backend, never taken as success on its
+   *  own; `savedDiffers` names any material field of a recId-matched saved row
+   *  that differs from the reviewed preview. Without `review`: unchanged. */
+  addPosition: {
+    (p: PortfolioPosition, opts: AddPositionOptions & { review: NonNullable<AddPositionOptions['review']> }): Promise<AddPositionResult>;
+    (p: PortfolioPosition, opts?: { skipPost?: boolean }): Promise<UnreviewedAddResult>;
+  };
   updatePosition: (contract: string, patch: Partial<PortfolioPosition>) => void;
   /** Record an added fill. Sends the total, the fill price, and the saved
    *  base together. Does not change quantity or entry until the server
@@ -432,16 +464,137 @@ type SaveOutcome =
   // `entryPrice` rides WITH it and is not optional cosmetics: both engines
   // compare `price <= entry * (1 - pct)`, so a fraction adopted without the
   // entry it was derived against puts them on different thresholds.
-  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }
+  // `saved` (#582): the complete 201 row, adopted whole by a reviewed create.
+  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null; saved?: BackendPosition }
   | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
   | { kind: 'duplicate' }                  // 409 — backend already has this contract
+  | { kind: 'review_required'; preview: TrackingPreview } // #582 412 — nothing saved
   | { kind: 'network' };                   // unreachable — keep the row pending
 
-async function postPosition(p: PortfolioPosition, portfolioValue = accountValue()): Promise<SaveOutcome> {
+function isBackendRow(x: unknown): x is BackendPosition {
+  const r = x as Partial<BackendPosition> | null;
+  return !!r && typeof r === 'object' && typeof r.contract === 'string' && typeof r.recId === 'string'
+    && typeof r.entryPrice === 'number' && typeof r.qty === 'number';
+}
+
+/** #582 — a server preview, or null when the body is not one. */
+export function parsePreview(x: unknown): TrackingPreview | null {
+  const b = x as {
+    fingerprint?: unknown; position?: unknown; adjustedQty?: unknown; premiumStopUnapplied?: unknown;
+    entryFromLiveQuote?: unknown; entryStockPrice?: unknown; inheritedPremiumStopPct?: unknown; differences?: unknown;
+  } | null;
+  if (!b || typeof b !== 'object' || typeof b.fingerprint !== 'string' || b.fingerprint === '') return null;
+  const row = b.position as Partial<BackendPosition> | null;
+  if (!row || typeof row !== 'object' || typeof row.contract !== 'string'
+    || typeof row.entryPrice !== 'number' || typeof row.qty !== 'number') return null;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return {
+    fingerprint: b.fingerprint,
+    position: fromBackend({ targets: [], dteTotal: null, createdAt: '', id: '', recId: '', ...row } as BackendPosition),
+    adjustedQty: num(b.adjustedQty),
+    premiumStopUnapplied: typeof b.premiumStopUnapplied === 'string' ? b.premiumStopUnapplied : null,
+    entryFromLiveQuote: b.entryFromLiveQuote === true,
+    entryStockPrice: num(b.entryStockPrice),
+    inheritedPremiumStopPct: num(b.inheritedPremiumStopPct),
+    differences: Array.isArray(b.differences)
+      ? (b.differences as PreviewDifference[]).filter((d) => d && typeof d.field === 'string' && typeof d.reason === 'string')
+      : [],
+  };
+}
+
+export type PreviewOutcome =
+  | { kind: 'ok'; preview: TrackingPreview }
+  | { kind: 'rejected'; detail: string }
+  | { kind: 'network' };
+
+/** #582 — ask the server what POST /api/portfolio would store for EXACTLY this
+ *  request (the same `toBackendPayload` body the confirmation sends). The
+ *  server writes nothing. A 409/422 is the create's own refusal, reported as
+ *  `rejected` with its detail. */
+export async function previewPosition(p: PortfolioPosition, portfolioValue = accountValue()): Promise<PreviewOutcome> {
+  try {
+    const res = await fetch(`${_BASE_URL()}/api/portfolio/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toBackendPayload(p, portfolioValue)),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const preview = parsePreview(body);
+      return preview ? { kind: 'ok', preview } : { kind: 'rejected', detail: 'The server review returned an unexpected answer.' };
+    }
+    return { kind: 'rejected', detail: errorDetail(body, res.status) };
+  } catch {
+    return { kind: 'network' };
+  }
+}
+
+/** #582 — fold the COMPLETE saved row onto the local one. Every persisted
+ *  field is the server's; local-only metadata (source, label, card snapshot,
+ *  greeks, scan anchor, the tracked expiry) stays. The create-only
+ *  `premiumStopDollar` and the review fingerprint are dropped on the way to
+ *  'synced', as on every promotion. */
+export function adoptSavedRow(local: PortfolioPosition, saved: BackendPosition): PortfolioPosition {
+  const s = fromBackend(saved);
+  const { premiumStopDollar: _createOnly, reviewFingerprint: _reviewed, ...rest } = local;
+  void _createOnly; void _reviewed;
+  return withServerEntry({
+    ...rest,
+    contracts: s.contracts,
+    entryDate: s.entryDate,
+    stop: s.stop,
+    structuralStop: s.structuralStop,
+    exitPlan: s.exitPlan,
+    maxLossOverride: s.maxLossOverride,
+    premiumStopPct: s.premiumStopPct,
+    activeTpMethod: s.activeTpMethod,
+    resolvedTpPrice: s.resolvedTpPrice,
+    resolvedTpUpdatedAt: s.resolvedTpUpdatedAt,
+    pickedMethod: s.pickedMethod,
+    pickedRowStockPrice: s.pickedRowStockPrice,
+    pickedRowOptionPrice: s.pickedRowOptionPrice,
+    pickedStopBasis: s.pickedStopBasis,
+    pickedAt: s.pickedAt,
+    holdMaxDays: s.holdMaxDays,
+    alertOverrides: s.alertOverrides,
+    targets: s.targets,
+    ...(saved.dteTotal != null ? { dteTotal: saved.dteTotal } : {}),
+    syncStatus: 'synced',
+    syncedAt: Date.now(),
+    syncPendingSince: undefined,
+  }, s.entryPrice);
+}
+
+/** #582 — after an ambiguous answer (409) to a reviewed create: the backend
+ *  row with THIS recId, null when the contract is held under another recId,
+ *  or 'network' when the backend cannot be read. Never a same-contract 409
+ *  alone. */
+async function savedRowByRecId(recId: string): Promise<BackendPosition | null | 'network'> {
+  try {
+    const res = await fetch(`${_BASE_URL()}/api/portfolio`);
+    if (!res.ok) return 'network';
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return 'network';
+    const found = (rows as BackendPosition[]).find((r) => r && r.recId === recId);
+    return found && isBackendRow(found) ? found : null;
+  } catch {
+    return 'network';
+  }
+}
+
+/** #582 — the header a Track basket confirmation carries. The fingerprint is a
+ *  precondition on the request, not a field of it: the body is byte-identical
+ *  to an unreviewed create, so every other caller and the golden payloads are
+ *  untouched. */
+export const REVIEW_FINGERPRINT_HEADER = 'X-Review-Fingerprint';
+
+async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(), reviewFingerprint?: string): Promise<SaveOutcome> {
   try {
     const res = await fetch(`${_BASE_URL()}/api/portfolio`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: reviewFingerprint != null
+        ? { 'Content-Type': 'application/json', [REVIEW_FINGERPRINT_HEADER]: reviewFingerprint }
+        : { 'Content-Type': 'application/json' },
       body: JSON.stringify(toBackendPayload(p, portfolioValue)),
     });
     if (res.ok) {
@@ -464,10 +617,16 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
         entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
+        ...(reviewFingerprint != null && isBackendRow(body) ? { saved: body } : {}),
       };
     }
     if (res.status === 409) return { kind: 'duplicate' };
     const body = await res.json().catch(() => ({}));
+    if (reviewFingerprint != null && res.status === 412) {
+      const detail = (body as { detail?: { code?: unknown; preview?: unknown } } | null)?.detail;
+      const preview = detail && detail.code === 'review_required' ? parsePreview(detail.preview) : null;
+      if (preview) return { kind: 'review_required', preview };
+    }
     return { kind: 'rejected', detail: errorDetail(body, res.status) };
   } catch {
     return { kind: 'network' };
@@ -1140,7 +1299,8 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             structuralStop: floorStop(p.structuralStop),
           })),
         }),
-      addPosition: async (p, opts) => {
+      // Cast: the overloads narrow the result for unreviewed callers (#582).
+      addPosition: (async (p: PortfolioPosition, opts?: AddPositionOptions): Promise<AddPositionResult> => {
         const recId = (p as PortfolioPosition & { recId?: string }).recId || generateRecId();
         const value = accountValue();
 
@@ -1167,6 +1327,9 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             // dashboard before the next sync corrected it.
             stop: floorStop(p.stop),
             structuralStop: floorStop(p.structuralStop),
+            // #582 — a reviewed create's pending retry must carry the SAME
+            // confirmation constraint, so it lives on the row itself.
+            ...(opts?.review ? { reviewFingerprint: opts.review.fingerprint } : {}),
           };
 
           const idxByRecId = s.positions.findIndex((x) => x.recId === recId);
@@ -1215,7 +1378,62 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
           return { ok: true, status: 'ok' as const };
         }
 
-        const outcome = await postPosition({ ...p, recId } as PortfolioPosition, value);
+        let outcome = await postPosition({ ...p, recId } as PortfolioPosition, value, opts?.review?.fingerprint);
+
+        // #582 — a reviewed (Track basket) confirmation. Its three answers that
+        // differ from an unreviewed create are settled here; the rest (rejected,
+        // network, an ok without a row body) fall through unchanged below.
+        if (opts?.review) {
+          const review = opts.review;
+          let savedDiffers: string[] | undefined;
+          if (outcome.kind === 'duplicate') {
+            // NEVER success on a same-contract 409 alone: only a backend row
+            // with THIS recId (and this contract) is this confirmation's save.
+            const found = await savedRowByRecId(recId);
+            if (found === 'network') {
+              outcome = { kind: 'network' };
+            } else if (found && found.contract === p.contract) {
+              outcome = { kind: 'ok', saved: found, premiumStopPct: found.premiumStopPct ?? null, entryPrice: found.entryPrice };
+              savedDiffers = savedDifferences(fromBackend(found), review.preview);
+            } else {
+              outcome = {
+                kind: 'rejected',
+                detail: 'A position for this contract is already open under another row — this reviewed row was not saved.',
+              };
+            }
+          }
+          if (outcome.kind === 'review_required') {
+            // Nothing was written: undo the optimistic row; not a failure.
+            const preview = outcome.preview;
+            set((s) => ({ positions: rollback(s.positions) }));
+            return {
+              ok: false, status: 'review_required' as const, preview,
+              detail: 'The server-resolved values changed since review; nothing was saved.',
+            };
+          }
+          if (outcome.kind === 'ok' && outcome.saved) {
+            const saved = outcome.saved;
+            set((s) => {
+              const restored = didMerge ? rollback(s.positions) : s.positions;
+              const local = restored.find((x) => x.recId === recId) ?? ({ ...p, recId } as PortfolioPosition);
+              const adopted = adoptSavedRow(local, saved);
+              return {
+                positions: restored.some((x) => x.recId === recId)
+                  ? restored.map((x) => (x.recId === recId ? adopted : x))
+                  : [...restored, adopted],
+              };
+            });
+            const drop = premiumStopDropOf(p, saved.premiumStopPct ?? null, saved.entryPrice);
+            const adjustedQty = outcome.adjustedQty ?? (saved.qty !== (p.contracts ?? 1) ? saved.qty : undefined);
+            return {
+              ok: true, status: 'ok' as const, adjustedQty,
+              premiumStopDropped: drop?.requestedDollar ?? undefined,
+              premiumStopDropReason: drop?.reason,
+              premiumStopKeptPct: drop?.keptPct,
+              ...(savedDiffers && savedDiffers.length > 0 ? { savedDiffers } : {}),
+            };
+          }
+        }
 
         // A 409 on a MERGE means the backend refused a scale-in (it keeps one open
         // position per contract — no add-to-existing). Don't report the local qty
@@ -1300,7 +1518,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         }
         // network — leave the row pending; the reconcile retries it. Never silently dropped.
         return { ok: false, status: 'pending' as const, detail: 'queued — will retry when the backend is reachable' };
-      },
+      }) as PortfolioStoreState['addPosition'],
       updatePosition: (contract, patch) => {
         // Floor stop/structuralStop once, up front, so the SAME value lands
         // in both the optimistic local state below and the network payload —
@@ -1497,13 +1715,57 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
             const localAbsent = snapshot.filter(
               (p) => p.recId && !remoteContracts.has(p.contract),
             );
+            // #582 — a REVIEWED pending row whose contract the backend now holds
+            // under ANOTHER recId was not saved (its own save carries its own
+            // recId). Say so instead of letting the remote row silently stand
+            // in for it; a remote row with the same recId IS its save.
+            for (const p of snapshot) {
+              if (p.syncStatus !== 'pending' || !p.reviewFingerprint || !remoteContracts.has(p.contract)) continue;
+              const remoteRow = remotePositions.find((r) => r.contract === p.contract);
+              if (remoteRow && remoteRow.recId !== p.recId) {
+                set({ lastSyncError: {
+                  symbol: p.symbol, contract: p.contract, at: Date.now(),
+                  detail: 'A position for this contract is already open under another row — the reviewed tracking row was not saved.',
+                } });
+              }
+            }
 
             const keep: PortfolioPosition[] = [];
             for (const p of localAbsent) {
               if (p.syncStatus === 'pending') {
                 // Retry the save. Never silently drop a pending row: on success
                 // promote it, on a hard rejection surface it, on network keep it.
-                const outcome = await postPosition(p, accountValue());
+                // #582 — a reviewed row retries under its ORIGINAL confirmation
+                // fingerprint; a changed resolution can never be approved here.
+                const outcome = await postPosition(p, accountValue(), p.reviewFingerprint);
+                if (p.reviewFingerprint && outcome.kind === 'review_required') {
+                  set({ lastSyncError: {
+                    symbol: p.symbol, contract: p.contract, at: Date.now(),
+                    detail: 'The server-resolved values changed since you reviewed this tracking row, so it was not saved. Review it again from Step 7.',
+                  } });
+                  continue; // dropped, never saved with values nobody reviewed
+                }
+                if (p.reviewFingerprint && outcome.kind === 'duplicate') {
+                  // Ambiguous: keep it pending. The next GET shows whether the
+                  // contract is held under this recId (its save) or another.
+                  keep.push(p);
+                  continue;
+                }
+                if (p.reviewFingerprint && outcome.kind === 'ok' && outcome.saved) {
+                  const drop = premiumStopDropOf(p, outcome.saved.premiumStopPct ?? null, outcome.saved.entryPrice);
+                  if (drop) {
+                    set((s) => {
+                      const queue = [...s.premiumStopDropQueue, {
+                        symbol: p.symbol, contract: p.contract,
+                        requestedDollar: drop.requestedDollar, reason: drop.reason,
+                        keptPct: drop.keptPct, at: Date.now(),
+                      }];
+                      return { premiumStopDropQueue: queue, lastPremiumStopDropped: queue[0] ?? null };
+                    });
+                  }
+                  keep.push(adoptSavedRow(p, outcome.saved));
+                  continue;
+                }
                 if (outcome.kind === 'ok' || outcome.kind === 'duplicate') {
                   // Fold the SERVER-DERIVED premiumStopPct onto the row, the
                   // same way addPosition and applyPersistedPosition do. This
@@ -1629,7 +1891,10 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
         // Push all local positions to the backend (409 = already there, safe to ignore).
         const { positions } = usePortfolioStore.getState();
         const value = accountValue();
-        await Promise.all(positions.map((p) => postPosition(p, value)));
+        // #582 — a pending REVIEWED row re-POSTs only under its own confirmation
+        // fingerprint (cleared once synced), so this push can never save values
+        // nobody reviewed; a 412 here leaves it for the reconcile to report.
+        await Promise.all(positions.map((p) => postPosition(p, value, p.syncStatus === 'synced' ? undefined : p.reviewFingerprint)));
       },
     }),
     {

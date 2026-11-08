@@ -75,14 +75,28 @@ jest.mock('@/lib/api', () => ({
  * sending its own fraction (PREMIUM-STOP-FALLBACK-ALIGN): the dropped-stop
  * disclosure tests below rely on this reply reading as "the server stored no
  * per-position stop". What the page POSTS is read off the request instead. */
-function echoFetch(): typeof fetch {
+
+/** #582 — Track basket confirms only server-reviewed rows. The review
+ *  (POST /api/portfolio/preview) is answered with the request echoed as the
+ *  would-be saved row; every other request goes to `inner`. */
+function withPreview(inner: typeof fetch): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
+    return (inner as unknown as (u: string, i?: RequestInit) => Promise<unknown>)(url, init);
+  }) as unknown as typeof fetch;
+}
+
+function echoFetch(): typeof fetch {
+  return withPreview(jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
       const body = { ...JSON.parse(String(init.body)), premiumStopPct: null };
       return { ok: true, status: 201, json: async () => body };
     }
     return { ok: true, json: async () => ({}) };
-  }) as unknown as typeof fetch;
+  }) as unknown as typeof fetch);
 }
 
 const CARD_INVALIDATION = 140;
@@ -942,11 +956,11 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   });
 
   it('shows the rejection banner for a BASKET order with no broker selected', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = withPreview(jest.fn().mockResolvedValue({
       ok: false,
       status: 422,
       json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-    }) as unknown as typeof fetch;
+    }) as unknown as typeof fetch);
 
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
@@ -970,9 +984,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
      * gated behind a selected broker; reachable the moment it was hoisted. */
     {
       // ── Submit 1: the backend refuses it.
-      global.fetch = jest.fn().mockResolvedValue({
+      global.fetch = withPreview(jest.fn().mockResolvedValue({
         ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-      }) as unknown as typeof fetch;
+      }) as unknown as typeof fetch);
       render(<Step7TradeCardPage />);
       await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
@@ -984,9 +998,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
       // ── Submit 2: the backend accepts it. Same page, same card, no
       //    navigation -- so nothing else clears the banner.
-      global.fetch = jest.fn().mockResolvedValue({
+      global.fetch = withPreview(jest.fn().mockResolvedValue({
         ok: true, json: async () => ({}),
-      }) as unknown as typeof fetch;
+      }) as unknown as typeof fetch);
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
       fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
       submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
@@ -1008,9 +1022,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
    * a `finally`, so a failing assertion (a mutation run) cannot leak a spent
    * slot into the tests after it. */
   const reject422 = () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = withPreview(jest.fn().mockResolvedValue({
       ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-    }) as unknown as typeof fetch;
+    }) as unknown as typeof fetch);
   };
   const acceptAll = () => {
     global.fetch = echoFetch();
@@ -1207,9 +1221,10 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const added: Array<{ symbol: string; source?: string }> = [];
     act(() => {
       usePortfolioStore.setState({
-        addPosition: ((p: Parameters<typeof realAddPosition>[0]) => {
+        // #582 — forward the review, so the basket's reviewed confirmation runs.
+        addPosition: ((p: Parameters<typeof realAddPosition>[0], opts?: Parameters<typeof realAddPosition>[1]) => {
           added.push({ symbol: p.symbol, source: p.source });
-          return realAddPosition(p);
+          return (realAddPosition as (x: typeof p, o?: typeof opts) => ReturnType<typeof realAddPosition>)(p, opts);
         }) as typeof realAddPosition,
       });
     });

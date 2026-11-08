@@ -166,3 +166,29 @@
   flex-direction: column;
   gap: 4px;
 }
+
+/* #582 — per-row server review: requested beside server-resolved. */
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface-2) 60%, var(--bg-surface));
+}
+
+.reviewGrid {
+  display: grid;
+  grid-template-columns: 140px 1fr 1.4fr;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+}
+
+.reviewLine {
+  display: contents;
+}
+
+.reviewLine > div {
+  display: flex;
+  flex-direction: column;
+}

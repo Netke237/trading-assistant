@@ -19,7 +19,8 @@ import { FundamentalHealthCard } from '@/components/molecules/FundamentalHealthC
 import { TradeCard, type EditOverlay, type TouchedFields } from '@/components/organisms/TradeCard';
 import { CandidateNav } from '@/components/molecules/CandidateNav';
 import { quoteWarning } from '@/lib/quoteWarning';
-import { SendToBrokerDialog, type DraftOrder } from '@/components/organisms/SendToBrokerDialog';
+import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
+import type { ReviewedTrackingOrder, TrackingPreview, TrackingSubmitResult } from '@/lib/trackingReview';
 import { SubmissionReview } from '@/components/organisms/SubmissionReview';
 import { usePortfolioStore, persistPosition, applyPersistedPosition } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
@@ -1253,7 +1254,22 @@ export default function Step7Page() {
   };
   const removePin = (sym: string) => setBasket((b) => b.filter((s) => s !== sym));
 
-  const handleSubmit = async (orders: DraftOrder[], _riskOverridden: boolean) => {
+  /* #582 — Track basket's request for one row at the dialog's one-off
+   * quantity: the SAME draft builder the review renders. ROUND 10 finding 7 --
+   * the LIVE mid, for the active symbol only; the rest legitimately fall back
+   * to their scan mid. The dialog has the server review exactly this request. */
+  const trackingDraftFor = (card: TradeCardData, contracts: number) => buildSubmissionDraft(
+    submissionInputsFor(card, contracts, card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null),
+    { broker: null, globalPremiumStopPct },
+  );
+  /* One canonical recId per symbol (recIdMap): a reviewed row keeps it from
+   * review to confirmation and through any retry, so an ambiguous save is
+   * resolved by recId, never by its contract alone. */
+  const trackingStampsFor = (symbol: string) => ({
+    entryDate: todayISO(), orderedAt: nowISOLocal(), recId: recIdMap[symbol] ?? generateRecId(),
+  });
+
+  const handleSubmit = async (orders: ReviewedTrackingOrder[], _riskOverridden: boolean): Promise<TrackingSubmitResult> => {
     usePortfolioStore.getState().clearSyncError();
     // Same reason as the two order paths: this submit's outcome, not the last
     // one's. Basket notes are symbol-qualified because several land at once.
@@ -1274,22 +1290,32 @@ export default function Step7Page() {
     let saved = 0, queued = 0;
     const failures: string[] = [];
     const adjusted: string[] = [];
+    // #582 — rows left in the basket: review-required (nothing saved; the
+    // dialog shows the new server values) or whose request changed since review.
+    const reviewRequired: Record<string, TrackingPreview> = {};
+    const remaining: string[] = [];
 
     for (const o of orders) {
-      // One canonical recId per order: addPosition syncs it to the backend
-      // (a single POST), so there is no second POST to conflict (409) with.
-      const recId = recIdMap[o.card.symbol] ?? generateRecId();
-      // #581 — the same draft builder the review renders, at this row's
-      // basket quantity. ROUND 10 finding 7 -- the LIVE mid, for the active
-      // symbol only; the rest legitimately fall back to their scan mid. The
-      // draft's request carries `scanStockPrice` (ROUND 10 finding 2) and the
-      // raw invalidation flag (finding 6), exactly as the old builder did.
-      const draft = buildSubmissionDraft(
-        submissionInputsFor(o.card, o.contracts, o.card.symbol === effectiveCard?.symbol ? liveQuoteForCard?.price ?? null : null),
-        { broker: null, globalPremiumStopPct },
-      );
-      const res = await addPosition(stampPosition(draft.tracking, { entryDate: todayISO(), orderedAt: nowISOLocal(), recId }));
+      // #582 — the request the SERVER REVIEWED (the #581 draft at this row's
+      // basket quantity, stamped with this symbol's canonical recId), posted
+      // unchanged with the reviewed fingerprint. Its `scanStockPrice` (ROUND 10
+      // finding 2) and raw invalidation flag (finding 6) are the draft's.
+      // A request that no longer matches the current draft is not sent: the
+      // dialog re-reviews it.
+      if (trackingDraftFor(o.card, o.contracts).fingerprint !== o.draftFingerprint) {
+        remaining.push(o.card.symbol);
+        continue;
+      }
+      const recId = o.request.recId;
+      const res = await addPosition(o.request, { review: { fingerprint: o.preview.fingerprint, preview: o.preview } });
 
+      if (res.status === 'review_required') {
+        // Nothing was saved. Earlier rows may have changed its capacity, or the
+        // quote moved: the trader reviews the new values before anything saves.
+        if (res.preview) reviewRequired[o.card.symbol] = res.preview;
+        remaining.push(o.card.symbol);
+        continue;
+      }
       if (res.status === 'rejected') {
         // Backend refused it and the optimistic row was dropped — a real failure.
         failures.push(`${o.card.symbol}: ${res.detail ?? 'not saved'}`);
@@ -1314,6 +1340,13 @@ export default function Step7Page() {
       // status === 'ok' — confirmed saved by the backend.
       incrementDaily();
       saved++;
+      if (res.savedDiffers && res.savedDiffers.length > 0) {
+        // Resolved by recId after an ambiguous answer: the saved row is this
+        // row's own, but it was saved with values other than the ones just
+        // reviewed (an earlier confirmation of the same recId). Adopted as saved.
+        const note = `${o.card.symbol}: already saved under this row's id with different values (${res.savedDiffers.join(', ')}) — the Portfolio shows the saved row.`;
+        setBasketNotes((prev) => (prev.includes(note) ? prev : [...prev, note]));
+      }
       if (res.adjustedQty != null) {
         adjusted.push(`${o.card.symbol}: ${res.adjustedQty} contract${res.adjustedQty === 1 ? '' : 's'}`);
       }
@@ -1323,8 +1356,10 @@ export default function Step7Page() {
         contracts: o.contracts,
       });
     }
-    setDialogOpen(false);
-    setBasket([]);
+    // Saved, queued and hard-failed rows leave the basket; the rest stay for
+    // re-review in the still-open dialog.
+    setBasket(remaining);
+    if (remaining.length === 0) setDialogOpen(false);
 
     // Toast covers placed orders (saved or queued-for-retry); the red error banner
     // covers hard rejections. They describe DIFFERENT orders, so both may show for
@@ -1337,6 +1372,7 @@ export default function Step7Page() {
     if (failures.length) {
       setBasketError(`Some orders were not saved — ${failures.join('; ')}`);
     }
+    return { reviewRequired };
   };
 
   const basketEmpty = basket.length === 0;
@@ -1350,9 +1386,10 @@ export default function Step7Page() {
         <details className={paperStyles.pageExplanation}>
           <summary>How this page works</summary>
         <Text size={13} tone="secondary">
-          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Tracking
-          places no broker order, and a tracked row reserves its contract and symbol: to trade one, send it from
-          its card instead of tracking it, or close the tracked row first.
+          Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Pinning
+          only selects a candidate — it freezes no values. Track basket shows each row&apos;s server-resolved values for
+          review before anything is saved. Tracking places no broker order, and a tracked row reserves its contract
+          and symbol: to trade one, send it from its card instead of tracking it, or close the tracked row first.
         </Text>
         </details>
       </div>
@@ -1699,6 +1736,9 @@ export default function Step7Page() {
           methodPickBySymbol={Object.fromEntries(
             basketCards.map((c) => [c.symbol, methodPickFor(c)]),
           )}
+          trackingDraftFor={trackingDraftFor}
+          stampsFor={trackingStampsFor}
+          globalPremiumStopPct={globalPremiumStopPct}
           onClose={() => setDialogOpen(false)}
           onSubmit={handleSubmit}
         />

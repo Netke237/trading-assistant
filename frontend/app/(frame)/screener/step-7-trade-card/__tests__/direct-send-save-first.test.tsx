@@ -72,10 +72,24 @@ let getReplies: Array<() => Promise<Reply>>;
 /** Shared call-order log (test 1). */
 let callLog: string[];
 const echo = (body: Record<string, unknown>) => Promise.resolve({ ok: true, status: 201, json: async () => body });
+
+/** #582 — Track basket confirms only server-reviewed rows. The review
+ *  (POST /api/portfolio/preview) is answered with the request echoed as the
+ *  would-be saved row; every other request goes to `inner`. */
+function withPreview(inner: typeof fetch): typeof fetch {
+  return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
+    return (inner as unknown as (u: string, i?: RequestInit) => Promise<unknown>)(url, init);
+  }) as unknown as typeof fetch;
+}
+
 const originalFetch = global.fetch;
 
 function installFetch() {
-  global.fetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+  global.fetch = withPreview(jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith('/api/portfolio') && init?.method === 'POST') {
       callLog.push('persist');
@@ -86,7 +100,7 @@ function installFetch() {
       if (next) return next();
     }
     return { ok: true, json: async () => ({}) };
-  }) as unknown as typeof fetch;
+  }) as unknown as typeof fetch);
 }
 
 const persistBodies = () => (global.fetch as jest.Mock).mock.calls
