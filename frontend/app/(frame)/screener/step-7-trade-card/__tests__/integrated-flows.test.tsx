@@ -333,13 +333,17 @@ describe('#584 CHECK a — the card review before and beside the server review',
 });
 
 describe('#584 CHECK b — a literal "None" or "null" order id from an adapter', () => {
-  /* PINS A REPORTED FINDING, not a desired behaviour. `tradier_paper.py` and
-     `ibkr_paper.py` build `order_id` with str(...), so a JSON null id arrives as
-     the text "None", which `routers/broker.py` serves in a 200 body (and records
-     as outcome-unknown). `classifyDirectFailure` only refuses '' and 'unknown'.
-     If the coordinator aligns it with `_UNUSABLE_ORDER_IDS`, change this test. */
-  it.each(['None', 'null'])('"%s" classifies as placed while the outcome facts report no id', (id) => {
-    expect(classifyDirectFailure({ response: { order_id: id, status: 'Submitted' } })).toEqual({ verdict: 'placed', orderId: id });
+  /* `tradier_paper.py` and `ibkr_paper.py` build `order_id` with str(...), so a
+     JSON null id arrives as the text "None", which `routers/broker.py` serves in
+     a 200 body and records as outcome-unknown. `classifyDirectFailure` and
+     `responseFacts` share `UNUSABLE_ORDER_IDS` (#593), so the banner, the note
+     and the outcome panel all agree that no order id was reported. */
+  it.each(['None', 'null'])('"%s" keeps the row as an unknown order and the outcome facts report no id', (id) => {
+    expect(classifyDirectFailure({ response: { order_id: id, status: 'Submitted' } })).toEqual({
+      verdict: 'keep',
+      why: 'broker reply had no usable order ID (status Submitted)',
+      orderId: null,
+    });
     expect(responseFacts({ order_id: id, status: 'Submitted', broker: 'ibkr_paper' }).orderId).toBeNull();
   });
 
@@ -347,7 +351,7 @@ describe('#584 CHECK b — a literal "None" or "null" order id from an adapter',
     expect(classifyDirectFailure({ response: { order_id: id, status: 'Submitted' } }).verdict).toBe('keep');
   });
 
-  it('on the page the banner says placed and the outcome says Not reported', async () => {
+  it('on the page no order is announced, the outcome says Not reported, and one order-unknown note is raised', async () => {
     (api.postOptionOrder as jest.Mock).mockResolvedValue({ order_id: 'None', status: 'Submitted', broker: 'ibkr_paper', deduped: false });
     seed(makeCard(), { picks: { [AAA_KEY]: pick() } });
     await renderPage();
@@ -355,7 +359,9 @@ describe('#584 CHECK b — a literal "None" or "null" order id from an adapter',
     fireEvent.click(within(review).getByRole('button', { name: /^Send to / }));
     const outcome = within(await screen.findByRole('region', { name: 'Broker order outcome' }));
     expect(outcome.getByText('Order ID').closest('div')).toHaveTextContent('Not reported');
-    expect(screen.getByText(/Order placed — ID: None/)).toBeInTheDocument();
-    expect(useDirectSendNotesStore.getState().notes).toHaveLength(0);
+    expect(screen.queryByText(/Order placed — ID: None/)).not.toBeInTheDocument();
+    const notes = useDirectSendNotesStore.getState().notes;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ kind: 'order-unknown', orderId: null });
   });
 });

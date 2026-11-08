@@ -147,6 +147,16 @@ describe('sendStockSaveFirst', () => {
     expect(notes()).toEqual([expect.objectContaining({ kind: 'order-unknown' })]);
   });
 
+  it('a literal "None" order id keeps the row with one note and no id in its label (#593)', async () => {
+    (api.postStockOrder as jest.Mock).mockResolvedValueOnce({ order_id: 'None', status: 'Submitted' });
+    const out = await send();
+    expect(out.kind).toBe('unknown');
+    expect(notes()).toEqual([expect.objectContaining({ kind: 'order-unknown', orderId: null })]);
+    expect(positions()).toHaveLength(1);
+    expect(positions()[0].sourceLabel ?? '').not.toContain('(ID: None)');
+    expect(api.deletePortfolioPosition).not.toHaveBeenCalled();
+  });
+
   function savedBodies(): Record<string, unknown>[] {
     return (global.fetch as jest.Mock).mock.calls
       .filter((call) => call[1]?.method === 'POST' && String(call[0]).includes('/api/portfolio'))
