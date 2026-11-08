@@ -26,7 +26,7 @@ import { useScanStore } from '@/lib/scanStore';
 import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
 import { premiumStopPctFromDollars, money, weightPercents, days } from '@/lib/barrierRace';
-import { premiumStopDollarBounds } from '@/lib/premiumStop';
+import { premiumStopDollarBounds, premiumStopPctLabel } from '@/lib/premiumStop';
 import { TIME_STOP_DTE } from '@/lib/alertEngine';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
 import {
@@ -200,6 +200,97 @@ function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_
   if (source === 'swing_low') return 'Structural stop — Swing Low';
   if (source === 'swing_high') return 'Structural stop — Swing High';
   return 'Structural stop';
+}
+
+/** #578 — the Exit Plan's premium-loss readout, derived from the SAME basis
+ *  the Premium stop field already resolves (`anchorMid` and
+ *  `effectivePremiumStop` with their live/global/pinned/touched branches).
+ *  Display only: nothing here is sent anywhere. All arithmetic is in integer
+ *  cents of the displayed figures, so per-share, per-contract (×100 shares)
+ *  and entered-quantity values reconcile exactly. A missing or invalid input
+ *  reads "Unavailable — <reason>", never $0.00 and never a calculation
+ *  (Monte Carlo / Arithmetic) premium. */
+interface ExitPremiumValues {
+  basis: string;
+  pct: string;
+  lossShare: string;
+  lossContract: string;
+  lossQuantity: string;
+  remainingShare: string;
+  remainingContract: string;
+  remainingQuantity: string;
+}
+
+const UNAVAILABLE_AT_FILL = 'Unavailable — resolved against the fill';
+
+function exitPremiumValues({
+  readOnly, touched, showsGlobal, effectiveStop, pinnedStop, basis, basisSource, globalPct, contracts,
+}: {
+  readOnly: boolean;
+  touched: boolean;
+  showsGlobal: boolean;
+  effectiveStop: number | null | undefined;
+  pinnedStop: number | null | undefined;
+  basis: number;
+  basisSource: string | null;
+  globalPct: number;
+  contracts: number;
+}): ExitPremiumValues {
+  const toCents = (x: number | null | undefined) =>
+    x != null && Number.isFinite(x) && x > 0 ? Math.round(x * 100) : null;
+  const perShare = (cents: number) => `$${(cents / 100).toFixed(2)}/share`;
+  const usd = (dollars: number) =>
+    `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const quantityValid = Number.isInteger(contracts) && contracts >= 1;
+  const quantityOf = (cents: number) => (quantityValid ? usd(cents * contracts) : 'Unavailable — entered quantity invalid');
+
+  if (readOnly) {
+    // P2-24: the mid is too small for a per-contract stop, so there is no
+    // usable basis on the card; the server resolves the stop against the fill.
+    const pinnedCents = touched ? toCents(pinnedStop) : null;
+    if (pinnedCents != null) {
+      return {
+        basis: UNAVAILABLE_AT_FILL,
+        pct: UNAVAILABLE_AT_FILL,
+        lossShare: `${perShare(pinnedCents)} (pinned)`,
+        lossContract: usd(pinnedCents),
+        lossQuantity: quantityOf(pinnedCents),
+        remainingShare: UNAVAILABLE_AT_FILL,
+        remainingContract: UNAVAILABLE_AT_FILL,
+        remainingQuantity: UNAVAILABLE_AT_FILL,
+      };
+    }
+    return {
+      basis: UNAVAILABLE_AT_FILL,
+      pct: `${premiumStopPctLabel(globalPct)} global — resolved against the fill`,
+      lossShare: UNAVAILABLE_AT_FILL,
+      lossContract: UNAVAILABLE_AT_FILL,
+      lossQuantity: UNAVAILABLE_AT_FILL,
+      remainingShare: UNAVAILABLE_AT_FILL,
+      remainingContract: UNAVAILABLE_AT_FILL,
+      remainingQuantity: UNAVAILABLE_AT_FILL,
+    };
+  }
+
+  const lossCents = toCents(effectiveStop);
+  const basisCents = toCents(basis);
+  const noLoss = 'Unavailable — no premium-loss amount';
+  const noBasis = 'Unavailable — no positive premium basis';
+  const basisReason = lossCents == null ? noLoss
+    : basisCents == null ? noBasis
+    : lossCents >= basisCents ? 'Unavailable — loss at or above the premium basis'
+    : null;
+  const remainingCents = basisReason == null ? (basisCents as number) - (lossCents as number) : null;
+  return {
+    basis: basisCents != null ? `${perShare(basisCents)} · ${basisSource ?? 'premium basis'}` : noBasis,
+    pct: basisReason ?? premiumStopPctLabel(showsGlobal ? globalPct : (lossCents as number) / (basisCents as number)),
+    lossShare: lossCents != null ? perShare(lossCents) : noLoss,
+    lossContract: lossCents != null ? usd(lossCents) : noLoss,
+    lossQuantity: lossCents != null ? quantityOf(lossCents) : noLoss,
+    remainingShare: remainingCents != null ? perShare(remainingCents) : (basisReason as string),
+    remainingContract: remainingCents != null ? usd(remainingCents) : (basisReason as string),
+    remainingQuantity: remainingCents != null ? quantityOf(remainingCents) : (basisReason as string),
+  };
 }
 
 interface TradeCardProps {
@@ -1808,6 +1899,25 @@ export function TradeCard({
     ? Math.round((liveMid as number) * globalPremiumStopPct * 100) / 100
     : overlay.premiumStop;
 
+  /** #578 — which input `anchorMid` resolved to, in the same precedence
+   *  (`firstPositive`), so the Exit Plan can name its premium basis. */
+  const isPositiveNumber = (x: number | null | undefined) => x != null && Number.isFinite(x) && x > 0;
+  const anchorMidSource = isPositiveNumber(liveMid) ? 'live mid'
+    : isPositiveNumber(data.contractDetails?.mid) ? 'scan mid'
+    : isPositiveNumber(data.entry.limit) ? 'plan entry limit (no mid)'
+    : null;
+  const exitPremium = exitPremiumValues({
+    readOnly: premiumStopReadOnly,
+    touched: premiumStopTouched,
+    showsGlobal: showsGlobalOnLiveMid,
+    effectiveStop: effectivePremiumStop,
+    pinnedStop: overlay.premiumStop,
+    basis: anchorMid,
+    basisSource: anchorMidSource,
+    globalPct: globalPremiumStopPct,
+    contracts: overlay.contracts,
+  });
+
   /** Bounds for the Entry limit — the field this branch made into the order's
    *  `limit_price`.
    *
@@ -2609,6 +2719,13 @@ export function TradeCard({
                   // missing_invalidation).
                   nullLabel="not computed — re-run the scan"
                 />
+                {overlay.invalidation == null && (
+                  <div>
+                    <Text size={10} tone="caution">
+                      Invalidation stop required — Send to broker stays disabled until this field is filled.
+                    </Text>
+                  </div>
+                )}
                 {premiumStopReadOnly ? (
                   // P2-24 / R3-2 / decision Q-P2-2: a stop the user already typed
                   // is KEPT and shown as pinned (and still sent); an untouched
@@ -2655,15 +2772,48 @@ export function TradeCard({
                     expiry (alertEngine.ts, alert_generator.py). The plan's own
                     `timeStopDays` fires nothing and is no longer shown. */}
                 <KV label="Time exit" value={`${TIME_STOP_DTE} DTE`} mono />
+                <div>
+                  <Text size={10} tone="dim">
+                    {`Alert when ${TIME_STOP_DTE} or fewer calendar days remain until expiry — not ${TIME_STOP_DTE} days after entry, and not an automatic close.`}
+                  </Text>
+                </div>
               </dl>
-              <Text size={10} tone="dim">
-                Invalidation is the editable execution stock stop. The scan supplies a structural/ATR stop
-                (or legacy fallback); an Arithmetic calculation does not automatically replace this field.
-                It also remains functionally load-bearing, not just a display figure: Send to broker stays disabled
-                (&quot;Invalidation stop required&quot;) whenever this field is missing, regardless of what the
-                Arithmetic card&apos;s stop shows — the two are not just independently-displayed numbers, one of them
-                is a hard submit gate the other has no relationship to.
-              </Text>
+              {/* #578 — what the Premium stop above means in units, on the
+                  field's own basis. Read-only results: plain KV rows, never the
+                  editable affordance. */}
+              <div className={styles.exitPremiumValues} role="group" aria-label="Premium-loss values">
+                <KV label="Premium basis" value={exitPremium.basis} mono />
+                <KV label="Premium-loss %" value={exitPremium.pct} mono />
+                <KV label="Loss per share" value={exitPremium.lossShare} mono />
+                <KV label="Loss per contract (×100 shares)" value={exitPremium.lossContract} mono />
+                <KV label={`Loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.lossQuantity} mono />
+                <KV label="Remaining option value per share" value={exitPremium.remainingShare} mono />
+                <KV label="Remaining option value per contract (×100 shares)" value={exitPremium.remainingContract} mono />
+                <KV label={`Remaining option value for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.remainingQuantity} mono />
+                <Text size={10} tone="dim">Estimates at the premium basis above, before costs; not a model price or a fill.</Text>
+              </div>
+              <details className={styles.methodDetails}>
+                <summary>How these exit settings are resolved</summary>
+                <Text size={10} tone="dim">
+                  Invalidation is the editable execution stock stop. The scan supplies a structural/ATR stop
+                  (or legacy fallback); an Arithmetic calculation does not automatically replace this field.
+                  It also remains functionally load-bearing, not just a display figure: Send to broker stays disabled
+                  (&quot;Invalidation stop required&quot;) whenever this field is missing, regardless of what the
+                  Arithmetic card&apos;s stop shows — the two are not just independently-displayed numbers, one of them
+                  is a hard submit gate the other has no relationship to.
+                </Text>
+                <Text size={10} tone="dim">
+                  Premium stop is a loss amount per share. Its premium basis is the live mid when one is available,
+                  otherwise the scan mid, otherwise the plan&apos;s entry limit — the same basis that bounds the field.
+                  An untouched field shows the global percentage applied to the live mid; a typed or restored amount
+                  is kept until you clear it. Monte Carlo and Arithmetic premiums are separate calculation inputs and
+                  are never used here. The opened position resolves the stop against its actual fill: a typed dollar
+                  amount stays fixed, while an inherited global percentage is applied to the fill.
+                </Text>
+                <Text size={10} tone="dim">
+                  {`The time exit is the alert engine's TIME_STOP for an open option position at ${TIME_STOP_DTE} or fewer days to expiry. It closes nothing by itself, and the plan's own time-stop days fire nothing and are not shown.`}
+                </Text>
+              </details>
             </section>
 
             <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Max loss budget">
@@ -2754,7 +2904,6 @@ export function TradeCard({
             <KV label="Execution stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)}` : 'Not computed — re-run the scan'} mono />
           </dl>
           <Text size={11} tone="dim">Calculation does not replace your execution stock invalidation. Edit it in Order inputs &amp; risk budget.</Text>
-          <Text size={10} tone="dim">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
           {!exitPlan && (
             <div className={styles.targetsTable}>
                 <div className={styles.targetRow}>
@@ -2766,42 +2915,50 @@ export function TradeCard({
                         </div>
                         <div className={styles.targetValues}>
                           <KV label="Price" value={`$${scanFinalStop.price.toFixed(2)}`} mono />
-                          <KV
-                            label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
-                            value={scanFinalStop.structuralPrice != null
-                              ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
-                              : 'No structural stop found'}
-                            mono
-                          />
-                          <KV
-                            label="ATR-floor price"
-                            value={scanFinalStop.atrFloorPrice != null
-                              ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
-                            mono
-                          />
-                          <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
-                          <KV
-                            label="Structural ↔ ATR-floor distance"
-                            value={scanFinalStop.distanceDollar != null
-                              ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
-                            mono
-                          />
                           {/* The two the scan cannot answer, said rather than
                               omitted — an absent row reads as "there is no
                               such thing", not "not computed yet". */}
                           <KV label="Contract value at stop" value="—" mono />
                           <KV label="Max loss if stopped" value="—" mono />
                         </div>
-                        {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
-                          <Text size={10} tone="dim">
-                            {stopJustification({
-                              source: scanFinalStop.stopSource,
-                              structuralPrice: scanFinalStop.structuralPrice ?? null,
-                              atrFloorPrice: scanFinalStop.atrFloorPrice,
-                              distanceDollar: scanFinalStop.distanceDollar ?? null,
-                            })}
-                          </Text>
-                        )}
+                        {/* #578 — source/ATR/structure explanation collapsed by
+                            default; the stop price above stays visible. */}
+                        <details className={styles.methodDetails}>
+                          <summary>Stop source, ATR and structure detail</summary>
+                          <Text size={10} tone="dim">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
+                          <div className={styles.targetValues}>
+                            <KV
+                              label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
+                              value={scanFinalStop.structuralPrice != null
+                                ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
+                                : 'No structural stop found'}
+                              mono
+                            />
+                            <KV
+                              label="ATR-floor price"
+                              value={scanFinalStop.atrFloorPrice != null
+                                ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
+                              mono
+                            />
+                            <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
+                            <KV
+                              label="Structural ↔ ATR-floor distance"
+                              value={scanFinalStop.distanceDollar != null
+                                ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
+                              mono
+                            />
+                          </div>
+                          {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
+                            <Text size={10} tone="dim">
+                              {stopJustification({
+                                source: scanFinalStop.stopSource,
+                                structuralPrice: scanFinalStop.structuralPrice ?? null,
+                                atrFloorPrice: scanFinalStop.atrFloorPrice,
+                                distanceDollar: scanFinalStop.distanceDollar ?? null,
+                              })}
+                            </Text>
+                          )}
+                        </details>
                         <Text size={10} tone="dim">
                           From the scan. Compute an Arithmetic Plan to price this stop
                           against the contract and size the position. {scanFinalStop.computedAt ? `As of ${formatHHMM(scanFinalStop.computedAt)}.` : ''}
@@ -2825,20 +2982,26 @@ export function TradeCard({
                     </div>
                     <div className={styles.targetValues}>
                       <KV label="Price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
-                      <KV
-                        label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
-                        value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
-                        mono
-                      />
-                      <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
-                      <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
-                      <KV
-                        label="Structural ↔ ATR-floor distance"
-                        value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
-                        mono
-                      />
                     </div>
-                    <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
+                    <details className={styles.methodDetails}>
+                      <summary>Stop source, ATR and structure detail</summary>
+                      <Text size={10} tone="dim">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
+                      <div className={styles.targetValues}>
+                        <KV
+                          label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
+                          value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                          mono
+                        />
+                        <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
+                        <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
+                        <KV
+                          label="Structural ↔ ATR-floor distance"
+                          value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
+                          mono
+                        />
+                      </div>
+                      <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
+                    </details>
                     <Text size={10} tone="dim">{arithmeticLiveStockPrice != null ? 'Calculated this session' : 'Restored Arithmetic calculation'}{exitPlan.computedAt ? ` · ${formatHHMM(exitPlan.computedAt)}` : ''}; reference stock price {arithmeticLiveStockPrice != null ? `$${arithmeticLiveStockPrice.toFixed(2)}` : 'unavailable for restored calculation'}.</Text>
                     <dl className={styles.kvList}>
                       <KV label="Arithmetic contract value at stop" value={`$${exitPlan.stop.contractPrice.toFixed(2)}/share`} mono />
@@ -3052,6 +3215,7 @@ export function TradeCard({
                 <input
                   type="number"
                   className={styles.editInput}
+                  data-editable="true"
                   min={1}
                   max={500}
                   aria-label={`${key.toUpperCase()} profit target %`}
@@ -3516,6 +3680,7 @@ function EditableTargetRow({
               <input
                 type="number"
                 className={styles.editTargetInput}
+                data-editable="true"
                 value={draft}
                 min={0.01}
                 onChange={(e) => setDraft(e.target.value)}
@@ -3527,6 +3692,7 @@ function EditableTargetRow({
             ) : (
               <span
                 className={styles.editValue}
+                data-editable="true"
                 onClick={startEdit}
                 role="button"
                 tabIndex={0}
@@ -3808,6 +3974,7 @@ export function EditableKV({
           type="text"
           inputMode="decimal"
           className={styles.editInput}
+          data-editable="true"
           value={draft}
           onChange={(e) => { typedRef.current = true; setDraft(e.target.value); }}
           onBlur={save}
@@ -3824,6 +3991,7 @@ export function EditableKV({
       ) : (
         <span
           className={styles.editValue}
+          data-editable="true"
           onClick={startEdit}
           role="button"
           tabIndex={0}
@@ -4098,7 +4266,8 @@ function MaxLossOverrideEditor({
         <div className={styles.targetPctRow}>
           <button
             type="button"
-            className={styles.btn}
+            className={`${styles.btn} ${styles.editableToggle}`}
+            data-editable="true"
             onClick={() => setDraftMode('percent')}
             aria-pressed={draftMode === 'percent'}
           >
@@ -4106,7 +4275,8 @@ function MaxLossOverrideEditor({
           </button>
           <button
             type="button"
-            className={styles.btn}
+            className={`${styles.btn} ${styles.editableToggle}`}
+            data-editable="true"
             onClick={() => setDraftMode('dollar')}
             aria-pressed={draftMode === 'dollar'}
           >
@@ -4115,6 +4285,7 @@ function MaxLossOverrideEditor({
           <input
             type="number"
             className={styles.editInput}
+            data-editable="true"
             value={draftValue}
             min={0}
             step={draftMode === 'percent' ? 0.25 : 10}
