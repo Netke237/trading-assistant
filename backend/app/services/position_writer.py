@@ -82,9 +82,29 @@ live re-anchor -- none sent, or one the `(live - scan)` shift drove to <= 0,
 which would otherwise be stored as NULL. It raises before the risk-check
 SELECT, so nothing is written. The auto-trade booking passes True: a position
 with no stop there has no invalidation and no STOP_REACHED alert at all.
+
+REVIEW AND CONFIRMATION (#582, TC-REVIEW-07). `preview_position` and
+`create_position` are two doors into ONE function, `_resolve_and_book`: the
+live refetch, re-anchor, direction check, exposure check and resize, premium
+stop derivation and `seed_tp_from_pick` run once, in one place, for both. The
+two doors part only after the transient row is built, at `_review_point`:
+  - a PREVIEW returns that row and its `resolution_fingerprint` and rolls back
+    its own transaction (which holds only the exposure-guard write). It never
+    reaches `prepared_order`, `transfer_hold`, `db.add` or `commit`, and it
+    refuses a session that already carries a transaction, so it can never roll
+    back a caller's work. The router gives it a request-scoped session.
+  - a CONFIRMATION (`review_fingerprint` set) compares the freshly resolved
+    fingerprint with the reviewed one under the same booking/exposure lock,
+    BEFORE any hold transfer, add or commit. A difference rolls back and raises
+    `ReviewRequired` carrying the new preview; nothing is written. The current
+    quote and current risk checks are never frozen or waived to make it match.
+  - `review_fingerprint=None` (every caller before #582, the auto-trade booking
+    and the direct sends) is the create exactly as before.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 
 import asyncio
@@ -229,6 +249,153 @@ def _rescale_rung_shares(targets: list, asked: int, stored: int) -> list:
     ]
 
 
+@dataclass
+class PositionPreview:
+    """What a create WOULD store, resolved by the create's own code (#582).
+
+    `position` is a TRANSIENT `PortfolioPositionModel`: built, never added to a
+    session, never flushed (`id` is None). `fingerprint` is
+    `resolution_fingerprint` over the request and these resolved values.
+    `differences` names each field the server resolved differently from the
+    request, with the writer's reason; the client renders them, it does not
+    re-derive them."""
+    position: PortfolioPositionModel
+    fingerprint: str
+    adjusted_size: Optional[int]
+    premium_stop_unapplied: Optional[str]
+    entry_from_live_quote: bool
+    entry_stock_price: Optional[float]
+    inherited_premium_stop_pct: Optional[float]
+    differences: list
+
+
+class ReviewRequired(Exception):
+    """A confirmation's reviewed fingerprint no longer matches the current
+    resolution. Raised before any transfer/add/commit; nothing was written.
+    `preview` is the fresh resolution the client must show for re-review."""
+
+    def __init__(self, preview: PositionPreview):
+        super().__init__("review_required")
+        self.preview = preview
+
+
+def _global_premium_stop_pct() -> Optional[float]:
+    """The global premium stop a NULL `premium_stop_pct` inherits -- the same
+    reader the backend alert generator uses. An inherited material default, so
+    it is part of the fingerprint of a row that inherits it. Never raises: an
+    unreadable config reads as None (the fingerprint then says "unknown")."""
+    try:
+        from app.services.alert_generator import _premium_stop_pct
+        return float(_premium_stop_pct())
+    except Exception:
+        _log.warning("position_writer: could not read the global premium stop", exc_info=True)
+        return None
+
+
+# Request fields that cannot change trading semantics: the ids and stamps of
+# the submission, the record-only card snapshot and the deprecated, ignored
+# portfolio value. Everything else in the request is material.
+_NON_MATERIAL_REQUEST = frozenset({
+    "recId", "entryDate", "pickedAt", "tradeCardSnapshot", "portfolioValue",
+})
+
+
+def resolution_fingerprint(
+    body: PortfolioPositionCreate,
+    position: PortfolioPositionModel,
+    *,
+    inherited_premium_stop_pct: Optional[float],
+    rr_ratios,
+) -> str:
+    """One hash over the immutable request and the material RESOLVED fields.
+
+    In: every request field except `_NON_MATERIAL_REQUEST`; the resolved entry,
+    quantity, stop, structural stop, premium-stop fraction, targets (with
+    their rung allocations), exit plan, max-loss override, hold, DTE, the pick
+    record, the effective TP pair, the global premium stop when the row
+    inherits it, and the configured R ratios when an Arithmetic pick maps
+    through them. Out: ids, timestamps (`resolved_tp_updated_at`, `created_at`)
+    and diagnostics (`entry_stock_price`, log text, `over_exposure`)."""
+    request = body.model_dump(mode="json", exclude=set(_NON_MATERIAL_REQUEST))
+    resolved = {
+        "entry_price": position.entry_price,
+        "qty": position.qty,
+        "stop": position.stop,
+        "structural_stop": position.structural_stop,
+        "premium_stop_pct": position.premium_stop_pct,
+        "inherited_premium_stop_pct": (
+            inherited_premium_stop_pct if position.premium_stop_pct is None else None
+        ),
+        "targets": position.targets,
+        "exit_plan": position.exit_plan,
+        "max_loss_override": position.max_loss_override,
+        "hold_max_days": position.hold_max_days,
+        "dte_total": position.dte_total,
+        "picked_method": position.picked_method,
+        "picked_row_stock_price": position.picked_row_stock_price,
+        "picked_row_option_price": position.picked_row_option_price,
+        "picked_stop_basis": position.picked_stop_basis,
+        "active_tp_method": position.active_tp_method,
+        "resolved_tp_price": position.resolved_tp_price,
+        "rr_ratios": list(rr_ratios) if body.pickedMethod == "arithmetic" and isinstance(rr_ratios, (list, tuple)) else None,
+    }
+    payload = json.dumps(
+        {"request": request, "resolved": resolved},
+        sort_keys=True, separators=(",", ":"), allow_nan=False, default=str,
+    )
+    return "v1:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _differences(
+    body: PortfolioPositionCreate,
+    position: PortfolioPositionModel,
+    *,
+    entry_from_live_quote: bool,
+    reanchored: bool,
+    dollar_applied: bool,
+    premium_stop_unapplied: Optional[str],
+) -> list:
+    """Requested vs effective, with the writer's own reason for each change."""
+    out: list = []
+
+    def add(field, requested, effective, reason):
+        out.append({"field": field, "requested": requested, "effective": effective, "reason": reason})
+
+    if position.entry_price != body.entryPrice:
+        add("entryPrice", body.entryPrice, position.entry_price,
+            "live_quote" if entry_from_live_quote else "request")
+    if position.qty != body.qty:
+        add("qty", body.qty, position.qty, "exposure_resize")
+    for field, sent, stored in (
+        ("stop", body.stop, position.stop),
+        ("structuralStop", body.structuralStop, position.structural_stop),
+    ):
+        if sent == stored:
+            continue
+        if stored is None:
+            add(field, sent, None, "unset")
+        else:
+            add(field, sent, stored, "reanchored" if reanchored else "normalized")
+    if list(body.targets or []) != list(position.targets or []):
+        add("targets", list(body.targets or []), position.targets,
+            "reanchored" if reanchored else "rung_rescaled")
+    requested_stop = (
+        {"dollar": body.premiumStopDollar, "pct": body.premiumStopPct}
+        if body.premiumStopDollar is not None or body.premiumStopPct is not None else None
+    )
+    if premium_stop_unapplied is not None:
+        add("premiumStop", requested_stop, position.premium_stop_pct, "premium_stop_unapplied")
+    elif dollar_applied:
+        add("premiumStop", requested_stop, position.premium_stop_pct, "derived_from_dollar")
+    elif requested_stop is not None and position.premium_stop_pct is None:
+        add("premiumStop", requested_stop, None, "inherits_global")
+    if body.pickedMethod and body.pickedMethod != "ladder" and position.active_tp_method == "ladder":
+        add("targetAlert",
+            {"method": body.pickedMethod, "stockPrice": body.pickedRowStockPrice},
+            {"method": "ladder", "price": None}, "ladder_fallback")
+    return out
+
+
 def _prepared_marker(body: PortfolioPositionCreate, stored_qty: int) -> dict:
     """Gates-on save-before-order identity. Gates-off booking must not call this."""
     from decimal import Decimal
@@ -262,8 +429,76 @@ async def create_position(
     cap_basis: Optional[float] = None,
     cap_basis_floor: Optional[float] = None,
     exposure_attempt_id: Optional[str] = None,
+    review_fingerprint: Optional[str] = None,
 ) -> WriteOutcome:
     """Persist a position from a create request. See the module docstring.
+
+    `review_fingerprint` (#582): the fingerprint of the preview the user
+    confirmed. When set, a current resolution with a different fingerprint
+    raises `ReviewRequired` before anything is written. None: unchanged."""
+    return await _resolve_and_book(
+        body, db,
+        quote_fetcher=quote_fetcher, price_fetcher=price_fetcher,
+        exit_plan_cfg_loader=exit_plan_cfg_loader,
+        enforce_pre_trade_gates=enforce_pre_trade_gates, stop_required=stop_required,
+        cap_basis=cap_basis, cap_basis_floor=cap_basis_floor,
+        exposure_attempt_id=exposure_attempt_id,
+        preview=False, review_fingerprint=review_fingerprint,
+    )
+
+
+async def preview_position(
+    body: PortfolioPositionCreate,
+    db: AsyncSession,
+    *,
+    quote_fetcher: Optional[Callable[..., Awaitable[object]]] = None,
+    price_fetcher: Optional[Callable[..., Awaitable[object]]] = None,
+    exit_plan_cfg_loader: Optional[Callable[[], dict]] = None,
+) -> PositionPreview:
+    """Resolve a card-path create (gates on) and write nothing (#582).
+
+    `db` must be a session of its own, with no transaction open and nothing
+    pending: the preview ends ITS transaction with a rollback (releasing the
+    exposure-guard write `lock_exposure` made), and on a shared session that
+    rollback would discard the caller's work. Raises ValueError instead.
+    HTTPExceptions (409 duplicate, 422 wrong-side stop / exposure) raise as
+    they would on the create; the rollback runs either way."""
+    sync = db.sync_session
+    if sync.new or sync.dirty or sync.deleted or db.in_transaction():
+        raise ValueError(
+            "preview_position needs its own session: this one already has a "
+            "transaction, and a preview ends its transaction with a rollback."
+        )
+    try:
+        return await _resolve_and_book(
+            body, db,
+            quote_fetcher=quote_fetcher, price_fetcher=price_fetcher,
+            exit_plan_cfg_loader=exit_plan_cfg_loader,
+            enforce_pre_trade_gates=True, stop_required=False,
+            cap_basis=None, cap_basis_floor=None, exposure_attempt_id=None,
+            preview=True, review_fingerprint=None,
+        )
+    finally:
+        await db.rollback()
+
+
+async def _resolve_and_book(
+    body: PortfolioPositionCreate,
+    db: AsyncSession,
+    *,
+    quote_fetcher: Optional[Callable[..., Awaitable[object]]],
+    price_fetcher: Optional[Callable[..., Awaitable[object]]],
+    exit_plan_cfg_loader: Optional[Callable[[], dict]],
+    enforce_pre_trade_gates: bool,
+    stop_required: bool,
+    cap_basis: Optional[float],
+    cap_basis_floor: Optional[float],
+    exposure_attempt_id: Optional[str],
+    preview: bool,
+    review_fingerprint: Optional[str],
+):
+    """THE resolution, shared by the create and the preview. Returns a
+    `WriteOutcome` (create) or a `PositionPreview` (preview).
 
     `cap_basis`: the per-contract premium the D5 cap is judged at, when the
     caller has ALREADY judged the order at one -- the auto-trade booking passes
@@ -791,6 +1026,40 @@ async def create_position(
                 datetime.now(timezone.utc) if resolved_tp_price is not None else None
             ),
         )
+
+        # #582 -- THE REVIEW POINT. Everything above is the resolution, run
+        # identically for a preview and a create; nothing below it runs for a
+        # preview, and nothing below it runs for a confirmation whose reviewed
+        # fingerprint no longer matches. Still under the booking/exposure lock,
+        # and before prepared_order / transfer_hold / add / commit.
+        if preview or review_fingerprint is not None:
+            inherited = _global_premium_stop_pct() if position.premium_stop_pct is None else None
+            reanchored = bool(need_reanchor and live_price and live_price > 0)
+            entry_from_live_quote = bool(live_entry_rounded and live_entry_rounded > 0)
+            resolved = PositionPreview(
+                position=position,
+                fingerprint=resolution_fingerprint(
+                    body, position, inherited_premium_stop_pct=inherited, rr_ratios=_rr_ratios,
+                ),
+                adjusted_size=risk.adjusted_size,
+                premium_stop_unapplied=premium_stop_unapplied,
+                entry_from_live_quote=entry_from_live_quote,
+                entry_stock_price=entry_stock_price,
+                inherited_premium_stop_pct=inherited,
+                differences=_differences(
+                    body, position,
+                    entry_from_live_quote=entry_from_live_quote, reanchored=reanchored,
+                    dollar_applied=dollar_applied, premium_stop_unapplied=premium_stop_unapplied,
+                ),
+            )
+            if preview:
+                # preview_position's `finally` rolls back; the row was never added.
+                return resolved
+            if review_fingerprint != resolved.fingerprint:
+                # Release the exposure guard; this transaction wrote nothing else.
+                await db.rollback()
+                raise ReviewRequired(resolved)
+
         if enforce_pre_trade_gates and body.orderType:
             position.prepared_order = _prepared_marker(body, stored_qty)
         if exposure_attempt_id:
