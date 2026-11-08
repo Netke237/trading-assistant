@@ -10184,7 +10184,7 @@
       "owner": "agent",
       "name": "Direct send: a null broker order id must not read as placed (#593)",
       "summary": "classifyDirectFailure refuses every order id the backend counts as unusable, so a 'None' or 'null' id raises the order-unknown note instead of 'Order placed'.",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 1,
       "audit_clean": false,
       "plan_audit_clean": true,
@@ -10193,14 +10193,14 @@
       "branch": "board/direct-send-null-order-id-fbc69da3",
       "size": "XS",
       "complexity": 2,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "frontend/lib/directOrder.ts",
         "pattern": "UNUSABLE_ORDER_IDS",
-        "note": "PRESENCE ONLY of the shared unusable-id set; absent until built. Correctness requires tests and the independent audit."
+        "note": "PRESENCE ONLY of the shared unusable-id set. Correctness requires tests and the independent audit."
       },
-      "note": "Taken 2026-11-08 from Board #151 on Kenneth's instruction. Plan round 1 CLEAN (0 gate findings). Build next.",
+      "note": "Taken 2026-11-08 from Board #151 on Kenneth's instruction. Plan round 1 CLEAN. T1 #599 built at f3e8402f, coordinator-verified: typecheck clean, Jest 6222/6224 (the two Windows number-locale failures only). Built, NOT audited: code audit pending.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
