@@ -729,7 +729,12 @@ export const api = {
     action: 'BUY' | 'SELL'; effect: 'OPEN' | 'CLOSE'; quantity: number;
     order_type: 'MKT' | 'LMT'; limit_price: number | null;
     tif: 'DAY' | 'GTC'; conid?: number;
-  }) => post<{ order_id: string; status: string; broker: string }>('/broker/option-order', req),
+    /** #583 — the durable attempt (`OptionOrderRequest.attempt_id`): a resend
+     *  with the same id replays the stored result instead of placing again. */
+    attempt_id?: string;
+    /** #583 — the saved Portfolio row this order belongs to (its recId). */
+    saved_rec_id?: string;
+  }) => post<{ order_id: string; status: string; broker: string; deduped?: boolean }>('/broker/option-order', req),
 
   armAutoTrade: (req: {
     broker: string; symbol: string; option_symbol: string;

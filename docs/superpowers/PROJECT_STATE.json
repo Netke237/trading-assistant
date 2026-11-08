@@ -1,10 +1,10 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
-  "updated": "2026-10-26",
-  "updated_by": "REGIME-SERIES-LENGTH shipped (#534)",
+  "updated": "2026-11-07",
+  "updated_by": "TRADE-CARD-DECISION-REVIEW plan audit and publication wiring",
   "main": "REGIME-SERIES-LENGTH merged via PR #568 at c23bd303 (2026-10-31, board self-merge conditions verified): one settled, adjusted daily regime DB history (>=800 bars) shared by Options, Stocks, Analysis and auto-trade Fire, explicit 'Regime: Unmeasured' disclosure; plan2/code round4 clean, exact-head CI passed. || PREVIOUS: OHLCV-ALPACA-DAY-HOLES merged via PR #566 at 915ddc6d (2026-10-25, board self-merge conditions verified): Alpaca default feed upgraded to SIP, pure Python NYSE trading calendar gap detector, CLI detector, and targeted Alpaca SIP backfill script with batch timestamp pinning; plan r3 closed by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25, code r3 clean; all CI checks passed. || PREVIOUS: APP-AUDIT-INTEGRATION merged via PR #556 at 56f12789 (2026-10-24, board self-merge conditions verified): Lane K cross-mode integration audit and Programme #348 culmination; complete 52,308-row inventory reconciled (4,577 verified, 33,330 asserted, 14,261 ambiguous, 140 not-run); 48-defect registry unified; 4 cross-mode user journeys verified under rapid switching, stale-async isolation, and persistence recovery; three separate verdicts rendered. Plan2/code2 clean, exact-head CI passed before merge. || PREVIOUS: REGIME-SERIES-LENGTH evidence merged via PR #540 at 4399e924 (2026-10-24, board self-merge conditions verified): read-only probe, M1-M3 evidence and report; Window B achieves 100% exact numerical identity with 5-year Window C (0 deltas, 0 flips across 2,012 measured cells); Window A has 43.70% unmeasured rate and 288 silent gate bypasses; options 1-4 measured on 540 universe symbols; decision pending with Kenneth on #534. Plan1/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: HESTON-RR-OVERPRICING evidence merged via PR #527 at 8e1e3b0a (2026-10-22, board self-merge conditions verified): read-only probe, M1-M4 evidence and report; 0 of 10 real Heston cards change Step 7 grade; options A-D measured on 326 fits; decision pending with Kenneth on #335. Plan3/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: EXACT-STRIKE merged via PR #512 at 34b00b37 (2026-10-22, board self-merge conditions verified): fractional option strikes carried exactly through chain rows, contract ids, quote matching, scan cards, Watchlist grading and the Step 6 rescue; integer-strike ids byte-identical; read-only persisted-id check script. Plan2/code1 clean, exact-head CI passed before merge. || PREVIOUS: Verified merges: APP-AUDIT-B-SAVE-FEEDBACK PR #500 at a9d138d3354a065c91fe44eaef3dd9964d528b25 (2026-10-22), exact-head CI all success; post-merge TypeScript/97 frontend tests passed. User-authorized HISTORY-INCREMENTAL-NIGHTLY-B #499 at70e48af2 and cloud setup #122 atbf0b3b54 also verified;176 mocked backend and7 cloud preservation post-merge tests passed. Market-cap #368/#454 reconciliation included from documentation PR #455; original main record preserved below. || PREVIOUS: APP-AUDIT-B-STOCK-FILTERS merged via PR #452 at 809f883e (2026-10-21, board self-merge conditions verified): Step 2 universe price and market cap filters propagated to stocks manual and scheduled requests (#380); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-RUN-GATE merged via PR #420 at be45fcf4 (2026-10-19, board self-merge conditions verified): direction-aligned REJECT confirmation dialog hoisted to gate stocks, prebreakout, and options modes before scan/navigation in RunScanButton (#387); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-VIX-WINDOW merged via PR #411 at b5e665cf (2026-10-19, board self-merge conditions verified): 252-day VIX percentile prior window bounded to vix_closes[-253:-1]; plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-INVENTORY report/tooling merged via PR #405 at1a83551b (2026-10-17, board self-merge conditions verified): inventory ownership/state contracts and isolated navigation evidence; plan2/code2clean. Documentation paths intentionally excluded from Actions; exact-head0applicable checks, local source/runtime/omission verifiers/typecheck/34focused tests passed. Domain B-I/J acceptance and rail UI fixes395 pending. || PREVIOUS: BROKER-PATH-RESIDUALS merged via PR #323 at 2cd5daa8 (2026-10-15, user authorized in chat): durable broker attempts with no automated redispatch of unknown outcomes, serialized portfolio saves, weighted added-fill booking, exposure holds; Alembic merge revision c29a451f911c. Plan3/code3 clean; exact-head backend/frontend/browser CI passed. Previous: CANDIDATE-BACKTEST-CHART merged via PR #333 at2d04dbf3 (2026-10-15, user authorized): frozen original candidate artifacts, exact fill markers, indexed strategy/gross long benchmark and separate explicit fresh runs; plan1/code2 clean; exact-head backend/frontend/browser CI passed after one permitted Google Fonts flake retry. Previous: STOCKS-HORIZON-T4 merged via PR #325 at1031a82f (2026-10-15, user authorized): confirmed Pre-Breakout/Fibonacci backtests and per-horizon research tuning; plan2/code2 clean; exact-head backend/frontend/browser CI passed. Previous: STATE-MULTI-PLAN-STAGE merged via PR #316 at e70d37a6 (2026-10-14, user authorized in chat): explicit authorized additional plan stages retain per-stage caps and complete-tail opening checks; historical approval tests work in shallow CI. Plan2clean; original code stage3notclean preserved; authorized code stage2round2clean, continuous7. Exact-head89db4975 backend/frontend/Playwright CI passed before merge. || PREVIOUS: YAML-DEPTH-BOUND phase A merged via PR #309 at d23b1588 (2026-10-14): depth32 persisted request bounds, transactional store mutations, guarded options restore. Plan3/code1clean; local backend8652passed/9skip, frontend5254tests/252suites/typecheckpassed; exact-head backend/frontend/browser CIpassed. Phase B deferred. || PREVIOUS: b10db25b — verified Options presentation PR #277 merge; SCAN-REPORT-ISOLATION merged via PR #275 on 2026-10-13 at 51b4821465e298eaee611be10b18513dc9654e50; verified MERGED, plan3/code1 clean, exact-head backend/frontend/Playwright CI all passed. || PREVIOUS: STOCKS-PIPELINE-INSPECTOR merged via PR #231 (user authorized): Stocks Backtest shared inspector, legacy residual counting and exclusions; plan1/code3 clean, integrated frontend4994PASS/buildPASS/production-browser2PASS/CIallPASS. Origin/main and local main synchronized per user clarification. || PREVIOUS: PR #225 merged STOCK-PRES-P2-POSITION on 2026-10-11 at 28c738bac69a0968ab3316ec0994272d5c338f90; independent audits clean and exact-head backend/frontend/Playwright CI passed. || PREVIOUS: PR #219 merged AGENT-SELF-MERGE on 2026-10-11 at 5bfb7b1107bd045584401198ca8dd23d4955fcae with explicit chat authorization; independent plan/code reviews clean. || PREVIOUS: PR #204 merged seven audited waiting-merge board items with explicit chat approval at b741f6104f68cf252be265af18d32ae5f045215c; all seven frozen source heads verified on main; original PRs merged and board issues closed. Independent integration audit clean in two code rounds, 93 scheduler/cancellation/quote regression tests passed, final combined CI green. || PREVIOUS: STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": null,
-  "active_phase": "HISTORY-LATEST-BAR-UNFINALIZED",
+  "active_phase": "TRADE-CARD-DECISION-REVIEW",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
   "phases": [
     {
@@ -9860,6 +9860,156 @@
         "closure_evidence": "Fresh independent gate-auditor subagent (bmad-review-adversarial-general) reviewed git diff origin/main..a232f49e -- backend/ (origin/main = c8f3b8a2, already merged) against the plan; 0 gate findings."
       },
       "pr": 587
+    },
+    {
+      "id": "TRADE-CARD-DECISION-REVIEW",
+      "name": "Trade-card decision review and exact tracking/broker confirmation (#575)",
+      "status": "built",
+      "owner": "agent",
+      "branch": "board/trade-card-decision-review-5f119477",
+      "tracking_issue": 575,
+      "plan": "docs/superpowers/plans/2026-11-07-trade-card-decision-review-plan.md",
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "completion_pct": 85,
+      "size": "XL",
+      "complexity": 4,
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/plans/trade-card-decision-review/final-verification.md",
+        "pattern": "TRADE-CARD-DECISION-REVIEW COMPLETE",
+        "note": "Final acceptance evidence only; graph wiring and a source-only baseline do not complete the phase."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "ticket_breakdown_audit (historical published review; not rerun here)",
+          "reviewed": "Ticket acceptance breakdown #575/#576-#584 as published in #575 comment 6705058582; snapshot published-requirements.json",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "limitation": "Historical ticket-level plan review reported in issue; does not approve expanded implementation architecture or code."
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "fresh independent subagent /root/plan_audit_r2 applying bmad-review-adversarial-general",
+          "reviewed": "Expanded implementation plan at c74d488c, SHA256 631e30164856c3e69555c997c5e28af64110ea8a6cee90365522af9ad1c04244; new architecture plus interactions with published round1 breakdown and actual source",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/trade-card-decision-review/plan-r2.md"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "stage_round": 3,
+          "reviewer": "fresh independent subagent /root/plan_baseline_r3 applying bmad-review-adversarial-general",
+          "reviewed": "git diff 7f01f9fb -- implementation plan; baseline amendment and interactions only. SHA256 39a71d526b7ef136c2a142f151c14cca1cb3e1b62d52fd14e5822be822d1bc81",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/trade-card-decision-review/plan-r3.md"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh independent gate-auditor subagent applying bmad-review-adversarial-general (Claude coordinator session, 2026-11-08)",
+          "reviewed": "git diff f391522e..06e68752 -- frontend backend on board/trade-card-decision-review-5f119477 (54 files; whole integrated implementation of #577-#584) against docs/superpowers/plans/2026-11-07-trade-card-decision-review-plan.md and the ticket acceptance criteria",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "Broker dispatch of the one captured request, staleness blocks, reviewed-vs-saved quantity gate, attempt_id/saved_rec_id through _check_attempt_id/_prepared_matches; save-first cleanup on 412/409/422/503/offline; preview never reaches prepared_order/transfer_hold/add/commit, guarded session, finally rollback; fingerprint coverage and comparison under the lock before every write, no-header path unchanged; adoptSavedRow, sync re-POST fingerprints, persistence shape; exitPremiumValues, StackedBar weights, Ladder/Arithmetic bases, chosenOutcome, review totals; copy vs first_passage/reprice_horizon/picked_method/alert_generator. Ran test_position_review (21) and brokerReview/trackingReview/submissionDraft (51). Limits: Postgres behaviour judged by reading, only SQLite executed; no full suites or browser by the auditor.",
+          "below_gate_noted": "JSON-null broker order id: tradier_paper.py:149 and ibkr_paper.py:175 yield 'None', backend records outcome-unknown, frontend directOrder.ts:105 accepts it so the status reads placed with no ORDER-UNKNOWN note. Status label only: no wrong number, nothing persisted differs. Logged against main, not fixed in branch."
+        }
+      ],
+      "note": "RESUME 2026-11-08 from 7aab5720; native children 576-582 verified closed (7/9). Recovered unfinished583 work in isolated worktree, original preserved. Plan3clean/code0 retained, phase20%,XL,complexity4. Backend3.11 full suite running;583 implementer active. Mini-PC comparison remains user-deferred/unverified. || 2026-11-08: reassigned to Claude by Kenneth in chat (twice: from codex e6cac1a0, then from codex 179b9130 after Claude's claim lapsed during a usage-limit outage); continued on board/trade-card-decision-review-5f119477, no history rewritten. All 9 build tickets closed and coordinator-verified: full Jest 6207/6209 (2 machine-locale failures), backend full run at 7aab5720 10126 passed (known Windows set only), final register 625/625. BUILT, code audit not started; audit_clean false; 70%; not ready to merge. || CODE ROUND 4 (code stage round 1 of 3) CLEAN 2026-11-08: fresh independent gate-auditor, diff f391522e..06e68752, 0 gate findings. audit_clean true; 85%. PR next; self-merge only under board.md step 7. || SELF-MERGE PENDING, PR #594 (Closes #575; supersedes #592, #588, #586), audited head 06e68752 (code round 4 clean). Commits after the audited head are documentation-only state/audit records. Not merged; the live PR state is authoritative.",
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent gate-auditor subagent (bmad-review-adversarial-general) reviewed git diff origin/main..06e68752 -- frontend backend (merge-base f391522e) against the plan and tickets; 0 gate findings."
+      },
+      "baseline_evidence": "docs/superpowers/plans/trade-card-decision-review/README.md",
+      "baseline_sha": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
+      "mini_pc_comparison": "deferred by direct user instruction in this chat; not verified and no longer blocks implementation",
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "Fresh independent plan_baseline_r3 reviewed only user-authorized pinned-main/deferred-mini-PC amendment; zero gate findings; exact planSHA256 39a71d526b7ef136c2a142f151c14cca1cb3e1b62d52fd14e5822be822d1bc81."
+      },
+      "build_tickets": {
+        "576": {
+          "status": "closed_source_inventory_complete",
+          "commit": "61ea11033800c29b7aec02d6e1c9018defad9d25",
+          "completion_pct": 70,
+          "size": "S",
+          "complexity": 3
+        },
+        "577": {
+          "status": "closed",
+          "commit": "3d0bc89f",
+          "size": "M",
+          "complexity": 3
+        },
+        "578": {
+          "status": "closed",
+          "commit": "03399e13",
+          "size": "M",
+          "complexity": 3
+        },
+        "579": {
+          "status": "closed",
+          "commit": "7fa7771b+e183355e",
+          "size": "M",
+          "complexity": 4
+        },
+        "580": {
+          "status": "closed",
+          "commit": "d538f27b",
+          "size": "L",
+          "complexity": 4
+        },
+        "581": {
+          "status": "closed",
+          "commit": "c58bdd64",
+          "size": "L",
+          "complexity": 4
+        },
+        "582": {
+          "status": "closed",
+          "commit": "91d7c20f+7aab5720",
+          "size": "L",
+          "complexity": 4
+        },
+        "583": {
+          "status": "closed",
+          "commit": "4e28cb16+28f5425a",
+          "size": "L",
+          "complexity": 4
+        },
+        "584": {
+          "status": "closed",
+          "commit": "b8d66ab4",
+          "size": "L",
+          "complexity": 4
+        }
+      },
+      "pr": 594
     }
   ],
   "already_shipped": [
@@ -11712,6 +11862,11 @@
       "answer_literal": "agree with all recommedations ",
       "source": "https://github.com/Netke237/trading-assistant/issues/535#issuecomment-3444458316",
       "scope": "OHLCV-ALPACA-DAY-HOLES"
+    },
+    {
+      "id": "TC-REVIEW-PIN-MAIN-DEFER-MINIPC-2026-11-07",
+      "target": "TRADE-CARD-DECISION-REVIEW",
+      "decision": "User in this chat directed resume using freshly fetched main c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b as baseline, mini-PC comparison deferred in #576, finish inventory and proceed in dependency order; required independent audits retained."
     }
   ],
   "pending_kenneth": [
