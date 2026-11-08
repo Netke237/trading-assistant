@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/direct-send-null-order-id-fbc69da3",
-      "claimed_at": "2026-11-08T20:38:27Z",
-      "expires_at": "2026-11-09T01:08:50Z",
-      "note": "#593 null order id must not read as placed",
-      "task": "DIRECT-SEND-NULL-ORDER-ID"
-    }
-  ]
+  "claims": []
 }
