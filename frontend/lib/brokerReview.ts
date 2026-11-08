@@ -28,7 +28,7 @@
  */
 
 import type { OptionOrderRequest } from './submissionDraft';
-import { normaliseStatus, isAcceptedNotFilled } from './directOrder';
+import { normaliseStatus, isAcceptedNotFilled, UNUSABLE_ORDER_IDS } from './directOrder';
 
 /* ── The captured request ────────────────────────────────────────────────── */
 
@@ -85,14 +85,12 @@ export interface BrokerResponseFacts {
   deduped: boolean;
 }
 
-const UNUSABLE_ID = new Set(['', 'unknown', 'none', 'null']);
-
 export function responseFacts(res: unknown): BrokerResponseFacts {
   const r = (res && typeof res === 'object' ? res : {}) as Record<string, unknown>;
   const text = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
   const id = text(r.order_id);
   return {
-    orderId: id != null && !UNUSABLE_ID.has(id.toLowerCase()) ? id : null,
+    orderId: id != null && !UNUSABLE_ORDER_IDS.has(id.toLowerCase()) ? id : null,
     status: text(r.status),
     broker: text(r.broker),
     deduped: r.deduped === true,
