@@ -3199,9 +3199,18 @@ export function TradeCard({
           <Text size={10} tone="dim">{`Simulation uses calendar-day steps to expiry. Current selected-contract metadata: ${data.contractDetails?.dte ?? 'unavailable'} DTE; saved run DTE is unavailable in the stored context. Probability means target premium touched before expiry, even if a stop is also reached. Median time is conditional on target hits, in calendar days; independent target probabilities can sum past 100%.`}</Text>
           <Text size={10} tone="dim">{`Current inherited holding/repricing settings (not saved run inputs): ${horizonPreset ?? 'backend default'}; hold minimum ${holdMin ?? 'default'}, maximum ${holdMax ?? 'default'} trading days. These are separate from the expiry simulation horizon.`}</Text>
           <Text size={11} tone="secondary">Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.</Text>
+          {/* #579: the race barriers are simulation INPUTS and the execution
+              fields are the position's actual settings. Two labelled groups,
+              never merged, and the resolution that produced the inputs stated
+              once so a difference between the two reads as expected. */}
+          <Text size={11} weight={500}>Simulation inputs (captured at Run)</Text>
           <div className={styles.arithmeticBasis}>
             <KV label="Companion race stock barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.stockStopPrice.toFixed(2)} stock` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
             <KV label="Companion race premium exit-value barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.premiumStopPrice.toFixed(2)}/share` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
+          </div>
+          <Text size={10} tone="dim">Simulation inputs are what the last run raced against, resolved at Run: stock barrier = Arithmetic Plan structural + ATR stop (computed for this contract on this visit), else the structural level, else the Exit Plan stock invalidation; premium barrier = the Premium stop field when you changed it to a loss below the run&apos;s premium, else the risk-rules default percentage. They can differ from the settings below. Monte Carlo never copies one into the other; moving a barrier after the run hides these inputs and the race until you re-run.</Text>
+          <Text size={11} weight={500}>Actual Exit Plan settings (not changed by Monte Carlo)</Text>
+          <div className={styles.arithmeticBasis}>
             <KV label="Execution stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)} stock` : 'Unavailable'} mono />
             <KV label="Execution premium-stop loss amount" value={premiumStopReadOnly
               ? premiumStopTouched && overlay.premiumStop != null ? `$${overlay.premiumStop.toFixed(2)}/share · pinned` : `Global loss allowance: ${Number((globalPremiumStopPct * 100).toFixed(2))}% (fill-derived)`
@@ -3270,6 +3279,14 @@ export function TradeCard({
               <Text size={11} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
             )}
           </div>
+          {/* `undefined` is "never run" (or the frame before a run lands), as
+              opposed to `null` after a failure, which has its own copy above. */}
+          {firstPassage === undefined && !firstPassageLoading && (
+            <Text size={11} tone="dim">
+              No estimate yet. Nothing runs automatically — click Run Monte Carlo Estimate to
+              simulate the entered targets; results and the Barrier Race appear after it finishes.
+            </Text>
+          )}
           {firstPassage && (
             <div className={styles.targetsTable}>
               {firstPassage.targets.map((t, i) => (
