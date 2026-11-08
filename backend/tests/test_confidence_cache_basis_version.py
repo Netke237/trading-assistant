@@ -9,7 +9,7 @@ row miss; old rows expire naturally.
 """
 from __future__ import annotations
 
-EXPECTED_VERSION = "b3"  # b3: STOCKS-HORIZON-P0A A4 (non-overlapping confidence replay)
+EXPECTED_VERSION = "b4"  # b4: PROVIDER-FALLBACK-FORMING-BAR #536 (no forming bars on the Options DB-miss fallback)
 
 # The pre-T2 key format for cache_key("AAPL", "Bullish", "Swing", None, None,
 # scoring_mode="stock"): no version suffix.

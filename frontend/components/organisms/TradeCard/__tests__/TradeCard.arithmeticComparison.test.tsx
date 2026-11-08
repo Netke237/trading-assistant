@@ -52,26 +52,29 @@ const show = (p = plan(), overrides: Partial<TradeCardData> = {}) => {
   return within(screen.getByText('Arithmetic Profit Target').closest('section')!);
 };
 beforeEach(() => { localStorage.clear(); jest.clearAllMocks(); });
-it('shows every custom returned row in one table with effective stock target, model and calendar median', () => {
+// #580: rows instead of a horizontally scrolling table, in Monte Carlo's field
+// order; the original arithmetic target and snap geometry sit in an expansion.
+it('shows every custom returned row with resolved stock target, model and calendar median', () => {
   const region = show();
-  const table = within(region.getByRole('table', { name: 'Arithmetic target comparison' }));
-  expect(table.getAllByRole('row')).toHaveLength(4);
-  for (const ratio of ['2.5:1 target', '3.5:1 target', '4.5:1 target']) expect(table.getByText(ratio)).toBeVisible();
-  const first = within(table.getAllByRole('row')[1]);
-  for (const value of ['$195.00', '$196.00', '$6.50', '60%', '~8 calendar days', 'Delta approximation', '$500.00']) expect(first.getAllByText(value).find((element) => element.closest('td'))).toBeVisible();
+  const list = within(region.getByRole('list', { name: 'Arithmetic target comparison' }));
+  expect(list.getAllByRole('listitem')).toHaveLength(3);
+  for (const ratio of ['2.5:1 target', '3.5:1 target', '4.5:1 target']) expect(list.getByText(ratio)).toBeVisible();
+  const first = within(list.getAllByRole('listitem')[0]);
+  for (const value of ['$196.00', '$6.50', '60%', '~8 calendar days', 'Delta approximation', '$500.00']) expect(first.getAllByText(value)[0]).toBeVisible();
+  expect(first.getByText('$195.00')).toBeInTheDocument(); // original arithmetic target, in the expansion
   expect(region.getByText(/2 entered contracts × 100 shares.*selected-contract full exit/)).toBeVisible();
   expect(region.getByText(/Stored calculation stock entry: unavailable/)).toBeVisible();
   expect(first.getByText(/Bearish target capped/)).toBeVisible();
   expect(first.getByText(/test_quality_reason/)).toBeInTheDocument();
-  expect(within(table.getAllByRole('row')[2]).getByText('$0.00')).toBeVisible();
-  expect(within(table.getAllByRole('row')[2]).getByText('Unavailable — no conditional median')).toBeVisible();
+  expect(within(list.getAllByRole('listitem')[1]).getByText('$0.00')).toBeVisible();
+  expect(within(list.getAllByRole('listitem')[1]).getByText('Unavailable — no conditional median')).toBeVisible();
 });
 it.each(['missing', 'zero', 'nonfinite', 'mismatched'])('does not borrow scan, edited or live premium with %s calculation provenance', (basis) => {
   const p = plan();
   if (basis === 'missing') p.stop.stopCost = undefined;
   else p.stop.stopCost = { ...p.stop.stopCost!, ...(basis === 'zero' ? { premium: 0 } : basis === 'nonfinite' ? { premium: NaN } : { stopPrice: 179 }) };
   const region = show(p);
-  const first = within(within(region.getByRole('table')).getAllByRole('row')[1]);
+  const first = within(within(region.getByRole('list')).getAllByRole('listitem')[0]);
   expect(first.getByText('Unavailable — calculation premium basis missing')).toBeVisible();
   expect(region.getByText('Calculation premium used')).toBeVisible();
   expect(region.queryByText('$4.00/share')).not.toBeInTheDocument();
@@ -83,7 +86,8 @@ it('names spread results as selected-contract outcomes rather than whole-spread 
 it('retains absent estimates instead of inventing probability, time or profit', () => {
   const p = plan(); p.targets = [row(5, { probability: NaN, expectedDays: null, contractPrice: NaN })];
   const region = show(p);
-  const result = within(within(region.getByRole('table')).getAllByRole('row')[1]);
+  const result = within(within(region.getByRole('list')).getAllByRole('listitem')[0]);
+  // Option premium, dollar outcome and probability; time has its own wording.
   expect(result.getAllByText('Unavailable')).toHaveLength(3);
 });
 it('reports an empty target response without fixed two-row placeholders', () => {

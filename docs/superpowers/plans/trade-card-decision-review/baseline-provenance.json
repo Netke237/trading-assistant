@@ -1,0 +1,210 @@
+{
+  "source_revision": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
+  "actual_running_revision": null,
+  "actual_running_url": null,
+  "running_build_comparison": "USER DEFERRED: mini-PC URL/revision unknown, not verified, not an implementation blocker; no equivalence claimed",
+  "source_hashes": {
+    "frontend/components/organisms/TradeCard/index.tsx": "f5815e6e3fb97c39d4e5a58fb457ee93ee2cf2b2c1c5139aaabef26cfe911c5c",
+    "frontend/components/organisms/TradeCard/TradeCard.module.css": "e0be91667a57756e3ef58b50efc8e0f6ce7c98793c8ca028c687a62ed4118794",
+    "frontend/components/organisms/BarrierRaceCard/index.tsx": "b40c9848b2e3d733f750732c7025670cda84b74d904d77c581d76ff84466a72c",
+    "frontend/app/(frame)/screener/step-7-trade-card/page.tsx": "f1ae3067090da2f1717aabc571c3a41f5e2696a7d546387746db9d67fd34899c",
+    "frontend/components/organisms/SendToBrokerDialog/index.tsx": "0319ff0f0fdc18c79f8e74de6b6e4bebffe750aaf0ea053a1d471fe47d7388ed",
+    "frontend/lib/portfolioStore.ts": "8803dd36d956f7de318f16e2cc8161536e5dea2c7bef117d8c12c0ea76c53d08",
+    "backend/app/services/position_writer.py": "77395f6dce2ebf93a0c7a1124ee58ffa44d743b1a0ddfae8c810533c803b5991"
+  },
+  "local_browser_smoke": {
+    "command": "npx playwright test --config=/tmp/trade-card-playwright.config.ts e2e/tests/trade-card-ui-followup.spec.ts --project=chromium --workers=1 --grep 1920px-dark",
+    "result": "1 passed, 19.0 seconds",
+    "browser": "/usr/bin/chromium",
+    "scope": "mocked current source only",
+    "limitation": "default Playwright bundled browser absent; used installed system Chromium via temporary config"
+  },
+  "publication_preflight_graph": [
+    {
+      "number": 576,
+      "issue_id": 6257437530,
+      "labels": [
+        "size:S",
+        "complexity:3"
+      ],
+      "expected_blocked_by": [],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 577,
+      "issue_id": 6257438130,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "expected_blocked_by": [
+        576
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 578,
+      "issue_id": 6257439024,
+      "labels": [
+        "size:M",
+        "complexity:3"
+      ],
+      "expected_blocked_by": [
+        576
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 579,
+      "issue_id": 6257439705,
+      "labels": [
+        "size:M",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        576
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 580,
+      "issue_id": 6257440323,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        579
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 581,
+      "issue_id": 6257441004,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        578,
+        580
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 582,
+      "issue_id": 6257441618,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        581
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 583,
+      "issue_id": 6257442644,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        581
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    },
+    {
+      "number": 584,
+      "issue_id": 6257443185,
+      "labels": [
+        "size:L",
+        "complexity:4"
+      ],
+      "expected_blocked_by": [
+        577,
+        582,
+        583
+      ],
+      "current_blocked_by": [],
+      "current_parent": null
+    }
+  ],
+  "verified_native_children": [
+    576,
+    577,
+    578,
+    579,
+    580,
+    581,
+    582,
+    583,
+    584
+  ],
+  "verified_native_dependencies": {
+    "576": [],
+    "577": [
+      576
+    ],
+    "578": [
+      576
+    ],
+    "579": [
+      576
+    ],
+    "580": [
+      579
+    ],
+    "581": [
+      578,
+      580
+    ],
+    "582": [
+      581
+    ],
+    "583": [
+      581
+    ],
+    "584": [
+      577,
+      582,
+      583
+    ]
+  },
+  "local_state_capture": {
+    "states": [
+      "initial",
+      "calculated",
+      "stale",
+      "restored"
+    ],
+    "fixture_source": "docs/superpowers/plans/trade-card-worklogs/presentation-integration-evidence/browser-cases.cjs",
+    "capture_kind": "local source with mocked APIs",
+    "checks_passed": 15,
+    "page_errors": [],
+    "submit_arm_fire_save_requests": 0
+  },
+  "baseline_authorization": {
+    "revision": "c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b",
+    "kind": "user_authorized_pinned_current_main",
+    "date": "2026-11-07",
+    "mini_pc_comparison": "deferred_not_verified_not_blocking"
+  },
+  "source_inventory": {
+    "historical_entries": 520,
+    "source_inspected_historical_entries": 520,
+    "current_contract_supplements": 67,
+    "shared_helper_contracts": 38,
+    "runtime_preservation": "pending #584; no per-entry runtime completion claimed"
+  },
+  "source_hash_validation": "Immutable git show <application_source_revision>:<path> bytes; working-tree implementation may change. This validates baseline evidence, not current implementation."
+}
