@@ -72,6 +72,14 @@ EXPECTED_UNTYPED: frozenset[tuple[str, str, str, str]] = frozenset({
      "body.<PortfolioPositionCreate>.tradeCardSnapshot"),
     ("POST /api/portfolio", "body", "any-dict",
      "body.<PortfolioPositionCreate>.maxLossOverride"),
+    # #582: the side-effect-free preview takes the SAME create body (same
+    # leaves, same JSON non-finite guard); it writes nothing.
+    ("POST /api/portfolio/preview", "body", "any-dict", "body.<PortfolioPositionCreate>.exitPlan"),
+    ("POST /api/portfolio/preview", "body", "any-dict", "body.<PortfolioPositionCreate>.targets"),
+    ("POST /api/portfolio/preview", "body", "any-dict",
+     "body.<PortfolioPositionCreate>.tradeCardSnapshot"),
+    ("POST /api/portfolio/preview", "body", "any-dict",
+     "body.<PortfolioPositionCreate>.maxLossOverride"),
     ("PATCH /api/portfolio/{rec_id}", "body", "any-dict",
      "body.<PortfolioPositionUpdate>.targets"),
     ("PATCH /api/portfolio/{rec_id}", "body", "any-dict",
@@ -117,7 +125,7 @@ EXPECTED_UNTYPED: frozenset[tuple[str, str, str, str]] = frozenset({
     ("POST /api/backtest-artifacts/fresh", "body", "any-dict",
      "request.<FreshBacktestRequest>.params"),
 })
-EXPECTED_UNTYPED_COUNT = 35
+EXPECTED_UNTYPED_COUNT = 39  # 35 in section 1 + the #582 preview's 4
 
 
 # ── the walk ──────────────────────────────────────────────────────────────────

@@ -59,7 +59,7 @@ Results:
 
 ### Deliberate inventory extension — CANDIDATE-BACKTEST-CHART (2026-10-15)
 
-The original 34-leaf inventory above is retained as historical evidence. The current route-wide ratchet pins **35 untyped leaves**, adding exactly:
+The original 34-leaf inventory above is retained as historical evidence. This extension took the route-wide ratchet to **35 untyped leaves** (now 39, see the #582 extension below), adding exactly:
 
 | Route | Parameter kind | Leaf kind | Schema path |
 |---|---|---|---|
@@ -68,6 +68,19 @@ The original 34-leaf inventory above is retained as historical evidence. The cur
 `FreshBacktestRequest.params` deliberately carries a strategy-dependent object. Its dict value schema is untyped, but its whole-model validator calls `validate_parameters` before the endpoint runs. For each supported daily strategy it requires the complete signature-derived key set, rejects unknown keys, checks strict scalar types (including rejecting numeric strings and booleans as numbers), bounds integer/float parameters and signal-window requirements, requires finite floats, and requires an explicit null historical `current_price`. Multi-strategy configuration requires unique supported daily variants, an integer confirmation count within the selected count, and an exact matching `variant_params` key set; the same validator recursively checks every selected variant's complete parameters. It does not accept ambient parameter defaults.
 
 The application-wide `NonFiniteJsonGuard` additionally rejects NaN/Infinity/overflowing numeric literals at any depth before request validation. `test_fresh_backtest.py::test_nonfinite_params_rejected_before_history_or_engine` uses the real `create_app()` stack to pin HTTP 422 for direct and multi-nested literals and nonfinite strings, asserts neither historical data nor the backtest engine runs, and confirms the same finite configuration reaches history. The inventory walker still requires exact set/count equality, probes every typed float leaf, and has no float allowlist. Future untyped additions still fail until deliberately documented and covered.
+
+### Deliberate inventory extension — TRADE-CARD-DECISION-REVIEW #582 `POST /api/portfolio/preview` (2026-11-07)
+
+The route-wide ratchet (`backend/tests/test_request_finite_inventory.py`, `EXPECTED_UNTYPED_COUNT = 39`) now pins **39 untyped leaves**: the 35 above plus these 4.
+
+| Route | Parameter kind | Leaf kind | Schema path |
+|---|---|---|---|
+| `POST /api/portfolio/preview` | body | any-dict | `body.<PortfolioPositionCreate>.exitPlan` |
+| `POST /api/portfolio/preview` | body | any-dict | `body.<PortfolioPositionCreate>.targets` |
+| `POST /api/portfolio/preview` | body | any-dict | `body.<PortfolioPositionCreate>.tradeCardSnapshot` |
+| `POST /api/portfolio/preview` | body | any-dict | `body.<PortfolioPositionCreate>.maxLossOverride` |
+
+The preview takes the same `PortfolioPositionCreate` body as `POST /api/portfolio`, so these are the same four model fields already inventoried for that route, reached through a second route. The preview writes no position. The application-wide `NonFiniteJsonGuard` covers their numeric literals as it does for the create route. Documentation of the existing ratchet only: no runtime or test change.
 
 ## 2. Validation outcome (one rule, everywhere)
 

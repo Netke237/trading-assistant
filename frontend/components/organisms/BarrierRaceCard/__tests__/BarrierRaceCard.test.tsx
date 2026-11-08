@@ -86,17 +86,16 @@ function renderCard(props: Partial<React.ComponentProps<typeof BarrierRaceCard>>
 // -- 10. The bars and the shares ---------------------------------------------
 
 describe('the race outcome', () => {
-  it('renders one bar per target, at the returned widths', () => {
+  it('renders one bar per target, at the allocated widths', () => {
     renderCard();
     const targetSegments = screen.getAllByTestId('segment-Target first');
     expect(targetSegments).toHaveLength(3);
-    // Exact strings: a binary-float tail (0.14 * 100 = 14.000000000000002)
-    // would otherwise land in the style attribute verbatim.
-    // Raw shares, not the allocated weights: the bar is continuous and these
-    // sum to 100% exactly on their own.
-    expect(targetSegments[0]).toHaveStyle({ width: '26.8500%' });
-    expect(targetSegments[1]).toHaveStyle({ width: '13.8000%' });
-    expect(targetSegments[2]).toHaveStyle({ width: '8.2500%' });
+    // #579: the allocated weights the labels and the edge use, not the raw
+    // shares (26.85% / 13.80% / 8.25%), so the picture and the numbers beside
+    // it are the same four values.
+    expect(targetSegments[0]).toHaveStyle({ width: '27%' });
+    expect(targetSegments[1]).toHaveStyle({ width: '14%' });
+    expect(targetSegments[2]).toHaveStyle({ width: '8%' });
   });
 
   it('omits a zero-width segment rather than rendering an invisible one', () => {
@@ -135,6 +134,60 @@ describe('the race outcome', () => {
   });
 });
 
+// -- #579: one set of shares for the picture, the labels and the aria -------
+
+describe('the bar geometry, on a row whose raw shares differ from its allocated weights', () => {
+  // Raw shares deliberately different from the backend's allocated weights:
+  // 0.0045 is allocated 0.01 (rounds up), 0.003 is allocated 0 (rounds down),
+  // and the other shares sit off a whole hundredth. The weights are the ones
+  // the labels and the edge already use.
+  const RAW_VS_ALLOCATED: BarrierRace = {
+    ...RACE,
+    outcomes: [
+      outcome({
+        pTargetFirst: 0.2685, pStockStopFirst: 0.0045, pPremiumStopFirst: 0.682, pNeither: 0.045,
+        weightTargetFirst: 0.27, weightStockStopFirst: 0.01, weightPremiumStopFirst: 0.68, weightNeither: 0.04,
+      }),
+      outcome({
+        targetPct: 0.35, targetOptionPrice: 7.02,
+        pTargetFirst: 0.1355, pStockStopFirst: 0.003, pPremiumStopFirst: 0.7845, pNeither: 0.077,
+        weightTargetFirst: 0.14, weightStockStopFirst: 0.0, weightPremiumStopFirst: 0.78, weightNeither: 0.08,
+      }),
+    ],
+  };
+  const LABELS = ['Target first', 'Stock stop first', 'Premium stop first', 'Neither'];
+
+  const rowShares = (row: HTMLElement) => {
+    const cells = within(row).getAllByRole('cell').map((c) => c.textContent ?? '');
+    const bar = within(row).getByRole('img');
+    const widths = LABELS.map((label) => {
+      const seg = bar.querySelector(`[data-testid="segment-${label}"]`) as HTMLElement | null;
+      return seg ? seg.style.width : null;
+    });
+    const spoken = LABELS.map((label) => {
+      const m = new RegExp(`${label} (\\d+)%`).exec(bar.getAttribute('aria-label') ?? '');
+      return m ? `${m[1]}%` : null;
+    });
+    return { visible: cells.slice(2, 6), widths, spoken };
+  };
+
+  it('sizes every segment from the allocated weight, matching the visible and spoken labels', () => {
+    renderCard({ race: RAW_VS_ALLOCATED });
+    const rows = within(screen.getAllByRole('table')[1]).getAllByRole('row').slice(1);
+    const first = rowShares(rows[0]);
+    expect(first.visible).toEqual(['27%', '1%', '68%', '4%']);
+    expect(first.spoken).toEqual(['27%', '1%', '68%', '4%']);
+    expect(first.widths).toEqual(['27%', '1%', '68%', '4%']);
+
+    // A raw share above zero whose allocated weight is 0 draws no segment,
+    // exactly as the 0% beside it says.
+    const second = rowShares(rows[1]);
+    expect(second.visible).toEqual(['14%', '0%', '78%', '8%']);
+    expect(second.spoken).toEqual(['14%', '0%', '78%', '8%']);
+    expect(second.widths).toEqual(['14%', null, '78%', '8%']);
+  });
+});
+
 // -- The barriers, each with its unit ----------------------------------------
 
 describe('the three barriers', () => {
@@ -142,6 +195,38 @@ describe('the three barriers', () => {
     renderCard();
     expect(screen.getByText('$176.00 stock')).toBeInTheDocument();
     expect(screen.getByText('$2.08 option')).toBeInTheDocument();
+  });
+
+  it('labels the barriers as simulation inputs, separate from the Exit Plan settings', () => {
+    const { container } = renderCard();
+    const d = container.querySelector('details') as HTMLElement;
+    const inputs = screen.getByText(/Simulation inputs, captured when the estimate ran/);
+    expect(inputs).toHaveTextContent(/not the Exit Plan's settings/);
+    expect(inputs).toHaveTextContent(/never copied into the Exit Plan/);
+    const precedence = screen.getByText(/Stock-stop input precedence/);
+    expect(precedence).toHaveTextContent(
+      /Arithmetic Plan's structural \+ ATR stop.*else the structural level.*else the Exit Plan's stock invalidation/,
+    );
+    expect(d.contains(inputs)).toBe(false);
+    expect(d.contains(precedence)).toBe(false);
+    // The existing source copy stays.
+    expect(screen.getByText('Structural level, or structural + ATR once an Arithmetic Plan has run')).toBeInTheDocument();
+  });
+
+  it('shows the barrier-time stock-stop value and loss with its time basis, outside the disclosure', () => {
+    const { container } = renderCard();
+    const d = container.querySelector('details') as HTMLElement;
+    const line = screen.getByText(/Stock-stop value at barrier time/);
+    expect(line).toHaveTextContent(
+      '$5.20 premium - $0.03 at the stop (repriced at 26d — the median day any path reaches the stop) = $5.17',
+    );
+    expect(d.contains(line)).toBe(false);
+  });
+
+  it('says when the stop could not be repriced instead of inventing a barrier-time value', () => {
+    renderCard({ race: { ...RACE, outcomes: [outcome({ stopRepricedValue: null, riskStockStop: null })] } });
+    expect(screen.getByText(/Stock-stop value at barrier time/))
+      .toHaveTextContent('$5.20 premium - could not reprice at the stop');
   });
 });
 
@@ -232,6 +317,15 @@ describe('when a barrier moved after the race was computed', () => {
     expect(screen.queryAllByRole('img')).toHaveLength(0);
     expect(screen.queryByText('$5.20 premium - $0.18 at the stop (repriced at 7d) = $5.02'))
       .not.toBeInTheDocument();
+  });
+
+  it('hides the barrier inputs, barrier-time value and disclosure along with the bars', () => {
+    const { container } = renderCard({ barriersChanged: true, invalidation: { probability: 0.3, expectedDays: 4 } });
+    expect(screen.queryByText(/Stock-stop value at barrier time/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Simulation inputs, captured when the estimate ran/)).not.toBeInTheDocument();
+    expect(container.querySelector('details')).toBeNull();
+    // The independent stock-stop touch survives a premium-only move.
+    expect(screen.getByText(/stock-stop probability is unaffected by the premium stop: 30%/)).toBeInTheDocument();
   });
 });
 
@@ -418,7 +512,33 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
     // The reason the two figures differ is what makes the comparison usable —
     // naming only decay sent a hand-checker looking for a difference decay
     // alone cannot account for.
-    expect(screen.getByText(/time decay AND by pricing model/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/time decay AND can differ by volatility input/),
+    ).toBeInTheDocument();
+  });
+
+  // #579: the copy has to say how each figure is actually computed. The
+  // immediate figure is compute_stop_cost — Black-Scholes at the stop with
+  // today's unchanged time to expiry, loss not capped — and the race's stock
+  // stop is repriced ONCE, at reprice_horizon.resolve_reprice_days' single
+  // horizon (the standalone stop-touch median, else the configured fallback,
+  // capped before expiry). The old copy claimed neither.
+  it('states the stop valuation bases the backend actually uses', () => {
+    const { container } = renderCard({ stopCostShown: true });
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/delta-linear/);
+    expect(text).not.toMatch(/capped at the premium/);
+    expect(text).not.toMatch(/each barrier's own median day/);
+    expect(text).not.toMatch(/Repriced at the median barrier day/);
+    expect(text).toMatch(
+      /both are Black-Scholes prices at the stop, but that one uses today's full time to expiry \(no time decay\), its loss is not capped/,
+    );
+    expect(text).toMatch(
+      /The stock-stop value is repriced once, at one horizon shared by every target: the median day over all paths that ever touch the stock stop/,
+    );
+    expect(text).toMatch(/or the configured holding-period fallback when that median is unavailable/);
+    expect(text).toMatch(/capped before expiry/);
+    expect(screen.getByText('Stock stop repriced once (touch median or fallback day)')).toBeInTheDocument();
   });
 
   it('says nothing about it when that readout is not rendered', () => {
@@ -427,7 +547,7 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
     // The line the paragraph always carries is still there — only the
     // cross-reference is conditional.
     expect(
-      screen.getByText(/Priced at each barrier's own median day/),
+      screen.getByText(/The stock-stop value is repriced once, at one horizon shared by every target/),
     ).toBeInTheDocument();
   });
 
@@ -455,7 +575,7 @@ describe('the comparison row', () => {
     expect(cells).toEqual([
       '20%$6.24Estimated dollar outcomeUnavailable', '', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00',
     ]);
-    // The bar is in the second cell, and it is still the raw-share bar.
+    // The bar is in the second cell, drawn from the same allocated weights.
     expect(within(rows[0]).getByRole('img')).toBeInTheDocument();
     expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent).slice(2))
       .toEqual(['14%', '0%', '78%', '8%', '~12d', '0.35x', '-$228.00']);
@@ -542,6 +662,15 @@ describe('the inline disclosure', () => {
     expect(inside.getByText(/Only the first ratio is a measurement/)).toBeInTheDocument();
     expect(inside.getByText(/It is signed, not a loss/)).toBeInTheDocument();
     expect(inside.getByText(/a real fear bid would leave more premium than shown/)).toBeInTheDocument();
+  });
+
+  it('keeps the volatility-fallback warning above the barriers and results it qualifies', () => {
+    renderCard({ race: { ...RACE, ivSolved: false } });
+    const iv = screen.getByText(/implied volatility could not be backed out of its quote/);
+    const [barriers, outcomes] = screen.getAllByRole('table');
+    expect(iv.compareDocumentPosition(barriers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const weak = screen.getByText(/describes an outcome the simulation almost never reached/);
+    expect(outcomes.compareDocumentPosition(weak) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('never holds a warning: both stay visible outside it', () => {

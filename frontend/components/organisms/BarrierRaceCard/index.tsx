@@ -192,6 +192,14 @@ export default function BarrierRaceCard({
       {/* 1. The three barriers ------------------------------------------- */}
       <div className={styles.block}>
         <Text size={12} weight={600}>The three barriers</Text>
+        {/* #579: these are the levels the simulation raced, not the position's
+            settings. Said here, beside the table, so a level that differs from
+            the Exit Plan is not read as a contradiction or a pending edit. */}
+        <Text size={10} tone="dim">
+          Simulation inputs, captured when the estimate ran — not the Exit Plan&apos;s settings. They
+          are never copied into the Exit Plan; if a barrier&apos;s current value moves after the run,
+          this race is cleared until you re-run.
+        </Text>
         <div className={styles.tableScroll}>
           <table className={`${styles.table} ${styles.barrierTable}`}>
             <thead>
@@ -235,6 +243,25 @@ export default function BarrierRaceCard({
             </tbody>
           </table>
         </div>
+        {/* The resolution TradeCard's estimate handler applies at request
+            time (`resolvedStockStop`, `sentPremiumStopPct`), stated in full:
+            the "How it is set" cell above names only the structural branches. */}
+        <Text size={10} tone="dim">
+          Stock-stop input precedence at run time: the Arithmetic Plan&apos;s structural + ATR stop
+          when it was computed for this contract on this visit, else the structural level (from
+          Check structure or fetched by the run itself), else the Exit Plan&apos;s stock invalidation.
+          The premium-stop input is the Exit Plan&apos;s Premium stop only when you changed that
+          field; otherwise the backend&apos;s own premium-stop percentage applies, as the row above says.
+        </Text>
+        {/* The stock-stop leg is computed once per stop, not per target, so the
+            first row's chain is every row's. The same formatter as the
+            disclosure's per-target "Risk" chain, so the two cannot disagree. */}
+        {race.outcomes.length > 0 && (
+          <Text size={10} tone="secondary">
+            Stock-stop value at barrier time, per share (same for every target):{' '}
+            {formatRaceRisk(race.outcomes[0], race.premiumUsed)}
+          </Text>
+        )}
         {invalidation && (
           <Text size={10} tone="dim">
             Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
@@ -380,7 +407,7 @@ export default function BarrierRaceCard({
         <div className={styles.assumptions}>
           <Text size={10} tone="dim">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
           <Text size={10} tone="dim">Medians are conditional on the outcome</Text>
-          <Text size={10} tone="dim">Repriced at the median barrier day</Text>
+          <Text size={10} tone="dim">Stock stop repriced once (touch median or fallback day)</Text>
           <Text size={10} tone="dim">IV unchanged at the barriers</Text>
           <Text size={10} tone="dim">Edge before commissions</Text>
         </div>
@@ -421,14 +448,21 @@ export default function BarrierRaceCard({
               leaves this card pointing a reader at a row that is nowhere on the
               page. */}
           <Text size={10} tone="dim">
-            Priced at each barrier&apos;s own median day, so time decay is included.
+            The stock-stop value is repriced once, at one horizon shared by every target: the
+            median day over all paths that ever touch the stock stop, measured on its own (not the
+            per-outcome medians), or the configured holding-period fallback when that median is
+            unavailable, capped before expiry. It is priced with the time to expiry left on that
+            day, so time decay is included.
             {stopCostShown ? (
               <>
                 {' '}For the immediate figure — what this stop costs if it is hit right now —
                 see &ldquo;Max loss if the stop is hit&rdquo; in Structure &amp; Stops.
-                The two differ by time decay AND by pricing model: that one is a
-                delta-linear estimate at today&apos;s price, capped at the premium, while these
-                are repriced by the simulation. Both are correct; naming only the decay sent a
+                The two differ by time decay AND can differ by volatility input: both are
+                Black-Scholes prices at the stop, but that one uses today&apos;s full time to expiry
+                (no time decay), its loss is not capped, and it takes the supplied implied
+                volatility or one solved from the mid, while these use the time left at the
+                repricing day and the volatility the simulation solved from the mid (or its
+                fallback). Both are correct; naming only the decay sent a
                 hand-checker looking for a difference decay alone cannot account for.
               </>
             ) : null}
@@ -551,39 +585,41 @@ function LegendKey({ className, label }: { className: string; label: string }) {
   );
 }
 
-/** A 100%-stacked bar. Widths come straight from the returned shares, which sum
- *  to 1 by construction, so the segments always fill the track exactly. */
+/** A 100%-stacked bar, drawn from the same allocated whole percentages
+ *  (`weightPercents`) that the visible cells, the spoken label and the edge
+ *  chain use. The raw `p*` shares used to set the widths, so a share of 0.0045
+ *  drew a sliver beside a printed 1% (or 0.003 drew one beside a printed 0%).
+ *  The allocated percentages sum to 100, so the segments still fill the track. */
 function StackedBar({ o }: { o: BarrierRaceOutcome }) {
-  const segments: Array<[string, number, string]> = [
-    [styles.swatchTarget, o.pTargetFirst, 'Target first'],
-    [styles.swatchStock, o.pStockStopFirst, 'Stock stop first'],
-    [styles.swatchPremium, o.pPremiumStopFirst, 'Premium stop first'],
-    [styles.swatchNeither, o.pNeither, 'Neither'],
-  ];
   // The spoken label carries the same allocated percentages as the visible
   // ones, so a screen-reader user hears a row that sums to 100% too. Rounding
   // each share independently here read out a total other than 100% on about
   // one row in nine (5% of them above 100). Measured; see
   // lib/barrierRace.test.ts for the sweep.
-  const spoken = weightPercents(o);
+  const shares = weightPercents(o);
+  const segments: Array<[string, number, string]> = [
+    [styles.swatchTarget, shares[0], 'Target first'],
+    [styles.swatchStock, shares[1], 'Stock stop first'],
+    [styles.swatchPremium, shares[2], 'Premium stop first'],
+    [styles.swatchNeither, shares[3], 'Neither'],
+  ];
   return (
     <div
       className={styles.bar}
       role="img"
       aria-label={
         `${(o.targetPct * 100).toFixed(0)}% target: `
-        + segments.map(([, , label], i) => `${label} ${spoken[i]}%`).join(', ')
+        + segments.map(([, pct, label]) => `${label} ${pct}%`).join(', ')
       }
     >
-      {segments.map(([cls, v, label]) => (
-        v > 0 ? (
+      {segments.map(([cls, pct, label]) => (
+        pct > 0 ? (
           <span
             key={label}
             className={`${styles.segment} ${cls}`}
-            // toFixed, not `v * 100`: 0.14 * 100 is 14.000000000000002 in
-            // binary floating point, and that tail ends up in the rendered
-            // style attribute verbatim.
-            style={{ width: `${(v * 100).toFixed(4)}%` }}
+            // Whole percentages from the helper, so no binary-float tail can
+            // reach the rendered style attribute.
+            style={{ width: `${pct}%` }}
             data-testid={`segment-${label}`}
           />
         ) : null

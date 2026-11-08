@@ -37,8 +37,12 @@ for (const theme of ['dark', 'light']) {
     await scores.focus();
     await page.keyboard.press('Enter');
     await expect(scores).toHaveAttribute('aria-expanded', 'true');
+    // #577: Fundamental Health sits beneath Market Sentiment, above the
+    // selected stock/contract identity and therefore above the scores.
     const health = page.getByText('Fundamental Health — no data');
-    expect((await scores.boundingBox())!.y).toBeLessThan((await health.boundingBox())!.y);
+    const identity = page.getByRole('region', { name: 'Selected stock and contract' });
+    expect((await health.boundingBox())!.y).toBeLessThan((await identity.boundingBox())!.y);
+    expect((await health.boundingBox())!.y).toBeLessThan((await scores.boundingBox())!.y);
     const stockEvidence = page.getByRole('button', { name: /Captured stock scoring evidence/ });
     await expect(stockEvidence).toHaveAttribute('aria-expanded', 'false');
     const captured = page.getByText(/Captured AAPL evidence/);

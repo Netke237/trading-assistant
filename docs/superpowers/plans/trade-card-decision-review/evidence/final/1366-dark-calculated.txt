@@ -1,0 +1,551 @@
+Skip to content
+BAMENDJOU
+Options Screener
+Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 8 · 14:21
+COMPLETED · STARTED NOV 8 · 14:21
+PENDING
+CLOSED
+·
+opens Mon 15:30 CET
+Config OK · 10 checks
+Market Regime
+Universe
+Direction + Horizon
+Stock Ranking
+Vol + Events
+Contracts
+7
+Trade Card
+← Exit Workflow
+COMPLETED
+14:21
+Options
+Stocks
+Pre-Breakout
+STEP 7 OF 7
+Trade Card
+How this page works
+Market Sentiment
+Swing · Daily
+Conviction
++73%
+Bullish — Measured market context for this horizon.
+State Bullish · sticky 73% · ≈12 strides
+Alignment
+OMM/HMM Aligned
+Fundamental Health
+74
+Strong quality · Low risk
+Growth
+80
+Quality
+75
+Risk
+65
+High debt
+Score definitions & safety flags
+← Prev
+AAPL
+1 / 2
+Next →
+☆ Pin to basket
+BASKET — empty
+📈
+AAPL
+Apple Inc.
+$185.20
+PASS
+BULLISH
+Selected contract
+$185 Call
+Expires 18 Dec 2026
+Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.
+Stock score 82/100 · PASS
+Backtested confidence: 72%
+AAPL|185|2026-12-18|C
+Contract score 78/100 · PASS
+$2.15 mid / share · 75d DTE · $215 CaR
+Contract Details
+Contract snapshot
+STRIKE
+$185
+EXPIRY
+2026-12-18
+RIGHT
+Call
+MID
+$2.15
+Δ
+0.52
+Θ / DAY
+$-0.05
+IV
+42.0%
+DTE
+75d
+CAR
+$215
+ALTERNATIVES (1)
+▼
+Stock & contract scores
+▸
+Order inputs & risk budget
+Execution fields are separate from calculated and simulated results. Premium stop is a loss amount per share; a simulated option stop is an exit-price threshold.
+Order Entry
+Order type
+Limit
+Limit
+$2.10
+Max fill
+$2.20
+Contracts
+1
+Exit Plan
+Invalidation
+$180.00
+Premium stop
+$1.29
+(GLOBAL 60%)
+Time exit
+3 DTE
+ALERT WHEN 3 OR FEWER CALENDAR DAYS REMAIN UNTIL EXPIRY — NOT 3 DAYS AFTER ENTRY, AND NOT AN AUTOMATIC CLOSE.
+Premium basis
+$2.15/share · live mid
+Premium-loss %
+60%
+Loss per share
+$1.29/share
+Loss per contract (×100 shares)
+$129.00
+Loss for 1 entered contract
+$129.00
+Remaining option value per share
+$0.86/share
+Remaining option value per contract (×100 shares)
+$86.00
+Remaining option value for 1 entered contract
+$86.00
+ESTIMATES AT THE PREMIUM BASIS ABOVE, BEFORE COSTS; NOT A MODEL PRICE OR A FILL.
+How these exit settings are resolved
+Trade loss budget & sizing
+MAX LOSS BUDGET
+$3,750 (account default)
+Set trade loss budget
+Entered quantity
+1 contract
+Full-premium exposure
+$215
+SCAN MID × ENTERED CONTRACTS × 100; THIS SNAPSHOT EXPOSURE DOES NOT USE THE EDITABLE LIMIT OR LIVE QUOTE.
+Arithmetic stop-loss estimate
+$150.00
+FOR ENTERED QUANTITY, USING SCAN MID AND THE RETURNED ARITHMETIC CONTRACT VALUE AT ITS CALCULATION STOP. SAME BASIS AS RECOMMENDED SIZE; SEPARATE FROM EXECUTION STOPS, TODAY'S STOP-COST CHECK AND RACE MEDIAN-DAY LOSS.
+THE LOSS BUDGET AFFECTS RECOMMENDED SIZE, NOT TARGET PROBABILITY. APPLY SIZE EXPLICITLY; ESTIMATED STOP LOSS DOES NOT BOUND FULL-PREMIUM RISK.
+RISK-DERIVED SIZE: 25 CONTRACTS (25.00 EXACT)
+Apply
+Structure & Stops
+Calculation geometry
+Execution stock invalidation
+$180.00
+Calculation does not replace your execution stock invalidation. Edit it in Order inputs & risk budget.
+Bottom (final stop)
+Price
+$180.00
+Stop source, ATR and structure detail
+CALCULATED THIS SESSION · 14:21; REFERENCE STOCK PRICE $185.20.
+Arithmetic contract value at stop
+$0.65/share
+Arithmetic stop pricing
+Heston repriced
+Arithmetic structural confidence
+75%
+ARITHMETIC CONTRACT ESTIMATE; SEPARATE PRICING BASIS FROM THE STOP-COST CHECK BELOW.
+Check structure
+STANDALONE STRUCTURAL CHECK REFRESHED THIS SESSION; INDEPENDENT OF THE FINAL STRUCTURAL/ATR STOP ABOVE.
+Structural check stock reference
+$185.20
+Structural confidence
+75%
+Structural stop — Order Block
+$180.00 (2.8% away)
+MAX LOSS IF THE STOP IS HIT
+CAUTION · 70% OF PREMIUM · $0.65/SHARE LEFT
+Estimated premium remaining per share
+$0.65/share
+Premium loss per share
+$1.50/share
+Estimated loss per contract
+$150 per contract — of the $215 premium, $65 left
+Estimated loss for 1 entered contract
+$150
+SELECTED CONTRACT ONLY (AAPL|185|2026-12-18|C), USING ENTERED QUANTITY × 100 SHARES PER CONTRACT, BEFORE COSTS. THIS IS NOT WHOLE-SPREAD RISK.
+STOP-COST SOURCE: ARITHMETIC CALCULATION STOP.
+$2.15 premium − $0.65 at $180.00 = $1.50 of $2.15 premium · Black-Scholes, priced today
+Profit-target methods
+Show side by side
+Arithmetic
+Monte Carlo
+Fixed % Ladder
+SHOWING OR COMPARING METHODS IS DISPLAY ONLY: IT DOES NOT RUN A CALCULATION, CHOOSE THE FINAL RECOMMENDATION METHOD OR CHANGE THE ORDER AND EXIT FIELDS. EACH CARD KEEPS ITS OWN SOURCE, VALUATION BASIS AND FRESHNESS; THE METHODS ARE INDEPENDENT AND CAN DISAGREE.
+Arithmetic Profit Target
+Bullish
+Selected strike / right
+$185.00 Call
+Latest calculation-input stock reference
+$185.20
+Calculation premium used
+$2.15/share
+STORED CALCULATION STOCK ENTRY: UNAVAILABLE IN THE RETURNED PLAN. THE REFERENCE ABOVE IS THE SCAN OR LATEST CALCULATION INPUT; CHECK STRUCTURE CAN ALSO REFRESH IT.
+1 ENTERED CONTRACTS × 100 SHARES · SELECTED-CONTRACT FULL EXIT. ESTIMATED DOLLAR OUTCOME = (RETURNED OPTION PREMIUM − CALCULATION'S ECHOED PREMIUM) × QUANTITY × 100, FROM DISPLAYED CENT-ROUNDED PRICES, BEFORE COMMISSIONS; NOT A FILL OR GUARANTEED PROFIT.
+RISK REFERENCE: SELECTED-CONTRACT FULL PREMIUM; STOP-LOSS SIZING REMAINS SEPARATELY SHOWN WITH ITS SCAN-MID BASIS IN ORDER INPUTS & RISK BUDGET. RATIOS DESCRIBE STOCK GEOMETRY, NOT GUARANTEED OPTION R:R. INDEPENDENT OF THE OTHER PROFIT-TARGET METHODS ON THIS PAGE; THEY CAN DISAGREE. THE COMPUTED STOCK STOP IS SHARED BY EVERY RETURNED TARGET AND DOES NOT REPLACE EXECUTION INVALIDATION.
+Calculated stop (shared by every returned target)
+Calculated stock stop
+$180.00 · atr_widened
+Current-time stop-cost value at stop
+$0.65/share
+Current-time stop-cost loss
+$1.50/share
+CALCULATED THIS SESSION · 14:21.
+CURRENT-TIME STOP-COST: BLACK-SCHOLES AT THE CALCULATED STOP WITH TODAY'S DAYS TO EXPIRY (NO ELAPSED TIME), ON THE CALCULATION'S ECHOED PREMIUM, PER SHARE. IT IS A DIFFERENT BASIS FROM THE ARITHMETIC CONTRACT VALUE AT STOP IN STRUCTURE & STOPS AND FROM THE BARRIER RACE'S BARRIER-TIME REPRICING. THE CALCULATED STOP DOES NOT REPLACE THE EXIT PLAN'S EXECUTION INVALIDATION.
+Compute Arithmetic Plan
+2:1 target
+NO STRUCTURAL LEVEL FOUND AHEAD — NOTHING TO COMPARE AGAINST.
+Option premium
+$3.70
+Estimated dollar outcome
+$155.00
+Resolved stock target (used for valuation)
+$195.00
+Pricing model
+Heston repriced
+Probability before expiry
+50%
+Conditional median time
+~9 calendar days
+Original target, snap geometry and pricing
+3:1 target
+NO STRUCTURAL LEVEL FOUND AHEAD — NOTHING TO COMPARE AGAINST.
+Option premium
+$4.70
+Estimated dollar outcome
+$255.00
+Resolved stock target (used for valuation)
+$200.00
+Pricing model
+Heston repriced
+Probability before expiry
+40%
+Conditional median time
+~13 calendar days
+Original target, snap geometry and pricing
+Monte Carlo Profit Target
+MONTE CARLO ESTIMATE — INDEPENDENT OF THE OTHER PROFIT-TARGET METHODS ON THIS PAGE; THEY CAN DISAGREE.
+Selected strike / right
+$185.00 Call
+Scan stock reference
+$185.20
+Same-estimate echoed premium
+$2.15/share
+Editable order entry (separate basis)
+$2.10/share
+STORED MONTE CARLO RUN STOCK ENTRY: UNAVAILABLE IN THE SAVED CONTEXT. THE SCAN REFERENCE ABOVE IS NOT THE RUN'S STOCK-ENTRY SNAPSHOT.
+CAPTURED REQUEST PREMIUM: $2.15/SHARE; DOLLAR OUTCOMES USE THE SAME-ESTIMATE ECHOED CENT BASIS WHEN MATCHED.
+1 ENTERED CONTRACTS × 100 SHARES · SELECTED-CONTRACT FULL EXIT. ESTIMATED DOLLAR OUTCOME = (RETURNED OPTION PREMIUM − ESTIMATE PREMIUM BASIS) × QUANTITY × 100, USING DISPLAYED CENT-ROUNDED PRICES, BEFORE COSTS; NOT A FILL OR GUARANTEED PROFIT.
+GBM simulated stock paths · Black-Scholes option repricing.
+SIMULATION USES CALENDAR-DAY STEPS TO EXPIRY. CURRENT SELECTED-CONTRACT METADATA: 75 DTE; SAVED RUN DTE IS UNAVAILABLE IN THE STORED CONTEXT. PROBABILITY MEANS TARGET PREMIUM TOUCHED BEFORE EXPIRY, EVEN IF A STOP IS ALSO REACHED. MEDIAN TIME IS CONDITIONAL ON TARGET HITS, IN CALENDAR DAYS; INDEPENDENT TARGET PROBABILITIES CAN SUM PAST 100%.
+CURRENT INHERITED HOLDING/REPRICING SETTINGS (NOT SAVED RUN INPUTS): SWING; HOLD MINIMUM 5, MAXIMUM 15 TRADING DAYS. THESE ARE SEPARATE FROM THE EXPIRY SIMULATION HORIZON.
+Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.
+Simulation inputs (captured at Run)
+Companion race stock barrier
+$180.00 stock
+Companion race premium exit-value barrier
+$1.15/share
+SIMULATION INPUTS ARE WHAT THE LAST RUN RACED AGAINST, RESOLVED AT RUN: STOCK BARRIER = ARITHMETIC PLAN STRUCTURAL + ATR STOP (COMPUTED FOR THIS CONTRACT ON THIS VISIT), ELSE THE STRUCTURAL LEVEL, ELSE THE EXIT PLAN STOCK INVALIDATION; PREMIUM BARRIER = THE PREMIUM STOP FIELD WHEN YOU CHANGED IT TO A LOSS BELOW THE RUN'S PREMIUM, ELSE THE RISK-RULES DEFAULT PERCENTAGE. THEY CAN DIFFER FROM THE SETTINGS BELOW. MONTE CARLO NEVER COPIES ONE INTO THE OTHER; MOVING A BARRIER AFTER THE RUN HIDES THESE INPUTS AND THE RACE UNTIL YOU RE-RUN.
+Actual Exit Plan settings (not changed by Monte Carlo)
+Execution stock invalidation
+$180.00 stock
+Execution premium-stop loss amount
+$1.29/share · global 60%
+INDEPENDENT STOCK-STOP TOUCH PROBABILITY AND TIME REMAIN IN THE BARRIER RACE DISCLOSURE. T1/T2/T3 ARE EDITABLE OPTION-PROFIT PERCENTAGES, 1–500%; RUN ESTIMATES THE ENTERED TARGETS.
+T1
+%
+T2
+%
+T3
+%
+Run Monte Carlo Estimate
+T20%
+Option premium
+$2.58
+Estimated dollar outcome
+$43.00
+Stock-price equivalent (display approximation)
+$195.00
+Structural level found
+$180.00
+Probability before expiry
+50%
+Conditional median time
+~7 calendar days
+T35%
+Option premium
+$2.90
+Estimated dollar outcome
+$75.00
+Stock-price equivalent (display approximation)
+$199.00
+Structural level found
+$180.00
+Probability before expiry
+40%
+Conditional median time
+~10 calendar days
+T50%
+Option premium
+$3.22
+Estimated dollar outcome
+$107.00
+Stock-price equivalent (display approximation)
+$203.00
+Structural level found
+$180.00
+Probability before expiry
+30%
+Conditional median time
+~13 calendar days
+EACH PROBABILITY ABOVE IS MEASURED ON ITS OWN, SO THEY CAN SUM PAST 100% — A PATH THAT HITS THE TARGET AND LATER THE STOP IS COUNTED IN BOTH. THE BARRIER RACE CARD BELOW COUNTS EVERY PATH ONCE, FOR WHICHEVER BARRIER IT REACHED FIRST. THE INVALIDATION ROW MOVED THERE TOO, FOR THE SAME REASON.
+Fixed % Ladder Plan
+▾
+Sell-to-Close Plan
+FIXED-FORMULA LADDER — INDEPENDENT OF THE OTHER PROFIT-TARGET METHODS ON THIS PAGE; THEY CAN DISAGREE.
+Editable order entry (outcome and R:R basis)
+$2.10/share
+R/R RISK: FULL PREMIUM (NO PROTECTIVE STOP ORDER).
+Actual Exit Plan settings (shared, not Ladder calculations)
+Exit Plan stock invalidation
+$180.00 stock
+Exit Plan premium-stop option threshold
+$0.86/share
+SOURCE: SHARED EXIT PLAN INVALIDATION FIELD — THE EXECUTION STOCK STOP, SET IN ORDER INPUTS & RISK BUDGET.
+SOURCE: SHARED EXIT PLAN PREMIUM STOP — PREMIUM BASIS $2.15/SHARE · LIVE MID MINUS LOSS $1.29/SHARE; THE OPTION VALUE AT WHICH THE PREMIUM-STOP ALERT FIRES.
+Ladder option value at stock stop
+Not calculated — the Ladder does not price its stock stop
+Ladder loss at stock stop
+Not calculated — the Ladder does not price its stock stop
+Stock-stop probability
+Not supplied
+Stock-stop time
+Not supplied
+SCAN-PLAN TARGETS AND STORED OPTION ESTIMATES. EDITED STOCK TARGETS USE THE EXISTING LOCAL APPROXIMATION; EDITING DOES NOT RUN A PRICING MODEL. RESTORED METHOD CHOICES ARE SHOWN IN THE FINAL RECOMMENDATION BELOW.
+DOLLAR OUTCOMES COMPARE EACH ALTERNATIVE EXIT WITH THE EDITABLE ENTRY LIMIT, USING DISPLAYED PREMIUMS ROUNDED TO CENTS. FULL-POSITION EXITS AND RUNG ALLOCATIONS ARE SEPARATE; DO NOT ADD ALTERNATIVE OUTCOMES.
+TP1
+PENDING
+Est. option (per share)
+$3.50
+Full-position outcome (1 contracts × 100 shares)
+$140.00
+Rung outcome (1 contracts × 100 shares)
+$140.00
+Stock price
+$194.25
+R:R
+0.7x
+Contracts
+1
+Probability before expiry
+Not supplied
+Conditional median time
+Not supplied
+SCAN/RESTORED PLAN TARGET AND STORED OPTION ESTIMATE
+BS REPRICED (IV-DERIVED)
+TP2
+PENDING
+Est. option (per share)
+$4.20
+Full-position outcome (1 contracts × 100 shares)
+$210.00
+Rung outcome (1 contracts × 100 shares)
+$210.00
+Stock price
+$195.00
+R:R
+1.0x
+Contracts
+1
+Probability before expiry
+Not supplied
+Conditional median time
+Not supplied
+SCAN/RESTORED PLAN TARGET AND STORED OPTION ESTIMATE
+BS REPRICED (IV-DERIVED)
+Barrier Race
+SAME SIMULATION AS THE MONTE CARLO CARD ABOVE, READ DIFFERENTLY: EVERY PATH IS ATTRIBUTED TO WHICHEVER BARRIER IT REACHED FIRST. IT PROPOSES NO LEVEL OF ITS OWN.
+The three barriers
+SIMULATION INPUTS, CAPTURED WHEN THE ESTIMATE RAN — NOT THE EXIT PLAN'S SETTINGS. THEY ARE NEVER COPIED INTO THE EXIT PLAN; IF A BARRIER'S CURRENT VALUE MOVES AFTER THE RUN, THIS RACE IS CLEARED UNTIL YOU RE-RUN.
+BARRIER	LEVEL	HOW IT IS SET	ARMED
+Profit target	per row below	Your T1/T2/T3 % of premium	exit, not a stop
+Stock stop	$180.00 stock	Structural level, or structural + ATR once an Arithmetic Plan has run	yes — whichever fires first
+Premium stop	$1.15 option	stops out after losing ~47% of premium — the default, because no per-trade premium stop is set above	yes — whichever fires first
+STOCK-STOP INPUT PRECEDENCE AT RUN TIME: THE ARITHMETIC PLAN'S STRUCTURAL + ATR STOP WHEN IT WAS COMPUTED FOR THIS CONTRACT ON THIS VISIT, ELSE THE STRUCTURAL LEVEL (FROM CHECK STRUCTURE OR FETCHED BY THE RUN ITSELF), ELSE THE EXIT PLAN'S STOCK INVALIDATION. THE PREMIUM-STOP INPUT IS THE EXIT PLAN'S PREMIUM STOP ONLY WHEN YOU CHANGED THAT FIELD; OTHERWISE THE BACKEND'S OWN PREMIUM-STOP PERCENTAGE APPLIES, AS THE ROW ABOVE SAYS.
+STOCK-STOP VALUE AT BARRIER TIME, PER SHARE (SAME FOR EVERY TARGET): $2.15 PREMIUM - $0.65 AT THE STOP (REPRICED AT 10D — THE MEDIAN DAY ANY PATH REACHES THE STOP) = $1.50
+MEASURED ON ITS OWN, 30% OF PATHS TOUCH THE STOCK STOP AT SOME POINT (MEDIAN ~10D) — IGNORING WHETHER THE PREMIUM STOP HAD ALREADY FIRED. THE ATTRIBUTION BELOW IS THE HONEST VERSION: THE GAP BETWEEN THE TWO IS HOW OFTEN YOU WERE STOPPED OUT ON PREMIUM BEFORE THE STOCK EVER GOT THERE.
+Which barrier is reached first
+1 ENTERED CONTRACTS × 100 SHARES · SELECTED-CONTRACT FULL EXIT. ESTIMATED DOLLAR OUTCOME USES THE RETURNED TARGET REWARD PER SHARE, IN THE SAME CENTS AS THE RISK / R:R / EDGE ARITHMETIC, × QUANTITY × 100, BEFORE COMMISSIONS; NOT A FILL OR GUARANTEED PROFIT. EACH ROW IS AN ALTERNATIVE EXIT.
+TARGET FIRST
+STOCK STOP FIRST
+PREMIUM STOP FIRST
+NEITHER, HELD TO EXPIRY
+TARGET / OPTION	SPLIT	TARGET FIRST	STOCK STOP	PREMIUM STOP	NEITHER	MEDIAN TO TARGET	R:R VS STOCK STOP	EDGE / CONTRACT
+
+20%
+$2.58
+ESTIMATED DOLLAR OUTCOME
+$43.00
+Use target
+
+	40%	20%	30%	10%	~7d	0.29x	-$30.00
+
+35%
+$2.90
+ESTIMATED DOLLAR OUTCOME
+$75.00
+Use target
+
+	40%	20%	30%	10%	~10d	0.50x	-$30.00
+
+50%
+$3.22
+ESTIMATED DOLLAR OUTCOME
+$107.00
+Use target
+
+	40%	20%	30%	10%	~13d	0.72x	-$30.00
+2,000 PATHS · EACH ROW SUMS TO 100%
+MEDIANS ARE CONDITIONAL ON THE OUTCOME
+STOCK STOP REPRICED ONCE (TOUCH MEDIAN OR FALLBACK DAY)
+IV UNCHANGED AT THE BARRIERS
+EDGE BEFORE COMMISSIONS
+Stop medians, full risk / R:R / edge arithmetic and explanations
+Final Recommendation
+Exit method for this trade
+Ladder
+2 TARGETS
+Arithmetic
+2 TARGETS
+Monte Carlo
+3 TARGETS
+Barrier Race
+3 TARGETS
+JUDGED ON
+Stock stop
+Premium stop
+A RECORD OF WHICH STOP THIS TRADE WAS JUDGED ON. IT DOES NOT CHANGE WHICH ALERTS FIRE — THE STOCK STOP AND THE PREMIUM STOP BOTH KEEP FIRING EXACTLY AS THEY DO TODAY.
+Final Status
+PASS
+Latest calculation
+Choosing a method records your decision; it does not run a calculation or apply its values to the order and exit fields.
+Chosen method
+Not selected — latest-calculation fallback is not a choice
+Applicable quantity
+1 entered contracts × 100 shares; selected-contract full exit
+Submission review
+DRAFT GENERATION 3
+The values Track basket and the direct sends submit for this card, from the same request they send. Changing the contract, quantity, entry, an exit setting or the selection replaces this draft.
+Order and contract (execution inputs)
+Contract
+AAPL 185C 12/18/26 · AAPL|185|2026-12-18|C
+Quantity
+1 contracts × 100 = 100 shares
+Entry limit
+$2.10/share · plan order type Limit · Place Limit posts it; Right Now — Market posts no limit
+Entry basis sent
+$2.15/share · live mid — provisional; the server re-quotes at save (not a fill)
+Actual exit settings (submitted)
+Stock stop
+$180.00 stock · plan-derived (the server re-anchors it to the live price)
+Premium stop
+Global 60% of the saved entry — no dollar amount sent; the server resolves it against the fill
+Structural stop
+$180.00 stock (record)
+Max-loss override
+None
+Time exit
+3 DTE — app-wide rule, not a per-position field
+Arithmetic plan attached
+Yes — computed 2026-11-08T13:21:45.514Z; its stop is a calculation result and is not applied
+Recorded selection (not applied to the settings)
+Method
+Not selected — sending is blocked until one is chosen
+Recorded stock target
+None sent
+Recorded option target
+None
+Judged on
+Not recorded
+Target alert
+Intended basis
+No method recorded
+Effective target alert
+Unresolved until server review
+Saved entry, quantity and premium-stop fraction
+Unresolved until server review — the server re-quotes, applies the exposure check and derives the fraction at save
+SENDING STAYS BLOCKED UNTIL A METHOD IS CHOSEN.
+Destinations
+Track basket
+Portfolio row only — no broker order · stored as AAPL|185|2026-12-18|C
+Place Limit
+Select a paper broker
+Right Now — Market
+Select a paper broker
+A DIRECT SEND RE-FETCHES THE OPTION QUOTE WHEN CLICKED; ITS ENTRY BASIS AND PREMIUM-STOP FRACTION THEN USE THAT QUOTE, AND THIS REVIEW REFRESHES TO IT. IF THE SERVER REDUCES THE QUANTITY TO FIT EXPOSURE LIMITS, THE ORDER IS SENT AT THE SAVED QUANTITY.
+PROBABILITIES, TIMES AND ESTIMATED VALUES IN THE FINAL RECOMMENDATION ARE CALCULATION RESULTS; THEY ARE NOT SUBMITTED.
+computed via: Monte Carlo, 14:21
+T20%
+$2.58 (50%)
+T35%
+$2.90 (40%)
+T50%
+$3.22 (30%)
+Armed stop (whichever fires first)
+$1.15 option / $180.00 stock
+T20% edge
+-$30.00 at 0.29x
+T35% edge
+-$30.00 at 0.50x
+T50% edge
+-$30.00 at 0.72x
+EDGE IS PER CONTRACT, BEFORE COMMISSIONS, AND ASSUMES IV IS UNCHANGED WHEN A BARRIER IS REACHED. SEE THE BARRIER RACE CARD FOR THE FULL ARITHMETIC.
+Track basket
+View chart
+Export JSON
+REC-1794144103673-76MW
+Live mid: $2.15Live stock: $185.20
+Decision and execution
+Execute via
+IBKR Paper
+Tradier Paper
+NOT CONFIGURED
+Tastytrade Paper
+NOT CONFIGURED
+←
+Back: Contracts
+STEP 7 OF 7
+Done
+→
+PRE-TRADE CHECKLIST · AAPL
+Gates for this candidate. Portfolio-level checks live below.
+IV acceptable
+Score ≥ 55
+R:R ≥ 2.0
+Spread < 5% of price
+HISTORICAL ANALOGS
+Not yet available.
+WATCHLIST · TOP 5
+PORTFOLIO
+Positions
+0
+Deployed
+$0
+Open P&L
+$0
+Winners
+0 / 0
