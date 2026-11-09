@@ -117,7 +117,9 @@ export interface DirectRoute {
   orderType: 'LMT' | 'MKT';
   position: Readonly<UnstampedPosition>;
   order: Readonly<OptionOrderRequest>;
-  /** A broker refusal known before sending (e.g. Tastytrade paper refuses MKT). */
+  /** A refusal known before sending: the contract has no supplied expiry
+   *  (`directExpiryBlock`), else a broker refusal (e.g. Tastytrade paper
+   *  refuses MKT). The page refuses a blocked route before anything is sent. */
   blocked: string | null;
 }
 
@@ -337,8 +339,35 @@ function trackingRequest(i: SubmissionInputs): UnstampedPosition {
   };
 }
 
+/** The selected contract's SUPPLIED expiry, or null when it has none: missing
+ *  `contractDetails`, or an expiry that is null, undefined, empty or blank. A
+ *  supplied non-blank value is returned exactly as given (no trimming). */
+function suppliedExpiry(card: TradeCardData): string | null {
+  const expiry: unknown = card.contractDetails?.expiry;
+  return typeof expiry === 'string' && expiry.trim() !== '' ? expiry : null;
+}
+
+/** #591 (DIRECT-SEND-EXPIRY-PLACEHOLDER) — why a direct send (Place Limit or
+ *  Right Now — Market) is refused for this card's contract expiry, or null.
+ *
+ *  A direct send's position carries the contract's expiry, which the local
+ *  Portfolio row keeps (the save body sends the contract id, not this field)
+ *  and DTE, the time-exit alert and P/L horizons read. With no supplied expiry the
+ *  send is REFUSED: nothing is inferred from a default DTE or a display label.
+ *  The same helper feeds `DirectRoute.blocked` (the review) and the page's
+ *  send preflight, which runs before any quote, preview, save or order. */
+export function directExpiryBlock(card: TradeCardData): string | null {
+  return suppliedExpiry(card) == null
+    ? 'This contract has no expiry date — reselect the contract in Step 6 before sending.'
+    : null;
+}
+
 /** A direct send's position — formerly the page's `buildPaperPosition`, with
- *  the order id 'pending' it was always called with before the save. */
+ *  the order id 'pending' it was always called with before the save.
+ *
+ *  #591 — with no supplied expiry the route is blocked (`directExpiryBlock`)
+ *  and this position carries an EMPTY expiry, which is never submitted; it
+ *  never carries a made-up date. */
 function directPosition(i: SubmissionInputs, orderType: 'LMT' | 'MKT', broker: string): UnstampedPosition {
   const card = i.card;
   const cd = card.contractDetails;
@@ -351,7 +380,7 @@ function directPosition(i: SubmissionInputs, orderType: 'LMT' | 'MKT', broker: s
     contract:      optionSymbolFor(card),
     direction:     card.direction,
     entryDate:     null,
-    expiry:        cd?.expiry ?? '2026-12-31',
+    expiry:        suppliedExpiry(card) ?? '',
     dteRemaining:  dte,
     dteTotal:      dte,
     entryPrice:    mid,
@@ -433,7 +462,8 @@ export function buildSubmissionDraft(inputs: SubmissionInputs, options: Submissi
     orderType,
     position: directPosition(inputs, orderType, broker),
     order: orderRequest(inputs, orderType, broker),
-    blocked: directOrderBlock(orderType, broker),
+    // A missing expiry is refused first; a valid one keeps the broker-type refusal.
+    blocked: directExpiryBlock(card) ?? directOrderBlock(orderType, broker),
   });
   const direct = options.broker
     ? { broker: options.broker, brokerLabel: brokerLabelFor(options.broker), limit: route('LMT', options.broker), market: route('MKT', options.broker) }

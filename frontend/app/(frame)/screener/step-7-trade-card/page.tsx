@@ -45,7 +45,7 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { premiumStopDollarToSend, premiumStopDropText, type PremiumStopDropReason } from '@/lib/premiumStop';
 import { useSettingsStore } from '@/lib/settingsStore';
 import {
-  buildSubmissionDraft, stampPosition, optionSymbolFor, submissionToken, submissionDifferences,
+  buildSubmissionDraft, directExpiryBlock, stampPosition, optionSymbolFor, submissionToken, submissionDifferences,
   type SubmissionDraft, type SubmissionInputs,
 } from '@/lib/submissionDraft';
 import {
@@ -1079,7 +1079,10 @@ export default function Step7Page() {
     // per order.
     setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
     const broker = selectedBroker;
-    const blocked = directOrderBlock(orderType, broker);
+    // #591 — the same refusal the draft's `DirectRoute.blocked` shows: a
+    // contract with no supplied expiry is refused here, before the quote probe,
+    // the server preview, the save and the order. Never a made-up expiry.
+    const blocked = directExpiryBlock(card) ?? directOrderBlock(orderType, broker);
     if (blocked) { setOrderError(blocked); return; }
     // A refresh of an open review for the same contract keeps its recId: nothing
     // was saved under it, and the saved-row identity stays stable to the send.
@@ -1185,6 +1188,10 @@ export default function Step7Page() {
     if (earningsGateFor(card, scanResult?.timestamp, earningsVetoDays).veto) return;
     if (!checkInvalidation(invalidationFor(card))) return;
     if (!checkMethodPick(methodPickFor(card))) return;
+    // #591 — belt and braces beside the staleness check: no save without a
+    // supplied expiry on the card being sent.
+    const expiryBlocked = directExpiryBlock(card);
+    if (expiryBlocked) { setOrderError(expiryBlocked); return; }
     const { orderType, label, brokerLabel, pos, contracts, request } = review;
     const recId = pos.recId;
     setOrderError(null); setSaveNotes([]); setBasketNotes([]); setBasketError(null);
