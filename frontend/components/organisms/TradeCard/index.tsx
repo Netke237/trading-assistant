@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Text, Data } from '@/components/primitives';
+import { Text, Data, Title } from '@/components/primitives';
 import { SymbolHeader } from '@/components/molecules/SymbolHeader';
 import { CollapsibleSection } from '@/components/molecules/CollapsibleSection';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
@@ -2602,9 +2602,10 @@ export function TradeCard({
 
       <div className={styles.grid}>
 
-            <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Exit Plan">
-              <Text size={14} weight={600}>Exit Plan</Text>
-              <dl className={styles.kvList}>
+        <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Exit Plan" id="exit-plan">
+          <Title as="h2" size={20}>Exit Plan</Title>
+          <div className={styles.exitEssentials}>
+            <div className={styles.exitColumn}>
                 <EditableKV
                   label="Invalidation"
                   value={overlay.invalidation}
@@ -2629,6 +2630,9 @@ export function TradeCard({
                     </Text>
                   </div>
                 )}
+              <Text size={12} tone="dim">Stock price · execution invalidation</Text>
+            </div>
+            <div className={styles.exitColumn}>
                 {premiumStopReadOnly ? (
                   // P2-24 / R3-2 / decision Q-P2-2: a stop the user already typed
                   // is KEPT and shown as pinned (and still sent); an untouched
@@ -2670,33 +2674,36 @@ export function TradeCard({
                     )}
                   </>
                 )}
-                {/* P2-03 (decision Q8) -- the exit the alerts actually make: an
-                    option position raises TIME_STOP at TIME_STOP_DTE days to
-                    expiry (alertEngine.ts, alert_generator.py). The plan's own
-                    `timeStopDays` fires nothing and is no longer shown. */}
-                <KV label="Time exit" value={`${TIME_STOP_DTE} DTE`} mono />
-                <div>
-                  <Text size={10} tone="dim">
-                    {`Alert when ${TIME_STOP_DTE} or fewer calendar days remain until expiry — not ${TIME_STOP_DTE} days after entry, and not an automatic close.`}
-                  </Text>
-                </div>
-              </dl>
-              {/* #578 — what the Premium stop above means in units, on the
-                  field's own basis. Read-only results: plain KV rows, never the
-                  editable affordance. */}
+              <Text size={12} tone="dim">Loss amount per option share</Text>
               <div className={styles.exitPremiumValues} role="group" aria-label="Premium-loss values">
-                <KV label="Premium basis" value={exitPremium.basis} mono />
-                <KV label="Premium-loss %" value={exitPremium.pct} mono />
-                <KV label="Loss per share" value={exitPremium.lossShare} mono />
-                <KV label="Loss per contract (×100 shares)" value={exitPremium.lossContract} mono />
-                <KV label={`Loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.lossQuantity} mono />
-                <KV label="Remaining option value per share" value={exitPremium.remainingShare} mono />
-                <KV label="Remaining option value per contract (×100 shares)" value={exitPremium.remainingContract} mono />
-                <KV label={`Remaining option value for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.remainingQuantity} mono />
-                <Text size={10} tone="dim">Estimates at the premium basis above, before costs; not a model price or a fill.</Text>
+                <div className={styles.exitReadouts}>
+                  <KV label="Premium-loss %" value={exitPremium.pct} mono />
+                  <KV label="Remaining option value per share" value={exitPremium.remainingShare} mono />
+                  <KV label="Loss per contract (×100 shares)" value={exitPremium.lossContract} mono />
+                  <KV label="Remaining option value per contract (×100 shares)" value={exitPremium.remainingContract} mono />
+                </div>
+                <details className={styles.methodDetails}>
+                  <summary>Premium basis & quantity breakdown</summary>
+                  <dl className={styles.kvList}>
+                    <KV label="Premium basis" value={exitPremium.basis} mono />
+                    <KV label="Loss per share" value={exitPremium.lossShare} mono />
+                    <KV label={`Loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.lossQuantity} mono />
+                    <KV label={`Remaining option value for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.remainingQuantity} mono />
+                  </dl>
+                  <Text size={10} tone="dim">Estimates at the premium basis above, before costs; not a model price or a fill.</Text>
+                </details>
               </div>
-              <details className={styles.methodDetails}>
-                <summary>How these exit settings are resolved</summary>
+            </div>
+            <div className={styles.exitColumn}>
+              <div className={styles.exitTime}>
+                <Text size={12} tone="secondary">Time exit</Text>
+                <Data size={24} weight={500}>{`${TIME_STOP_DTE} days to expiry`}</Data>
+              </div>
+              <Text size={12} tone="dim">{`Alert at ≤${TIME_STOP_DTE} DTE · no automatic close`}</Text>
+            </div>
+          </div>
+          <details className={styles.methodDetails}>
+            <summary>How these exit settings are resolved</summary>
                 <Text size={10} tone="dim">
                   Invalidation is the editable execution stock stop. The scan supplies a structural/ATR stop
                   (or legacy fallback); an Arithmetic calculation does not automatically replace this field.
@@ -2716,17 +2723,17 @@ export function TradeCard({
                 <Text size={10} tone="dim">
                   {`The time exit is the alert engine's TIME_STOP for an open option position at ${TIME_STOP_DTE} or fewer days to expiry. It closes nothing by itself, and the plan's own time-stop days fire nothing and are not shown.`}
                 </Text>
-              </details>
-            </section>
-
+            <Text size={10} tone="dim">
+              {`Alert when ${TIME_STOP_DTE} or fewer calendar days remain until expiry — not ${TIME_STOP_DTE} days after entry, and not an automatic close.`}
+            </Text>
+          </details>
+          <details className={styles.methodDetails}>
+            <summary>Structure evidence · ATR, pricing & Check structure</summary>
         <section aria-label="Structure & Stops" className={styles.structureSection}>
           <div className={styles.scoreCardHeader}>
             <Text size={14} weight={600}>Structure &amp; Stops</Text>
             <Text size={11} tone="secondary">Calculation geometry</Text>
           </div>
-          <dl className={styles.kvList}>
-            <KV label="Execution stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)}` : 'Not computed — re-run the scan'} mono />
-          </dl>
           <Text size={11} tone="dim">Calculation does not replace your execution stock invalidation. Edit it in Exit Plan.</Text>
           {!exitPlan && (
             <div className={styles.targetsTable}>
@@ -2936,6 +2943,9 @@ export function TradeCard({
             )}
           </div>
 
+        </section>
+
+          </details>
         </section>
 
         {/* TC-REVIEW-05 (#580) — the three profit-target methods in ONE results

@@ -780,16 +780,83 @@
   min-width: 0;
 }
 
-/* Keep stop geometry and its matched contract-cost check together across the card. */
+/* Shared execution settings stay prominent; calculation evidence expands below. */
+.exitEssentials {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.exitColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.exitColumn > .kvRow,
+.exitTime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.exitColumn > .kvRow > .editValue,
+.exitColumn > .kvRow > .editValue > span,
+.exitColumn > .kvRow > span:nth-child(2),
+.exitColumn > .kvRow > .editInput {
+  font-size: 24px;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.exitColumn > .kvRow > .editInput {
+  height: 40px;
+}
+
+.exitReadouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.exitReadouts > .kvRow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.exitReadouts > .kvRow > :nth-child(2) {
+  font-size: 16px;
+}
+
+.exitPremiumValues > .methodDetails {
+  margin-top: var(--space-2);
+}
+
+.exitPremiumValues .kvList {
+  margin: var(--space-2) 0;
+}
+
+.exitPremiumValues .kvList > .kvRow {
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
 .structureSection {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+}
+
+@media (max-width: 760px) {
+  .exitEssentials {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
 }
 
 .stopLossFigures {

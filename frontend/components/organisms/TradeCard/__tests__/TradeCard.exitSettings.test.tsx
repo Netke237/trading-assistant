@@ -79,6 +79,48 @@ beforeEach(() => {
   (api.getContractQuote as jest.Mock).mockResolvedValue({ price: 5.2 });
 });
 
+describe('compact actual Exit Plan (D04/D05)', () => {
+  it('shows editable essentials and a readable expiry alert while quantity, basis and time prose start closed', () => {
+    renderCard(<TradeCard data={card()} contracts={2} />);
+    expect(exitPlan().getByLabelText('Edit Invalidation')).toBeVisible();
+    expect(exitPlan().getByLabelText('Edit Premium stop')).toBeVisible();
+    for (const label of ['Premium-loss %', 'Remaining option value per share', 'Loss per contract (×100 shares)']) {
+      expect(exitPlan().getByText(label)).toBeVisible();
+    }
+    expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
+    expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
+    for (const label of ['Premium basis', 'Loss for 2 entered contracts', 'Remaining option value for 2 entered contracts']) {
+      expect(exitPlan().getByText(label)).not.toBeVisible();
+    }
+    expect(exitPlan().getByText(/not 3 days after entry/i)).not.toBeVisible();
+    expect(api.getStructuralStop).not.toHaveBeenCalled();
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+  });
+
+  it('keeps all structure and pricing evidence inside the single Exit Plan, closed until requested', async () => {
+    renderCard(<TradeCard data={card({ exit: { ...card().exit, finalStop: FINAL_STOP } })} />);
+    const evidence = exitPlan().getByText('Structure evidence · ATR, pricing & Check structure').closest('details')!;
+    expect(evidence).not.toHaveAttribute('open');
+    const stops = within(evidence);
+    expect(stops.getByText('Bottom (final stop)')).not.toBeVisible();
+    expect(stops.getByText('Check structure')).not.toBeVisible();
+    fireEvent.click(within(evidence).getByText('Structure evidence · ATR, pricing & Check structure'));
+    expect(stops.getByText('Bottom (final stop)')).toBeVisible();
+    expect(api.getStructuralStop).not.toHaveBeenCalled();
+    fireEvent.click(stops.getByRole('button', { name: 'Check structure' }));
+    await waitFor(() => expect(stops.getByText('Structural check stock reference')).toBeVisible());
+    expect(stops.getByText(/Standalone structural check refreshed this session/)).toBeVisible();
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
+  });
+
+  it('keeps missing-invalidation and small-premium notices visible with disclosures closed', () => {
+    renderCard(<TradeCard data={card({ exit: { ...card().exit, invalidation: null } })} liveMid={0.01} />);
+    expect(exitPlan().getByText(/Invalidation stop required — Send to broker stays disabled/)).toBeVisible();
+    expect(exitPlan().getByText(/too small for a per-contract premium stop/)).toBeVisible();
+    expect(exitPlan().queryByLabelText('Edit Premium stop')).not.toBeInTheDocument();
+  });
+});
+
 describe('premium-loss values use the execution field basis', () => {
   it('live mid + untouched: global % on the live mid, per share / per contract / entered quantity', () => {
     render(<TradeCard data={card()} liveMid={1.0} contracts={2} />);
@@ -188,7 +230,9 @@ describe('premium-loss values use the execution field basis', () => {
 describe('time exit, warnings and disclosures', () => {
   it('explains 3 DTE as an alert at three or fewer days until expiry, read-only', () => {
     render(<TradeCard data={card()} />);
-    expect(exitPlan().getByText('3 DTE')).toBeVisible();
+    expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
+    expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
+    fireEvent.click(exitPlan().getByText('How these exit settings are resolved'));
     expect(exitPlan().getByText(/alert when 3 or fewer calendar days remain until expiry/i)).toBeVisible();
     expect(exitPlan().getByText(/not 3 days after entry/i)).toBeVisible();
     expect(exitPlan().getByText(/not an automatic close/i)).toBeVisible();
@@ -210,8 +254,9 @@ describe('time exit, warnings and disclosures', () => {
     expect(exitPlan().queryByText(/Invalidation stop required — Send to broker stays disabled/)).not.toBeInTheDocument();
   });
 
-  it('collapses stop source / ATR / structure detail but keeps the final stop price visible', () => {
+  it('keeps final stop and nested source details reachable in closed structure evidence', () => {
     render(<TradeCard data={card({ exit: { ...card().exit, invalidation: 169, finalStop: FINAL_STOP } })} />);
+    fireEvent.click(exitPlan().getByText('Structure evidence · ATR, pricing & Check structure'));
     const stops = within(screen.getByRole('region', { name: 'Structure & Stops' }));
     expect(stops.getByText('Bottom (final stop)')).toBeVisible();
     expect(stops.getByText('Price')).toBeVisible();

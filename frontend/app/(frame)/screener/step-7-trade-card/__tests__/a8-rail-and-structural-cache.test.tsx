@@ -220,6 +220,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
 
   it('does not restore a check made on one contract onto another contract of the same symbol', async () => {
     render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByText('Structure evidence · ATR, pricing & Check structure'));
     fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
     expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
 
@@ -245,6 +246,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
       }) as any);
     });
     render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByText('Structure evidence · ATR, pricing & Check structure'));
     fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
     expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
 
@@ -277,6 +279,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
       }) as any);
     });
     render(<Step7TradeCardPage />);
+    fireEvent.click(await screen.findByText('Structure evidence · ATR, pricing & Check structure'));
     fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
     expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Arithmetic' }));

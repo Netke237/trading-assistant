@@ -16,6 +16,9 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
   }
+  // Structure pricing scenarios explicitly inspect the preserved evidence.
+  const evidence = screen.queryByText('Structure evidence · ATR, pricing & Check structure');
+  if (evidence) fireEvent.click(evidence);
   return view;
 };
 
@@ -965,7 +968,7 @@ describe('TradeCard', () => {
     // P2-03 (decision Q8): the exit the alert actually makes, read-only.
     expect(screen.queryByLabelText('Edit Time exit')).not.toBeInTheDocument();
     expect(screen.getByText('Time exit')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 DTE')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 days to expiry')).toBeInTheDocument();
     expect(screen.queryByText('Time stop')).not.toBeInTheDocument();
     expect(screen.queryByText(`${mockTradeCard.exit.timeStopDays}d`)).not.toBeInTheDocument();
   });
@@ -2466,12 +2469,9 @@ describe('TradeCard', () => {
         render(<TradeCard data={withStop} />);
         expect(screen.queryByText(/Bottom \(final stop\) — not/)).not.toBeInTheDocument();
         expect(screen.getByText('Bottom (final stop)')).toBeInTheDocument();
-        // THREE TIMES: "Price" and "ATR-floor price" in this row -- the same
-        // number here precisely because the floor is what decided the stop,
-        // which is the case this fixture exists to render -- plus the Exit
-        // Plan's Invalidation (169.00 in this fixture), which is always
-        // visible since P2-21 moved it out of the collapsed ladder group.
-        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(3);
+        // Price and ATR floor match because the floor decided this stop.
+        // Execution invalidation remains visible once in the actual Exit Plan.
+        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(2);
         expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$169.00');
         // The LOSING candidate rides along: the row prints both levels and the
         // gap, so a reader can see the floor was what widened the stop.
@@ -3080,7 +3080,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     expect(section.getByText('Estimated loss for 2 entered contracts').parentElement).toHaveTextContent('$440');
     expect(section.getByText(/Selected contract only.*100 shares/)).toBeVisible();
     expect(section.getByText(/Calculation does not replace/)).toBeVisible();
-    expect(section.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
     expect(section.getByText(/\$4.00 premium − \$1.80 at \$178.50/)).toBeVisible();
     fireEvent.click(screen.getByLabelText('Edit Limit'));
     fireEvent.change(screen.getByLabelText('Edit Limit'), { target: { value: '8' } });
@@ -3294,7 +3294,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
     expect(stops.getByText('Arithmetic contract value at stop').parentElement).toHaveTextContent('$1.00/share');
     expect(stops.getByText('Stop-cost source: Arithmetic calculation stop.')).toBeVisible();
-    expect(stops.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
 
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.

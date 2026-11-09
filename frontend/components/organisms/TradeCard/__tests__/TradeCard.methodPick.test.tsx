@@ -585,6 +585,7 @@ describe('TC-UI-02 selected recommendation', () => {
       (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
         available: true, price: Number(value), source: 'swing_low', confidence: 60, distancePct: 8.6,
       });
+      fireEvent.click(screen.getByText('Structure evidence · ATR, pricing & Check structure'));
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
       await waitFor(() => expect(screen.getByText(/Barriers changed/)).toBeVisible());
     } else {
