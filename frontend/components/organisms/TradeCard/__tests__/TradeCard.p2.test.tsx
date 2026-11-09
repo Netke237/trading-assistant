@@ -59,13 +59,14 @@ describe('P2-19 -- the untouched Premium stop follows the live mid, not the stal
   it('scan mid 5.20, live 1.00, global 0.60 -> shows $0.60 (global 60%)', () => {
     render(<TradeCard data={card()} liveMid={1.0} />);
     expect(premiumRow()).toHaveTextContent('$0.60');
-    expect(screen.getByText('(global 60%)')).toBeInTheDocument();
+    // #610 G5 — the global indicator is the loss-% chip beside the field.
+    expect(screen.getByText('60% loss · global')).toBeInTheDocument();
   });
 
   it('no live mid -> the scan seed, with no global label', () => {
     render(<TradeCard data={card()} />);
     expect(premiumRow()).toHaveTextContent('$3.12');
-    expect(screen.queryByText(/\(global \d+%\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/· global/)).not.toBeInTheDocument();
   });
 
   it('a bare focus-and-blur writes nothing (premiumStop stays untouched)', () => {
@@ -85,7 +86,7 @@ describe('P2-19 -- the untouched Premium stop follows the live mid, not the stal
     fireEvent.change(input, { target: { value: '0.45' } });
     fireEvent.blur(input);
     expect(premiumRow()).toHaveTextContent('$0.45');
-    expect(screen.queryByText('(global 60%)')).not.toBeInTheDocument();
+    expect(screen.queryByText(/· global/)).not.toBeInTheDocument();
   });
 });
 

@@ -76,7 +76,9 @@ it('starts fresh scores folded and reveals both complete panels without replacin
   expect(screen.getByText('negative equity')).toBeVisible();
   fireEvent.click(toggle);
   fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
-  const section = within(screen.getByRole('region', { name: 'Selected stock and contract' }));
+  // #610 G4 — Contract Qualification follows Decision & execution, outside
+  // the identity; both panels are read from the whole card.
+  const section = within(document.body);
   const values = [85, 78, 72, 90, 65, 80, 66, 55, 75, 60];
   const labels = ['Trend', 'Pullback', 'Trigger', 'Event', 'Volatility', 'DTE fit', 'Delta', 'IV', 'Liquidity', 'Spread'];
   labels.forEach((label, index) => {

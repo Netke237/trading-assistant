@@ -16,8 +16,9 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
   }
-  // Structure pricing scenarios explicitly inspect the preserved evidence.
-  const evidence = screen.queryByText('Structure evidence · ATR, pricing & Check structure');
+  // Structure pricing scenarios explicitly inspect the preserved evidence,
+  // inside the Exit Plan's one explanation disclosure (#610 G5).
+  const evidence = screen.queryByText('Exit Plan explanation · stop basis, premium & time exit');
   if (evidence) fireEvent.click(evidence);
   return view;
 };
@@ -266,11 +267,15 @@ describe('TradeCard', () => {
     }
     expect(within(context).getByText('BUY')).toBeInTheDocument();
     expect(within(context).getByText('SELL')).toBeInTheDocument();
-    const alternatives = within(context).getByRole('button', { name: /ALTERNATIVES/ });
+    // #610 G4 — the alternatives follow Decision & execution, outside the
+    // identity, in the shared disclosure style.
+    const alternatives = screen.getByRole('button', { name: /Alternative contracts \(1\)/ });
+    expect(context).not.toContainElement(alternatives);
     expect(alternatives).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(alternatives);
-    expect(within(context).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
-    expect(within(context).getByText('0')).toBeInTheDocument();
+    const altSection = alternatives.closest('section')!;
+    expect(within(altSection).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
+    expect(within(altSection).getByText('0')).toBeInTheDocument();
   });
   it('renders symbol and company in header', () => {
     render(<TradeCard data={mockTradeCard} />);
@@ -283,7 +288,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
-  it('keeps Fundamental Health above identity and independent qualification panels within identity', () => {
+  it('keeps Fundamental Health above identity and the two independent qualification panels on the card', () => {
     render(<TradeCard data={mockTradeCard} />);
     const identity = screen.getByRole('region', { name: 'Selected stock and contract' });
     expect(identity.previousElementSibling).toHaveTextContent('Fundamental Health');
@@ -323,7 +328,9 @@ describe('TradeCard', () => {
     try {
       await act(async () => { await Promise.resolve(); });
       const outer = screen.getByRole('button', { name: /Stock Qualification/ });
-      const group = screen.getByRole('region', { name: 'Selected stock and contract' });
+      // #610 G4 — Stock Qualification is in the identity; Contract
+      // Qualification follows Decision & execution. Both are on the card.
+      const group = view.container;
       expect(outer).toHaveAttribute('aria-expanded', 'false');
       fireEvent.click(outer);
       fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));

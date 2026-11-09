@@ -602,7 +602,7 @@ describe('TC-UI-02 selected recommendation', () => {
       (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
         available: true, price: Number(value), source: 'swing_low', confidence: 60, distancePct: 8.6,
       });
-      fireEvent.click(screen.getByText('Structure evidence · ATR, pricing & Check structure'));
+      fireEvent.click(screen.getByText('Exit Plan explanation · stop basis, premium & time exit'));
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
       // #606: the race now sits in Monte Carlo's closed expansion; the stale
       // state stays visible on the Monte Carlo card itself.

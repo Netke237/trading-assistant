@@ -7,9 +7,9 @@
 .directNoteRemove { padding: 4px 12px; background: transparent; color: var(--reject); border: 1px solid var(--reject); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; }
 .directNoteRemove:disabled { opacity: .5; cursor: wait; }
 
+/* The summary row itself is the shared disclosure row (#610 G13,
+   styles/disclosure.module.css); this only sets the body's type. */
 .pageExplanation { font-size: 12px; color: var(--text-secondary); }
-.pageExplanation > summary { cursor: pointer; color: var(--accent); }
-.pageExplanation[open] > summary { margin-bottom: var(--space-2); }
 
 .presentationPage { min-width: 0; }
 

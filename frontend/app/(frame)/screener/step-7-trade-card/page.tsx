@@ -68,6 +68,7 @@ import {
 import styles from '../screener.module.css';
 import toastStyles from './toast.module.css';
 import paperStyles from './page.module.css';
+import disclosure from '@/styles/disclosure.module.css';
 import { BEARISH_UNVALIDATED_MESSAGE, isBearishUnvalidated } from '@/lib/unvalidated';
 import { earningsGateFor, scanVetoDays, EARNINGS_VETO_MESSAGE } from '@/lib/earningsGate';
 
@@ -1810,9 +1811,10 @@ export default function Step7Page() {
   return (
     <div className={`${styles.main} ${paperStyles.presentationPage}`}>
       <div className={styles.stepHeader}>
-        <Text size={11} tone="dim" weight={500}>STEP 7 OF 7</Text>
+        <Text size={11} tone="secondary" weight={500}>STEP 7 OF 7</Text>
         <Title as="h1" size={24}>Trade Card</Title>
-        <details className={paperStyles.pageExplanation}>
+        {/* #610 G2/G13 — the card's shared disclosure row, default closed. */}
+        <details className={`${paperStyles.pageExplanation} ${disclosure.disclosureRow}`}>
           <summary>How this page works</summary>
         <Text size={13} tone="secondary">
           Cycle candidates with Prev / Next. Pin multiple to the basket to track them in the Portfolio. Pinning

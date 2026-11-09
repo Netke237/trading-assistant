@@ -196,6 +196,19 @@ function readableExpiry(expiry: string): string {
   return `${day} ${EXPIRY_MONTHS[month - 1]} ${m[1]}`;
 }
 
+const EXPIRY_MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
+
+/** #610 G2 — the identity headline's expiry with the month written out
+ *  ("18 December 2026"), as in the frozen reference. Same validation as
+ *  `readableExpiry`; anything else is returned unchanged. */
+function readableExpiryLong(expiry: string): string {
+  const short = readableExpiry(expiry);
+  if (short === expiry) return expiry;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expiry) as RegExpExecArray;
+  return `${Number(m[3])} ${EXPIRY_MONTHS_LONG[Number(m[2]) - 1]} ${m[1]}`;
+}
+
 const rightLabel = (right: 'C' | 'P') => (right === 'C' ? 'Call' : 'Put');
 
 function structuralStopSourceLabel(source: 'order_block' | 'swing_low' | 'swing_high' | null | undefined): string {
@@ -1935,6 +1948,21 @@ export function TradeCard({
     globalPct: globalPremiumStopPct,
     contracts: overlay.contracts,
   });
+  // #610 G5 — the Exit Plan's compact readout: a loss-% chip beside the
+  // premium stop and two concise lines. String composition of the existing
+  // `exitPremium` values only — no figure is computed here.
+  const exitPctIsFigure = /^\d+(\.\d+)?%$/.test(exitPremium.pct);
+  const exitLossChip = (
+    <span className={styles.lossChip} data-exit-chip="">
+      <Text size={12} tone={exitPctIsFigure ? 'caution' : 'secondary'}>
+        {exitPctIsFigure ? `${exitPremium.pct} loss${showsGlobalOnLiveMid ? ' · global' : ''}` : exitPremium.pct}
+      </Text>
+    </span>
+  );
+  const exitRemainingLine = exitPremium.remainingContract.startsWith('$')
+    ? `Remaining: ${exitPremium.remainingShare} · ${exitPremium.remainingContract} / contract`
+    : `Remaining: ${exitPremium.remainingShare}`;
+  const exitLossLine = `Loss: ${exitPremium.lossContract}${exitPremium.lossContract.startsWith('$') ? ' / contract' : ''}`;
 
   /** Bounds for the Entry limit — the field this branch made into the order's
    *  `limit_price`.
@@ -2498,87 +2526,110 @@ export function TradeCard({
       {showFundamentalHealth && <FundamentalHealthCard f={data.fundamentals} compact />}
       {/* 1. Header */}
       <section className={styles.headerCard} aria-label="Selected stock and contract">
-        <div className={styles.headerRow}>
-          <SymbolHeader
-            ticker={data.symbol}
-            company={data.company}
-            price={data.price}
-            direction={data.direction}
-            status={data.status}
-            size={24}
-            showChartButton
-          />
-          {/* Card-level "edited" indicator (EDITED-FLAG-2026-09-04). A
-              READOUT, not a control: the schematic governs this card's
-              layout, and nothing here is clickable. It states only THAT the
-              card departs from the plan and WHICH fields — deliberately no
-              before/after numbers, which would be a second place for the
-              card's figures to disagree with the rest of it. */}
-          {editedLabels.length > 0 && (
-            <Tooltip
-              text={`Edited on this card, so it no longer matches the scan's plan: ${editedLabels.join(', ')}. Clearing a field's input restores the planned value.`}
-              align="right"
-              position="bottom"
-            >
-              <span className={styles.editedBadge}>
-                <Text size={11} weight={500} tone="caution">Edited</Text>
-              </span>
-            </Tooltip>
-          )}
-        </div>
-        {/* #608 (D10) — the final status belongs to the identity, not to a
-            results summary further down. */}
-        <div className={styles.identityStatus} data-identity="final-status">
-          <LabeledStatusBadge
-            label="Final Status"
-            status={data.finalStatus}
-            tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels."
-          />
-        </div>
-        {/* #577 — the contract, readable at a glance beside the symbol:
-            strike, call/put and an expiry that carries its year. A
-            multi-leg spread also names itself and every leg. The same
-            snapshot values stay in Contract Details and Spread Legs below. */}
-        <div role="group" aria-label="Contract identity" className={styles.contractHeadline}>
-          <Text size={11} tone="secondary">Selected contract</Text>
-          <div className={styles.contractHeadlineMain}>
-            {data.contractDetails ? (
-              <>
-                <Data className={styles.contractStrike} size={18} weight={500}>{`$${data.contractDetails.strike} ${rightLabel(data.contractDetails.right)}`}</Data>
-                <Text className={styles.contractExpiry} size={14} weight={500}>{`Expires ${readableExpiry(data.contractDetails.expiry)}`}</Text>
-              </>
-            ) : (
-              <Data className={styles.contractStrike} size={18} weight={500}>{data.contract}</Data>
+        {/* #610 G2 — two columns, as in the frozen reference: the underlying
+            (symbol, company, price, final status) beside the selected
+            contract (accent rule, strike/right, expiry on its own line, one
+            DTE · option-mid line). The scores, raw contract id and snapshot
+            note that used to stack here moved to the qualification titles and
+            the Contract Details header below — every fact is still shown. */}
+        <div className={styles.identity}>
+          <div role="group" aria-label="Underlying" className={styles.identityUnderlying} data-identity="underlying">
+            <Text size={10} tone="secondary">Underlying</Text>
+            <div className={styles.headerRow}>
+              <SymbolHeader
+                ticker={data.symbol}
+                company={data.company}
+                price={data.price}
+                direction={data.direction}
+                status={data.status}
+                size={24}
+                showChartButton
+              />
+              {/* Card-level "edited" indicator (EDITED-FLAG-2026-09-04). A
+                  READOUT, not a control: the schematic governs this card's
+                  layout, and nothing here is clickable. It states only THAT the
+                  card departs from the plan and WHICH fields — deliberately no
+                  before/after numbers, which would be a second place for the
+                  card's figures to disagree with the rest of it. */}
+              {editedLabels.length > 0 && (
+                <Tooltip
+                  text={`Edited on this card, so it no longer matches the scan's plan: ${editedLabels.join(', ')}. Clearing a field's input restores the planned value.`}
+                  align="right"
+                  position="bottom"
+                >
+                  <span className={styles.editedBadge}>
+                    <Text size={11} weight={500} tone="caution">Edited</Text>
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+            {/* #608 (D10) — the final status belongs to the identity, not to a
+                results summary further down. */}
+            <div className={styles.identityStatus} data-identity="final-status">
+              <LabeledStatusBadge
+                label="Final Status"
+                status={data.finalStatus}
+                tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels."
+              />
+            </div>
+          </div>
+          {/* #577 — the contract, readable at a glance beside the symbol:
+              strike, call/put and an expiry that carries its year. A
+              multi-leg spread also names itself and every leg. The same
+              snapshot values stay in Contract Details and Spread Legs below. */}
+          <div role="group" aria-label="Contract identity" className={styles.contractHeadline}>
+            <Text size={10} tone="secondary">Selected contract</Text>
+            <div className={styles.contractHeadlineMain}>
+              {data.contractDetails ? (
+                <>
+                  <Text as="div" className={styles.contractStrike} size={16} weight={600}>{`$${data.contractDetails.strike} ${rightLabel(data.contractDetails.right)}`}</Text>
+                  <Text as="div" className={styles.contractExpiry} size={16} weight={500}>{`Expires ${readableExpiryLong(data.contractDetails.expiry)}`}</Text>
+                </>
+              ) : (
+                <Data as="div" className={styles.contractStrike} size={18} weight={500}>{data.contract}</Data>
+              )}
+            </div>
+            {data.contractDetails && (
+              <Text size={14} tone="secondary">
+                {`${data.contractDetails.dte} days to expiry · Option mid $${data.contractDetails.mid.toFixed(2)} / share`}
+              </Text>
+            )}
+            {multiLegs && (
+              <div className={styles.spreadIdentity}>
+                <Text size={12} weight={500}>{spreadName}</Text>
+                {multiLegs.map((leg, i) => (
+                  <Data key={i} size={12}>
+                    {`${leg.action === 'BUY' ? 'Buy' : 'Sell'} ${leg.qty} × $${leg.strike} ${rightLabel(leg.right)} · Expires ${readableExpiry(leg.expiry)}`}
+                  </Data>
+                ))}
+              </div>
             )}
           </div>
-          {multiLegs && (
-            <div className={styles.spreadIdentity}>
-              <Text size={12} weight={500}>{spreadName}</Text>
-              {multiLegs.map((leg, i) => (
-                <Data key={i} size={12}>
-                  {`${leg.action === 'BUY' ? 'Buy' : 'Sell'} ${leg.qty} × $${leg.strike} ${rightLabel(leg.right)} · Expires ${readableExpiry(leg.expiry)}`}
-                </Data>
-              ))}
-            </div>
-          )}
         </div>
-        <Text size={12} tone="secondary" className={styles.snapshotNote}>Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.</Text>
-        <div className={styles.identityFacts}>
-          <div>
-            <Text size={12}>Stock score {data.stockScore}/100 · {data.stockConfidence}</Text>
-            <Text size={11} tone="secondary">Backtested confidence: {data.confidence == null ? 'not supplied' : `${data.confidence}%`}</Text>
-          </div>
-          <div className={styles.contractIdentity}>
-            <Data size={11}>{data.contract}</Data>
-            <Text size={12}>Contract score {data.contractScore}/100 · {data.contractConfidence}</Text>
-            {data.contractDetails && <Text size={11} tone="secondary">${data.contractDetails.mid.toFixed(2)} mid / share · {data.contractDetails.dte}d DTE · ${car.toFixed(0)} CaR</Text>}
-          </div>
-        </div>
+        {/* Without contract details there is no Contract Details panel to
+            carry the snapshot note; the raw id is the headline above. */}
+        {!data.contractDetails && (
+          <Text size={12} tone="secondary" className={styles.snapshotNote}>Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.</Text>
+        )}
         {/* 5. Contract Details */}
         {data.contractDetails && (
           <section className={styles.detailsPanel} aria-label="Contract Details">
-            {/* #610 G3/G14 — its own panel header, readable labels. */}
-            <PanelHead title="Contract Details" meta="Contract snapshot" />
+            {/* #610 G3/G14 — its own panel header, readable labels. #610 G2 —
+                the raw contract id (secondary evidence, D02) and the snapshot
+                note are its right-aligned header meta. */}
+            <PanelHead
+              title="Contract Details"
+              meta={(
+                <span className={styles.detailsMeta}>
+                  <span className={styles.detailsMetaLine}>
+                    <Text size={11} tone="secondary">Contract snapshot</Text>
+                    <span aria-hidden="true">·</span>
+                    <Data size={11} tone="secondary">{data.contract}</Data>
+                  </span>
+                  <Text size={11} tone="secondary">Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.</Text>
+                </span>
+              )}
+            />
             <div className={styles.detailsGrid}>
               <DetailCell label="Strike" value={`$${data.contractDetails.strike}`} />
               <DetailCell label="Expiry" value={data.contractDetails.expiry} />
@@ -2602,7 +2653,16 @@ export function TradeCard({
           </section>
         )}
 
-        <CollapsibleSection title="Stock Qualification" storageKey="bamendjou:tradecard-scores-collapsed" defaultCollapsed keepMounted>
+        {/* Stays directly under Contract Details, closed (the user's placement
+            amendment). #610 G2 — its title carries the stock score and the
+            backtested confidence that used to stack under the identity. */}
+        <CollapsibleSection
+          title="Stock Qualification"
+          meta={`${data.stockScore}/100 · ${data.stockConfidence} · backtested confidence ${data.confidence == null ? 'not supplied' : `${data.confidence}%`}`}
+          storageKey="bamendjou:tradecard-scores-collapsed"
+          defaultCollapsed
+          keepMounted
+        >
           <ScoreCardPanel
             title="Stock Scorecard"
             qualification={{ card: data, kind: 'stock' }}
@@ -2612,17 +2672,6 @@ export function TradeCard({
             confidenceScore={data.confidence ?? null}
             confidenceText={data.confidenceText ?? null}
             statusTooltip="Backtested confidence tier for the stock signal. CAUTION means the pattern's historical win rate is marginal — consider reducing position size or waiting for a higher-conviction entry."
-          />
-        </CollapsibleSection>
-        <CollapsibleSection title="Contract Qualification" storageKey="bamendjou:tradecard-contract-qualification-collapsed" defaultCollapsed keepMounted>
-          <ScoreCardPanel
-            title={`Contract — ${data.contract}`}
-            qualification={{ card: data, kind: 'contract' }}
-            bars={contractBars}
-            total={data.contractScore}
-            confidence={data.contractConfidence}
-            statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
-            statusTooltipAlignRight
           />
         </CollapsibleSection>
 
@@ -2668,37 +2717,23 @@ export function TradeCard({
           </section>
         )}
 
-        {data.alternatives && data.alternatives.length > 0 && (
-          <div className={styles.altSection}>
-            <button
-              type="button"
-              className={styles.altToggle}
-              onClick={() => setAltOpen((v) => !v)}
-              aria-expanded={altOpen}
-            >
-              <Text size={11} tone="secondary">ALTERNATIVES ({data.alternatives.length})</Text>
-              <Text size={11} tone="secondary">{altOpen ? '▲' : '▼'}</Text>
-            </button>
-            {altOpen && (
-              <div className={styles.altList}>
-                {data.alternatives.map((alt, i) => (
-                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
       </section>
 
       <div className={styles.grid}>
 
         <section className={`${styles.planCard} ${styles.fullWidth}`} aria-label="Exit Plan" id="exit-plan">
           <PanelHead title="Exit Plan" />
+          {/* #610 G5 — the reference's compact Exit Plan: three columns
+              (invalidation · premium stop with its loss-% chip and two concise
+              remaining/loss lines · time exit), then ONE default-closed
+              explanation holding the premium basis and quantity breakdown, how
+              the settings resolve, and the structure evidence with Check
+              structure. Every value is an existing `exitPremium` string. */}
           <div className={styles.exitEssentials}>
             <div className={styles.exitColumn}>
                 <EditableKV
                   label="Invalidation"
+                  hint="stock price"
                   value={overlay.invalidation}
                   onChange={(v) => patch({ invalidation: v })}
                   onRevert={() => revert('invalidation')}
@@ -2721,7 +2756,6 @@ export function TradeCard({
                     </Text>
                   </div>
                 )}
-              <Text size={12} tone="secondary">Stock price · execution invalidation</Text>
             </div>
             <div className={styles.exitColumn}>
                 {premiumStopReadOnly ? (
@@ -2736,6 +2770,7 @@ export function TradeCard({
                         : `global (${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
                       mono
                     />
+                    {exitLossChip}
                     <div>
                       <Text size={12} tone="secondary">
                         {premiumStopTouched
@@ -2745,56 +2780,58 @@ export function TradeCard({
                     </div>
                   </>
                 ) : (
-                  <>
-                    <EditableKV
-                      label="Premium stop"
-                      value={effectivePremiumStop}
-                      onChange={(v) => patch({ premiumStop: v })}
-                      onRevert={() => revert('premiumStop')}
-                      prefix="$"
-                      min={premiumStopBounds.min}
-                      max={premiumStopBounds.max}
-                      mono
-                    />
-                    {showsGlobalOnLiveMid && (
-                      <div>
-                        <Text size={12} tone="secondary">
-                          {`(global ${Number((globalPremiumStopPct * 100).toFixed(2))}%)`}
-                        </Text>
-                      </div>
-                    )}
-                  </>
+                  <EditableKV
+                    label="Premium stop"
+                    hint="loss / share"
+                    value={effectivePremiumStop}
+                    onChange={(v) => patch({ premiumStop: v })}
+                    onRevert={() => revert('premiumStop')}
+                    prefix="$"
+                    min={premiumStopBounds.min}
+                    max={premiumStopBounds.max}
+                    mono
+                    adornment={exitLossChip}
+                  />
                 )}
-              <Text size={12} tone="secondary">Loss amount per option share</Text>
-              <div className={styles.exitPremiumValues} role="group" aria-label="Premium-loss values">
-                <div className={styles.exitReadouts}>
-                  <KV label="Premium-loss %" value={exitPremium.pct} mono />
-                  <KV label="Remaining option value per share" value={exitPremium.remainingShare} mono />
-                  <KV label="Loss per contract (×100 shares)" value={exitPremium.lossContract} mono />
-                  <KV label="Remaining option value per contract (×100 shares)" value={exitPremium.remainingContract} mono />
-                </div>
-                <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
-                  <summary>Premium basis & quantity breakdown</summary>
-                  <dl className={styles.kvList}>
-                    <KV label="Premium basis" value={exitPremium.basis} mono />
-                    <KV label="Loss per share" value={exitPremium.lossShare} mono />
-                    <KV label={`Loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.lossQuantity} mono />
-                    <KV label={`Remaining option value for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.remainingQuantity} mono />
-                  </dl>
-                  <Text size={12} tone="secondary">Estimates at the premium basis above, before costs; not a model price or a fill.</Text>
-                </details>
+              <div className={styles.exitSummary} role="group" aria-label="Premium-loss summary">
+                <Text size={12} weight={600}>{exitRemainingLine}</Text>
+                <Text size={12} tone="secondary">{exitLossLine}</Text>
               </div>
             </div>
             <div className={styles.exitColumn}>
               <div className={styles.exitTime}>
                 <Text size={12} tone="secondary">Time exit</Text>
-                <Data size={24} weight={500}>{`${TIME_STOP_DTE} days to expiry`}</Data>
+                <Data className={styles.exitTimeValue} size={18} weight={500}>{`${TIME_STOP_DTE} days to expiry`}</Data>
               </div>
               <Text size={12} tone="secondary">{`Alert at ≤${TIME_STOP_DTE} DTE · no automatic close`}</Text>
             </div>
           </div>
           <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
-            <summary>How these exit settings are resolved</summary>
+            <summary>Exit Plan explanation · stop basis, premium &amp; time exit</summary>
+            <div className={styles.exitExplanationBody}>
+              <div className={styles.exitExplanationBlock}>
+                <Text size={13} weight={600}>Premium basis &amp; quantity breakdown</Text>
+                <div className={styles.exitPremiumValues} role="group" aria-label="Premium-loss values">
+                  <dl className={styles.kvList}>
+                    <KV label="Premium-loss %" value={exitPremium.pct} mono />
+                    <KV label="Remaining option value per share" value={exitPremium.remainingShare} mono />
+                    <KV label="Loss per contract (×100 shares)" value={exitPremium.lossContract} mono />
+                    <KV label="Remaining option value per contract (×100 shares)" value={exitPremium.remainingContract} mono />
+                    <KV label="Premium basis" value={exitPremium.basis} mono />
+                    <KV label="Loss per share" value={exitPremium.lossShare} mono />
+                    <KV label={`Loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.lossQuantity} mono />
+                    <KV label={`Remaining option value for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={exitPremium.remainingQuantity} mono />
+                  </dl>
+                </div>
+                {showsGlobalOnLiveMid && (
+                  <Text size={12} tone="secondary">
+                    {`Untouched premium stop: the global ${Number((globalPremiumStopPct * 100).toFixed(2))}% applies to the live mid.`}
+                  </Text>
+                )}
+                <Text size={12} tone="secondary">Estimates at the premium basis above, before costs; not a model price or a fill.</Text>
+              </div>
+              <div className={styles.exitExplanationBlock}>
+                <Text size={13} weight={600}>How these exit settings are resolved</Text>
                 <Text size={12} tone="secondary">
                   Invalidation is the editable execution stock stop. The scan supplies a structural/ATR stop
                   (or legacy fallback); an Arithmetic calculation does not automatically replace this field.
@@ -2814,228 +2851,229 @@ export function TradeCard({
                 <Text size={12} tone="secondary">
                   {`The time exit is the alert engine's TIME_STOP for an open option position at ${TIME_STOP_DTE} or fewer days to expiry. It closes nothing by itself, and the plan's own time-stop days fire nothing and are not shown.`}
                 </Text>
-            <Text size={12} tone="secondary">
-              {`Alert when ${TIME_STOP_DTE} or fewer calendar days remain until expiry — not ${TIME_STOP_DTE} days after entry, and not an automatic close.`}
-            </Text>
-          </details>
-          <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
-            <summary>Structure evidence · ATR, pricing & Check structure</summary>
-        <section aria-label="Structure & Stops" className={styles.structureSection}>
-          <div className={styles.scoreCardHeader}>
-            <Text size={14} weight={600}>Structure &amp; Stops</Text>
-            <Text size={11} tone="secondary">Calculation geometry</Text>
-          </div>
-          <Text size={12} tone="secondary">Calculation does not replace your execution stock invalidation. Edit it in Exit Plan.</Text>
-          {!exitPlan && (
-            <div className={styles.targetsTable}>
-                <div className={styles.targetRow}>
-                  <div className={styles.targetMain}>
-                    {scanFinalStop ? (
-                      <>
-                        <div className={styles.targetId}>
-                          <Text size={12} weight={600}>Bottom (final stop)</Text>
-                        </div>
-                        <div className={styles.targetValues}>
-                          <KV label="Price" value={`$${scanFinalStop.price.toFixed(2)}`} mono />
-                          {/* The two the scan cannot answer, said rather than
-                              omitted — an absent row reads as "there is no
-                              such thing", not "not computed yet". */}
-                          <KV label="Contract value at stop" value="—" mono />
-                          <KV label="Max loss if stopped" value="—" mono />
-                        </div>
-                        {/* #578 — source/ATR/structure explanation collapsed by
-                            default; the stop price above stays visible. */}
-                        <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
-                          <summary>Stop source, ATR and structure detail</summary>
-                          <Text size={12} tone="secondary">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
-                          <div className={styles.targetValues}>
-                            <KV
-                              label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
-                              value={scanFinalStop.structuralPrice != null
-                                ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
-                                : 'No structural stop found'}
-                              mono
-                            />
-                            <KV
-                              label="ATR-floor price"
-                              value={scanFinalStop.atrFloorPrice != null
-                                ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
-                              mono
-                            />
-                            <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
-                            <KV
-                              label="Structural ↔ ATR-floor distance"
-                              value={scanFinalStop.distanceDollar != null
-                                ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
-                              mono
-                            />
-                          </div>
-                          {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
-                            <Text size={12} tone="secondary">
-                              {stopJustification({
-                                source: scanFinalStop.stopSource,
-                                structuralPrice: scanFinalStop.structuralPrice ?? null,
-                                atrFloorPrice: scanFinalStop.atrFloorPrice,
-                                distanceDollar: scanFinalStop.distanceDollar ?? null,
-                              })}
-                            </Text>
-                          )}
-                        </details>
-                        <Text size={12} tone="secondary">
-                          From the scan. Compute an Arithmetic Plan to price this stop
-                          against the contract and size the position. {scanFinalStop.computedAt ? `As of ${formatHHMM(scanFinalStop.computedAt)}.` : ''}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text size={12} tone="secondary">
-                        Bottom (final stop) — not computed — re-run the scan
-                      </Text>
-                    )}
-                  </div>
-                </div>
-            </div>
-          )}
-          {exitPlan && (
-            <div className={styles.targetsTable}>
-                <div className={styles.targetRow}>
-                  <div className={styles.targetMain}>
-                    <div className={styles.targetId}>
-                      <Text size={12} weight={600}>Bottom (final stop)</Text>
-                    </div>
-                    <div className={styles.targetValues}>
-                      <KV label="Price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
-                    </div>
-                    <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
-                      <summary>Stop source, ATR and structure detail</summary>
-                      <Text size={12} tone="secondary">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
-                      <div className={styles.targetValues}>
-                        <KV
-                          label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
-                          value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
-                          mono
-                        />
-                        <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
-                        <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
-                        <KV
-                          label="Structural ↔ ATR-floor distance"
-                          value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
-                          mono
-                        />
-                      </div>
-                      <Text size={12} tone="secondary">{stopJustification(exitPlan.stop)}</Text>
-                    </details>
-                    <Text size={12} tone="secondary">{arithmeticLiveStockPrice != null ? 'Calculated this session' : 'Restored Arithmetic calculation'}{exitPlan.computedAt ? ` · ${formatHHMM(exitPlan.computedAt)}` : ''}; reference stock price {arithmeticLiveStockPrice != null ? `$${arithmeticLiveStockPrice.toFixed(2)}` : 'unavailable for restored calculation'}.</Text>
-                    <dl className={styles.kvList}>
-                      <KV label="Arithmetic contract value at stop" value={`$${exitPlan.stop.contractPrice.toFixed(2)}/share`} mono />
-                      <KV label="Arithmetic stop pricing" value={exitPlan.stop.rrModel} />
-                      <KV label="Arithmetic structural confidence" value={exitPlan.stop.structuralConfidence != null ? `${exitPlan.stop.structuralConfidence}%` : '—'} mono />
-                    </dl>
-                    <Text size={12} tone="secondary">Arithmetic contract estimate; separate pricing basis from the stop-cost check below.</Text>
-
-                  </div>
-                </div>
-            </div>
-          )}
-          {/* Standalone Check Structure — runs independently of the full
-               compute below; its result shows on its own. Reuses the same
-               checkStructure handler / structuralStop state as before. */}
-          <div className={styles.structuralStop}>
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={checkStructure}
-              disabled={structuralLoading}
-            >
-              <Text size={12} weight={500}>
-                {structuralLoading ? 'Checking structure…' : 'Check structure'}
-              </Text>
-            </button>
-            {structuralError && (
-              <Text size={12} tone="reject">Couldn&apos;t check structure — try again.</Text>
-            )}
-            {!structuralError && structuralLoading && (
-              <Text size={11} tone="secondary">Checking…</Text>
-            )}
-            {!structuralError && !structuralLoading && structuralStop === undefined && (
-              <Text size={11} tone="secondary">—</Text>
-            )}
-            {!structuralError && !structuralLoading && structuralStop === null && (
-              <Text size={11} tone="secondary">No structural stop found</Text>
-            )}
-            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct === 0 && (
-              <Text size={11} tone="secondary">N/A (stop = price)</Text>
-            )}
-            {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct !== 0 && (
-              <div className={styles.structuralSnapshot}>
-                <Text size={12} tone="secondary">{structuralIsFreshRef.current ? 'Standalone structural check refreshed this session' : 'Restored standalone structural check'}; independent of the final structural/ATR stop above.</Text>
-                <dl className={styles.kvList}>
-                <KV label="Structural check stock reference" value={`$${(structuralStopStockPrice ?? data.price).toFixed(2)}`} mono />
-                <KV label="Structural confidence" value={`${structuralStop.confidence}%`} mono />
-                <KV
-                  label={structuralStopSourceLabel(structuralStop.source)}
-                  value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
-                  mono
-                />
-                </dl>
-              </div>
-            )}
-            {/* "Not computed", never a silent PASS. The gate has a third state
-                by design (spec §3): no contract on the card, an IV that would
-                not invert, an expiring contract, or an exit plan restored from
-                a blob written before the gate moved server-side. A missing
-                badge would read as an unremarkable contract, which is the one
-                thing this readout must never do. Gated on `stopCostShown` like
-                the badge itself, so a failed or in-flight structural fetch
-                shows its own state rather than two contradicting ones. */}
-            {stopCostShown && !stopRisk && sharedStop && (
-              <div className={styles.stopRiskGate}>
-                <Text size={10} tone="secondary">MAX LOSS IF THE STOP IS HIT</Text>
                 <Text size={12} tone="secondary">
-                  Not computed — no priced contract for this stop.
+                  {`Alert when ${TIME_STOP_DTE} or fewer calendar days remain until expiry — not ${TIME_STOP_DTE} days after entry, and not an automatic close.`}
                 </Text>
               </div>
-            )}
-            {stopCostShown && stopRisk && (
-              <div className={styles.stopRiskGate}>
-                <div className={styles.stopRiskHead}>
-                  <Text size={10} tone="secondary">MAX LOSS IF THE STOP IS HIT</Text>
-                  <StatusBadge
-                    status={stopRisk.status}
-                    label={formatStopLossBadge(stopRisk)}
-                    tooltip={
-                      stopRisk.status === 'PASS'
-                        ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
-                        : stopLossIsTotalOnPrintedFigures(stopRisk)
-                          ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
-                          : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
-                    }
-                  />
+              <div className={styles.exitExplanationBlock}>
+                <Text size={13} weight={600}>Structure evidence · ATR, pricing &amp; Check structure</Text>
+              <section aria-label="Structure & Stops" className={styles.structureSection}>
+                <div className={styles.scoreCardHeader}>
+                  <Text size={14} weight={600}>Structure &amp; Stops</Text>
+                  <Text size={11} tone="secondary">Calculation geometry</Text>
                 </div>
-                {/* Every input, so the verdict is auditable at a glance — the
-                    whole complaint that produced this gate was a ratio whose
-                    inputs were invisible. */}
-                {/* Headline first, in per-contract dollars: that is the sum
-                    actually at risk, and the percentage on the badge is a
-                    summary of it. The arithmetic line stays per-share so it
-                    reconciles against the premium it prints. Every figure on
-                    both lines is the server's, already quantized to cents, so
-                    the subtraction holds exactly under the hand check this
-                    card's whole premise rests on. */}
-                <dl className={styles.stopLossFigures}>
-                  <KV label="Estimated premium remaining per share" value={`$${stopRisk.valueAtStop.toFixed(2)}/share`} mono />
-                  <KV label="Premium loss per share" value={`$${stopRisk.loss.toFixed(2)}/share`} mono />
-                  <KV label="Estimated loss per contract" value={formatStopLossHeadline(stopRisk)} mono />
-                  <KV label={`Estimated loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={`$${(Math.round(stopRisk.loss * 100) * overlay.contracts).toLocaleString('en-US')}`} mono />
-                </dl>
-                <Text size={12} tone="secondary">Selected contract only ({data.contract}), using entered quantity × 100 shares per contract, before costs. This is not whole-spread risk.</Text>
-                <Text size={12} tone="secondary">Stop-cost source: {sharedStop?.source === 'exit_plan' ? 'Arithmetic calculation stop' : 'standalone structural check'}.</Text>
-                <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
+                <Text size={12} tone="secondary">Calculation does not replace your execution stock invalidation. Edit it in Exit Plan.</Text>
+                {!exitPlan && (
+                  <div className={styles.targetsTable}>
+                      <div className={styles.targetRow}>
+                        <div className={styles.targetMain}>
+                          {scanFinalStop ? (
+                            <>
+                              <div className={styles.targetId}>
+                                <Text size={12} weight={600}>Bottom (final stop)</Text>
+                              </div>
+                              <div className={styles.targetValues}>
+                                <KV label="Price" value={`$${scanFinalStop.price.toFixed(2)}`} mono />
+                                {/* The two the scan cannot answer, said rather than
+                                    omitted — an absent row reads as "there is no
+                                    such thing", not "not computed yet". */}
+                                <KV label="Contract value at stop" value="—" mono />
+                                <KV label="Max loss if stopped" value="—" mono />
+                              </div>
+                              {/* #578 — source/ATR/structure explanation collapsed by
+                                  default; the stop price above stays visible. */}
+                              <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
+                                <summary>Stop source, ATR and structure detail</summary>
+                                <Text size={12} tone="secondary">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
+                                <div className={styles.targetValues}>
+                                  <KV
+                                    label={structuralStopSourceLabel(scanFinalStop.structuralSource ?? null)}
+                                    value={scanFinalStop.structuralPrice != null
+                                      ? `$${scanFinalStop.structuralPrice.toFixed(2)}`
+                                      : 'No structural stop found'}
+                                    mono
+                                  />
+                                  <KV
+                                    label="ATR-floor price"
+                                    value={scanFinalStop.atrFloorPrice != null
+                                      ? `$${scanFinalStop.atrFloorPrice.toFixed(2)}` : '—'}
+                                    mono
+                                  />
+                                  <KV label="ATR(14)" value={`$${scanFinalStop.atr.toFixed(2)}`} mono />
+                                  <KV
+                                    label="Structural ↔ ATR-floor distance"
+                                    value={scanFinalStop.distanceDollar != null
+                                      ? `$${scanFinalStop.distanceDollar.toFixed(2)}` : '—'}
+                                    mono
+                                  />
+                                </div>
+                                {scanFinalStop.stopSource != null && scanFinalStop.atrFloorPrice != null && (
+                                  <Text size={12} tone="secondary">
+                                    {stopJustification({
+                                      source: scanFinalStop.stopSource,
+                                      structuralPrice: scanFinalStop.structuralPrice ?? null,
+                                      atrFloorPrice: scanFinalStop.atrFloorPrice,
+                                      distanceDollar: scanFinalStop.distanceDollar ?? null,
+                                    })}
+                                  </Text>
+                                )}
+                              </details>
+                              <Text size={12} tone="secondary">
+                                From the scan. Compute an Arithmetic Plan to price this stop
+                                against the contract and size the position. {scanFinalStop.computedAt ? `As of ${formatHHMM(scanFinalStop.computedAt)}.` : ''}
+                              </Text>
+                            </>
+                          ) : (
+                            <Text size={12} tone="secondary">
+                              Bottom (final stop) — not computed — re-run the scan
+                            </Text>
+                          )}
+                        </div>
+                      </div>
+                  </div>
+                )}
+                {exitPlan && (
+                  <div className={styles.targetsTable}>
+                      <div className={styles.targetRow}>
+                        <div className={styles.targetMain}>
+                          <div className={styles.targetId}>
+                            <Text size={12} weight={600}>Bottom (final stop)</Text>
+                          </div>
+                          <div className={styles.targetValues}>
+                            <KV label="Price" value={`$${exitPlan.stop.price.toFixed(2)}`} mono />
+                          </div>
+                          <details className={`${styles.methodDetails} ${disclosure.disclosureRow}`}>
+                            <summary>Stop source, ATR and structure detail</summary>
+                            <Text size={12} tone="secondary">ATR floor is backend-configured; the returned floor price and ATR(14) below describe this calculation.</Text>
+                            <div className={styles.targetValues}>
+                              <KV
+                                label={structuralStopSourceLabel(exitPlan.stop.structuralSource)}
+                                value={exitPlan.stop.structuralPrice != null ? `$${exitPlan.stop.structuralPrice.toFixed(2)}` : 'No structural stop found'}
+                                mono
+                              />
+                              <KV label="ATR-floor price" value={`$${exitPlan.stop.atrFloorPrice.toFixed(2)}`} mono />
+                              <KV label="ATR(14)" value={`$${exitPlan.atr.toFixed(2)}`} mono />
+                              <KV
+                                label="Structural ↔ ATR-floor distance"
+                                value={exitPlan.stop.distanceDollar != null ? `$${exitPlan.stop.distanceDollar.toFixed(2)}` : '—'}
+                                mono
+                              />
+                            </div>
+                            <Text size={12} tone="secondary">{stopJustification(exitPlan.stop)}</Text>
+                          </details>
+                          <Text size={12} tone="secondary">{arithmeticLiveStockPrice != null ? 'Calculated this session' : 'Restored Arithmetic calculation'}{exitPlan.computedAt ? ` · ${formatHHMM(exitPlan.computedAt)}` : ''}; reference stock price {arithmeticLiveStockPrice != null ? `$${arithmeticLiveStockPrice.toFixed(2)}` : 'unavailable for restored calculation'}.</Text>
+                          <dl className={styles.kvList}>
+                            <KV label="Arithmetic contract value at stop" value={`$${exitPlan.stop.contractPrice.toFixed(2)}/share`} mono />
+                            <KV label="Arithmetic stop pricing" value={exitPlan.stop.rrModel} />
+                            <KV label="Arithmetic structural confidence" value={exitPlan.stop.structuralConfidence != null ? `${exitPlan.stop.structuralConfidence}%` : '—'} mono />
+                          </dl>
+                          <Text size={12} tone="secondary">Arithmetic contract estimate; separate pricing basis from the stop-cost check below.</Text>
+
+                        </div>
+                      </div>
+                  </div>
+                )}
+                {/* Standalone Check Structure — runs independently of the full
+                     compute below; its result shows on its own. Reuses the same
+                     checkStructure handler / structuralStop state as before. */}
+                <div className={styles.structuralStop}>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    onClick={checkStructure}
+                    disabled={structuralLoading}
+                  >
+                    <Text size={12} weight={500}>
+                      {structuralLoading ? 'Checking structure…' : 'Check structure'}
+                    </Text>
+                  </button>
+                  {structuralError && (
+                    <Text size={12} tone="reject">Couldn&apos;t check structure — try again.</Text>
+                  )}
+                  {!structuralError && structuralLoading && (
+                    <Text size={11} tone="secondary">Checking…</Text>
+                  )}
+                  {!structuralError && !structuralLoading && structuralStop === undefined && (
+                    <Text size={11} tone="secondary">—</Text>
+                  )}
+                  {!structuralError && !structuralLoading && structuralStop === null && (
+                    <Text size={11} tone="secondary">No structural stop found</Text>
+                  )}
+                  {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct === 0 && (
+                    <Text size={11} tone="secondary">N/A (stop = price)</Text>
+                  )}
+                  {!structuralError && !structuralLoading && structuralStop != null && structuralStop.distancePct !== 0 && (
+                    <div className={styles.structuralSnapshot}>
+                      <Text size={12} tone="secondary">{structuralIsFreshRef.current ? 'Standalone structural check refreshed this session' : 'Restored standalone structural check'}; independent of the final structural/ATR stop above.</Text>
+                      <dl className={styles.kvList}>
+                      <KV label="Structural check stock reference" value={`$${(structuralStopStockPrice ?? data.price).toFixed(2)}`} mono />
+                      <KV label="Structural confidence" value={`${structuralStop.confidence}%`} mono />
+                      <KV
+                        label={structuralStopSourceLabel(structuralStop.source)}
+                        value={`$${structuralStop.price.toFixed(2)} (${structuralStop.distancePct.toFixed(1)}% away)`}
+                        mono
+                      />
+                      </dl>
+                    </div>
+                  )}
+                  {/* "Not computed", never a silent PASS. The gate has a third state
+                      by design (spec §3): no contract on the card, an IV that would
+                      not invert, an expiring contract, or an exit plan restored from
+                      a blob written before the gate moved server-side. A missing
+                      badge would read as an unremarkable contract, which is the one
+                      thing this readout must never do. Gated on `stopCostShown` like
+                      the badge itself, so a failed or in-flight structural fetch
+                      shows its own state rather than two contradicting ones. */}
+                  {stopCostShown && !stopRisk && sharedStop && (
+                    <div className={styles.stopRiskGate}>
+                      <Text size={10} tone="secondary">MAX LOSS IF THE STOP IS HIT</Text>
+                      <Text size={12} tone="secondary">
+                        Not computed — no priced contract for this stop.
+                      </Text>
+                    </div>
+                  )}
+                  {stopCostShown && stopRisk && (
+                    <div className={styles.stopRiskGate}>
+                      <div className={styles.stopRiskHead}>
+                        <Text size={10} tone="secondary">MAX LOSS IF THE STOP IS HIT</Text>
+                        <StatusBadge
+                          status={stopRisk.status}
+                          label={formatStopLossBadge(stopRisk)}
+                          tooltip={
+                            stopRisk.status === 'PASS'
+                              ? 'The contract still holds meaningful value if this stop is hit — the cheaper candidate to be wrong on.'
+                              : stopLossIsTotalOnPrintedFigures(stopRisk)
+                                ? 'At this stop the contract is a total loss, so the stop is not a risk control on it. A closer stop, or a higher-delta strike, would make it one. Not a reason to skip the trade — a reason to size it knowing that.'
+                                : 'This stop costs most of the premium. Little is left to salvage if it is hit.'
+                          }
+                        />
+                      </div>
+                      {/* Every input, so the verdict is auditable at a glance — the
+                          whole complaint that produced this gate was a ratio whose
+                          inputs were invisible. */}
+                      {/* Headline first, in per-contract dollars: that is the sum
+                          actually at risk, and the percentage on the badge is a
+                          summary of it. The arithmetic line stays per-share so it
+                          reconciles against the premium it prints. Every figure on
+                          both lines is the server's, already quantized to cents, so
+                          the subtraction holds exactly under the hand check this
+                          card's whole premise rests on. */}
+                      <dl className={styles.stopLossFigures}>
+                        <KV label="Estimated premium remaining per share" value={`$${stopRisk.valueAtStop.toFixed(2)}/share`} mono />
+                        <KV label="Premium loss per share" value={`$${stopRisk.loss.toFixed(2)}/share`} mono />
+                        <KV label="Estimated loss per contract" value={formatStopLossHeadline(stopRisk)} mono />
+                        <KV label={`Estimated loss for ${overlay.contracts} entered contract${overlay.contracts === 1 ? '' : 's'}`} value={`$${(Math.round(stopRisk.loss * 100) * overlay.contracts).toLocaleString('en-US')}`} mono />
+                      </dl>
+                      <Text size={12} tone="secondary">Selected contract only ({data.contract}), using entered quantity × 100 shares per contract, before costs. This is not whole-spread risk.</Text>
+                      <Text size={12} tone="secondary">Stop-cost source: {sharedStop?.source === 'exit_plan' ? 'Arithmetic calculation stop' : 'standalone structural check'}.</Text>
+                      <Data size={11} tone="secondary">{formatStopPremiumRisk(stopRisk)}</Data>
+                    </div>
+                  )}
+                </div>
+
+              </section>
               </div>
-            )}
-          </div>
-
-        </section>
-
+            </div>
           </details>
         </section>
 
@@ -3927,6 +3965,51 @@ export function TradeCard({
         </section>
       </div>
 
+      {/* #610 G4 — Contract Qualification and the alternative contracts follow
+          Decision & execution, as in the frozen reference; both closed. */}
+      <div className={styles.trailingSections}>
+        <CollapsibleSection
+          title="Contract Qualification"
+          meta={`${data.contractScore}/100 · ${data.contractConfidence}`}
+          storageKey="bamendjou:tradecard-contract-qualification-collapsed"
+          defaultCollapsed
+          keepMounted
+        >
+          <ScoreCardPanel
+            title={`Contract — ${data.contract}`}
+            qualification={{ card: data, kind: 'contract' }}
+            bars={contractBars}
+            total={data.contractScore}
+            confidence={data.contractConfidence}
+            statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+            statusTooltipAlignRight
+          />
+        </CollapsibleSection>
+        {data.alternatives && data.alternatives.length > 0 && (
+          // #610 G4 — the same bordered disclosure row as the qualification
+          // sections (accent "›", sentence-case title), replacing the dim
+          // uppercase toggle. Same local, unpersisted open state and handler.
+          <section className={styles.altSection}>
+            <button
+              type="button"
+              className={styles.altToggle}
+              onClick={() => setAltOpen((v) => !v)}
+              aria-expanded={altOpen}
+            >
+              <span className={styles.altChevron} data-open={altOpen ? '' : undefined} aria-hidden="true">›</span>
+              <Text size={14} weight={600}>{`Alternative contracts (${data.alternatives.length})`}</Text>
+            </button>
+            {altOpen && (
+              <div className={styles.altList}>
+                {data.alternatives.map((alt, i) => (
+                  <AlternativeContractRow key={`${alt.strike}|${alt.expiry}|${alt.right ?? ''}`} alt={alt} rank={i + 1} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
       <div className={styles.recIdFooter}>
         <Text size={11} tone="secondary">{displayRecId}</Text>
       </div>
@@ -4132,6 +4215,8 @@ export function EditableKV({
   decimals = 2,
   nullLabel = 'not computed',
   inputWidth,
+  hint,
+  adornment,
 }: {
   label: string;
   /** NULL renders `nullLabel` and starts the editor with an EMPTY draft, so a
@@ -4159,6 +4244,12 @@ export function EditableKV({
   /** #610 G15 — presentation only: a narrow box for a short whole number
    *  (Contracts). Every other editable field uses the standard width. */
   inputWidth?: 'narrow';
+  /** #610 G5 — presentation only: the unit folded into the label line
+   *  ("Invalidation · stock price"). Not part of the field's accessible name. */
+  hint?: string;
+  /** #610 G5 — presentation only: a readout shown beside the value (the
+   *  Exit Plan's loss-% chip). Never editable, never part of the input. */
+  adornment?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value == null ? '' : String(value));
@@ -4339,7 +4430,9 @@ export function EditableKV({
     <div className={`${styles.kvRow} ${styles.kvRowEditable}`} data-input-width={inputWidth}>
       {/* #610 G15 — the reference's small "Editable" tag after the label. */}
       <span className={styles.editLabel}>
-        <Text size={12} tone="secondary">{label}</Text>
+        {hint
+          ? <span><Text size={12} tone="secondary">{label}</Text><Text size={12} tone="secondary">{` · ${hint}`}</Text></span>
+          : <Text size={12} tone="secondary">{label}</Text>}
         <Text size={10} tone="accent" className={styles.editableTag}>Editable</Text>
       </span>
       {editing ? (
@@ -4397,6 +4490,7 @@ export function EditableKV({
               : <Text size={13} weight={500}>{displayValue}</Text>}
         </span>
       )}
+      {adornment}
       {/* The refusal, announced. `aria-live="polite"` rather than an alert
           role: nothing on screen is wrong, a typed value was declined.
     *

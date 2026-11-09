@@ -182,7 +182,7 @@ describe('disclosure defaults on a fully computed card', () => {
     expect(details.length).toBeGreaterThanOrEqual(5);
     expect(details.filter((d) => d.open).map((d) => d.querySelector('summary')?.textContent)).toEqual([]);
     expect(screen.getByRole('button', { name: /Stock Qualification/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /ALTERNATIVES/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Alternative contracts/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ })).toHaveAttribute('aria-expanded', 'true');
     const warning = screen.getByText(/Invalidation stop required — Send to broker/);
     expect(warning.closest('details')).toBeNull();

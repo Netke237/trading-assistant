@@ -28,6 +28,9 @@ interface CollapsibleSectionProps {
   className?: string;
   /** Title size; 14 by default. Presentation only. */
   titleSize?: 14 | 16;
+  /** Short secondary facts after the title on the summary row (#610 G2),
+   *  e.g. "82/100 · PASS". Part of the toggle's accessible name. */
+  meta?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -38,6 +41,7 @@ export function CollapsibleSection({
   keepMounted = false,
   className,
   titleSize = 14,
+  meta,
   children,
 }: CollapsibleSectionProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -82,6 +86,7 @@ export function CollapsibleSection({
             before the title that turns when open. */}
         <span className={styles.chevron} data-open={collapsed ? undefined : ''} aria-hidden="true">›</span>
         <Text size={titleSize} weight={600}>{title}</Text>
+        {meta != null && <Text size={12} tone="secondary" className={styles.meta}>{meta}</Text>}
       </button>
       {keepMounted
         ? <div hidden={collapsed}><div className={styles.body}>{children}</div></div>

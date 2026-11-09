@@ -63,6 +63,11 @@ const PLAN_RESPONSE = {
 const exitPlan = () => within(screen.getByRole('region', { name: 'Exit Plan' }));
 const values = () => within(exitPlan().getByRole('group', { name: 'Premium-loss values' }));
 const value = (label: string) => values().getByText(label).parentElement;
+// #610 G5 — the Exit Plan's ONE explanation (premium breakdown, how settings
+// resolve, structure evidence with Check structure), default closed.
+const EXPLANATION = 'Exit Plan explanation · stop basis, premium & time exit';
+const openExplanation = () => fireEvent.click(exitPlan().getByText(EXPLANATION));
+const summary = () => within(exitPlan().getByRole('group', { name: 'Premium-loss summary' }));
 const edit = (label: string, v: string) => {
   fireEvent.click(screen.getByLabelText(`Edit ${label}`));
   const input = screen.getByLabelText(`Edit ${label}`);
@@ -84,8 +89,13 @@ describe('compact actual Exit Plan (D04/D05)', () => {
     renderCard(<TradeCard data={card()} contracts={2} />);
     expect(exitPlan().getByLabelText('Edit Invalidation')).toBeVisible();
     expect(exitPlan().getByLabelText('Edit Premium stop')).toBeVisible();
+    // #610 G5 — the loss % as a chip beside the premium stop, and two concise
+    // remaining/loss lines; the full readout is in the closed explanation.
+    expect(exitPlan().getByText('60% loss')).toBeVisible();
+    expect(summary().getByText('Remaining: $2.08/share · $208.00 / contract')).toBeVisible();
+    expect(summary().getByText('Loss: $312.00 / contract')).toBeVisible();
     for (const label of ['Premium-loss %', 'Remaining option value per share', 'Loss per contract (×100 shares)']) {
-      expect(exitPlan().getByText(label)).toBeVisible();
+      expect(exitPlan().getByText(label)).not.toBeVisible();
     }
     expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
     expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
@@ -100,11 +110,12 @@ describe('compact actual Exit Plan (D04/D05)', () => {
   it('keeps all structure and pricing evidence inside the single Exit Plan, closed until requested', async () => {
     renderCard(<TradeCard data={card({ exit: { ...card().exit, finalStop: FINAL_STOP } })} />);
     const evidence = exitPlan().getByText('Structure evidence · ATR, pricing & Check structure').closest('details')!;
+    expect(evidence.querySelector('summary')).toHaveTextContent(EXPLANATION);
     expect(evidence).not.toHaveAttribute('open');
     const stops = within(evidence);
     expect(stops.getByText('Bottom (final stop)')).not.toBeVisible();
     expect(stops.getByText('Check structure')).not.toBeVisible();
-    fireEvent.click(within(evidence).getByText('Structure evidence · ATR, pricing & Check structure'));
+    openExplanation();
     expect(stops.getByText('Bottom (final stop)')).toBeVisible();
     expect(api.getStructuralStop).not.toHaveBeenCalled();
     fireEvent.click(stops.getByRole('button', { name: 'Check structure' }));
@@ -125,7 +136,7 @@ describe('premium-loss values use the execution field basis', () => {
   it('live mid + untouched: global % on the live mid, per share / per contract / entered quantity', () => {
     render(<TradeCard data={card()} liveMid={1.0} contracts={2} />);
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('$0.60');
-    expect(screen.getByText('(global 60%)')).toBeInTheDocument();
+    expect(exitPlan().getByText('60% loss · global')).toBeVisible();
     expect(value('Premium basis')).toHaveTextContent('$1.00/share · live mid');
     expect(value('Premium-loss %')).toHaveTextContent('60%');
     expect(value('Loss per share')).toHaveTextContent('$0.60/share');
@@ -177,7 +188,8 @@ describe('premium-loss values use the execution field basis', () => {
     render(<TradeCard data={card()} liveMid={1.0} initialPremiumStop={0.5} initialInvalidation={175} />);
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('$0.50');
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$175.00');
-    expect(screen.queryByText('(global 60%)')).not.toBeInTheDocument();
+    expect(exitPlan().queryByText(/· global/)).not.toBeInTheDocument();
+    expect(exitPlan().getByText('50% loss')).toBeVisible();
     expect(value('Premium basis')).toHaveTextContent('$1.00/share · live mid');
     expect(value('Premium-loss %')).toHaveTextContent('50%');
     expect(value('Remaining option value per share')).toHaveTextContent('$0.50/share');
@@ -232,7 +244,7 @@ describe('time exit, warnings and disclosures', () => {
     render(<TradeCard data={card()} />);
     expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
     expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
-    fireEvent.click(exitPlan().getByText('How these exit settings are resolved'));
+    openExplanation();
     expect(exitPlan().getByText(/alert when 3 or fewer calendar days remain until expiry/i)).toBeVisible();
     expect(exitPlan().getByText(/not 3 days after entry/i)).toBeVisible();
     expect(exitPlan().getByText(/not an automatic close/i)).toBeVisible();
@@ -244,7 +256,7 @@ describe('time exit, warnings and disclosures', () => {
     const explanation = exitPlan().getByText(/Invalidation is the editable execution stock stop/);
     expect(explanation).not.toBeVisible();
     expect(exitPlan().getByText(/Invalidation stop required — Send to broker stays disabled/)).toBeVisible();
-    fireEvent.click(exitPlan().getByText('How these exit settings are resolved'));
+    openExplanation();
     expect(explanation).toBeVisible();
     expect(exitPlan().getByText(/Monte Carlo and Arithmetic premiums are separate calculation inputs/)).toBeVisible();
   });
@@ -256,7 +268,7 @@ describe('time exit, warnings and disclosures', () => {
 
   it('keeps final stop and nested source details reachable in closed structure evidence', () => {
     render(<TradeCard data={card({ exit: { ...card().exit, invalidation: 169, finalStop: FINAL_STOP } })} />);
-    fireEvent.click(exitPlan().getByText('Structure evidence · ATR, pricing & Check structure'));
+    openExplanation();
     const stops = within(screen.getByRole('region', { name: 'Structure & Stops' }));
     expect(stops.getByText('Bottom (final stop)')).toBeVisible();
     expect(stops.getByText('Price')).toBeVisible();

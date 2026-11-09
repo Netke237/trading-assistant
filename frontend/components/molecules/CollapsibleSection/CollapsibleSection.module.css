@@ -9,6 +9,7 @@
 
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-2);
@@ -44,4 +45,9 @@
 
 .chevron[data-open] {
   transform: rotate(90deg);
+}
+
+/* #610 G2 — secondary facts after the title, on the same summary row. */
+.meta {
+  min-width: 0;
 }

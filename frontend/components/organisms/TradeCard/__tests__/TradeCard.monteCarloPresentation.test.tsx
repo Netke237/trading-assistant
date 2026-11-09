@@ -132,7 +132,7 @@ it('reads the execution loss amount once, in the Exit Plan, on the live global b
   const region = show();
   expect(region.queryByText('Execution premium-stop loss amount')).not.toBeInTheDocument();
   const exitPlan = within(screen.getByRole('region', { name: 'Exit Plan' }));
-  expect(exitPlan.getByText('(global 60%)')).toBeVisible();
+  expect(exitPlan.getByText('60% loss · global')).toBeVisible();
   expect(exitPlan.getByLabelText('Edit Premium stop')).toHaveTextContent('5.40');
   expect(exitPlan.getByLabelText('Edit Premium stop')).not.toHaveTextContent('3.12');
 });
