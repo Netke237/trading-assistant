@@ -18,7 +18,7 @@
       "agent": "claude",
       "branch": "board/direct-send-expiry-placeholder-415ee393",
       "claimed_at": "2026-11-09T15:11:37Z",
-      "expires_at": "2026-11-09T18:32:37Z",
+      "expires_at": "2026-11-09T18:33:04Z",
       "note": "Kenneth reassigned from Codex session in chat; continuing from 7b27d05 (plan r1 clean, T1 #612)",
       "task": "DIRECT-SEND-EXPIRY-PLACEHOLDER"
     }
