@@ -377,11 +377,12 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps Exit Plan before methods, then entry and the latest result', () => {
+  it('keeps Exit Plan before methods, then entry and the decision', () => {
     render(<TradeCard data={mockTradeCard} />);
     const order = screen.getByRole('region', { name: 'Order Entry' });
     const exit = screen.getByRole('region', { name: 'Exit Plan' });
-    const latest = screen.getByText('Latest calculation');
+    // #608 — the decision section replaced the latest-result summary.
+    const latest = screen.getByRole('region', { name: 'Decision and execution' });
     const arithmetic = screen.getByText('Arithmetic Profit Target');
     expect(exit.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -2700,11 +2701,12 @@ describe('TradeCard', () => {
   });
 
   describe('Final Recommendation (Feature 8)', () => {
-    it('empty state — before any method is run, falls back to the Fixed % Ladder Plan\'s live T1/T2/T3 targets, explicitly labeled as a default', () => {
+    it('empty state — before any method is run, names the Fixed % Ladder Plan as the default without repeating its targets', () => {
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
-      // mockTradeCard's single target: stockPrice/targetPrice 200.02.
-      expect(within(screen.getByRole('region', { name: 'Final Recommendation' })).getByText('$200.02')).toBeInTheDocument();
+      expect(screen.getByText('No method explicitly run — the Fixed % Ladder Plan is the default; its targets are in the Ladder card')).toBeInTheDocument();
+      // #608 (D10) — the decision no longer repeats the ladder's T1/T2/T3; they
+      // stay in the Ladder card (mockTradeCard's single target: 200.02).
+      expect(within(screen.getByRole('region', { name: 'Decision and execution' })).queryByText('$200.02')).not.toBeInTheDocument();
       // The targets, and ONLY the targets. This branch used to carry the
       // Ladder's "Projected R/R (+8% stock move)" as well — the copy that
       // survived the readout's removal from the Ladder section itself, and the
@@ -2748,12 +2750,14 @@ describe('TradeCard', () => {
         fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
         await screen.findByText(/computed via: Arithmetic/);
         const expectedHHMM = `${String(fixedNow.getHours()).padStart(2, '0')}:${String(fixedNow.getMinutes()).padStart(2, '0')}`;
-        expect(screen.getByText(`computed via: Arithmetic, ${expectedHHMM}`)).toBeInTheDocument();
+        // #608 — named in the selected-target review as the latest
+        // calculation (not a choice); the caveat now sits on the Arithmetic card.
+        expect(screen.getByText(`Latest calculation, not a choice · computed via: Arithmetic, ${expectedHHMM}`)).toBeInTheDocument();
         expect(screen.getByText(
           /This stop price is not automatically monitored by alerts unless copied into the position's stop field after opening\./,
         )).toBeInTheDocument();
         // The empty-state Ladder fallback is gone now that a method has run.
-        expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+        expect(screen.queryByText(/No method explicitly run/)).not.toBeInTheDocument();
       } finally {
         jest.useRealTimers();
       }
@@ -2768,7 +2772,7 @@ describe('TradeCard', () => {
       fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
       await screen.findByText(/computed via: Monte Carlo/);
       expect(screen.queryByText(/not automatically monitored by alerts/)).not.toBeInTheDocument();
-      expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+      expect(screen.queryByText(/No method explicitly run/)).not.toBeInTheDocument();
     });
 
     it('does not build any cross-method comparison — Arithmetic\'s output never references Monte Carlo/Ladder figures or vice versa', async () => {
@@ -2789,7 +2793,7 @@ describe('TradeCard', () => {
       // method cards legitimately carry their own "...they can disagree"
       // disclaimers elsewhere on the page (Features 1/2/3), which is
       // unrelated to this card building its own comparison.
-      const finalRecSection = screen.getByText('Final Recommendation').closest('section')!;
+      const finalRecSection = screen.getByRole('region', { name: 'Decision and execution' });
       expect(within(finalRecSection).queryByText(/disagree/i)).not.toBeInTheDocument();
       expect(within(finalRecSection).queryByText(/agrees?/i)).not.toBeInTheDocument();
     });
@@ -3466,6 +3470,10 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
 // the race through the component that owns it. Both of the bugs below were
 // reachable by a ten-line test and shipped anyway.
 
+/** #608 — the Monte Carlo stop context's stock barrier, a race number shown
+ *  only behind raceIsShowable (it reads "Unavailable …" otherwise). */
+const raceBarrier = () => document.querySelector('[data-field="stock-barrier"]') as HTMLElement;
+
 const RACE_RESPONSE = {
   // ONE real `estimate_first_passage` call, whole: targets, invalidation and
   // race together (186.1 spot / 190 strike / 24 DTE / $2.75 premium / stop 180 /
@@ -3771,12 +3779,14 @@ describe('the estimate never races a level it depends on', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
     });
-    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+    // #608 — the race's armed barriers are read from the Monte Carlo stop
+    // context now that the decision no longer repeats them.
+    expect(raceBarrier()).toHaveTextContent('$180.00 stock');
 
     rerender(
       <TradeCard data={{ ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' }} />,
     );
-    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(raceBarrier()).not.toHaveTextContent('$180.00');
     expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
   });
 });
@@ -4020,16 +4030,18 @@ describe('the race gates, mutation-pinned', () => {
     expect(screen.queryByText(/Not simulated/)).not.toBeInTheDocument();
   });
 
-  it('stops printing race numbers in the Final Recommendation once a barrier moves', async () => {
+  it('stops printing race numbers outside the race card once a barrier moves', async () => {
     // raceIsShowable = raceIsFresh && !raceBarriersMoved. Dropping the second
     // term left every test green, because the card has its own
-    // barriers-changed branch and the Final Recommendation does not.
+    // barriers-changed branch. #608 — the Final Recommendation that used to
+    // repeat the armed barriers is gone; the Monte Carlo stop context reads
+    // the same gate, so it pins the term now.
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
     render(<TradeCard data={mockTradeCard} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
-    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+    expect(raceBarrier()).toHaveTextContent(/\$\d+\.\d\d stock/);
 
     expandLadder();
     await act(async () => {
@@ -4041,7 +4053,8 @@ describe('the race gates, mutation-pinned', () => {
       fireEvent.blur(input);
     });
 
-    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(raceBarrier()).not.toHaveTextContent(/\$\d+\.\d\d stock/);
+    expect(raceBarrier()).toHaveTextContent(/Unavailable/);
     // The gate's whole job now: show the race's numbers or show none. It no
     // longer swaps in a standalone invalidation probability, which counted
     // paths that touched the stock stop even where the premium stop had
@@ -4275,7 +4288,7 @@ describe('TradeCard — the card-level edited indicator', () => {
 // restored estimate reinstated the whole monte_carlo branch at whatever vintage
 // it was cached at. With the invalidation fallback removed, those rows are the
 // only numbers left in the branch — so an ungated vintage WAS the branch.
-describe('TradeCard — Final Recommendation target rows gate on freshness', () => {
+describe('TradeCard — decision review target figures gate on freshness', () => {
   beforeEach(() => {
     localStorage.clear();
     // estimateFirstPassage awaits getStructuralStop before it ever reaches
@@ -4307,7 +4320,7 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
   } as unknown as TradeCardData;
 
   const staleNotice = () => screen.queryByText(/Not re-run this session/);
-  // SCOPED TO THE FINAL RECOMMENDATION, deliberately. The standalone Monte
+  // SCOPED TO THE DECISION REVIEW (the Final Recommendation until #608), deliberately. The standalone Monte
   // Carlo card above renders the same restored `firstPassage.targets` ungated —
   // that is its own readout and outside TARGET-VINTAGE's scope — so a
   // document-wide query for the option price matches THAT row and would pass
@@ -4327,16 +4340,28 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     expect(staleNotice()).toBeInTheDocument();
   });
 
+  // #608 (D10) — the decision no longer lists every target; it reviews the
+  // ONE selected target. A fresh run makes Monte Carlo choosable and only then
+  // does the review print a Monte Carlo figure.
+  const review = () => within(screen.getByRole('region', { name: 'Selected target review' }));
+  const chooseT20 = () => {
+    fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'T20%' }));
+  };
+
   it('prints them once Estimate has actually been clicked this mount', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
     render(<TradeCard data={restored} />);
     expect(staleNotice()).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     // The in-flight state clears `firstPassage`, so the branch unmounts and
     // remounts — wait for it to come BACK before reading inside it.
     await screen.findByText(/computed via: Monte Carlo/);
-    expect(finalRec().getByText('T20%')).toBeInTheDocument();
     expect(staleNotice()).not.toBeInTheDocument();
+    chooseT20();
+    expect(review().getByText('Matched result option premium').parentElement).toHaveTextContent('$3.30 /share');
+    expect(review().getByText('72%')).toBeInTheDocument();
   });
 
   it('goes back to withholding them when the user navigates to another candidate', async () => {
@@ -4344,7 +4369,8 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     const { rerender } = render(<TradeCard data={restored} />);
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await screen.findByText(/computed via: Monte Carlo/);
-    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+    chooseT20();
+    expect(review().getByText('Matched result option premium').parentElement).toHaveTextContent('$3.30 /share');
 
     // Away to another candidate carrying ITS OWN cached estimate. Freshness is
     // per-mount, so the incoming card starts stale however fresh this one was.
@@ -4352,6 +4378,8 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
       ...restored, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C',
     };
     rerender(<TradeCard data={other} />);
+    expect(review().queryByText(/\$3\.30|72%/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeDisabled();
     expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
     expect(staleNotice()).toBeInTheDocument();
   });

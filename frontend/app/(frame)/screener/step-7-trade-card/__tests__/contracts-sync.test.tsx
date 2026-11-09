@@ -106,13 +106,25 @@ function makeCard(symbol: string): TradeCardData {
 const originalFetch = global.fetch;
 
 describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', () => {
-  it('keeps one exit selector inline in Final Recommendation, outside broker execution', async () => {
+  it('#608 groups one exit selector, the selected-target review, the submission review and every destination action in one decision section', async () => {
     render(<Step7TradeCardPage />);
-    const summary = await screen.findByRole('region', { name: 'Final Recommendation' });
-    expect(within(summary).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    const decision = await screen.findByRole('region', { name: 'Decision and execution' });
+    const group = within(decision);
+    expect(group.getByRole('radio', { name: 'Ladder' })).toBeVisible();
     expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
-    const execution = screen.getByText('Decision and execution').parentElement!;
+    expect(group.getByRole('radiogroup', { name: 'Judged on' })).toBeVisible();
+    expect(group.getByRole('region', { name: 'Selected target review' })).toBeVisible();
+    await waitFor(() => expect(group.getByRole('region', { name: 'Submission review' })).toBeInTheDocument());
+    expect(group.getByRole('button', { name: /track basket/i })).toBeInTheDocument();
+    expect(group.getByRole('button', { name: /export json/i })).toBeInTheDocument();
+    // The page's broker execution is a sub-group of the same section; the
+    // method selector stays outside it.
+    const execution = group.getByRole('group', { name: 'Broker execution and auto-trade' });
     expect(within(execution).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    fireEvent.click(within(execution).getByRole('button', { name: /ibkr paper/i }));
+    expect(await within(execution).findByRole('button', { name: /place limit/i })).toBeInTheDocument();
+    expect(within(execution).getByRole('button', { name: /right now — market/i })).toBeInTheDocument();
+    expect(await within(execution).findByRole('button', { name: /armed — fire on next qualifying condition/i })).toBeInTheDocument();
   });
 
   beforeEach(() => {

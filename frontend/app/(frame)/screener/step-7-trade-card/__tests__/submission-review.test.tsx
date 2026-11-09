@@ -159,10 +159,10 @@ describe('#581 Step 7 submission review', () => {
   beforeEach(() => { localStorage.clear(); });
   afterEach(() => { cleanup(); global.fetch = originalFetch; });
 
-  it('shows the actual execution inputs once, in the Final Recommendation, and they are what is sent', async () => {
+  it('shows the actual execution inputs once, in the decision section, and they are what is sent', async () => {
     setup([makeCard('AAA'), makeCard('BBB')]);
     await renderPage();
-    const final = within(screen.getByRole('region', { name: 'Final Recommendation' }));
+    const final = within(screen.getByRole('region', { name: 'Decision and execution' }));
     expect(final.getByRole('region', { name: 'Submission review' })).toBeInTheDocument();
     // The old "Execution …" echo rows are consolidated into the review.
     expect(screen.queryByText('Execution order / limit')).not.toBeInTheDocument();
@@ -197,7 +197,7 @@ describe('#581 Step 7 submission review', () => {
   it('a calculation stop is shown as a result; the actual stop is reviewed and sent', async () => {
     setup([makeCard('AAA', { exitPlan: PLAN }), makeCard('BBB')]);
     await renderPage();
-    const final = within(screen.getByRole('region', { name: 'Final Recommendation' }));
+    const final = within(screen.getByRole('region', { name: 'Decision and execution' }));
     // The calculation's own stop is on screen as a result...
     expect(final.queryAllByText(/\$131\.00/).length + screen.queryAllByText(/\$131\.00/).length).toBeGreaterThan(0);
     // ...while the review shows and the send carries the Exit Plan stop.

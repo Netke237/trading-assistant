@@ -446,10 +446,14 @@ interface TradeCardProps {
   initialMethodPick?: MethodPick | null;
   onMethodPickChange?: (pick: MethodPick | null) => void;
   /** #581 — the page's submission review (`SubmissionReview`), rendered in
-   *  the Final Recommendation in place of the "Execution …" echo rows, so the
+   *  the decision section (#608) in place of the "Execution …" echo rows, so the
    *  actual settings appear once, from the request the send paths submit.
    *  Absent (standalone card), the echo rows render instead. */
   submissionReview?: ReactNode;
+  /** #608 — the page's broker execution and auto-trade controls, rendered at
+   *  the end of the decision section so every destination action sits with
+   *  the method/target choice it acts on. Page-owned; absent standalone. */
+  destinations?: ReactNode;
 }
 
 function targetStatusTooltip(statusVal: TargetLevel['status']): string {
@@ -542,6 +546,7 @@ export function TradeCard({
   initialMethodPick = null,
   onMethodPickChange,
   submissionReview,
+  destinations,
 }: TradeCardProps) {
   const [chartOpen, setChartOpen] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
@@ -2450,6 +2455,42 @@ export function TradeCard({
   const summaryPrice = (value: number | null | undefined, unit: string) => value != null && Number.isFinite(value) && value >= 0
     ? `$${value.toFixed(2)} ${unit}` : 'Unavailable';
 
+  // #608 — the selected-target review's STATE, from the same resolution the
+  // KVs read: an invalidated/gone pick wins over everything, then no pick,
+  // a method-only pick, one matched row, or a recorded pair that matches
+  // several rows or none. A browser check reads it as `data-review-state`.
+  const reviewState = recommendationUnavailable ? 'unavailable'
+    : !methodPick ? 'not-selected'
+      : methodPick.rowStockPrice == null && methodPick.rowOptionPrice == null ? 'method-only'
+        : chosenRow ? 'selected'
+          : chosenMatches.length > 1 ? 'ambiguous' : 'unmatched';
+  // Which calculation the review describes and when — the "computed via"
+  // line the old results list carried — without repeating its targets. Before
+  // a choice this names the latest run, which is not a choice.
+  const reviewSource: string | null = recommendationUnavailable ? null
+    : recommendationMethod === 'arithmetic' && exitPlan
+      ? `${methodPick ? '' : 'Latest calculation, not a choice · '}computed via: Arithmetic, ${formatHHMM(exitPlan.computedAt)}`
+      : recommendationMethod === 'monte_carlo' && firstPassage
+        ? `${methodPick ? '' : 'Latest calculation, not a choice · '}computed via: Monte Carlo${firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}`
+        : recommendationMethod === 'barrier_race' && firstPassage
+          ? `computed via: Barrier Race${firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}`
+          : recommendationMethod === 'ladder'
+            ? 'Selected method: Fixed % Ladder Plan'
+            : recommendationMethod === null
+              ? 'No method explicitly run — the Fixed % Ladder Plan is the default; its targets are in the Ladder card'
+              : null;
+  // TARGET-VINTAGE-2026-09-04 — a restored estimate is named, not priced.
+  const reviewMcNotReRun = !recommendationUnavailable && recommendationMethod === 'monte_carlo'
+    && firstPassage != null && !estimateIsFresh;
+  const reviewEstimatesAbsent = {
+    unavailable: 'Unavailable — the selected method’s results are not current.',
+    'not-selected': 'Not selected — choose a method and a target row to see that target’s estimates.',
+    'method-only': 'No target row chosen — its estimates appear once you choose one.',
+    selected: 'Unavailable',
+    ambiguous: 'Unavailable — several current result rows match the recorded target.',
+    unmatched: 'Unavailable — no current result row matches the recorded target.',
+  }[reviewState];
+
   return (
     <div data-presentation="options-v2" className={styles.wrap}>
       {showMarketSentiment && <MarketSentiment s={data.sentiment} compact />}
@@ -2483,6 +2524,15 @@ export function TradeCard({
               </span>
             </Tooltip>
           )}
+        </div>
+        {/* #608 (D10) — the final status belongs to the identity, not to a
+            results summary further down. */}
+        <div className={styles.identityStatus} data-identity="final-status">
+          <LabeledStatusBadge
+            label="Final Status"
+            status={data.finalStatus}
+            tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels."
+          />
         </div>
         {/* #577 — the contract, readable at a glance beside the symbol:
             strike, call/put and an expiry that carries its year. A
@@ -3007,7 +3057,7 @@ export function TradeCard({
           </div>
           <Text size={10} tone="dim">
             Showing or comparing methods is display only: it does not run a calculation, choose the
-            Final Recommendation method or change the order and exit fields. Each card keeps its own
+            decision's exit method or change the order and exit fields. Each card keeps its own
             source, valuation basis and freshness; the methods are independent and can disagree.
           </Text>
         <div
@@ -3330,6 +3380,14 @@ export function TradeCard({
             {exitPlan && (
               <Text size={10} tone="dim">{`${arithmeticLiveStockPrice != null ? 'Calculated this session' : 'Restored Arithmetic calculation'}${exitPlan.computedAt ? ` · ${formatHHMM(exitPlan.computedAt)}` : ''}.`}</Text>
             )}
+            {/* #608 — moved here from the removed Final Recommendation list:
+                 it qualifies this card's calculated stop. */}
+            {exitPlan && (
+              <Text size={10} tone="caution">
+                This stop price is not automatically monitored by alerts unless copied into the position&apos;s
+                stop field after opening.
+              </Text>
+            )}
             <Text size={10} tone="dim">{"Current-time stop cost: Black-Scholes today at the calculated stop with today's days to expiry (no elapsed time), on the calculation's echoed premium, per share. It is a different basis from the Arithmetic contract value at stop in Structure & Stops and from the Barrier Race's barrier-time repricing. The option-price threshold is the shared Exit Plan premium stop on its own premium basis, not an Arithmetic calculation. The calculated stop does not replace the "}<a href="#exit-plan">Exit Plan ↑</a>{" execution invalidation."}</Text>
           </div>
           <div className={styles.methodSlot} data-slot="targets">
@@ -3500,7 +3558,7 @@ export function TradeCard({
               </table>
             </div>
             {data.exit.targetSource === 'capped' && <Text size={10} tone="caution">Bearish target capped to keep stock targets above the price floor.</Text>}
-            <Text size={10} tone="dim">Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices are shown in the Final Recommendation below.</Text>
+            <Text size={10} tone="dim">Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices are shown in the decision section below.</Text>
             <Text size={10} tone="dim">Dollar outcomes compare each alternative exit with the editable entry limit, using displayed premiums rounded to cents. Full-position exits and rung allocations are separate; do not add alternative outcomes.</Text>
             {/* Per-target R:R, allocation and pricing labels — the same figures
                  the rows used to carry, from the same ladderTargetFigures(). */}
@@ -3711,233 +3769,151 @@ export function TradeCard({
 
         {/* The Barrier Race now lives inside the Monte Carlo card (#606). */}
 
-        {/* Selected method's own results, with latest-run fallback before a choice. */}
-        <section aria-label="Final Recommendation" className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
+        {/* #608 (D10/D11) — ONE grouped decision section. The method, target
+             row and "Judged on" choices, the single compact review of the
+             selected target, the actual-settings review and every destination
+             action sit together. The old Final Recommendation's latest /
+             all-target results list is gone: each method's targets are in its
+             own card, and what was unique to that list — which calculation
+             ran and when, the not-re-run notice, the race edge of a chosen
+             target, the unavailable prompt — is in the review below. The final
+             status moved to the identity header. Every figure here is the
+             existing pick/row resolution above (`chosenRow`, `chosenPremium`,
+             `chosenOutcome`, …); nothing is re-derived or read from display
+             strings, and nothing here writes an order or exit field. */}
+        <section aria-label="Decision and execution" id="decision" data-decision-group="" className={`${styles.scoreCard} ${styles.decisionCard}`}>
           <div className={styles.scoreCardHeader}>
-            <Text size={14} weight={600}>Final Recommendation</Text>
-            {decisionTarget === undefined ? methodSelector
-              : decisionTarget ? createPortal(methodSelector, decisionTarget) : null}
-            <LabeledStatusBadge
-              label="Final Status"
-              status={data.finalStatus}
-              tooltip="Overall recommendation for this trade, combining the stock signal's historical accuracy and the contract's quality verdict — see the Stock Scorecard and Contract panels."
-            />
+            <Text size={14} weight={600}>Decision &amp; execution</Text>
           </div>
-          <div className={styles.scoreCardBody}>
-            <Text size={13} weight={500}>{methodPick || recommendationUnavailable ? 'Selected method results' : 'Latest calculation'}</Text>
-            <Text size={11} tone="secondary">
-              Choosing a method records your decision; it does not run a calculation or apply
-              its values to the order and exit fields.
-            </Text>
-            <section aria-label="Chosen method and target" className={styles.arithmeticBasis}>
-              <KV label="Chosen method" value={methodPick ? pickedOption?.label ?? 'Unavailable' : 'Not selected — latest-calculation fallback is not a choice'} />
-              {methodPick && !recommendationUnavailable && <>
-                <KV label="Chosen target" value={chosenRow?.label ?? (methodPick.rowStockPrice == null && methodPick.rowOptionPrice == null ? 'Target not selected' : chosenMatches.length > 1 ? 'Recorded target — multiple result rows match; evidence unavailable' : 'Recorded target — matching result unavailable')} />
-                <KV label="Recorded stock target" value={methodPick.rowStockPrice == null ? (methodPick.method === 'barrier_race' ? 'Not supplied by Barrier Race' : 'Not selected / unavailable') : summaryPrice(methodPick.rowStockPrice, 'stock')} mono />
-                <KV label="Recorded option target" value={methodPick.rowOptionPrice == null ? 'Not recorded by this choice' : summaryPrice(methodPick.rowOptionPrice, '/share')} mono />
-                {chosenRow && <>
-                  <KV label="Matched result option premium" value={summaryPrice(chosenPremium, '/share')} mono />
-                  <KV label={chosenRace ? 'Allocated target-first probability' : 'Independent target probability before expiry'} value={chosenRace ? `${weightPercents(chosenRace)[0]}%` : chosenProbability != null && Number.isFinite(chosenProbability) && chosenProbability >= 0 && chosenProbability <= 1 ? `${(chosenProbability * 100).toFixed(0)}%` : 'Unavailable'} mono />
-                  <KV label="Conditional target median" value={chosenDays != null && Number.isFinite(chosenDays) && chosenDays >= 0 ? chosenRace ? `~${days(chosenDays)} (calendar days)` : `~${Math.round(chosenDays)} calendar days` : 'Unavailable'} mono />
-                  <KV label="Result pricing model" value={chosenModel || 'Unavailable — no result model evidence'} />
-                  <KV label="Estimated dollar outcome (full position, before costs)" value={chosenOutcome} mono />
-                </>}
-                <KV label="Judged on basis" value={methodPick.stopBasis === 'premium' ? 'Premium stop' : 'Stock stop'} />
-                <KV label="Decision timestamp" value={methodPick.pickedAt} mono />
-              </>}
-              <KV label="Applicable quantity" value={`${overlay.contracts} entered contracts × 100 shares; selected-contract full exit${chosenLadder?.contractsToSell != null ? `; ladder rung allocation ${chosenLadder.contractsToSell} contracts` : ''}`} />
-              {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis; not whole-spread quantities or risk.</Text>}
-              {submissionReview === undefined && <>
-                <Text size={10} tone="dim">Execution fields below are the current order inputs. Selection does not synchronize them. Stock-stop and premium-stop alerts remain independent.</Text>
-                <KV label="Execution order / limit" value={`${data.entry.orderType} / ${summaryPrice(overlay.entryLimit, '/share')}`} mono />
-                <KV label="Execution stock stop" value={summaryPrice(overlay.invalidation, 'stock')} mono />
-                {/* #581 — on the SAME basis the Exit Plan and the send paths use:
-                    an untouched premium stop sends nothing, so the global applies
-                    against the fill (also in the tiny-premium read-only case); a
-                    touched one is the kept dollar amount. Never the display-only
-                    live-mid or scan-seed dollar figure. */}
-                <KV label="Execution premium stop" value={premiumStopTouched && overlay.premiumStop != null && overlay.premiumStop > 0
-                  ? `${summaryPrice(overlay.premiumStop, '/share')} · pinned`
-                  : `Global ${Number((globalPremiumStopPct * 100).toFixed(2))}% — resolved against fill`} mono />
-                <KV label="Execution time exit" value={`${TIME_STOP_DTE} DTE`} mono />
-              </>}
-            </section>
-            {/* #581 — the actual settings, once, from the submitted request. */}
-            {submissionReview}
-            {recommendationUnavailable && (
-              <Text size={11} tone="caution">Selected method results unavailable — run its calculation if needed, then choose an exit method again.</Text>
-            )}
-            {!recommendationUnavailable && recommendationMethod === 'arithmetic' && exitPlan && (
-              <>
-                <Text size={11} tone="dim">computed via: Arithmetic, {formatHHMM(exitPlan.computedAt)}</Text>
-                <div className={styles.scoreRow}>
-                  <Text size={12} tone="secondary">Bottom (final stop)</Text>
-                  <Data size={14} tone="primary">${exitPlan.stop.price.toFixed(2)}</Data>
+          <div className={styles.decisionGrid}>
+            <div className={styles.decisionChoices} data-decision-part="choices">
+              {decisionTarget === undefined ? methodSelector
+                : decisionTarget ? createPortal(methodSelector, decisionTarget) : null}
+              <Text size={11} tone="secondary">
+                Choosing a method records your decision; it does not run a calculation or apply
+                its values to the order and exit fields.
+              </Text>
+            </div>
+            <section
+              aria-label="Selected target review"
+              data-selected-target-review=""
+              data-review-state={reviewState}
+              className={styles.selectedReview}
+            >
+              <Text size={13} weight={500}>Your selected target</Text>
+              {reviewSource && <Text size={11} tone="dim">{reviewSource}</Text>}
+              {reviewMcNotReRun && (
+                <Text size={11} tone="caution">
+                  Not re-run this session — click Estimate to price these targets against the
+                  current premium.
+                </Text>
+              )}
+              {recommendationUnavailable && (
+                <Text size={11} tone="caution">Selected method results unavailable — run its calculation if needed, then choose an exit method again.</Text>
+              )}
+              <div role="group" aria-label="Recorded choice" data-review-part="recorded" className={styles.reviewGroup}>
+                <Text size={10} tone="dim">Recorded choice · stored with the trade</Text>
+                <div className={styles.reviewGrid}>
+                  <KV label="Chosen method" value={methodPick ? pickedOption?.label ?? 'Unavailable' : 'Not selected — latest-calculation fallback is not a choice'} />
+                  {methodPick && !recommendationUnavailable && <>
+                    <KV label="Chosen target" value={chosenRow?.label ?? (methodPick.rowStockPrice == null && methodPick.rowOptionPrice == null ? 'Target not selected' : chosenMatches.length > 1 ? 'Recorded target — multiple result rows match; evidence unavailable' : 'Recorded target — matching result unavailable')} />
+                    <KV label="Recorded stock target" value={methodPick.rowStockPrice == null ? (methodPick.method === 'barrier_race' ? 'Not supplied by Barrier Race' : 'Not selected / unavailable') : summaryPrice(methodPick.rowStockPrice, 'stock')} mono />
+                    <KV label="Recorded option target" value={methodPick.rowOptionPrice == null ? 'Not recorded by this choice' : summaryPrice(methodPick.rowOptionPrice, '/share')} mono />
+                    <KV label="Judged on basis" value={methodPick.stopBasis === 'premium' ? 'Premium stop' : 'Stock stop'} />
+                    <KV label="Decision timestamp" value={methodPick.pickedAt} mono />
+                  </>}
                 </div>
-                <Text size={10} tone="dim">{stopJustification(exitPlan.stop)}</Text>
-                {exitPlan.targets.map((t) => (
-                  <div className={styles.scoreRow} key={t.rrRatio}>
-                    <Text size={12} tone="secondary">{t.rrRatio}:1 target</Text>
-                    <Data size={13} tone="primary">${t.price.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)</Data>
-                  </div>
-                ))}
-                <Text size={10} tone="caution">
-                  This stop price is not automatically monitored by alerts unless copied into the position&apos;s
-                  stop field after opening.
-                </Text>
-              </>
-            )}
-            {!recommendationUnavailable && recommendationMethod === 'monte_carlo' && firstPassage && (
-              <>
-                <Text size={11} tone="dim">
-                  computed via: Monte Carlo{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}
-                </Text>
-                {/* TARGET-VINTAGE-2026-09-04 — GATED ON FRESHNESS, the same
-                     rule the Barrier Race already applies, and for the reason
-                     the comment below used to only NOTE: `firstPassage` is
-                     restored from the parent's per-contract cache on mount and
-                     `lastRunMethod` is derived from `computedAt` alone, so a
-                     restored estimate reinstated this whole branch at whatever
-                     vintage it was cached at. With the invalidation fallback
-                     gone these rows are the only numbers left in the branch,
-                     which made an ungated vintage the branch's entire content.
-
-                     Rendering nothing until Estimate is clicked is the accepted
-                     cost: consistency with how the rest of the card treats
-                     stale numbers wins. It is not rendered SILENTLY, though —
-                     a blank branch under a "computed via Monte Carlo" heading
-                     asserts a method ran and then shows no answer. The line
-                     below says which it is, matching the "Barriers changed —
-                     re-run the estimate" copy the race card paints for the
-                     same class of staleness. */}
-                {estimateIsFresh ? (
-                  firstPassage.targets.map((t, i) => (
-                    <div className={styles.scoreRow} key={`${t.pct}-${i}`}>
-                      <Text size={12} tone="secondary">{`T${Math.round(t.pct * 100)}%`}</Text>
-                      <Data size={13} tone="primary">
-                        ${t.optionPrice.toFixed(2)} ({(t.probability * 100).toFixed(0)}%)
-                      </Data>
-                    </div>
-                  ))
-                ) : (
-                  <Text size={11} tone="caution">
-                    Not re-run this session — click Estimate to price these targets against the
-                    current premium.
+              </div>
+              <div role="group" aria-label="Estimates at this target" data-review-part="estimates" className={styles.reviewGroup}>
+                <Text size={10} tone="dim">Estimates at this target · model values, gross before costs — not settings and not a fill</Text>
+                <div className={styles.reviewGrid}>
+                  {chosenRow ? <>
+                    <KV label="Matched result option premium" value={summaryPrice(chosenPremium, '/share')} mono />
+                    <KV label={chosenRace ? 'Allocated target-first probability' : 'Independent target probability before expiry'} value={chosenRace ? `${weightPercents(chosenRace)[0]}%` : chosenProbability != null && Number.isFinite(chosenProbability) && chosenProbability >= 0 && chosenProbability <= 1 ? `${(chosenProbability * 100).toFixed(0)}%` : 'Unavailable'} mono />
+                    <KV label="Conditional target median" value={chosenDays != null && Number.isFinite(chosenDays) && chosenDays >= 0 ? chosenRace ? `~${days(chosenDays)} (calendar days)` : `~${Math.round(chosenDays)} calendar days` : 'Unavailable'} mono />
+                    <KV label="Result pricing model" value={chosenModel || 'Unavailable — no result model evidence'} />
+                    <KV label="Estimated dollar outcome (full position, before costs)" value={chosenOutcome} mono />
+                    {chosenRace && (
+                      <KV label="Barrier Race edge per contract" value={chosenRace.edgePerContract != null ? `${money(chosenRace.edgePerContract)}${chosenRace.rrStockStop != null ? ` at ${chosenRace.rrStockStop.toFixed(2)}x` : ''}` : 'Unavailable'} mono />
+                    )}
+                  </> : (
+                    <Text size={11} tone="dim">{reviewEstimatesAbsent}</Text>
+                  )}
+                  <KV label="Applicable quantity" value={`${overlay.contracts} entered contracts × 100 shares; selected-contract full exit${chosenLadder?.contractsToSell != null ? `; ladder rung allocation ${chosenLadder.contractsToSell} contracts` : ''}`} />
+                </div>
+                {chosenRace && (
+                  <Text size={10} tone="dim">
+                    Edge is per contract, before commissions, and assumes IV is unchanged when a
+                    barrier is reached. See the Barrier Race card for the full arithmetic.
                   </Text>
                 )}
-              </>
-            )}
-            {/* A selected race shows exclusive race outcomes. Only the initial
-                no-pick latest-MC fallback retains the combined summary. */}
-            {!recommendationUnavailable && firstPassage &&
-              (recommendationMethod === 'barrier_race' ||
-                (methodPick === null && recommendationMethod === 'monte_carlo')) && (
-              <>
-                {recommendationMethod === 'barrier_race' && (
-                  <Text size={11} tone="dim">computed via: Barrier Race{firstPassage.computedAt ? `, ${formatHHMM(firstPassage.computedAt)}` : ''}</Text>
-                )}
-                {firstPassage.race && raceIsShowable ? (
-                  <>
-                    <div className={styles.scoreRow}>
-                      <Text size={12} tone="secondary">Armed stop (whichever fires first)</Text>
-                      <Data size={13} tone="primary">
-                        ${firstPassage.race.premiumStopPrice.toFixed(2)} option / $
-                        {firstPassage.race.stockStopPrice.toFixed(2)} stock
-                      </Data>
-                    </div>
-                    {firstPassage.race.outcomes.map((o) => (
-                      <div className={styles.scoreRow} key={`edge-${o.targetPct}`}>
-                        <Text size={12} tone="secondary">
-                          {`T${Math.round(o.targetPct * 100)}% edge`}
-                        </Text>
-                        <Data size={13} tone="primary">
-                          {recommendationMethod === 'barrier_race' && `$${o.targetOptionPrice.toFixed(2)} option (${weightPercents(o)[0]}% target first) — `}
-                          {o.edgePerContract != null ? money(o.edgePerContract) : '—'}
-                          {o.rrStockStop != null ? ` at ${o.rrStockStop.toFixed(2)}x` : ''}
-                        </Data>
-                      </div>
-                    ))}
-                    <Text size={10} tone="dim">
-                      Edge is per contract, before commissions, and assumes IV is unchanged when a
-                      barrier is reached. See the Barrier Race card for the full arithmetic.
-                    </Text>
-                  </>
-                ) : null}
-              </>
-            )}
-            {!recommendationUnavailable && (recommendationMethod === 'ladder' || recommendationMethod === null) && (
-              <>
-                <Text size={11} tone="caution">
-                  {methodPick?.method === 'ladder' ? 'Selected method: Fixed % Ladder Plan' : 'No method explicitly run — showing Fixed % Ladder Plan (default)'}
-                </Text>
-                {data.exit.targets.map((t, i) => (
-                  <div className={styles.scoreRow} key={t.id ?? i}>
-                    <Text size={12} tone="secondary">{t.id ? t.id.toUpperCase() : `T${i + 1}`}</Text>
-                    <Data size={13} tone="primary">${(t.targetPrice ?? t.stockPrice).toFixed(2)}</Data>
+                {chosenRow && <Text size={10} tone="dim">One alternative full-position exit at this target — not a sum of targets or a scale-out plan.</Text>}
+                {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis; not whole-spread quantities or risk.</Text>}
+              </div>
+              {submissionReview === undefined && (
+                <div role="group" aria-label="Submitted settings" data-review-part="settings" className={styles.reviewGroup}>
+                  <Text size={10} tone="dim">Execution fields below are the current order inputs. Selection does not synchronize them. Stock-stop and premium-stop alerts remain independent.</Text>
+                  <div className={styles.reviewGrid}>
+                    <KV label="Execution order / limit" value={`${data.entry.orderType} / ${summaryPrice(overlay.entryLimit, '/share')}`} mono />
+                    <KV label="Execution stock stop" value={summaryPrice(overlay.invalidation, 'stock')} mono />
+                    {/* #581 — on the SAME basis the Exit Plan and the send paths use:
+                        an untouched premium stop sends nothing, so the global applies
+                        against the fill (also in the tiny-premium read-only case); a
+                        touched one is the kept dollar amount. Never the display-only
+                        live-mid or scan-seed dollar figure. */}
+                    <KV label="Execution premium stop" value={premiumStopTouched && overlay.premiumStop != null && overlay.premiumStop > 0
+                      ? `${summaryPrice(overlay.premiumStop, '/share')} · pinned`
+                      : `Global ${Number((globalPremiumStopPct * 100).toFixed(2))}% — resolved against fill`} mono />
+                    <KV label="Execution time exit" value={`${TIME_STOP_DTE} DTE`} mono />
                   </div>
-                ))}
-                {/* "Projected R/R (+8% stock move)" stood here and is GONE,
-                     together with the model/"— edited" attribution line whose
-                     only job was to caption it. It was the third R:R on one
-                     page and the least defensible of the three: reward from a
-                     hardcoded +8% stock move nobody chose, risk from a flat
-                     percentage of premium.
-
-                     Note WHERE this was, because it explains why it outlived
-                     its own removal. The Ladder's copy of this readout went in
-                     an earlier round (see the note in section 6) — but this
-                     branch is the Ladder DEFAULT, rendered by the Final
-                     Recommendation when no method has been run, and it carried
-                     its own copy. Deleting the readout in one place left it on
-                     screen in the state a trader sees first, before clicking
-                     anything.
-
-                     overlay.premiumStop is UNTOUCHED, for the reasons the
-                     section 6 note gives: it is the premium-stop alert level
-                     and the barrier race's third barrier. Only the readouts
-                     went. */}
-              </>
-            )}
+                </div>
+              )}
+            </section>
           </div>
+          <Text size={11} tone="secondary">
+            The actual stock stop, premium stop and time exit are set once, in the{' '}
+            <a href="#exit-plan">Exit Plan ↑</a>. Choosing a method, target or basis does not replace
+            those settings or copy a calculated stop into them.
+          </Text>
+          {/* #581 — the actual settings, once, from the submitted request. */}
+          {submissionReview}
+          {/* 8. Actions — the card's own destinations, inside the decision. */}
+          <div className={styles.actions} data-decision-part="actions">
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={onSendToBroker}
+              disabled={sendDisabled || !onSendToBroker}
+            >
+              <Text size={13} weight={500}>{sendLabel ?? 'Send to broker'}</Text>
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={() => setChartOpen((v) => !v)}
+              aria-expanded={chartOpen}
+            >
+              <Text size={13} weight={500}>{chartOpen ? 'Hide chart' : 'View chart'}</Text>
+            </button>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${data.symbol}-trade-card.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Text size={13} weight={500}>Export JSON</Text>
+            </button>
+          </div>
+          {/* The page's broker execution and auto-trade, when supplied. */}
+          {destinations}
         </section>
-
-
-
-      </div>
-
-      {/* 8. Actions */}
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={onSendToBroker}
-          disabled={sendDisabled || !onSendToBroker}
-        >
-          <Text size={13} weight={500}>{sendLabel ?? 'Send to broker'}</Text>
-        </button>
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={() => setChartOpen((v) => !v)}
-          aria-expanded={chartOpen}
-        >
-          <Text size={13} weight={500}>{chartOpen ? 'Hide chart' : 'View chart'}</Text>
-        </button>
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={() => {
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${data.symbol}-trade-card.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-        >
-          <Text size={13} weight={500}>Export JSON</Text>
-        </button>
       </div>
 
       <div className={styles.recIdFooter}>

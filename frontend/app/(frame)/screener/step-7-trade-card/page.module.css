@@ -17,9 +17,13 @@
    boundary. The shared frame and every other route retain their own rules. */
 :global(div):has(> :global(main#workspace) .presentationPage) { min-width: 1200px; }
 
+/* #608 — one column: the broker execution panel now sits inside the
+   TradeCard's decision section, so no separate execution rail remains. The
+   panel only stands below the card column while a selected contract's plan
+   is being prepared (no TradeCard is mounted then). */
 .presentationLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 280px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--space-4);
   min-width: 0;
@@ -39,18 +43,3 @@
 
 .decisionAnchor { min-width: 0; }
 .paperButtons { flex-wrap: wrap; }
-
-/* Reserve room for both the frame rail and the methods' probability columns.
-   The same controls flow below the card when usable width cannot hold both. */
-@media (max-width: 1440px) {
-  .presentationLayout { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* BrokerPicker is the original sibling after the controlled decision anchor.
-   Its unchanged flex row wraps within the execution panel rather than squeezing
-   configured/disabled labels into a few pixels. */
-.decisionAnchor + :global(div) > :global(div) { flex-wrap: wrap; }
-.decisionAnchor + :global(div) :global(button) {
-  flex: 1 1 180px;
-  min-width: 0;
-}

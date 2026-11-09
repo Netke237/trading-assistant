@@ -1,5 +1,6 @@
 /**
- * TC-REVIEW-06 (#581) — the Final Recommendation hosts the submission review.
+ * TC-REVIEW-06 (#581) — the decision section (the Final Recommendation until
+ * #608) hosts the submission review.
  * The "Execution …" echo rows are consolidated into it; standalone (no review
  * supplied) the rows remain, with the premium stop on the Exit Plan's basis.
  */
@@ -53,13 +54,13 @@ const arithmeticPlan = {
   atr: 4,
 } as any;
 
-const final = () => within(screen.getByRole('region', { name: 'Final Recommendation' }));
+const final = () => within(screen.getByRole('region', { name: 'Decision and execution' }));
 const radio = (name: string) => screen.getByRole('radio', { name });
 
 beforeEach(() => { localStorage.clear(); useSettingsStore.setState({ premiumStopPct: 0.6 }); });
 
-describe('Final Recommendation hosts the submission review', () => {
-  it('a supplied review replaces the Execution echo rows, inside the Final Recommendation', () => {
+describe('the decision section hosts the submission review', () => {
+  it('a supplied review replaces the Execution echo rows, inside the decision section', () => {
     render(<TradeCard data={card()} submissionReview={<section aria-label="Submission review">REVIEW</section>} />);
     expect(final().getByRole('region', { name: 'Submission review' })).toHaveTextContent('REVIEW');
     expect(screen.queryByText('Execution order / limit')).not.toBeInTheDocument();
@@ -90,7 +91,7 @@ describe('Final Recommendation hosts the submission review', () => {
     render(<TradeCard data={card({ exit: { ...card().exit, exitPlan: arithmeticPlan } })} contracts={2} />);
     fireEvent.click(radio('Arithmetic'));
     fireEvent.click(radio('2:1'));
-    const summary = within(screen.getByRole('region', { name: 'Chosen method and target' }));
+    const summary = within(screen.getByRole('region', { name: 'Selected target review' }));
     const row = summary.getByText('Estimated dollar outcome (full position, before costs)').parentElement!;
     // (9.00 − 5.00 calculation premium) × 2 contracts × 100
     expect(row).toHaveTextContent('$800.00');
@@ -100,7 +101,7 @@ describe('Final Recommendation hosts the submission review', () => {
     render(<TradeCard data={card()} contracts={2} />);
     fireEvent.click(radio('Ladder'));
     fireEvent.click(radio('TP1'));
-    const summary = within(screen.getByRole('region', { name: 'Chosen method and target' }));
+    const summary = within(screen.getByRole('region', { name: 'Selected target review' }));
     expect(summary.getByText('Estimated dollar outcome (full position, before costs)').parentElement!)
       .toHaveTextContent('Unavailable — no matched calculation premium basis');
   });

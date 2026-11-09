@@ -1,7 +1,7 @@
 /** TC-REVIEW-05 (#580): Arithmetic and Ladder on Monte Carlo's stop/target
  *  order, and a display-only comparison of two or three methods in the same
  *  results area. Opening or comparing never calculates, never chooses the
- *  Final Recommendation method and never rewrites a setting. */
+ *  decision's exit method and never rewrites a setting. */
 import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { api } from '@/lib/api';
@@ -89,7 +89,7 @@ describe('display-only comparison in the same results area', () => {
     fireEvent.click(box('Fixed % Ladder'));
     expect(Array.from(document.querySelectorAll('[data-method-card]')).map(n => n.getAttribute('data-method-card')))
       .toEqual(['monte_carlo', 'arithmetic', 'ladder']);
-    const nodes = ['Exit Plan', 'Profit-target methods', 'Order Entry', 'Max loss budget', 'Final Recommendation']
+    const nodes = ['Exit Plan', 'Profit-target methods', 'Order Entry', 'Max loss budget', 'Decision and execution']
       .map(name => screen.getByRole('region', { name }));
     nodes.slice(1).forEach((node, i) => expect(nodes[i].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
   });

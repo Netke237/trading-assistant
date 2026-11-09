@@ -173,9 +173,10 @@ interface ToastState {
 }
 
 export default function Step7Page() {
-  // The controlled method selector renders inline in TradeCard's Final
-  // Recommendation (no decisionTarget is passed); AutoTradeArm retains its
-  // original page ownership/predicate even while an override plan is pending.
+  // The controlled method selector renders inline in TradeCard's decision
+  // section (no decisionTarget is passed), which also hosts this page's broker
+  // execution panel (#608); AutoTradeArm retains its original page
+  // ownership/predicate even while an override plan is pending.
   const [cards, setCards]         = useState<TradeCardData[]>([]);
   const [active, setActive]       = useState<string>('');
   const [basket, setBasket]       = useState<string[]>([]);
@@ -1560,6 +1561,244 @@ export default function Step7Page() {
   const basketEmpty = basket.length === 0;
   const sendLabel = basketEmpty ? 'Track basket' : `Track basket (${basket.length})`;
 
+  // #608 — the page's broker execution and auto-trade, handed to the
+  // TradeCard as its `destinations` so they sit inside the one grouped
+  // decision section with the method/target choice and the card's own
+  // Track basket / Export actions. Page-owned, exactly as before: the same
+  // handlers, guards, notices and state. While a selected contract's plan is
+  // still being prepared no TradeCard is mounted, so the same panel renders
+  // on its own below the card column instead (its notices must not vanish).
+  // The live-quote notices moved in from the card column: the no-live-quote
+  // confirmation gates these sends, so it belongs beside them.
+  const executionPanel = effectiveCard ? (
+    <div className={paperStyles.paperSection} role="group" aria-label="Broker execution and auto-trade">
+      <Text size={13} weight={600}>Broker execution &amp; auto-trade</Text>
+      {fetchingQuote && (
+        <Text size={11} tone="dim">Fetching live price…</Text>
+      )}
+      {quoteWarning(liveQuoteForCard) && (
+        <div role="status">
+          <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
+          <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
+        </div>
+      )}
+      {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
+        <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
+      )}
+      {liveStockPriceForCard != null && !fetchingQuote && (
+        <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
+      )}
+      <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
+      {selectedBroker && (
+        <>
+          <div className={paperStyles.paperButtons}>
+            <button
+              type="button"
+              className={paperStyles.paperBtnLimit}
+              onClick={placeLimitPaper}
+              disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
+              title={
+                bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                : earningsVeto ? EARNINGS_VETO_MESSAGE
+                : stopMissing ? MISSING_INVALIDATION_TITLE
+                : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : undefined
+              }
+            >
+              {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
+            </button>
+            <button
+              type="button"
+              className={paperStyles.paperBtnMarket}
+              onClick={placeMarketNow}
+              disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
+              title={
+                // Direction and broker refusals cannot be cured by filling a field.
+                bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
+                : marketBlocked != null ? marketBlocked
+                : earningsVeto ? EARNINGS_VETO_MESSAGE
+                : stopMissing ? MISSING_INVALIDATION_TITLE
+                : pickMissing ? MISSING_METHOD_PICK_TITLE
+                : undefined
+              }
+            >
+              {marketPlacing ? 'Placing…' : 'Right Now — Market'}
+            </button>
+          </div>
+          {/* #583 — the destination-specific review. Nothing is saved or
+            * sent until its final action, which posts the request shown. */}
+          {brokerReview && (() => {
+            const review = brokerReview;
+            const qtyDiff = differenceFor(review.preview, 'qty');
+            return (
+              <BrokerOrderReview
+                data={{
+                  label: review.label,
+                  brokerLabel: review.brokerLabel,
+                  account: review.account,
+                  request: review.request,
+                  requestedQuantity: review.contracts,
+                  quantityNote: qtyDiff ? reasonText(qtyDiff.reason) : null,
+                  marketMid: review.marketMid,
+                  savedEntry: review.preview.position.entryPrice,
+                  lines: reviewLines(review.pos, review.preview, review.globalPremiumStopPct),
+                  changedSinceReview: review.changedSinceReview,
+                }}
+                stale={brokerReviewStaleness(review)}
+                busy={limitPlacing || marketPlacing}
+                onConfirm={() => { void confirmBrokerReview(); }}
+                onCancel={() => setBrokerReview(null)}
+                onRefresh={() => { void reviewDirectOrder(review.orderType); }}
+              />
+            );
+          })()}
+          {/* Fix #3 (review). Said, not merely disabled; independent of the
+            * stop / pick refusals below for the same reason they are
+            * independent of each other. */}
+          {bearishUnvalidated && (
+            <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
+          )}
+          {earningsVeto && (
+            <Text size={11} tone="reject">
+              {EARNINGS_VETO_MESSAGE}
+            </Text>
+          )}
+          {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
+            * (title only -- see its armBlockedReason NOTE), so the
+            * unknown-earnings refusal is said here, beside the veto's.
+            * Manual sends stay enabled: D4 caps the card at CAUTION, it
+            * does not veto it. */}
+          {!earningsVeto && earningsGate.armBlockedReason && (
+            <Text size={11} tone="caution">
+              {earningsGate.armBlockedReason}
+            </Text>
+          )}
+          {!planReady && (
+            <Text size={11} tone="caution">
+              Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
+            </Text>
+          )}
+          {/* Said, not merely disabled. A greyed button with no reason
+            * beside it reads as a bug; the `title` above is a tooltip and
+            * a tooltip is not a disclosure. Rendered independently of
+            * `!planReady` rather than as its `else`, because the two are
+            * unrelated conditions and can hold at once -- an overridden
+            * contract still recomputing on a restored candidate -- and
+            * suppressing this one behind the other would hide the only
+            * refusal the user can actually act on. */}
+          {stopMissing && (
+            <Text size={11} tone="reject">
+              {MISSING_INVALIDATION_MESSAGE}
+            </Text>
+          )}
+          {/* Phase G piece 5, build step 4 (§7.1). Independent of
+            * `stopMissing` above for the same reason that one is
+            * independent of `!planReady` — a card can be missing both a
+            * stop and a pick at once, and suppressing this behind the
+            * other would hide a refusal the user can act on right now. */}
+          {pickMissing && (
+            <Text size={11} tone="reject">
+              {MISSING_METHOD_PICK_MESSAGE}
+            </Text>
+          )}
+          {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
+          {orderOutcome && <BrokerOrderOutcome outcome={orderOutcome} />}
+          {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
+            * Hiding it also hid Disarm for a strategy already armed; the
+            * veto now refuses Arm / Fire now inside the component, and the
+            * sentence is the one printed above. */}
+          {planReady && (
+            <AutoTradeArm
+              armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
+              // The same live quote TradeCard gets as `liveMid` and the
+              // page prints as "Live mid" -- it was in scope here all
+              // along and simply never handed down, leaving the arm path
+              // (and the daily-loss gate behind it) on the scan-time mid.
+              liveMid={liveQuoteForCard?.price ?? null}
+              card={effectiveCard}
+              broker={selectedBroker}
+              contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
+              // Piece 4 — the same resolution both send paths use, so a
+              // trade that is armed and a trade that is sent cannot end up
+              // at two different premium stops.
+              premiumStopDollar={premiumStopDollarFor(effectiveCard)}
+              // Same resolution as every other send path, for the same
+              // reason: an armed trade and a sent trade must not go out at
+              // two different limit prices.
+              entryLimit={entryLimitFor(effectiveCard)}
+              // DIRECT-SEND-STOP-GATE-2026-09-09, and since O4 step 6 also
+              // the booked stop: AutoTradeArm gates on this value AND posts
+              // it as `stop`, so the fired trade is booked at the level
+              // the card shows. The same resolution `stopMissing` is
+              // derived from, passed rather than recomputed, so Arm and
+              // the two direct buttons cannot refuse on two different
+              // readings of one field.
+              resolvedInvalidation={resolvedInvalidationForCard}
+              // O4 step 6 -- the booking fields, each resolved by the SAME
+              // expression `buildPaperPosition` uses for this card, so an
+              // armed trade books what Place Limit would have stored.
+              // `optionSymbol` is the booked `contract` (a unique column)
+              // and what the broker receives; `stopIsUserSet` tells the
+              // booking not to re-anchor a typed stop. Both are required
+              // props for that reason.
+              optionSymbol={toOptionSymbol(effectiveCard)}
+              stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
+              structuralStop={structuralStopPriceFor(effectiveCard)}
+              exitPlan={exitPlanFor(effectiveCard)}
+              maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
+              // Phase G piece 5, build step 4 (§7.1). The same resolution
+              // `pickMissing` is derived from, passed rather than
+              // recomputed, so Arm and the two direct buttons cannot
+              // refuse on two different readings of one field.
+              methodPick={resolvedMethodPickForCard}
+            />
+          )}
+        </>
+      )}
+      {/* OUTSIDE the `selectedBroker` gate, deliberately.
+        *
+        * ROUND 12 finding 2 -- the lines below are the ONLY channel for
+        * two things the basket path produces: the "premium stop could not
+        * be applied" disclosure (`droppedStopNote`, written by
+        * `handleSubmit` for every order the backend re-anchored) and the
+        * hard-rejection banner (`basketError` since A8b; `orderError`
+        * before it, on a failed save). The
+        * basket reaches `handleSubmit` through TradeCard's Send button,
+        * which never touches BrokerPicker -- so a user who pins a basket
+        * and sends it without selecting a paper broker got neither
+        * message. A required disclosure that renders only when an
+        * unrelated control happens to be set is a disclosure that does not
+        * exist.
+        *
+        * `paperOrderId` stays inside the gate above: only the two direct
+        * paths set it, and both require a selected broker. */}
+      {saveNotes.map((n) => (
+        <Text key={n} size={12} tone="caution">{n}</Text>
+      ))}
+      {basketNotes.map((n) => (
+        <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
+      ))}
+      {basketError && <Text size={12} tone="reject">{basketError}</Text>}
+      {orderError && <Text size={12} tone="reject">{orderError}</Text>}
+      {/* P1b-i -- the direct sends' persistent notes. Outside the broker
+        * gate like the lines above; each Remove acts on its own rec_id. */}
+      {directNotes.map((n) => (
+        <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
+          <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
+          <button
+            type="button"
+            className={paperStyles.directNoteRemove}
+            onClick={() => { void removeNoteRow(n); }}
+            disabled={n.removing}
+          >
+            {`Remove (${n.label})`}
+          </button>
+          {n.status && <Text size={11} tone="caution">{n.status}</Text>}
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   return (
     <div className={`${styles.main} ${paperStyles.presentationPage}`}>
       <div className={styles.stepHeader}>
@@ -1679,6 +1918,7 @@ export default function Step7Page() {
               submissionReview={activeDraft && activeSubmissionToken
                 ? <SubmissionReview draft={activeDraft} generation={activeSubmissionToken.generation} />
                 : undefined}
+              destinations={executionPanel}
             />
           )}
           {!basketEmpty && basketPlansPending && basketPlanErrors.length === 0 && (
@@ -1694,240 +1934,15 @@ export default function Step7Page() {
               </button>
             </div>
           ))}
-          {fetchingQuote && (
-            <Text size={11} tone="dim">Fetching live price…</Text>
-          )}
-          {quoteWarning(liveQuoteForCard) && (
-            <div role="status">
-              <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
-              <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
-            </div>
-          )}
-          {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
-            <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
-          )}
-          {liveStockPriceForCard != null && !fetchingQuote && (
-            <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
-          )}
         </>
       )}
 
         </div>
 
-      {/* Paper broker execution */}
-      {effectiveCard && (
-        <div className={paperStyles.paperSection}>
-          <Text size={14} weight={600}>Decision and execution</Text>
-          <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
-          {selectedBroker && (
-            <>
-              <div className={paperStyles.paperButtons}>
-                <button
-                  type="button"
-                  className={paperStyles.paperBtnLimit}
-                  onClick={placeLimitPaper}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated}
-                  title={
-                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
-                    : earningsVeto ? EARNINGS_VETO_MESSAGE
-                    : stopMissing ? MISSING_INVALIDATION_TITLE
-                    : pickMissing ? MISSING_METHOD_PICK_TITLE
-                    : undefined
-                  }
-                >
-                  {limitPlacing ? 'Placing…' : planReady ? `Place Limit @ $${entryLimitFor(effectiveCard).toFixed(2)}` : 'Place Limit'}
-                </button>
-                <button
-                  type="button"
-                  className={paperStyles.paperBtnMarket}
-                  onClick={placeMarketNow}
-                  disabled={limitPlacing || marketPlacing || !planReady || stopMissing || pickMissing || earningsVeto || bearishUnvalidated || marketBlocked != null}
-                  title={
-                    // Direction and broker refusals cannot be cured by filling a field.
-                    bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE
-                    : marketBlocked != null ? marketBlocked
-                    : earningsVeto ? EARNINGS_VETO_MESSAGE
-                    : stopMissing ? MISSING_INVALIDATION_TITLE
-                    : pickMissing ? MISSING_METHOD_PICK_TITLE
-                    : undefined
-                  }
-                >
-                  {marketPlacing ? 'Placing…' : 'Right Now — Market'}
-                </button>
-              </div>
-              {/* #583 — the destination-specific review. Nothing is saved or
-                * sent until its final action, which posts the request shown. */}
-              {brokerReview && (() => {
-                const review = brokerReview;
-                const qtyDiff = differenceFor(review.preview, 'qty');
-                return (
-                  <BrokerOrderReview
-                    data={{
-                      label: review.label,
-                      brokerLabel: review.brokerLabel,
-                      account: review.account,
-                      request: review.request,
-                      requestedQuantity: review.contracts,
-                      quantityNote: qtyDiff ? reasonText(qtyDiff.reason) : null,
-                      marketMid: review.marketMid,
-                      savedEntry: review.preview.position.entryPrice,
-                      lines: reviewLines(review.pos, review.preview, review.globalPremiumStopPct),
-                      changedSinceReview: review.changedSinceReview,
-                    }}
-                    stale={brokerReviewStaleness(review)}
-                    busy={limitPlacing || marketPlacing}
-                    onConfirm={() => { void confirmBrokerReview(); }}
-                    onCancel={() => setBrokerReview(null)}
-                    onRefresh={() => { void reviewDirectOrder(review.orderType); }}
-                  />
-                );
-              })()}
-              {/* Fix #3 (review). Said, not merely disabled; independent of the
-                * stop / pick refusals below for the same reason they are
-                * independent of each other. */}
-              {bearishUnvalidated && (
-                <Text size={11} tone="reject">{BEARISH_UNVALIDATED_MESSAGE}</Text>
-              )}
-              {earningsVeto && (
-                <Text size={11} tone="reject">
-                  {EARNINGS_VETO_MESSAGE}
-                </Text>
-              )}
-              {/* Audit round 1, F8. AutoTradeArm prints no sentence of its own
-                * (title only -- see its armBlockedReason NOTE), so the
-                * unknown-earnings refusal is said here, beside the veto's.
-                * Manual sends stay enabled: D4 caps the card at CAUTION, it
-                * does not veto it. */}
-              {!earningsVeto && earningsGate.armBlockedReason && (
-                <Text size={11} tone="caution">
-                  {earningsGate.armBlockedReason}
-                </Text>
-              )}
-              {!planReady && (
-                <Text size={11} tone="caution">
-                  Recomputing the plan for your selected contract — ordering enabled once it&apos;s ready.
-                </Text>
-              )}
-              {/* Said, not merely disabled. A greyed button with no reason
-                * beside it reads as a bug; the `title` above is a tooltip and
-                * a tooltip is not a disclosure. Rendered independently of
-                * `!planReady` rather than as its `else`, because the two are
-                * unrelated conditions and can hold at once -- an overridden
-                * contract still recomputing on a restored candidate -- and
-                * suppressing this one behind the other would hide the only
-                * refusal the user can actually act on. */}
-              {stopMissing && (
-                <Text size={11} tone="reject">
-                  {MISSING_INVALIDATION_MESSAGE}
-                </Text>
-              )}
-              {/* Phase G piece 5, build step 4 (§7.1). Independent of
-                * `stopMissing` above for the same reason that one is
-                * independent of `!planReady` — a card can be missing both a
-                * stop and a pick at once, and suppressing this behind the
-                * other would hide a refusal the user can act on right now. */}
-              {pickMissing && (
-                <Text size={11} tone="reject">
-                  {MISSING_METHOD_PICK_MESSAGE}
-                </Text>
-              )}
-              {paperOrderId && <Text size={12} tone="pass">{paperOrderId.label}: Order placed — ID: {paperOrderId.id}</Text>}
-              {orderOutcome && <BrokerOrderOutcome outcome={orderOutcome} />}
-              {/* Task 10c (Kenneth, 2026-10-03): rendered on a vetoed card too.
-                * Hiding it also hid Disarm for a strategy already armed; the
-                * veto now refuses Arm / Fire now inside the component, and the
-                * sentence is the one printed above. */}
-              {planReady && (
-                <AutoTradeArm
-                  armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
-                  // The same live quote TradeCard gets as `liveMid` and the
-                  // page prints as "Live mid" -- it was in scope here all
-                  // along and simply never handed down, leaving the arm path
-                  // (and the daily-loss gate behind it) on the scan-time mid.
-                  liveMid={liveQuoteForCard?.price ?? null}
-                  card={effectiveCard}
-                  broker={selectedBroker}
-                  contracts={orderContractsBySymbol[effectiveCard.symbol] ?? 1}
-                  // Piece 4 — the same resolution both send paths use, so a
-                  // trade that is armed and a trade that is sent cannot end up
-                  // at two different premium stops.
-                  premiumStopDollar={premiumStopDollarFor(effectiveCard)}
-                  // Same resolution as every other send path, for the same
-                  // reason: an armed trade and a sent trade must not go out at
-                  // two different limit prices.
-                  entryLimit={entryLimitFor(effectiveCard)}
-                  // DIRECT-SEND-STOP-GATE-2026-09-09, and since O4 step 6 also
-                  // the booked stop: AutoTradeArm gates on this value AND posts
-                  // it as `stop`, so the fired trade is booked at the level
-                  // the card shows. The same resolution `stopMissing` is
-                  // derived from, passed rather than recomputed, so Arm and
-                  // the two direct buttons cannot refuse on two different
-                  // readings of one field.
-                  resolvedInvalidation={resolvedInvalidationForCard}
-                  // O4 step 6 -- the booking fields, each resolved by the SAME
-                  // expression `buildPaperPosition` uses for this card, so an
-                  // armed trade books what Place Limit would have stored.
-                  // `optionSymbol` is the booked `contract` (a unique column)
-                  // and what the broker receives; `stopIsUserSet` tells the
-                  // booking not to re-anchor a typed stop. Both are required
-                  // props for that reason.
-                  optionSymbol={toOptionSymbol(effectiveCard)}
-                  stopIsUserSet={invalidationIsUserSetFor(effectiveCard)}
-                  structuralStop={structuralStopPriceFor(effectiveCard)}
-                  exitPlan={exitPlanFor(effectiveCard)}
-                  maxLossOverride={maxLossOverrideBySymbol[effectiveCard.symbol] ?? null}
-                  // Phase G piece 5, build step 4 (§7.1). The same resolution
-                  // `pickMissing` is derived from, passed rather than
-                  // recomputed, so Arm and the two direct buttons cannot
-                  // refuse on two different readings of one field.
-                  methodPick={resolvedMethodPickForCard}
-                />
-              )}
-            </>
-          )}
-          {/* OUTSIDE the `selectedBroker` gate, deliberately.
-            *
-            * ROUND 12 finding 2 -- the lines below are the ONLY channel for
-            * two things the basket path produces: the "premium stop could not
-            * be applied" disclosure (`droppedStopNote`, written by
-            * `handleSubmit` for every order the backend re-anchored) and the
-            * hard-rejection banner (`basketError` since A8b; `orderError`
-            * before it, on a failed save). The
-            * basket reaches `handleSubmit` through TradeCard's Send button,
-            * which never touches BrokerPicker -- so a user who pins a basket
-            * and sends it without selecting a paper broker got neither
-            * message. A required disclosure that renders only when an
-            * unrelated control happens to be set is a disclosure that does not
-            * exist.
-            *
-            * `paperOrderId` stays inside the gate above: only the two direct
-            * paths set it, and both require a selected broker. */}
-          {saveNotes.map((n) => (
-            <Text key={n} size={12} tone="caution">{n}</Text>
-          ))}
-          {basketNotes.map((n) => (
-            <Text key={`basket:${n}`} size={12} tone="caution">{n}</Text>
-          ))}
-          {basketError && <Text size={12} tone="reject">{basketError}</Text>}
-          {orderError && <Text size={12} tone="reject">{orderError}</Text>}
-          {/* P1b-i -- the direct sends' persistent notes. Outside the broker
-            * gate like the lines above; each Remove acts on its own rec_id. */}
-          {directNotes.map((n) => (
-            <div key={`direct:${n.recId}`} className={paperStyles.directNote}>
-              <Text size={12} tone="reject">{directSendNoteText(n)}</Text>
-              <button
-                type="button"
-                className={paperStyles.directNoteRemove}
-                onClick={() => { void removeNoteRow(n); }}
-                disabled={n.removing}
-              >
-                {`Remove (${n.label})`}
-              </button>
-              {n.status && <Text size={11} tone="caution">{n.status}</Text>}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* The execution panel stands alone only while no TradeCard is mounted
+          (a selected contract's plan is still being prepared); otherwise it
+          is inside the card's decision section (#608). */}
+      {effectiveCard && isOverride && !planReady && executionPanel}
 
       </div>
 
