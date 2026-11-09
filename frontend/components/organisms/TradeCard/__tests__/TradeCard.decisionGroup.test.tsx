@@ -28,9 +28,9 @@ jest.mock('@/components/molecules/LabeledStatusBadge', () => ({
 // Calculation tests open every method card explicitly, as the other suites do.
 const render = (...args: Parameters<typeof renderCard>) => {
   const view = renderCard(...args);
-  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+  for (const name of ['Arithmetic', 'Ladder']) {
     const toggle = screen.queryByRole('checkbox', { name });
-    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
   return view;
 };

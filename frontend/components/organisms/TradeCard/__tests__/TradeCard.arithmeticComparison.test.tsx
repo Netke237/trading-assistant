@@ -7,9 +7,9 @@ import type { TradeCardData } from '@/types/domain';
 // These existing calculation/flow tests exercise all methods explicitly.
 const render = (...args: Parameters<typeof renderCard>) => {
   const view = renderCard(...args);
-  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+  for (const name of ['Arithmetic', 'Ladder']) {
     const toggle = screen.queryByRole('checkbox', { name });
-    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
   return view;
 };
@@ -70,13 +70,16 @@ it('shows every custom returned row with resolved stock target, model and calend
   const region = show();
   const rows = rowsOf(region);
   expect(rows).toHaveLength(3);
-  for (const [i, ratio] of ['2.5:1 target', '3.5:1 target', '4.5:1 target'].entries()) expect(within(rows[i]).getByText(ratio)).toBeVisible();
+  for (const [i, ratio] of ['2.5:1', '3.5:1', '4.5:1'].entries()) expect(within(rows[i]).getByText(ratio)).toBeVisible();
   const first = within(rows[0]);
-  for (const value of ['$196.00', '$6.50', '60%', '~8 calendar days', '$500.00']) expect(first.getAllByText(value)[0]).toBeVisible();
+  for (const value of ['$196.00', '$6.50', '60%', '~8d', '$500.00']) expect(first.getAllByText(value)[0]).toBeVisible();
   // Model and original arithmetic target are in the geometry expansion.
   expect(region.getAllByText('Delta approximation')[0]).toBeInTheDocument();
   expect(region.getAllByText('$195.00')[0]).toBeInTheDocument();
-  expect(region.getAllByText(/2 entered contracts × 100 shares.*selected-contract full exit/)[0]).toBeVisible();
+  // #610 G8: the quantity basis stays visible in the short footnote; the full
+  // sentences are in the card's disclosures.
+  expect(region.getByText(/Outcome: 2 contracts × 100 shares, full exit, before commissions/)).toBeVisible();
+  expect(region.getAllByText(/2 entered contracts × 100 shares.*selected-contract full exit/)[0]).toBeInTheDocument();
   expect(region.getByText(/Stored calculation stock entry: unavailable/)).toBeInTheDocument();
   expect(first.getByText(/Bearish target capped/)).toBeVisible();
   expect(region.getAllByText(/test_quality_reason/)[0]).toBeInTheDocument();

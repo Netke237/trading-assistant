@@ -95,14 +95,13 @@ describe('stop consequence beside the barriers', () => {
     expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
     const inputs = mc().getByRole('spinbutton', { name: 'T1 profit target %' });
     const runButton = mc().getByRole('button', { name: 'Run Monte Carlo Estimate' });
-    const stopHeading = stopSlot().getByText('Stock barrier (run input)');
+    // #610 G7: before any estimate the four facts are one line that names them.
+    const stopLine = stopSlot().getByText('Unavailable — run or re-run estimate to confirm barriers').parentElement!;
     expect(inputs.compareDocumentPosition(runButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(runButton.compareDocumentPosition(stopHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    for (const label of ['Stock barrier (run input)', 'Option-price barrier (run input)',
-      'Option value at stock stop (barrier time)', 'Loss at stock stop (barrier time)']) {
-      expect(kv(label)).toHaveTextContent(/Unavailable/);
-      expect(kv(label)).toBeVisible();
-    }
+    expect(runButton.compareDocumentPosition(stopLine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stopLine).toHaveTextContent(
+      /Stock barrier, option-price barrier, and option value and loss at the stock stop \(barrier time\)/);
+    expect(stopLine).toBeVisible();
   });
 
   it('fresh run: shows both run barriers and the race value and loss at the stock stop with its barrier-time basis', async () => {
@@ -191,16 +190,18 @@ describe('compact target table', () => {
     await run();
     const table = mc().getByRole('table', { name: 'Monte Carlo targets' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Target', 'Stock price', 'Option value', 'Probability (independent touch)', 'Conditional time', 'Est. dollar outcome',
+      'Target', 'Stock price', 'Option value', 'Probability (independent touch)', 'Conditional time (calendar days)', 'Est. dollar outcome',
     ]);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows.map((r) => Array.from(r.querySelectorAll('th,td')).map((c) => c.textContent))).toEqual([
-      ['T25%', '$194.10', '$6.50', '61%', '~7 calendar days', '$260.00'],
+      ['T25%', '$194.10', '$6.50', '61%', '~7d', '$260.00'],
       ['T50%', 'not reachable', '$7.80', '42%', 'Unavailable — no conditional median', '$520.00'],
-      ['T75%', '$202.30', '$9.10', '27%', '~15 calendar days', '$780.00'],
+      ['T75%', '$202.30', '$9.10', '27%', '~15d', '$780.00'],
     ]);
     expect(table).toBeVisible();
-    expect(mc().getByText(/measured on its own.*conditional on reaching the target/)).toBeVisible();
+    // #610 G8: one short visible footnote; the full sentence is in the model disclosure.
+    expect(mc().getByText(/^Probability counts each target's touch on its own.*conditional median/)).toBeVisible();
+    expect(mc().getByText(/measured on its own.*conditional on reaching the target/)).toBeInTheDocument();
   });
 });
 

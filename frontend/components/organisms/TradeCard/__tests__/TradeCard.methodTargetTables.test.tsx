@@ -70,7 +70,7 @@ type Method = 'arithmetic' | 'monte_carlo' | 'ladder';
 const cardEl = (m: Method) => document.querySelector(`[data-method-card="${m}"]`) as HTMLElement;
 const slot = (m: Method, name: string) => cardEl(m).querySelector(`[data-slot="${name}"]`) as HTMLElement;
 const box = (name: string) => screen.getByRole('checkbox', { name });
-const openAll = () => { fireEvent.click(box('Arithmetic')); fireEvent.click(box('Fixed % Ladder')); };
+const openAll = () => { fireEvent.click(box('Arithmetic')); fireEvent.click(box('Ladder')); };
 const MC_ORDER = ['stock', 'option', 'probability', 'time', 'outcome'];
 const cells = (r: HTMLElement) => Array.from(r.querySelectorAll('th,td')).map((c) => c.textContent);
 const fieldOrder = (r: HTMLElement) => Array.from(r.querySelectorAll('[data-field]'))
@@ -95,7 +95,7 @@ describe('Arithmetic in Monte Carlo order', () => {
     expect(rows).toHaveLength(2);
     for (const r of rows) expect(fieldOrder(r)).toEqual(MC_ORDER);
     // Resolved (snapped) targets used for valuation, not the original $195/$199.
-    expect(cells(rows[0]).slice(1)).toEqual(['$196.00', '$6.50', '60%', '~8 calendar days', '$750.00']);
+    expect(cells(rows[0]).slice(1)).toEqual(['$196.00', '$6.50', '60%', '~8d', '$750.00']);
     expect(cells(rows[1]).slice(1)).toEqual(['$200.00', '$8.25', '40%', 'Unavailable — no conditional median', '$1275.00']);
     // The capped warning stays with its row, outside any disclosure.
     const capped = within(rows[0]).getByText(/Bearish target capped/);
@@ -245,7 +245,7 @@ describe('two and three method comparison', () => {
         expect(cardEl(m)).toBeVisible();
         expect(stopFields(m)).toHaveLength(4);
       }
-      fireEvent.click(box('Fixed % Ladder'));
+      fireEvent.click(box('Ladder'));
       fireEvent.click(within(cardEl('arithmetic')).getByText('Original targets, snap geometry & pricing model'));
       fireEvent.click(within(cardEl('ladder')).getByText('Ladder R:R, allocation & pricing'));
       await act(async () => { await Promise.resolve(); });
