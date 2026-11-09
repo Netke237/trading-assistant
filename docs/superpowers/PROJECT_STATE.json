@@ -10301,9 +10301,9 @@
       "name": "Trade card durable-reference presentation alignment (#603)",
       "owner": "agent",
       "status": "in_progress",
-      "summary": "Seven presentation amendments; user selected #604 only for this session.",
+      "summary": "Six build tickets completed; continuing #610 visual acceptance and final integrated verification.",
       "tracking_issue": 603,
-      "branch": "claude/ui-layout-information-design-1n94si",
+      "branch": "board/trade-card-reference-alignment-8b8ee0c6",
       "plan": "docs/superpowers/plans/2026-11-09-trade-card-reference-alignment-plan.md",
       "size": "XL",
       "complexity": 4,
@@ -10315,14 +10315,14 @@
         "rounds": 3,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "alignment_plan_remaining_review checked added Tasks2–7 and interactions with Task1 against frozen reference and source: zero gate findings; plan stage closed clean at cap3."
+        "closure_evidence": "alignment_plan_remaining_review checked added Tasks2\u20137 and interactions with Task1 against frozen reference and source: zero gate findings; plan stage closed clean at cap3."
       },
       "audit_history": [
         {
           "round": 1,
           "stage": "plan",
           "reviewer": "amendment_ticket_plan_audit",
-          "scope": "Seven-ticket publication manifest, GitHub #604–610 and frozen reference d8245e66; historical review from publication session",
+          "scope": "Seven-ticket publication manifest, GitHub #604\u2013610 and frozen reference d8245e66; historical review from publication session",
           "gate_findings": 0,
           "outcome": "clean"
         },
@@ -10330,7 +10330,7 @@
           "round": 2,
           "stage": "plan",
           "reviewer": "alignment_plan_detail_audit",
-          "scope": "Added Task1 detail in 2026-11-09-trade-card-reference-alignment-plan.md against TradeCard/selector/disclosures/reference D01–D03",
+          "scope": "Added Task1 detail in 2026-11-09-trade-card-reference-alignment-plan.md against TradeCard/selector/disclosures/reference D01\u2013D03",
           "gate_findings": 0,
           "outcome": "clean"
         },
@@ -10338,12 +10338,12 @@
           "round": 3,
           "stage": "plan",
           "reviewer": "alignment_plan_remaining_review",
-          "scope": "Remaining execution details Tasks2–7 in 2026-11-09-trade-card-reference-alignment-plan.md against source and frozen d8245e66 reference",
+          "scope": "Remaining execution details Tasks2\u20137 in 2026-11-09-trade-card-reference-alignment-plan.md against source and frozen d8245e66 reference",
           "gate_findings": 0,
           "outcome": "clean"
         }
       ],
-      "note": "Kenneth reassigned the phase from the Codex session to a Claude session in chat on 2026-11-09 (forced claim take on his instruction); continued from board/trade-card-reference-alignment-86fd081f @779f791. Draft PR611 (old branch) to be superseded, not merged. 6/7 built; approved plan stage3 clean, code stage0 pending integrated audit. Existing code/numerical/transport behavior retained.",
+      "note": "User explicitly instructed this Codex session to take over and continue. New branch resumes60c4acb6 (visual batches1/2); other-container uncommitted batch3 unavailable. Fresh actual/reference captures stored. Previous branches preserved; phase claim reassigned on direct chat instruction.6/7 built, plan3clean/code0pending; no counters reset.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
