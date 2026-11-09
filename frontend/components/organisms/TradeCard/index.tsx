@@ -3010,7 +3010,11 @@ export function TradeCard({
             Final Recommendation method or change the order and exit fields. Each card keeps its own
             source, valuation basis and freshness; the methods are independent and can disagree.
           </Text>
-        <div className={styles.methodGrid} data-compare-count={comparedMethods.length}>
+        <div
+          className={styles.methodGrid}
+          data-compare-count={comparedMethods.length}
+          data-compare-ladder={comparedMethods.includes('ladder') ? 'true' : undefined}
+        >
         {/* Arithmetic Profit Target (Feature 3) — the primary method. */}
         <div className={styles.methodCardSlot} data-method-card="monte_carlo" hidden={!comparedMethods.includes('monte_carlo')}>
         <section className={`${styles.planCard} ${styles.methodCard}`} aria-label="Monte Carlo Profit Target">

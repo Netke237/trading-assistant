@@ -143,6 +143,29 @@ describe('comparison layout', () => {
   });
 });
 
+describe('Ladder comparison width (#607)', () => {
+  /* jsdom applies no CSS; the browser check is capture-method-tables.cjs
+     (`scrolling tables`). A row is shared with the Ladder's seven-column table
+     only where each card gets ~500px: two methods with the Ladder stack below
+     1024px of results width, three methods keep the Ladder on a full row of
+     its own below 1541px. */
+  it('pins the container queries that keep the Ladder table off a too-narrow shared row', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'TradeCard.module.css'), 'utf8');
+    const block = (query: string) => {
+      const at = css.indexOf(`@container (${query}) {`);
+      if (at < 0) return '';
+      const end = css.indexOf('\n}', at);
+      return css.slice(at, end);
+    };
+    const two = block('max-width: 1023px');
+    expect(two).toMatch(/\.methodGrid\[data-compare-count="2"\]\[data-compare-ladder\]\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/);
+    const three = block('max-width: 1540px');
+    expect(three).toMatch(/\.methodGrid\[data-compare-count="3"\]\s*\{\s*grid-template-columns:\s*repeat\(auto-fit, minmax\(min\(100%, max\(360px, 34%\)\), 1fr\)\);/);
+    expect(three).toMatch(/\.methodGrid\[data-compare-count="3"\] > \[data-method-card="ladder"\] > \.methodCard\s*\{\s*grid-column:\s*1 \/ -1;/);
+    expect(css).not.toContain('@container (max-width: 1111px)');
+  });
+});
+
 describe('disclosure defaults on a fully computed card', () => {
   it('every explanation is closed, and the values and warnings it explains stay outside', async () => {
     const data = card({

@@ -123,6 +123,21 @@ describe('display-only comparison in the same results area', () => {
     expect(box('Arithmetic')).toBeDisabled();
   });
 
+  it('marks the grid when the Ladder is compared, so a too-narrow shared row can stack (#607)', () => {
+    render(<TradeCard data={card()} contracts={3} />);
+    const grid = () => document.querySelector('[data-compare-count]') as HTMLElement;
+    expect(grid()).not.toHaveAttribute('data-compare-ladder');
+    fireEvent.click(box('Arithmetic'));
+    expect(grid()).not.toHaveAttribute('data-compare-ladder');
+    fireEvent.click(box('Fixed % Ladder'));
+    expect(grid()).toHaveAttribute('data-compare-ladder', 'true');
+    fireEvent.click(box('Arithmetic'));
+    expect(grid()).toHaveAttribute('data-compare-count', '2');
+    expect(grid()).toHaveAttribute('data-compare-ladder', 'true');
+    fireEvent.click(box('Fixed % Ladder'));
+    expect(grid()).not.toHaveAttribute('data-compare-ladder');
+  });
+
   it('opening and comparing fires no request, no edit and leaves the method choice unchanged', async () => {
     const onEditsChange = jest.fn();
     const onMethodPickChange = jest.fn();

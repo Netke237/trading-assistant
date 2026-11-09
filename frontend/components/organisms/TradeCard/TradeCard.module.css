@@ -606,11 +606,28 @@
 .methodCardSlot { display: contents; }
 .methodCardSlot[hidden] { display: none; }
 
-/* #607 — with all three methods open, the Ladder (last, seven table columns)
-   wraps onto a row of its own whenever the grid holds fewer than three cards
-   per row; there it takes the full row so its table needs no scrolling. */
+/* #607 — the Ladder's seven-column table needs a card about 490px wide
+   (table ~455px plus the card's side padding); narrower, its outcome columns
+   would hide behind the table's sideways scroll. So a row is shared with the
+   Ladder only when every card in it gets at least ~500px:
+   - two methods including the Ladder: side by side only from 1024px of
+     results width (2 × 504px + gap); below that the two cards stack, each
+     taking the full width;
+   - all three methods: three per row only from 1541px (3 × 503px + gaps);
+     below that the grid holds at most two per row and the Ladder (last)
+     wraps onto a row of its own, which it takes in full.
+   Cards that do share a row keep the subgrid's equal heights and aligned
+   slots. Monte Carlo + Arithmetic is unaffected. */
 .methodResults { container-type: inline-size; }
-@container (max-width: 1111px) {
+@container (max-width: 1023px) {
+  .methodGrid[data-compare-count="2"][data-compare-ladder] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container (max-width: 1540px) {
+  .methodGrid[data-compare-count="3"] {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, max(360px, 34%)), 1fr));
+  }
   .methodGrid[data-compare-count="3"] > [data-method-card="ladder"] > .methodCard {
     grid-column: 1 / -1;
   }
