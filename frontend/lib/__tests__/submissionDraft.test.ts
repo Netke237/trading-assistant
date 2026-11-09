@@ -1,5 +1,5 @@
 import {
-  buildSubmissionDraft, stampPosition, orderAtQuantity, targetBasisOf,
+  buildSubmissionDraft, directExpiryBlock, stampPosition, orderAtQuantity, targetBasisOf,
   submissionToken, isCurrentSubmission, submissionDifferences,
   type SubmissionInputs,
 } from '@/lib/submissionDraft';
@@ -174,5 +174,73 @@ describe('generation tokens — a late response never replaces a newer review', 
     // earlier generation is still stale.
     expect(isCurrentSubmission(submissionToken(a, 1), submissionToken(a, 3))).toBe(false);
     expect(isCurrentSubmission(null, tokenB)).toBe(false);
+  });
+});
+
+/* #591 / #612 (DIRECT-SEND-EXPIRY-PLACEHOLDER) — a direct send's position used
+ * `cd?.expiry ?? '2026-12-31'`: a card with no supplied expiry stored a made-up
+ * calendar date on the Portfolio row (DTE, time-exit alert and P/L horizons
+ * then read it). Policy: no supplied, non-blank expiry → both direct routes are
+ * BLOCKED with a reselect-contract reason and carry an empty expiry that is
+ * never submitted. Nothing is inferred from a default DTE or a display label. */
+describe('direct sends refuse a contract with no supplied expiry', () => {
+  const details = card().contractDetails!;
+  const UNAVAILABLE: Array<[string, TradeCardData]> = [
+    ['missing contractDetails', card({ contractDetails: undefined })],
+    ['null expiry', card({ contractDetails: { ...details, expiry: null as unknown as string } })],
+    ['undefined expiry', card({ contractDetails: { ...details, expiry: undefined as unknown as string } })],
+    ['empty expiry', card({ contractDetails: { ...details, expiry: '' } })],
+    ['whitespace-only expiry', card({ contractDetails: { ...details, expiry: '   ' } })],
+  ];
+
+  it.each(UNAVAILABLE)('%s: both routes are blocked with a reselect reason and no made-up expiry (never throws)', (_n, c) => {
+    let d!: ReturnType<typeof buildSubmissionDraft>;
+    expect(() => { d = buildSubmissionDraft(inputs({ card: c }), OPTS); }).not.toThrow();
+    for (const route of [d.direct!.limit, d.direct!.market]) {
+      expect(route.position.expiry).not.toBe('2026-12-31');
+      expect(route.position.expiry).toBe('');
+      expect(route.blocked).toMatch(/no expiry date/i);
+      expect(route.blocked).toMatch(/reselect the contract/i);
+    }
+    expect(d.direct!.limit.orderType).toBe('LMT');
+    expect(d.direct!.market.orderType).toBe('MKT');
+  });
+
+  it.each(UNAVAILABLE)('%s: the missing-expiry reason wins over a broker refusal on either route', (_n, c) => {
+    const d = buildSubmissionDraft(inputs({ card: c }), { ...OPTS, broker: 'tastytrade_paper' });
+    expect(d.direct!.limit.blocked).toMatch(/no expiry date/i);
+    expect(d.direct!.market.blocked).toMatch(/no expiry date/i);
+  });
+
+  it.each(UNAVAILABLE)('%s: directExpiryBlock gives the same reselect reason the routes carry', (_n, c) => {
+    const reason = directExpiryBlock(c);
+    expect(reason).toBe('This contract has no expiry date — reselect the contract in Step 6 before sending.');
+    const d = buildSubmissionDraft(inputs({ card: c }), OPTS);
+    expect(d.direct!.limit.blocked).toBe(reason);
+    expect(d.direct!.market.blocked).toBe(reason);
+  });
+
+  it('directExpiryBlock is null for a supplied expiry', () => {
+    expect(directExpiryBlock(card())).toBeNull();
+  });
+
+  it('a supplied expiry is kept exactly and neither route is blocked by it', () => {
+    const d = buildSubmissionDraft(inputs(), OPTS);
+    for (const route of [d.direct!.limit, d.direct!.market]) {
+      expect(route.position.expiry).toBe('2026-05-15');
+      expect(route.position.contract).toBe('AAA|150|2026-05-15|C');
+      expect(route.order.option_symbol).toBe('AAA|150|2026-05-15|C');
+      expect(route.blocked).toBeNull();
+    }
+    // The existing broker-type refusal is unchanged on a valid expiry.
+    const t = buildSubmissionDraft(inputs(), { ...OPTS, broker: 'tastytrade_paper' });
+    expect(t.direct!.market.blocked).toBe('Tastytrade paper accepts limit orders only — use Place Limit.');
+    expect(t.direct!.limit.blocked).toBeNull();
+  });
+
+  it('Track basket keeps its own DTE-derived expiry (out of scope, unchanged)', () => {
+    const d = buildSubmissionDraft(inputs({ card: card({ contractDetails: undefined }) }), OPTS);
+    expect(d.tracking.expiry).toBe(new Date(Date.now() + 24 * 86_400_000).toISOString().slice(0, 10));
+    expect(d.tracking.dteTotal).toBe(24);
   });
 });
