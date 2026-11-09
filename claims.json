@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/direct-send-expiry-placeholder-98c94733",
-      "claimed_at": "2026-11-09T06:37:02Z",
-      "expires_at": "2026-11-09T09:39:05Z",
-      "note": "Work Board #591: prevent invented expiry in direct sends",
-      "task": "DIRECT-SEND-EXPIRY-PLACEHOLDER"
-    }
-  ]
+  "claims": []
 }
