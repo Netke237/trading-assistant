@@ -205,7 +205,7 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
         <Text size={11} tone="secondary" weight={400}>Exit method for this trade</Text>
         {pick && (
           <button type="button" className={styles.clear} onClick={() => onChange(null)}>
-            <Text size={10} tone="dim">Clear</Text>
+            <Text size={12} tone="secondary">Clear</Text>
           </button>
         )}
       </div>
@@ -224,7 +224,7 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
             onClick={() => pickMethod(o.method)}
           >
             <Text size={11} weight={500}>{o.label}</Text>
-            <Text size={10} tone="dim">
+            <Text size={11} tone="secondary">
               {o.unavailable ?? `${o.rows.length} target${o.rows.length === 1 ? '' : 's'}`}
             </Text>
           </button>
@@ -233,7 +233,7 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
 
       {active && active.rows.length > 0 && (
         <>
-          <Text size={10} tone="dim">Target row</Text>
+          <Text size={11} tone="secondary">Target row</Text>
           <div className={styles.row} role="radiogroup" aria-label="Target row">
             {active.rows.map((r) => (
               <button
@@ -246,14 +246,14 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
                 onClick={() => pickRow(r)}
               >
                 <Text size={11} weight={500}>{r.label}</Text>
-                <Data size={11} weight={400} tone="dim">{priceText(r.displayPrice)}</Data>
+                <Data size={11} weight={400} tone="secondary">{priceText(r.displayPrice)}</Data>
               </button>
             ))}
           </div>
         </>
       )}
 
-      <Text size={10} tone="dim">Judged on</Text>
+      <Text size={11} tone="secondary">Judged on</Text>
       <div className={styles.row} role="radiogroup" aria-label="Judged on">
         {STOP_BASES.map((b) => (
           <button
@@ -270,7 +270,7 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
           </button>
         ))}
       </div>
-      <Text size={10} tone="dim">
+      <Text size={12} tone="secondary">
         A record of which stop this trade was judged on. It does not change which alerts fire —
         the stock stop and the premium stop both keep firing exactly as they do today.
       </Text>

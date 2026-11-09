@@ -723,15 +723,8 @@
   min-width: 0;
 }
 
-.methodDetails > summary {
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.methodDetails[open] > summary {
-  margin-bottom: var(--space-2);
-}
+/* The summary row itself is the shared disclosure row (#610 G13,
+   styles/disclosure.module.css); `.methodDetails` only places the body. */
 
 .identityFacts {
   display: grid;
@@ -854,14 +847,10 @@
 .exitColumn > .kvRow > .editValue > span,
 .exitColumn > .kvRow > span:nth-child(2),
 .exitColumn > .kvRow > .editInput {
-  font-size: 24px;
+  font-size: 21px;
   line-height: 1.4;
   max-width: 100%;
   overflow-wrap: anywhere;
-}
-
-.exitColumn > .kvRow > .editInput {
-  height: 40px;
 }
 
 .exitReadouts {
@@ -1002,4 +991,117 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* #610 G14 — one header row for every top-level panel (h2 title, optional
+   right meta, divider beneath), and the same row one step smaller for the
+   cards inside a section (method cards, Order Entry, trade loss budget). */
+.panelHead,
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.panelHead > h2 {
+  margin: 0;
+}
+
+/* #610 G3 — Contract Details as its own bordered panel inside the identity. */
+.detailsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.detailsPanel .detailsGrid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-4) var(--space-3);
+}
+
+.detailsPanel .detailsCell {
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* #610 G15 — the editable label with its "Editable" tag, and one consistent
+   editable box: label above a fixed-width, left-aligned value at 21px in the
+   Exit Plan and Order Entry alike (narrow for the Contracts whole number).
+   The accent tint and border of `.editValue` / `.editInput` are unchanged. */
+.editLabel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  min-width: 0;
+}
+
+.editableTag {
+  white-space: nowrap;
+}
+
+.exitColumn > .kvRowEditable > .editValue,
+.exitColumn > .kvRowEditable > .editInput,
+.handlingGrid .orderStrip .kvRowEditable > .editValue,
+.handlingGrid .orderStrip .kvRowEditable > .editInput {
+  box-sizing: border-box;
+  width: 150px;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 2px var(--space-2);
+  text-align: left;
+}
+
+.kvRowEditable[data-input-width='narrow'] > .editValue,
+.kvRowEditable[data-input-width='narrow'] > .editInput,
+.handlingGrid .orderStrip .kvRowEditable[data-input-width='narrow'] > .editValue,
+.handlingGrid .orderStrip .kvRowEditable[data-input-width='narrow'] > .editInput {
+  width: 80px;
+}
+
+/* A card header already draws the divider the budget editor's own top rule
+   would repeat directly beneath it. */
+.cardHead + .structuralStop {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.handlingGrid .orderStrip .kvRowEditable {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: var(--space-2);
+}
+
+.handlingGrid .orderStrip .kvRowEditable > .editValue,
+.handlingGrid .orderStrip .kvRowEditable > .editValue > span,
+.handlingGrid .orderStrip .kvRowEditable > .editInput {
+  font-size: 21px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.handlingGrid .orderStrip .kvRowEditable > .editRejected {
+  text-align: left;
+}
+
+/* #610 G14 — the Ladder card's own (collapsible) header gets the same divider
+   as the other method cards' headers while it is open. */
+.ladderCard > button[aria-expanded='true'] {
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--space-3);
 }

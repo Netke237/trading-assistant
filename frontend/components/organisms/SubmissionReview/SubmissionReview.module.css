@@ -58,10 +58,7 @@
   color: var(--text-secondary);
 }
 
-.details > summary {
-  cursor: pointer;
-  color: var(--accent);
-}
+/* The summary row is the shared disclosure row (#610 G13). */
 
 .detailsBody {
   display: flex;

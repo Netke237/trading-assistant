@@ -319,11 +319,11 @@ export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBy
         </header>
 
         <div className={styles.tableHead}>
-          <Text size={10} tone="dim">SYMBOL</Text>
-          <Text size={10} tone="dim">CONTRACT</Text>
-          <Text size={10} tone="dim" className={styles.right}>MID</Text>
-          <Text size={10} tone="dim">QTY</Text>
-          <Text size={10} tone="dim" className={styles.right}>EST $</Text>
+          <Text size={10} tone="secondary">SYMBOL</Text>
+          <Text size={10} tone="secondary">CONTRACT</Text>
+          <Text size={10} tone="secondary" className={styles.right}>MID</Text>
+          <Text size={10} tone="secondary">QTY</Text>
+          <Text size={10} tone="secondary" className={styles.right}>EST $</Text>
         </div>
 
         <div className={styles.tableBody}>
@@ -472,7 +472,7 @@ function TrackingReviewBlock({
   if (!review || review.status === 'loading') {
     return (
       <div className={styles.review} role="region" aria-label={label} aria-busy="true">
-        <Text size={11} tone="dim">Resolving the tracked values with the server…</Text>
+        <Text size={11} tone="secondary">Resolving the tracked values with the server…</Text>
       </div>
     );
   }
@@ -496,7 +496,7 @@ function TrackingReviewBlock({
       <Data size={11}>{l.requested}</Data>
       <div>
         <Data size={11} tone={l.adjusted ? 'caution' : 'primary'}>{l.effective}</Data>
-        {l.note && <Text size={10} tone="caution">Adjusted — {l.note}</Text>}
+        {l.note && <Text size={12} tone="caution">Adjusted — {l.note}</Text>}
       </div>
     </div>
   );
@@ -515,15 +515,15 @@ function TrackingReviewBlock({
         </Text>
       )}
       <div className={styles.reviewGrid}>
-        <Text size={10} tone="dim">FIELD</Text>
-        <Text size={10} tone="dim">REQUESTED</Text>
-        <Text size={10} tone="dim">SERVER-RESOLVED</Text>
+        <Text size={10} tone="secondary">FIELD</Text>
+        <Text size={10} tone="secondary">REQUESTED</Text>
+        <Text size={10} tone="secondary">SERVER-RESOLVED</Text>
       </div>
       {REVIEW_GROUPS.map((g) => (
         <div key={g.name} role="group" aria-label={g.name} className={styles.reviewGroup} data-review-group={g.id}>
           {g.id === 'destination'
             ? <Text size={11} tone="secondary">Portfolio tracking · no broker order · values resolved by the server now</Text>
-            : <Text size={10} tone="dim">{g.title}</Text>}
+            : <Text size={11} tone="secondary">{g.title}</Text>}
           <div className={styles.reviewGrid}>
             {lines.filter((l) => g.keys.includes(l.key)).map(lineRow)}
             {g.id === 'destination' && fixedRow('Expiry', expiryText)}
@@ -535,18 +535,18 @@ function TrackingReviewBlock({
         </div>
       ))}
       {review.preview.premiumStopUnapplied && (
-        <Text size={10} tone="caution">{review.preview.premiumStopUnapplied}</Text>
+        <Text size={12} tone="caution">{review.preview.premiumStopUnapplied}</Text>
       )}
       <details className={styles.reviewDetails} data-review-details>
         <summary>Technical details</summary>
         <div className={styles.reviewGrid}>
           <div className={styles.reviewLine}>
-            <Text size={10} tone="secondary">Review fingerprint</Text>
-            <div className={styles.reviewSpan}><Data size={10}>{review.preview.fingerprint}</Data></div>
+            <Text size={11} tone="secondary">Review fingerprint</Text>
+            <div className={styles.reviewSpan}><Data size={11}>{review.preview.fingerprint}</Data></div>
           </div>
           <div className={styles.reviewLine}>
-            <Text size={10} tone="secondary">Saved-row id</Text>
-            <div className={styles.reviewSpan}><Data size={10}>{review.request.recId}</Data></div>
+            <Text size={11} tone="secondary">Saved-row id</Text>
+            <div className={styles.reviewSpan}><Data size={11}>{review.request.recId}</Data></div>
           </div>
         </div>
       </details>
@@ -627,7 +627,7 @@ function RiskSummary({
         }
         if (!worst || worst.rc.maxLossLimitDollar == null) return null;
         return (
-          <Text size={11} tone="dim">
+          <Text size={11} tone="secondary">
             Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString('en-US')}
             {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString('en-US')})
           </Text>

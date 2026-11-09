@@ -13,6 +13,7 @@ import {
 } from '@/lib/barrierRace';
 import type { BarrierRace, BarrierRaceOutcome } from '@/types/domain';
 import styles from './BarrierRaceCard.module.css';
+import disclosure from '@/styles/disclosure.module.css';
 
 export interface BarrierRaceCardProps {
   /** Entered quantity, used only for a selected-contract full-exit display. */
@@ -111,7 +112,7 @@ export default function BarrierRaceCard({
     return (
       <section className={styles.card}>
         <Header />
-        <Text size={12} tone="dim">
+        <Text size={12} tone="secondary">
           Not simulated — contract expires today. A zero-length simulation has no paths to
           attribute, and four zeroes would read as a result rather than a refusal.
         </Text>
@@ -156,7 +157,7 @@ export default function BarrierRaceCard({
              printed — with the level it was measured against named, which is
              the fact that makes it stale. */}
         {invalidation && (
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             {stockStopMoved
               ? `${(invalidation.probability * 100).toFixed(0)}% of paths touched the stock stop at
                  some point — but measured against the $${race.stockStopPrice.toFixed(2)} stop this
@@ -176,13 +177,13 @@ export default function BarrierRaceCard({
 
   return (
     <section className={styles.card}>
-      <Header />
+      <Header withNote={false} />
 
       {/* Above everything it qualifies, and never inside the disclosure below:
           it caveats every number on the card, so a reader who never opens the
           full arithmetic must still see it. */}
       {!race.ivSolved && (
-        <Text size={10} tone="caution">
+        <Text size={12} tone="caution">
           The contract&apos;s own implied volatility could not be backed out of its quote, so this
           simulation ran on a generic fallback volatility. Treat every number on this card as
           describing a contract the market is not pricing this way — re-check the quote.
@@ -195,7 +196,7 @@ export default function BarrierRaceCard({
         {/* #579: these are the levels the simulation raced, not the position's
             settings. Said here, beside the table, so a level that differs from
             the Exit Plan is not read as a contradiction or a pending edit. */}
-        <Text size={10} tone="dim">
+        <Text size={12} tone="secondary">
           Simulation inputs, captured when the estimate ran — not the Exit Plan&apos;s settings. They
           are never copied into the Exit Plan; if a barrier&apos;s current value moves after the run,
           this race is cleared until you re-run.
@@ -204,10 +205,10 @@ export default function BarrierRaceCard({
           <table className={`${styles.table} ${styles.barrierTable}`}>
             <thead>
               <tr>
-                <th scope="col"><Text size={10} tone="dim">Barrier</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Level</Text></th>
-                <th scope="col"><Text size={10} tone="dim">How it is set</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Armed</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Barrier</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Level</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">How it is set</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Armed</Text></th>
               </tr>
             </thead>
             <tbody>
@@ -215,7 +216,7 @@ export default function BarrierRaceCard({
                 <td><Text size={11}>Profit target</Text></td>
                 <td className={styles.nowrap}><Data size={11}>per row below</Data></td>
                 <td><Text size={11} tone="secondary">Your T1/T2/T3 % of premium</Text></td>
-                <td><Text size={11} tone="dim">exit, not a stop</Text></td>
+                <td><Text size={11} tone="secondary">exit, not a stop</Text></td>
               </tr>
               <tr>
                 <td><Text size={11}>Stock stop</Text></td>
@@ -246,7 +247,7 @@ export default function BarrierRaceCard({
         {/* The resolution TradeCard's estimate handler applies at request
             time (`resolvedStockStop`, `sentPremiumStopPct`), stated in full:
             the "How it is set" cell above names only the structural branches. */}
-        <Text size={10} tone="dim">
+        <Text size={12} tone="secondary">
           Stock-stop input precedence at run time: the Arithmetic Plan&apos;s structural + ATR stop
           when it was computed for this contract on this visit, else the structural level (from
           Check structure or fetched by the run itself), else the Exit Plan&apos;s stock invalidation.
@@ -257,13 +258,13 @@ export default function BarrierRaceCard({
             first row's chain is every row's. The same formatter as the
             disclosure's per-target "Risk" chain, so the two cannot disagree. */}
         {race.outcomes.length > 0 && (
-          <Text size={10} tone="secondary">
+          <Text size={12} tone="secondary">
             Stock-stop value at barrier time, per share (same for every target):{' '}
             {formatRaceRisk(race.outcomes[0], race.premiumUsed)}
           </Text>
         )}
         {invalidation && (
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             Measured on its own, {(invalidation.probability * 100).toFixed(0)}% of paths touch the
             stock stop at some point
             {/* days(), the same formatter the risk chain uses. Math.round here
@@ -291,7 +292,7 @@ export default function BarrierRaceCard({
           payload, so the row and its chain cannot disagree. */}
       <div className={styles.block}>
         <Text size={12} weight={600}>Which barrier is reached first</Text>
-        <Text size={10} tone="dim">
+        <Text size={12} tone="secondary">
           {quantity != null && Number.isFinite(quantity) && quantity >= 0
             ? `${quantity} entered contracts × 100 shares`
             : 'Entered quantity unavailable'}
@@ -299,7 +300,7 @@ export default function BarrierRaceCard({
           per share, in the same cents as the risk / R:R / edge arithmetic, × quantity × 100,
           before commissions; not a fill or guaranteed profit. Each row is an alternative exit.
         </Text>
-        {isSpread && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
+        {isSpread && <Text size={12} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
         <div className={styles.legend}>
           <LegendKey className={styles.swatchTarget} label="Target first" />
           <LegendKey className={styles.swatchStock} label="Stock stop first" />
@@ -313,22 +314,22 @@ export default function BarrierRaceCard({
           <table className={`${styles.table} ${styles.outcomeTable}`}>
             <thead>
               <tr>
-                <th scope="col" className={styles.nowrap}><Text size={10} tone="dim">Target / option</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Split</Text></th>
+                <th scope="col" className={styles.nowrap}><Text size={11} tone="secondary">Target / option</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Split</Text></th>
                 {/* "Target first", not "Target": the first column is the target
                     percentage, this one is its share of the attribution. */}
-                <th scope="col"><Text size={10} tone="dim">Target first</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Stock stop</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Premium stop</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Neither</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Target first</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Stock stop</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Premium stop</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Neither</Text></th>
                 {/* Only the target's conditional median is in the row. The two
                     stop medians are in the disclosure below, beside the chains
                     they belong to — still rendered, not dropped: they were
                     once computed, mapped onto the wire and typed, but never
                     shown. */}
-                <th scope="col"><Text size={10} tone="dim">Median to target</Text></th>
-                <th scope="col"><Text size={10} tone="dim">R:R vs stock stop</Text></th>
-                <th scope="col"><Text size={10} tone="dim">Edge / contract</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Median to target</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">R:R vs stock stop</Text></th>
+                <th scope="col"><Text size={11} tone="secondary">Edge / contract</Text></th>
               </tr>
             </thead>
             <tbody>
@@ -350,8 +351,8 @@ export default function BarrierRaceCard({
                     <td className={styles.nowrap}>
                       <div className={styles.targetCell}>
                         <Text size={11} weight={500}>{pctLabel(o.targetPct)}</Text>
-                        <Data size={10} tone="dim">{money(o.targetOptionPrice)}</Data>
-                        <Text size={10} tone="dim">Estimated dollar outcome</Text>
+                        <Data size={11} tone="secondary">{money(o.targetOptionPrice)}</Data>
+                        <Text size={11} tone="secondary">Estimated dollar outcome</Text>
                         <Data size={11}>{raceTargetOutcome(o, quantity)}</Data>
                         {onSelectTarget && (
                           <button
@@ -393,7 +394,7 @@ export default function BarrierRaceCard({
              allocated 0.01, so reading the raw value let this claim the stock
              stop never wins while the table above printed 1%. */}
         {race.outcomes.every((o) => o.weightStockStopFirst === 0) && (
-          <Text size={10} tone="caution">
+          <Text size={12} tone="caution">
             On this contract the stock stop wins under 1% of paths, so the bolded R:R above
             describes an outcome the simulation almost never reached, and its term contributes
             exactly nothing to the edge below. Largest-remainder allocation can round a genuinely
@@ -405,11 +406,11 @@ export default function BarrierRaceCard({
         {/* The assumptions every number in the row rests on, short enough to
             stay on screen. Each is stated in full in the disclosure below. */}
         <div className={styles.assumptions}>
-          <Text size={10} tone="dim">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
-          <Text size={10} tone="dim">Medians are conditional on the outcome</Text>
-          <Text size={10} tone="dim">Stock stop repriced once (touch median or fallback day)</Text>
-          <Text size={10} tone="dim">IV unchanged at the barriers</Text>
-          <Text size={10} tone="dim">Edge before commissions</Text>
+          <Text size={12} tone="secondary">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
+          <Text size={12} tone="secondary">Medians are conditional on the outcome</Text>
+          <Text size={12} tone="secondary">Stock stop repriced once (touch median or fallback day)</Text>
+          <Text size={12} tone="secondary">IV unchanged at the barriers</Text>
+          <Text size={12} tone="secondary">Edge before commissions</Text>
         </div>
       </div>
 
@@ -419,19 +420,18 @@ export default function BarrierRaceCard({
           being created on demand. Nothing actionable or any warning lives in
           here — only the remaining medians, the arithmetic behind the row and
           the prose that explains it. */}
-      <details className={styles.details}>
-        <summary className={styles.summary}>
-          <Text size={11} tone="accent">
-            Stop medians, full risk / R:R / edge arithmetic and explanations
-          </Text>
-        </summary>
+      <details className={`${styles.details} ${disclosure.disclosureRow}`}>
+        <summary>Stop medians, full risk / R:R / edge arithmetic and explanations</summary>
         <div className={styles.detailsBody}>
-          <Text size={10} tone="dim">
+          {/* #610 G1 — the card's introduction, moved here from under its
+              title: it explains the reading, it qualifies no figure. */}
+          <HeaderNote />
+          <Text size={12} tone="secondary">
             Every row sums to 100% because each of the {race.nPaths.toLocaleString()} simulated paths
             is counted once, for whichever barrier it reached first. The Monte Carlo card above
             measures each barrier on its own, so its numbers can sum past 100%.
           </Text>
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             The medians are conditional: &quot;{daysLabel(race.outcomes[0]?.daysTarget ?? null)} to{' '}
             {pctLabel(race.outcomes[0]?.targetPct ?? 0)}&quot; is the median over the paths that got
             there first, not over all paths.
@@ -447,7 +447,7 @@ export default function BarrierRaceCard({
               the immediate stop-cost gate does not — a failed structural sub-fetch
               leaves this card pointing a reader at a row that is nowhere on the
               page. */}
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             The stock-stop value is repriced once, at one horizon shared by every target: the
             median day over all paths that ever touch the stock stop, measured on its own (not the
             per-outcome medians), or the configured holding-period fallback when that median is
@@ -474,33 +474,33 @@ export default function BarrierRaceCard({
                 {pctLabel(o.targetPct)} target · {money(o.targetOptionPrice)} option
               </Text>
               <div className={styles.chain}>
-                <Text size={10} tone="dim">Median to stock stop</Text>
+                <Text size={11} tone="secondary">Median to stock stop</Text>
                 <Data size={11}>{daysLabel(o.daysStockStop)}</Data>
               </div>
               <div className={styles.chain}>
-                <Text size={10} tone="dim">Median to premium stop</Text>
+                <Text size={11} tone="secondary">Median to premium stop</Text>
                 <Data size={11}>{daysLabel(o.daysPremiumStop)}</Data>
               </div>
               <div className={styles.chain}>
-                <Text size={10} tone="dim">Risk</Text>
+                <Text size={11} tone="secondary">Risk</Text>
                 <Data size={11}>{formatRaceRisk(o, race.premiumUsed)}</Data>
               </div>
               <div className={styles.chain}>
-                <Text size={10} tone="dim">R:R vs stock stop</Text>
+                <Text size={11} tone="secondary">R:R vs stock stop</Text>
                 <Data size={11} weight={500}>{formatRaceRR(o)}</Data>
               </div>
               <div className={`${styles.chain} ${styles.muted}`}>
-                <Text size={10} tone="dim">R:R vs premium stop</Text>
+                <Text size={11} tone="secondary">R:R vs premium stop</Text>
                 <Data size={11} tone="dim">{formatRacePremiumRR(o)}</Data>
               </div>
               <div className={styles.chain}>
-                <Text size={10} tone="dim">Edge</Text>
+                <Text size={11} tone="secondary">Edge</Text>
                 <Data size={11}>{formatRaceEdge(o, race.premiumUsed)}</Data>
               </div>
             </div>
           ))}
 
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             Only the first ratio is a measurement. Its risk leg is the premium minus what the
             contract would still be worth at the stock stop, which depends on strike, spot, time and
             IV independently — so it genuinely differs between contracts. The greyed one divides two
@@ -511,11 +511,11 @@ export default function BarrierRaceCard({
             fraction is an arbitrary number, so working it out from them disagrees with the printed
             ratio on roughly two rows in five.
           </Text>
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             The &quot;Neither&quot; term is the mean value of those paths at expiry minus the premium
             paid. It is signed, not a loss — those paths can end above what you paid.
           </Text>
-          <Text size={10} tone="dim">
+          <Text size={12} tone="secondary">
             Assumes implied volatility is unchanged when a barrier is reached. On a long call that is
             pessimistic at the stop and optimistic at the target — a real fear bid would leave more
             premium than shown.
@@ -564,15 +564,21 @@ function raceEdgeValue(o: BarrierRaceOutcome, premium: number): string {
   return match ? match[1] : '—';
 }
 
-function Header() {
+function Header({ withNote = true }: { withNote?: boolean }) {
   return (
     <>
       <Text size={14} weight={600}>Barrier Race</Text>
-      <Text size={10} tone="dim">
-        Same simulation as the Monte Carlo card above, read differently: every path is attributed to
-        whichever barrier it reached first. It proposes no level of its own.
-      </Text>
+      {withNote && <HeaderNote />}
     </>
+  );
+}
+
+function HeaderNote() {
+  return (
+    <Text size={12} tone="secondary">
+      Same simulation as the Monte Carlo card above, read differently: every path is attributed to
+      whichever barrier it reached first. It proposes no level of its own.
+    </Text>
   );
 }
 
@@ -580,7 +586,7 @@ function LegendKey({ className, label }: { className: string; label: string }) {
   return (
     <span className={styles.legendKey}>
       <span className={`${styles.swatch} ${className}`} aria-hidden="true" />
-      <Text size={10} tone="dim">{label}</Text>
+      <Text size={11} tone="secondary">{label}</Text>
     </span>
   );
 }

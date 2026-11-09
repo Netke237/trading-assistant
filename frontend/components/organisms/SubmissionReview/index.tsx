@@ -32,6 +32,7 @@ import type { ReactNode } from 'react';
 import { Text } from '@/components/primitives';
 import type { LadderFallbackReason, SubmissionDraft, TargetBasis } from '@/lib/submissionDraft';
 import styles from './SubmissionReview.module.css';
+import disclosure from '@/styles/disclosure.module.css';
 
 const METHOD_LABEL: Record<string, string> = {
   ladder: 'Ladder', arithmetic: 'Arithmetic', monte_carlo: 'Monte Carlo', barrier_race: 'Barrier Race',
@@ -128,7 +129,7 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
         <Text size={11} tone="secondary">What Track basket and the direct sends submit for this card</Text>
       </div>
       {identity.spread && (
-        <Text size={10} tone="caution">
+        <Text size={12} tone="caution">
           {identity.spread.name}: only the selected contract is submitted; the other legs are not part of this request.
         </Text>
       )}
@@ -179,14 +180,14 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
           <Row label="Intended basis">{intendedBasis(selection.targetBasis)}</Row>
           <Row label="Effective target alert">Unresolved until server review</Row>
         </dl>
-        {fallbackNote && <Text size={10} tone={selection.targetBasis.kind === 'ladder_fallback' ? 'caution' : 'dim'}>{note}</Text>}
+        {fallbackNote && <Text size={12} tone={selection.targetBasis.kind === 'ladder_fallback' ? 'caution' : 'secondary'}>{note}</Text>}
       </div>
 
-      <details className={styles.details} data-review-details>
+      <details className={`${styles.details} ${disclosure.disclosureRow}`} data-review-details>
         <summary>Technical details and provenance</summary>
         <div className={styles.detailsBody}>
-          <Text size={11} tone="dim">{`Draft generation ${generation}`}</Text>
-          <Text size={11} tone="dim">
+          <Text size={12} tone="secondary">{`Draft generation ${generation}`}</Text>
+          <Text size={12} tone="secondary">
             The values Track basket and the direct sends submit for this card, from the same request they send.
             Changing the contract, quantity, entry, an exit setting or the selection replaces this draft.
           </Text>
@@ -195,13 +196,13 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
               ? `Yes — computed ${selection.exitPlanComputedAt ?? 'at an unknown time'}; its stop is a calculation result and is not applied`
               : 'No'}</Row>
           </dl>
-          {note && !fallbackNote && <Text size={11} tone="dim">{note}</Text>}
-          <Text size={11} tone="dim">
+          {note && !fallbackNote && <Text size={12} tone="secondary">{note}</Text>}
+          <Text size={12} tone="secondary">
             A direct send re-fetches the option quote when clicked; its entry basis and premium-stop fraction then use
             that quote, and this review refreshes to it. If the server reduces the quantity to fit exposure limits, the
             order is sent at the saved quantity.
           </Text>
-          <Text size={11} tone="dim">
+          <Text size={12} tone="secondary">
             Probabilities, times and estimated values in “Your selected target” above are calculation results; they are not submitted.
           </Text>
         </div>

@@ -134,16 +134,19 @@ describe('TradeCard identity and market context (#577)', () => {
     const headline = within(identity).getByRole('group', { name: 'Contract identity' });
     const details = within(identity).getByText('Contract Details');
     expect(follows(headline, details)).toBe(true);
-    const cell = (label: string) => within(identity).getByText(label).parentElement!;
-    expect(cell('STRIKE')).toHaveTextContent('$190');
-    expect(cell('EXPIRY')).toHaveTextContent('2026-05-15');
-    expect(cell('RIGHT')).toHaveTextContent('Call');
-    expect(cell('MID')).toHaveTextContent('$2.50');
-    expect(cell('Δ')).toHaveTextContent('0.45');
-    expect(cell('Θ / DAY')).toHaveTextContent('$-0.09');
-    expect(cell('IV RANK')).toHaveTextContent('45');
+    const panel = within(identity).getByRole('region', { name: 'Contract Details' });
+    const cell = (label: string) => within(panel).getByText(label).parentElement!;
+    // #610 G3 — sentence-case labels, written out; the symbols stay as hints.
+    expect(cell('Strike')).toHaveTextContent('$190');
+    expect(cell('Expiry')).toHaveTextContent('2026-05-15');
+    expect(cell('Right')).toHaveTextContent('Call');
+    expect(cell('Mid')).toHaveTextContent('$2.50');
+    expect(cell('Delta')).toHaveTextContent('0.45');
+    expect(cell('Delta')).toHaveAttribute('title', 'Δ');
+    expect(cell('Theta / day')).toHaveTextContent('−$0.09');
+    expect(cell('IV rank')).toHaveTextContent('45');
     expect(cell('DTE')).toHaveTextContent('24d');
-    expect(cell('CAR')).toHaveTextContent('$500');
+    expect(cell('Capital at risk')).toHaveTextContent('$500');
   });
 
   it('keeps every Fundamental Health score, badge, colour and definition, and its missing-data state', () => {

@@ -221,12 +221,12 @@ describe('TradeCard', () => {
     expect(within(context).getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
     expect(within(context).getByText('Contract Details')).toBeInTheDocument();
     expect(within(context).getByText('Contract snapshot')).toBeInTheDocument();
-    expect(within(context).getByText('IV RANK')).toBeInTheDocument();
+    expect(within(context).getByText('IV rank')).toBeInTheDocument();
     expect(within(context).getByText('45')).toBeInTheDocument();
-    const mid = within(context).getByText('MID').parentElement!;
+    const mid = within(context).getByText('Mid').parentElement!;
     expect(mid).toHaveTextContent('$2.50');
     expect(mid).not.toHaveTextContent('$7.50');
-    expect(within(context).getByText('CAR').parentElement).toHaveTextContent('$250');
+    expect(within(context).getByText('Capital at risk').parentElement).toHaveTextContent('$250');
   });
 
   it('preserves absolute IV and missing details without substituting rank or live mid', () => {
@@ -236,11 +236,11 @@ describe('TradeCard', () => {
     const context = screen.getByRole('region', { name: 'Selected stock and contract' });
     expect(within(context).getByText('IV')).toBeInTheDocument();
     expect(within(context).getByText('38.0%')).toBeInTheDocument();
-    expect(within(context).queryByText('IV RANK')).not.toBeInTheDocument();
+    expect(within(context).queryByText('IV rank')).not.toBeInTheDocument();
     rerender(<TradeCard data={{ ...mockTradeCard, contractDetails: undefined }} liveMid={7.5} />);
     expect(within(context).getAllByText(mockTradeCard.contract).length).toBeGreaterThan(0);
     expect(within(context).queryByText('Contract Details')).not.toBeInTheDocument();
-    expect(within(context).queryByText('CAR')).not.toBeInTheDocument();
+    expect(within(context).queryByText('Capital at risk')).not.toBeInTheDocument();
   });
 
   it('keeps conditional spread values and alternative reasons in the same selected context', () => {
@@ -370,7 +370,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('2026-05-15')).toBeInTheDocument();
     expect(screen.getByText('Call')).toBeInTheDocument();
     expect(screen.getByText('0.45')).toBeInTheDocument();
-    expect(screen.getByText('$-0.09')).toBeInTheDocument();
+    expect(screen.getByText('−$0.09')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
     expect(screen.getByText('24d')).toBeInTheDocument();
     const mids = screen.getAllByText('$2.50');
