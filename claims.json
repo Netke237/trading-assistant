@@ -2,19 +2,25 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/trade-card-reference-alignment-86fd081f",
-      "claimed_at": "2026-11-09T11:14:33Z",
-      "expires_at": "2026-11-09T14:53:56Z",
-      "note": "",
-      "task": "TRADE-CARD-REFERENCE-ALIGNMENT"
-    },
-    {
-      "agent": "claude",
       "branch": "board/direct-send-expiry-placeholder-4ff3bc02",
       "claimed_at": "2026-11-09T11:37:55Z",
       "expires_at": "2026-11-09T14:47:45Z",
       "note": "",
       "task": "DIRECT-SEND-EXPIRY-PLACEHOLDER"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/ui-layout-information-design-1n94si",
+      "claimed_at": "2026-11-09T12:47:05Z",
+      "expires_at": "2026-11-09T15:47:05Z",
+      "note": "Kenneth reassigned from Codex session in chat; continuing #606 from 779f791",
+      "previous": [
+        {
+          "branch": "board/trade-card-reference-alignment-86fd081f",
+          "claimed_at": "2026-11-09T11:14:33Z"
+        }
+      ],
+      "task": "TRADE-CARD-REFERENCE-ALIGNMENT"
     }
   ]
 }
