@@ -158,9 +158,13 @@ describe('TradeCard', () => {
     }] } };
     render(<TradeCard data={data} contracts={3} />);
     const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
-    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent(full);
-    expect(within(ladder).getByText('Rung outcome (1 contracts × 100 shares)').parentElement).toHaveTextContent(rung);
-    expect(within(ladder).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
+    // #607: one table row per target; the quantity basis is in the header/cell.
+    const row = ladder.querySelector('[data-target-row]') as HTMLElement;
+    expect(within(ladder).getByRole('columnheader', { name: 'Full-position outcome (3 contracts × 100 shares)' })).toBeInTheDocument();
+    expect(row.querySelector('[data-field="outcome"]')).toHaveTextContent(full);
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent(rung);
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent('1 contracts × 100 shares');
+    expect(within(row).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
     expect(within(ladder).getByText(/do not add alternative outcomes/)).toBeInTheDocument();
   });
 
@@ -169,7 +173,8 @@ describe('TradeCard', () => {
       ...mockTradeCard.exit.targets[0], contractsToSell: undefined,
     }] } };
     render(<TradeCard data={data} contracts={3} />);
-    expect(screen.getByText('Rung outcome (allocation unavailable)').parentElement).toHaveTextContent('Unavailable');
+    const row = screen.getByRole('region', { name: 'Fixed ladder targets' }).querySelector('[data-target-row]') as HTMLElement;
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent('Unavailable · allocation unavailable');
   });
 
   it('keeps the same editable ladder state and local pricing approximation without running a model', () => {
@@ -184,7 +189,7 @@ describe('TradeCard', () => {
     expect(within(ladder).getByText('edited')).toBeInTheDocument();
     expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ targets: [201] }), expect.anything());
     // Existing local formula: 2.5 + 0.5 * abs(201 - 185.2) = 10.40.
-    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent('$2370.00');
+    expect(ladder.querySelector('[data-target-row] [data-field="outcome"]')).toHaveTextContent('$2370.00');
     expect(api.getExitPlan).not.toHaveBeenCalled();
     expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
   });

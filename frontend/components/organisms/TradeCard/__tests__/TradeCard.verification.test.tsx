@@ -93,6 +93,9 @@ const cardOf = (method: 'arithmetic' | 'monte_carlo' | 'ladder') =>
 const fieldValues = (method: 'arithmetic' | 'monte_carlo' | 'ladder', field: string) =>
   Array.from((document.querySelector(`[data-method-card="${method}"]`) as HTMLElement).querySelectorAll(`[data-target-row] [data-field="${field}"]`))
     .map((n) => n.textContent);
+// #607: per-target Ladder R:R sits in the "Ladder R:R, allocation & pricing" table.
+const ladderRr = () => Array.from(document.querySelectorAll('table[aria-label="Ladder R:R and allocation"] tbody [data-field="rr"]'))
+  .map((n) => n.textContent);
 const raceCount = () => screen.queryAllByTestId('segment-Target first').length;
 
 async function typeInto(label: string, value: string) {
@@ -124,17 +127,19 @@ beforeEach(() => {
 
 describe('comparison layout', () => {
   /* jsdom applies no CSS. The browser check is capture-final-verification.cjs
-     (`squeezedTargetRows`); this pins the rule that fixes it. A Ladder row has
-     a source note and a pricing badge beside its values. In a comparison-width
-     card those two left `.targetMain` (flex: 1, basis 0) no width at all. */
-  it('gives a target row\'s values a full line inside the comparison grid', () => {
+     (`squeezedTargetRows`); this pins the rules that keep target values
+     readable. #607 replaced the Ladder's flex rows (and their #584 wrap rule)
+     with the shared compact table: a comparison-width card scrolls the table
+     rather than squeezing it, and a cell never breaks a price mid-number. */
+  it('keeps every method\'s target table readable inside the comparison grid', () => {
     const css = fs.readFileSync(path.join(__dirname, '..', 'TradeCard.module.css'), 'utf8');
     const rule = (selector: string) => {
       const at = css.indexOf(`${selector} {`);
       return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
     };
-    expect(rule('.methodGrid .targetRow')).toMatch(/flex-wrap:\s*wrap/);
-    expect(rule('.methodGrid .targetMain')).toMatch(/flex:\s*1 1 100%/);
+    expect(rule('.mcTableScroll')).toMatch(/overflow-x:\s*auto/);
+    expect(rule('.mcTargetTable')).toMatch(/overflow-wrap:\s*normal/);
+    expect(rule('.methodGrid .methodCard')).toMatch(/grid-template-rows:\s*subgrid/);
   });
 });
 
@@ -184,7 +189,8 @@ describe('one edit, every method, each on its own basis', () => {
     expect(fieldValues('monte_carlo', 'outcome')[0]).toContain('$650.00');
     expect(fieldValues('ladder', 'outcome')[0]).toContain('$1500.00');
     expect(fieldValues('ladder', 'outcome-rung')[0]).toContain('$300.00');
-    expect(fieldValues('ladder', 'outcome')[0]).toContain('5 contracts');
+    // #607: the Ladder table names the full-position quantity in its header.
+    expect(cardOf('ladder').getByRole('columnheader', { name: 'Full-position outcome (5 contracts × 100 shares)' })).toBeInTheDocument();
     expect(screen.getByText('Loss for 5 entered contracts')).toBeInTheDocument();
     expect(screen.getAllByText(/-\$120\.00/).length).toBeGreaterThan(0);     // race edge stays per contract
     expect(raceCount()).toBe(2);
@@ -194,12 +200,12 @@ describe('one edit, every method, each on its own basis', () => {
   it('an entry edit moves only the Ladder: calculation premiums are separate bases', async () => {
     await computedCard();
     const before = callCounts();
-    expect(fieldValues('ladder', 'rr')[0]).toContain('0.6x');   // the backend's ratio, at the plan's entry
+    expect(ladderRr()[0]).toContain('0.6x');   // the backend's ratio, at the plan's entry
 
     await typeInto('Limit', '4');
 
     expect(fieldValues('ladder', 'outcome')[0]).toContain('$1200.00');      // (8.00 − 4.00) × 3 × 100
-    expect(fieldValues('ladder', 'rr')[0]).toContain('1.0x');               // (8 − 4) / 4, full premium
+    expect(ladderRr()[0]).toContain('1.0x');               // (8 − 4) / 4, full premium
     expect(fieldValues('arithmetic', 'outcome')[0]).toContain('$750.00');
     expect(fieldValues('monte_carlo', 'outcome')[0]).toContain('$390.00');
     expect(cardOf('arithmetic').getByText('Calculation premium used').parentElement).toHaveTextContent('$4.00/share');

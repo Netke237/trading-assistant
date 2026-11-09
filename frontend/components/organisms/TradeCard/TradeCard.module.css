@@ -606,6 +606,16 @@
 .methodCardSlot { display: contents; }
 .methodCardSlot[hidden] { display: none; }
 
+/* #607 — with all three methods open, the Ladder (last, seven table columns)
+   wraps onto a row of its own whenever the grid holds fewer than three cards
+   per row; there it takes the full row so its table needs no scrolling. */
+.methodResults { container-type: inline-size; }
+@container (max-width: 1111px) {
+  .methodGrid[data-compare-count="3"] > [data-method-card="ladder"] > .methodCard {
+    grid-column: 1 / -1;
+  }
+}
+
 .methodGrid .methodCard {
   display: grid;
   grid-template-rows: subgrid;
@@ -621,13 +631,6 @@
 .methodGrid .ladderCard > div { display: contents; }
 .methodGrid .ladderCard > div > .methodSlot { padding: 0 var(--space-4); }
 
-/* #584 — a Ladder row sets a source note and a pricing badge beside its values.
-   At comparison width those two took all the row and `.targetMain` (basis 0)
-   got none, so the values overlapped. The values take the first line; the note
-   and badge wrap beneath them. */
-.methodGrid .targetRow { flex-wrap: wrap; }
-.methodGrid .targetMain { flex: 1 1 100%; }
-
 .methodSlot {
   display: flex;
   flex-direction: column;
@@ -640,26 +643,6 @@
 .methodGrid > *,
 .targetMain {
   min-width: 0;
-}
-
-.resultColumns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(145px, 0.7fr);
-  gap: var(--space-4);
-}
-
-.probabilityColumn {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--border-subtle);
-}
-
-.resultColumns .kvRow {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
 }
 
 .targetPctRow {
@@ -896,7 +879,9 @@
 /* #606 — Monte Carlo essentials. The stop context is four label-above-value
    facts that wrap by width; the targets are one compact table whose columns
    keep the same order in every row. The table scrolls inside its own wrapper
-   only when a comparison-width card genuinely cannot fit it. */
+   only when a comparison-width card genuinely cannot fit it. #607 — Arithmetic
+   and Ladder use the same stop grid and table classes, so compared cards share
+   one arrangement; the subgrid rows above align their stop and target slots. */
 .mcStopGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
@@ -912,12 +897,26 @@
 .mcTargetTable {
   width: 100%;
   border-collapse: collapse;
+  /* #607 — the slot's `overflow-wrap: anywhere` let a squeezed column break a
+     price mid-number. Cells wrap only between words; a card too narrow for
+     every column scrolls the table inside .mcTableScroll instead. */
+  overflow-wrap: normal;
+}
+
+/* #607 — Arithmetic and Ladder reuse this table. A cell's secondary lines
+   (capped/scale-out cautions, the rung quantity) sit under its value, and a
+   Ladder target's status/edited badges wrap under its label. */
+.mcTargetTable .targetId { flex-wrap: wrap; }
+.mcTargetTable th > * + *,
+.mcTargetTable td > * + * {
+  display: block;
+  margin-top: var(--space-1);
 }
 
 .mcTargetTable th,
 .mcTargetTable td {
   text-align: left;
-  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
 }
