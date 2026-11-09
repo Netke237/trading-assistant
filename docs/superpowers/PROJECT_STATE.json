@@ -10239,14 +10239,14 @@
       "id": "DIRECT-SEND-EXPIRY-PLACEHOLDER",
       "name": "Direct send refuses missing expiry (#591)",
       "owner": "agent",
-      "status": "built",
+      "status": "shipped",
       "summary": "Remove fictional direct-position expiry; refuse unknown expiry before any quote/review/save/order. Tracking and known-expiry payloads unchanged.",
       "tracking_issue": 591,
       "branch": "board/direct-send-expiry-placeholder-415ee393",
       "plan": "docs/superpowers/plans/2026-11-09-direct-send-expiry-placeholder-plan.md",
       "size": "S",
       "complexity": 2,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "audit_rounds": 2,
       "audit_clean": true,
       "plan_audit_clean": true,
@@ -10262,7 +10262,7 @@
         "pattern": "export function directExpiryBlock",
         "note": "Presence only; request refusal, freshness and unchanged valid transport require tests and independent audit."
       },
-      "note": "SELF-MERGE PENDING, PR #613, audited head 1cb7758 (code round1 clean on 86982b5..1cb7758; later commits are state/doc records only). Kenneth reassigned the item from the Codex session to a Claude session in chat on 2026-11-09. Not merged; pending exact-head CI.",
+      "note": "Kenneth reassigned the item from the Codex session to a Claude session in chat on 2026-11-09; continued from board/direct-send-expiry-placeholder-4ff3bc02 @7b27d05. Plan round1 CLEAN; code round 2 (code stage round 1) CLEAN, 0 gate findings, audited head 1cb7758. SHIPPED: PR #613 merged at 9067538f on 2026-11-09 (head 390a2ebf = audited 1cb7758 plus PROJECT_STATE-only records; exact-head CI backend/frontend/Playwright passed; board step-7 self-merge conditions verified).",
       "audit_history": [
         {
           "round": 1,
@@ -10294,7 +10294,9 @@
           "commit": "1cb7758",
           "note": "Coordinator re-ran typecheck + full Jest 337/337 suites, 6261/6261 tests."
         }
-      ]
+      ],
+      "pr": 613,
+      "merge_commit": "9067538f7d992b2fdf74efb387e963acc77a6ffe"
     }
   ],
   "already_shipped": [
