@@ -1641,6 +1641,7 @@ export default function Step7Page() {
               <BrokerOrderReview
                 data={{
                   label: review.label,
+                  expiry: review.pos.expiry || null,
                   brokerLabel: review.brokerLabel,
                   account: review.account,
                   request: review.request,

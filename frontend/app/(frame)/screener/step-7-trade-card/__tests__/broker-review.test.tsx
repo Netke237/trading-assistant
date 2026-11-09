@@ -574,3 +574,23 @@ describe('#583 — the outcome shows only what the broker response supplies', ()
     expect(api.postOptionOrder).not.toHaveBeenCalled();
   });
 });
+
+/* #609 — the destination review was re-arranged for reading only. For fixed
+ * inputs the preview body, the saved body and the broker order stay byte-for-
+ * byte what they were before (only the per-click stamps are normalised). */
+const STAMPS = new Set(['entryDate', 'orderedAt', 'recId', 'attempt_id', 'saved_rec_id']);
+const normalised = (v: unknown) => JSON.stringify(v, (k, x) => (STAMPS.has(k) ? '<stamp>' : x));
+const DIRECT_PERSIST_BODY = '{"recId":"<stamp>","symbol":"AAA","contract":"AAA|150|2026-05-15|C","direction":"Bullish","entryPrice":2.5,"qty":1,"entryDate":"<stamp>","stop":140,"structuralStop":null,"exitPlan":null,"maxLossOverride":null,"premiumStopDollar":null,"premiumStopPct":null,"targets":[],"dteTotal":24,"portfolioValue":100000,"scanStockPrice":150,"stopIsUserSet":false,"tradeCardSnapshot":{"stockScore":80,"stockConfidence":"PASS","stockBreakdown":{"trend":80,"pullback":80,"trigger":80,"event":80,"volatility":80},"contractScore":70,"contractConfidence":"PASS","contractBreakdown":{"dteFit":80,"delta":65,"ivAttractiveness":55,"liquidity":75,"spread":60},"rrRatio":2,"rrModel":"Heston repriced","strike":150},"pickedMethod":"ladder","pickedRowStockPrice":160,"pickedRowOptionPrice":null,"pickedStopBasis":"stock","pickedAt":"2026-09-14T10:00:00.000Z","holdMaxDays":null,"orderType":"LMT","orderLimitPrice":2.5}';
+const DIRECT_ORDER = '{"broker":"ibkr_paper","symbol":"AAA","option_symbol":"AAA|150|2026-05-15|C","action":"BUY","effect":"OPEN","quantity":1,"order_type":"LMT","limit_price":2.5,"tif":"DAY","attempt_id":"<stamp>","saved_rec_id":"<stamp>"}';
+
+describe('#609 — direct-send request parity after the review re-arrangement', () => {
+  it('previews, saves and sends byte-identical bodies for the same inputs', async () => {
+    await renderPage();
+    await openReview();
+    fireEvent.click(confirmBtn());
+    await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledTimes(1));
+    expect(normalised(previewBodies()[0])).toBe(DIRECT_PERSIST_BODY);
+    expect(normalised(persistBodies()[0])).toBe(DIRECT_PERSIST_BODY);
+    expect(normalised((api.postOptionOrder as jest.Mock).mock.calls[0][0])).toBe(DIRECT_ORDER);
+  });
+});

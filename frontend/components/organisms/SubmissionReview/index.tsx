@@ -19,7 +19,13 @@
  *     (`services/picked_method.py` `seed_tp_from_pick`), never a promise of an
  *     option-price take-profit order;
  *   - calculation results (probabilities, times, estimated values) stay in the
- *     Final Recommendation above and are not submitted.
+ *     selected-target review above and are not submitted.
+ *
+ * #609 (TC-ALIGN-06) — destination-first: three visible groups (destination
+ * and request; the actual position settings; the recorded decision and target
+ * alert), then ONE native closed disclosure for the draft generation, the
+ * attached-plan provenance and the long resolution explanations. Every
+ * warning, refusal and provisional / unresolved label stays visible.
  */
 
 import type { ReactNode } from 'react';
@@ -104,6 +110,12 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
       + `${r.order.limit_price != null ? ` ${usd(r.order.limit_price)}` : ''} · ${r.order.tif}`;
   const note = basisNote(selection.targetBasis);
 
+  const expiry = identity.expiry && identity.expiry.trim() !== '' ? identity.expiry : null;
+  const expiryText = expiry
+    ? `${expiry}${identity.dte != null ? ` · ${identity.dte} DTE` : ''}`
+    : `Not supplied${draft.tracking.expiry ? ` — Track basket stores ${draft.tracking.expiry}, derived from the DTE` : ''}`;
+  const fallbackNote = note && selection.targetBasis.kind !== 'requested_stock_level';
+
   return (
     <section
       aria-label="Submission review"
@@ -113,75 +125,87 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
     >
       <div className={styles.header}>
         <Text size={13} weight={500}>Submission review</Text>
-        <Text size={10} tone="dim">Draft generation {generation}</Text>
+        <Text size={11} tone="secondary">What Track basket and the direct sends submit for this card</Text>
       </div>
-      <Text size={11} tone="secondary">
-        The values Track basket and the direct sends submit for this card, from the same request they send.
-        Changing the contract, quantity, entry, an exit setting or the selection replaces this draft.
-      </Text>
       {identity.spread && (
         <Text size={10} tone="caution">
           {identity.spread.name}: only the selected contract is submitted; the other legs are not part of this request.
         </Text>
       )}
 
-      <Text size={11} weight={500}>Order and contract (execution inputs)</Text>
-      <dl className={styles.list}>
-        <Row label="Contract">{`${identity.contractLabel} · ${identity.optionSymbol}`}</Row>
-        <Row label="Quantity">{`${quantity.contracts} contracts × 100 = ${quantity.shares} shares`}</Row>
-        <Row label="Entry limit">{`${usd(entry.limitPrice)}/share · plan order type ${entry.planOrderType} · Place Limit posts it; Right Now — Market posts no limit`}</Row>
-        <Row label="Entry basis sent">{entryBasis}</Row>
-      </dl>
+      <div role="group" aria-label="Destination and request" className={styles.group} data-review-group="destination">
+        <Text size={11} weight={500}>Destination &amp; request</Text>
+        <dl className={styles.list}>
+          <Row label="Track basket">{`Portfolio row only — no broker order · stored as ${identity.trackedContract}`}</Row>
+          <Row label="Place Limit">{direct ? route(direct.limit) : 'Select a paper broker'}</Row>
+          <Row label="Right Now — Market">{direct ? route(direct.market) : 'Select a paper broker'}</Row>
+          <Row label="Contract">{`${identity.contractLabel} · ${identity.optionSymbol}`}</Row>
+          <Row label="Expiry">{expiryText}</Row>
+          <Row label="Quantity">{`${quantity.contracts} contracts × 100 = ${quantity.shares} shares`}</Row>
+          <Row label="Entry limit">{`${usd(entry.limitPrice)}/share · plan order type ${entry.planOrderType} · Place Limit posts it; Right Now — Market posts no limit`}</Row>
+          <Row label="Entry basis sent">{entryBasis}</Row>
+          <Row label="Saved entry, quantity and premium-stop fraction">Unresolved until server review — the server re-quotes, applies the exposure check and derives the fraction at save</Row>
+        </dl>
+      </div>
 
-      <Text size={11} weight={500}>Actual exit settings (submitted)</Text>
-      <dl className={styles.list}>
-        <Row label="Stock stop">{stops.stockStop != null
-          ? `${usd(stops.stockStop)} stock · ${stops.stockStopIsUserSet ? 'typed (absolute; not re-anchored)' : 'plan-derived (the server re-anchors it to the live price)'}`
-          : 'Missing — sending is blocked until a stock stop is set'}</Row>
-        <Row label="Premium stop">{premiumText}</Row>
-        <Row label="Structural stop">{stops.structuralStop != null ? `${usd(stops.structuralStop)} stock (record)` : 'None attached'}</Row>
-        <Row label="Max-loss override">{stops.maxLossOverride
-          ? stops.maxLossOverride.mode === 'dollar' ? usd(stops.maxLossOverride.value) : pct(stops.maxLossOverride.value)
-          : 'None'}</Row>
-        <Row label="Time exit">{`${stops.timeExitDte} DTE — app-wide rule, not a per-position field`}</Row>
-        <Row label="Arithmetic plan attached">{selection.exitPlanAttached
-          ? `Yes — computed ${selection.exitPlanComputedAt ?? 'at an unknown time'}; its stop is a calculation result and is not applied`
-          : 'No'}</Row>
-      </dl>
+      <div role="group" aria-label="Position settings" className={styles.group} data-review-group="settings">
+        <Text size={11} weight={500}>Position settings · actual, submitted, distinct from model results</Text>
+        <dl className={styles.list}>
+          <Row label="Stock stop">{stops.stockStop != null
+            ? `${usd(stops.stockStop)} stock · ${stops.stockStopIsUserSet ? 'typed (absolute; not re-anchored)' : 'plan-derived (the server re-anchors it to the live price)'}`
+            : 'Missing — sending is blocked until a stock stop is set'}</Row>
+          <Row label="Premium stop">{premiumText}</Row>
+          <Row label="Time-exit alert">{`≤${stops.timeExitDte} days to expiry — an alert, not a close; app-wide rule, not a per-position field`}</Row>
+          <Row label="Structural stop">{stops.structuralStop != null ? `${usd(stops.structuralStop)} stock (record)` : 'None attached'}</Row>
+          <Row label="Max-loss override">{stops.maxLossOverride
+            ? stops.maxLossOverride.mode === 'dollar' ? usd(stops.maxLossOverride.value) : pct(stops.maxLossOverride.value)
+            : 'None'}</Row>
+        </dl>
+        <Text size={11} tone="secondary">
+          These are in-app alert settings on the Portfolio row. No protective stop-loss or take-profit order is sent to a broker.
+        </Text>
+      </div>
 
-      <Text size={11} weight={500}>Recorded selection (not applied to the settings)</Text>
-      <dl className={styles.list}>
-        <Row label="Method">{pick ? METHOD_LABEL[pick.method] ?? pick.method : 'Not selected — sending is blocked until one is chosen'}</Row>
-        <Row label="Recorded stock target">{pick?.rowStockPrice != null ? `${usd(pick.rowStockPrice)} stock` : 'None sent'}</Row>
-        <Row label="Recorded option target">{pick?.rowOptionPrice != null
-          ? `${usd(pick.rowOptionPrice)}/share (record only — never a take-profit order)` : 'None'}</Row>
-        <Row label="Judged on">{pick
-          ? `${pick.stopBasis === 'premium' ? 'Premium stop' : 'Stock stop'} — a recorded basis; the stock-stop and premium-stop alerts both stay armed`
-          : 'Not recorded'}</Row>
-      </dl>
+      <div role="group" aria-label="Target alert basis" className={styles.group} data-review-group="target">
+        <Text size={11} weight={500}>Recorded decision &amp; target alert (the selection is not applied to the settings)</Text>
+        <dl className={styles.list}>
+          <Row label="Method">{pick ? METHOD_LABEL[pick.method] ?? pick.method : 'Not selected — sending is blocked until one is chosen'}</Row>
+          <Row label="Recorded stock target">{pick?.rowStockPrice != null ? `${usd(pick.rowStockPrice)} stock` : 'None sent'}</Row>
+          <Row label="Recorded option target">{pick?.rowOptionPrice != null
+            ? `${usd(pick.rowOptionPrice)}/share (record only — never a take-profit order)` : 'None'}</Row>
+          <Row label="Judged on">{pick
+            ? `${pick.stopBasis === 'premium' ? 'Premium stop' : 'Stock stop'} — a recorded basis; the stock-stop and premium-stop alerts both stay armed`
+            : 'Not recorded'}</Row>
+          <Row label="Intended basis">{intendedBasis(selection.targetBasis)}</Row>
+          <Row label="Effective target alert">Unresolved until server review</Row>
+        </dl>
+        {fallbackNote && <Text size={10} tone={selection.targetBasis.kind === 'ladder_fallback' ? 'caution' : 'dim'}>{note}</Text>}
+      </div>
 
-      <Text size={11} weight={500}>Target alert</Text>
-      <dl className={styles.list}>
-        <Row label="Intended basis">{intendedBasis(selection.targetBasis)}</Row>
-        <Row label="Effective target alert">Unresolved until server review</Row>
-        <Row label="Saved entry, quantity and premium-stop fraction">Unresolved until server review — the server re-quotes, applies the exposure check and derives the fraction at save</Row>
-      </dl>
-      {note && <Text size={10} tone={selection.targetBasis.kind === 'ladder_fallback' ? 'caution' : 'dim'}>{note}</Text>}
-
-      <Text size={11} weight={500}>Destinations</Text>
-      <dl className={styles.list}>
-        <Row label="Track basket">{`Portfolio row only — no broker order · stored as ${identity.trackedContract}`}</Row>
-        <Row label="Place Limit">{direct ? route(direct.limit) : 'Select a paper broker'}</Row>
-        <Row label="Right Now — Market">{direct ? route(direct.market) : 'Select a paper broker'}</Row>
-      </dl>
-      <Text size={10} tone="dim">
-        A direct send re-fetches the option quote when clicked; its entry basis and premium-stop fraction then use
-        that quote, and this review refreshes to it. If the server reduces the quantity to fit exposure limits, the
-        order is sent at the saved quantity.
-      </Text>
-      <Text size={10} tone="dim">
-        Probabilities, times and estimated values in the Final Recommendation are calculation results; they are not submitted.
-      </Text>
+      <details className={styles.details} data-review-details>
+        <summary>Technical details and provenance</summary>
+        <div className={styles.detailsBody}>
+          <Text size={11} tone="dim">{`Draft generation ${generation}`}</Text>
+          <Text size={11} tone="dim">
+            The values Track basket and the direct sends submit for this card, from the same request they send.
+            Changing the contract, quantity, entry, an exit setting or the selection replaces this draft.
+          </Text>
+          <dl className={styles.list}>
+            <Row label="Arithmetic plan attached">{selection.exitPlanAttached
+              ? `Yes — computed ${selection.exitPlanComputedAt ?? 'at an unknown time'}; its stop is a calculation result and is not applied`
+              : 'No'}</Row>
+          </dl>
+          {note && !fallbackNote && <Text size={11} tone="dim">{note}</Text>}
+          <Text size={11} tone="dim">
+            A direct send re-fetches the option quote when clicked; its entry basis and premium-stop fraction then use
+            that quote, and this review refreshes to it. If the server reduces the quantity to fit exposure limits, the
+            order is sent at the saved quantity.
+          </Text>
+          <Text size={11} tone="dim">
+            Probabilities, times and estimated values in “Your selected target” above are calculation results; they are not submitted.
+          </Text>
+        </div>
+      </details>
     </section>
   );
 }
