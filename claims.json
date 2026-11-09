@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "docs/trade-card-design-reference-8a325a1f",
-      "claimed_at": "2026-11-09T05:23:44Z",
-      "expires_at": "2026-11-09T08:25:26Z",
-      "note": "Publish audited amendment tickets and native board relationships; no application changes",
-      "task": "TRADE-CARD-AMENDMENT-PUBLICATION"
-    }
-  ]
+  "claims": []
 }
