@@ -10282,7 +10282,7 @@
           "outcome": "clean"
         }
       ],
-      "note": "Kenneth reassigned the phase from the Codex session to a Claude session in chat on 2026-11-09 (forced claim take on his instruction); continued from board/trade-card-reference-alignment-86fd081f @779f791. Draft PR611 (old branch) to be superseded, not merged. 4/7 built; approved plan stage3 clean, code stage0 pending integrated audit. Existing code/numerical/transport behavior retained.",
+      "note": "Kenneth reassigned the phase from the Codex session to a Claude session in chat on 2026-11-09 (forced claim take on his instruction); continued from board/trade-card-reference-alignment-86fd081f @779f791. Draft PR611 (old branch) to be superseded, not merged. 5/7 built; approved plan stage3 clean, code stage0 pending integrated audit. Existing code/numerical/transport behavior retained.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
@@ -10320,7 +10320,10 @@
         },
         {
           "issue": 608,
-          "status": "in_progress"
+          "status": "built",
+          "completion_pct": 70,
+          "commit": "1a29fcde06c543b6b4cc372c10abb1ec2c6995cd",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/608-acceptance.md"
         },
         {
           "issue": 609,
