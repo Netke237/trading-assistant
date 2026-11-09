@@ -10282,7 +10282,7 @@
           "outcome": "clean"
         }
       ],
-      "note": "User explicitly instructed continuing through remaining board tickets.1/7 built, #605 now starting; all approved remaining execution details independently reviewed clean plan3. Phase code audit remains0 and pending integration; no counters reset.",
+      "note": "User explicitly instructed continuing through all remaining tickets. 2/7 built; approved plan stage3 clean, code stage0 pending integrated audit. Existing code/numerical/transport behavior retained. Draft PR611; no merge clearance yet.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
@@ -10299,7 +10299,10 @@
         },
         {
           "issue": 605,
-          "status": "not_started"
+          "status": "built",
+          "completion_pct": 70,
+          "commit": "2df60eb649da6790cc144979c4098737f80f81ef",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/605-acceptance.md"
         },
         {
           "issue": 606,
