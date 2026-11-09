@@ -279,6 +279,7 @@ describe('step-7-trade-card -- the structural-stop cache is keyed by contract (A
     render(<Step7TradeCardPage />);
     fireEvent.click(await screen.findByRole('button', { name: /check structure/i }));
     expect(await screen.findByText('$143.25 (4.5% away)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Arithmetic' }));
     fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
     await waitFor(() => expect(api.getExitPlan).toHaveBeenCalled());
 

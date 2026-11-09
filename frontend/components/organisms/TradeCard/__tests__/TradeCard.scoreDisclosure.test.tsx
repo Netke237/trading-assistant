@@ -53,16 +53,30 @@ const contractKey = 'bamendjou:tradecard:contract:scoring-evidence:collapsed';
 
 beforeEach(() => localStorage.clear());
 
+it('separates closed qualifications immediately after visible raw contract details', () => {
+  render(<TradeCard data={data} />);
+  const stock = screen.getByRole('button', { name: /Stock Qualification/ });
+  const contract = screen.getByRole('button', { name: /Contract Qualification/ });
+  expect(stock).toHaveAttribute('aria-expanded', 'false');
+  expect(contract).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByText('Contract Details')).toBeVisible();
+  expect(screen.getByText('Contract Details').closest('section')!.nextElementSibling).toBe(stock.closest('section'));
+  fireEvent.click(contract);
+  expect(screen.getByText('Stock Scorecard')).not.toBeVisible();
+  expect(screen.getByRole('button', { name: /Captured contract scoring evidence/ })).toBeVisible();
+});
+
 it('starts fresh scores folded and reveals both complete panels without replacing captured evidence', () => {
   const before = JSON.stringify(data);
   render(<TradeCard data={data} />);
-  const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+  const toggle = screen.getByRole('button', { name: /Stock Qualification/ });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('Stock Scorecard')).not.toBeVisible();
   expect(screen.getByText('Fundamental Health')).toBeVisible();
   expect(screen.getByText('negative equity')).toBeVisible();
   fireEvent.click(toggle);
-  const section = within(toggle.closest('section')!);
+  fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
+  const section = within(screen.getByRole('region', { name: 'Selected stock and contract' }));
   const values = [85, 78, 72, 90, 65, 80, 66, 55, 75, 60];
   const labels = ['Trend', 'Pullback', 'Trigger', 'Event', 'Volatility', 'DTE fit', 'Delta', 'IV', 'Liquidity', 'Spread'];
   labels.forEach((label, index) => {
@@ -104,17 +118,18 @@ it.each(['0', '1'])('restores existing outer score preference %s and independent
   localStorage.setItem(stockKey, '0');
   localStorage.setItem(contractKey, '1');
   const { unmount } = render(<TradeCard data={data} />);
-  const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+  const toggle = screen.getByRole('button', { name: /Stock Qualification/ });
   expect(toggle).toHaveAttribute('aria-expanded', saved === '0' ? 'true' : 'false');
   expect(localStorage.getItem(scoresKey)).toBe(saved);
   if (saved === '1') fireEvent.click(toggle);
+  fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
   expect(screen.getByRole('button', { name: /Captured stock scoring evidence/ })).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByRole('button', { name: /Captured contract scoring evidence/ })).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
   expect(localStorage.getItem(scoresKey)).toBe('1');
   unmount();
   render(<TradeCard data={data} />);
-  expect(screen.getByRole('button', { name: /Stock & contract scores/ })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: /Stock Qualification/ })).toHaveAttribute('aria-expanded', 'false');
   expect(localStorage.getItem(stockKey)).toBe('0');
   expect(localStorage.getItem(contractKey)).toBe('1');
 });

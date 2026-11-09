@@ -5,10 +5,20 @@
 import '@testing-library/jest-dom';
 import * as fs from 'fs';
 import * as path from 'path';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render as renderCard, screen, waitFor, within } from '@testing-library/react';
 import { api } from '@/lib/api';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import type { BarrierRace, ExitPlan, ExitPlanTargetRow, FirstPassageContext, FirstPassageEstimate, MethodPick, TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -143,7 +153,7 @@ describe('disclosure defaults on a fully computed card', () => {
     const details = Array.from(document.querySelectorAll('details'));
     expect(details.length).toBeGreaterThanOrEqual(5);
     expect(details.filter((d) => d.open).map((d) => d.querySelector('summary')?.textContent)).toEqual([]);
-    expect(screen.getByRole('button', { name: /Stock & contract scores/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Stock Qualification/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: /ALTERNATIVES/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ })).toHaveAttribute('aria-expanded', 'true');
     const warning = screen.getByText(/Invalidation stop required — Send to broker/);

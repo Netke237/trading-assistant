@@ -65,10 +65,11 @@ describe('TradeCard identity and market context (#577)', () => {
     const sentimentNode = screen.getByText('Market Sentiment');
     const health = screen.getByText('Fundamental Health');
     const identity = screen.getByRole('region', { name: 'Selected stock and contract' });
-    const scores = screen.getByRole('button', { name: /Stock & contract scores/ });
+    const scores = screen.getByRole('button', { name: /Stock Qualification/ });
     expect(follows(sentimentNode, health)).toBe(true);
     expect(follows(health, identity)).toBe(true);
-    expect(follows(identity, scores)).toBe(true);
+    expect(identity).toContainElement(scores);
+    expect(follows(within(identity).getByText('Contract Details'), scores)).toBe(true);
     expect(screen.getAllByText('Fundamental Health')).toHaveLength(1);
   });
 

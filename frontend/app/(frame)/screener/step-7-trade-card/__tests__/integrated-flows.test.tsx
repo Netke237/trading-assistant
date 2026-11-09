@@ -183,6 +183,7 @@ describe('#584 every exit method reaches the tracking review unchanged', () => {
   const steps: [string, string, (() => Promise<void>)][] = [
     ['Ladder', 'ladder', async () => { fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); }],
     ['Arithmetic', 'arithmetic', async () => {
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Arithmetic' }));
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i })); });
       await waitFor(() => expect(screen.getByRole('radio', { name: 'Arithmetic' })).toBeEnabled());
       fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' }));

@@ -4,10 +4,20 @@
  * supplied) the rows remain, with the premium stop on the Exit Plan's basis.
  */
 import '@testing-library/jest-dom';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render as renderCard, screen, within, fireEvent } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { useSettingsStore } from '@/lib/settingsStore';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {

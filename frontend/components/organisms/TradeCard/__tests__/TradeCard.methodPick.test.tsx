@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render as renderCard, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
@@ -9,6 +9,16 @@ import type { TradeCardData, MethodPick } from '@/types/domain';
 // §6.2). Spec test 13 ("a pick on a stale estimate is cleared") is the
 // `clears a monte_carlo pick` case below. The control's own rules are in
 // components/molecules/MethodPickSelector/__tests__.
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {

@@ -4,11 +4,21 @@
  * docs/superpowers/plans/2026-09-25-p2-premium-stop-position-editing-plan.md
  */
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as renderCard, screen, fireEvent } from '@testing-library/react';
 import { TradeCard, EditableKV } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useSettingsStore } from '@/lib/settingsStore';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {

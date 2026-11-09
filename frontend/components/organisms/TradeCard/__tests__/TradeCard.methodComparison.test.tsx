@@ -80,9 +80,25 @@ const slotOrder = (el: HTMLElement) => Array.from(el.querySelectorAll('[data-slo
 beforeEach(() => { localStorage.clear(); jest.clearAllMocks(); });
 
 describe('display-only comparison in the same results area', () => {
+  it('starts Monte Carlo only, orders comparison MC first and keeps execution after results', () => {
+    render(<TradeCard data={card()} contracts={3} />);
+    expect(cardOf('monte_carlo')).toBeVisible();
+    expect(cardOf('arithmetic')).not.toBeVisible();
+    expect(cardOf('ladder')).not.toBeVisible();
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
+    expect(Array.from(document.querySelectorAll('[data-method-card]')).map(n => n.getAttribute('data-method-card')))
+      .toEqual(['monte_carlo', 'arithmetic', 'ladder']);
+    const nodes = ['Exit Plan', 'Profit-target methods', 'Order Entry', 'Max loss budget', 'Final Recommendation']
+      .map(name => screen.getByRole('region', { name }));
+    nodes.slice(1).forEach((node, i) => expect(nodes[i].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
+  });
+
   it('shows all three method cards in one results area with a checked comparison control each', () => {
     render(<TradeCard data={card()} contracts={3} />);
-    for (const name of ['Arithmetic', 'Monte Carlo', 'Fixed % Ladder']) expect(box(name)).toBeChecked();
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
+    for (const name of ['Monte Carlo', 'Arithmetic', 'Fixed % Ladder']) expect(box(name)).toBeChecked();
     const area = screen.getByRole('region', { name: 'Profit-target methods' });
     for (const m of ['arithmetic', 'monte_carlo', 'ladder'] as const) {
       expect(area).toContainElement(cardOf(m));
@@ -92,29 +108,19 @@ describe('display-only comparison in the same results area', () => {
     expect(area).toContainElement(screen.getByRole('region', { name: 'Fixed ladder targets' }));
   });
 
-  it('compares any two, then three, methods side by side', () => {
+  it('compares two then three methods and keeps the last one open', () => {
     render(<TradeCard data={card()} contracts={3} />);
-    fireEvent.click(box('Monte Carlo'));
-    expect(cardOf('monte_carlo')).not.toBeVisible();
+    expect(box('Monte Carlo')).toBeDisabled();
+    fireEvent.click(box('Arithmetic'));
     expect(cardOf('arithmetic')).toBeVisible();
-    expect(cardOf('ladder')).toBeVisible();
+    expect(cardOf('ladder')).not.toBeVisible();
     expect(document.querySelector('[data-compare-count]')).toHaveAttribute('data-compare-count', '2');
-    fireEvent.click(box('Arithmetic'));
-    fireEvent.click(box('Monte Carlo'));
-    expect(cardOf('arithmetic')).not.toBeVisible();
-    expect(cardOf('monte_carlo')).toBeVisible();
-    fireEvent.click(box('Arithmetic'));
-    for (const m of ['arithmetic', 'monte_carlo', 'ladder'] as const) expect(cardOf(m)).toBeVisible();
+    fireEvent.click(box('Fixed % Ladder'));
     expect(document.querySelector('[data-compare-count]')).toHaveAttribute('data-compare-count', '3');
-  });
-
-  it('keeps at least one method open', () => {
-    render(<TradeCard data={card()} contracts={3} />);
     fireEvent.click(box('Monte Carlo'));
     fireEvent.click(box('Fixed % Ladder'));
     expect(box('Arithmetic')).toBeChecked();
     expect(box('Arithmetic')).toBeDisabled();
-    expect(cardOf('arithmetic')).toBeVisible();
   });
 
   it('opening and comparing fires no request, no edit and leaves the method choice unchanged', async () => {
@@ -127,6 +133,8 @@ describe('display-only comparison in the same results area', () => {
     try {
       render(<TradeCard data={card()} contracts={3} initialMethodPick={pick}
         onEditsChange={onEditsChange} onMethodPickChange={onMethodPickChange} />);
+      fireEvent.click(box('Arithmetic'));
+      fireEvent.click(box('Fixed % Ladder'));
       await act(async () => { await Promise.resolve(); });
       jest.clearAllMocks();
       onEditsChange.mockClear(); onMethodPickChange.mockClear();
@@ -155,6 +163,8 @@ describe('display-only comparison in the same results area', () => {
 describe('consistent stop/target field order', () => {
   it('orders every card basis → stop → targets', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     for (const m of ['arithmetic', 'monte_carlo', 'ladder'] as const) {
       expect(slotOrder(cardOf(m)).filter((s) => s !== 'header')).toEqual(['basis', 'stop', 'targets']);
     }
@@ -162,6 +172,8 @@ describe('consistent stop/target field order', () => {
 
   it('lists target fields in Monte Carlo order on all three methods', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const mcRows = within(cardOf('monte_carlo')).getAllByText(/^T\d+%$/).map((n) => n.closest('[data-target-row]') as HTMLElement);
     expect(mcRows).toHaveLength(2);
     expect(fieldOrder(mcRows[0])).toEqual(FIELD_ORDER);
@@ -177,6 +189,8 @@ describe('consistent stop/target field order', () => {
 describe('Arithmetic card', () => {
   it('shows its calculated stop, current-time stop-cost estimate, every target row and the resolved target', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const arith = within(cardOf('arithmetic'));
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText('Calculated stock stop').parentElement).toHaveTextContent('$180.00 · structural');
@@ -201,6 +215,8 @@ describe('Arithmetic card', () => {
 
   it('puts the original arithmetic target, snap geometry and pricing explanation in an expansion', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const first = within(within(cardOf('arithmetic')).getAllByRole('listitem')[0]);
     const original = first.getByText('Original arithmetic stock target');
     expect(original).not.toBeVisible();
@@ -218,6 +234,8 @@ describe('Arithmetic card', () => {
     const p = plan();
     p.stop.stopCost = { ...p.stop.stopCost!, stopPrice: 179 };
     render(<TradeCard data={card({ exitPlan: p })} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText('Current-time stop-cost value at stop').parentElement).toHaveTextContent(/^Current-time stop-cost value at stopUnavailable/);
     expect(stop.queryByText('$1.80/share')).not.toBeInTheDocument();
@@ -225,12 +243,16 @@ describe('Arithmetic card', () => {
 
   it('is not a horizontally scrolling table: targets wrap as rows', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     expect(within(cardOf('arithmetic')).queryByRole('table')).not.toBeInTheDocument();
     expect(within(cardOf('arithmetic')).getByRole('list', { name: 'Arithmetic target comparison' })).toBeVisible();
   });
 
   it('states not-yet-computed stop rows without inventing values', () => {
     render(<TradeCard data={card({ exitPlan: undefined })} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText('Calculated stock stop').parentElement).toHaveTextContent('Not yet computed');
     expect(stop.getByText('Current-time stop-cost value at stop').parentElement).toHaveTextContent('Not yet computed');
@@ -240,6 +262,8 @@ describe('Arithmetic card', () => {
 describe('Ladder card', () => {
   it('shows the shared Exit Plan stops with explicit sources and labels only its own stock-stop valuation as not calculated', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const ladder = cardOf('ladder');
     const stop = within(ladder.querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText('Exit Plan stock invalidation').parentElement).toHaveTextContent('$179.64 stock');
@@ -259,6 +283,8 @@ describe('Ladder card', () => {
 
   it('keeps per-share, full-position and rung bases distinct and never adds outcomes together', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     const ladder = within(cardOf('ladder'));
     const [tp1, tp2] = Array.from(cardOf('ladder').querySelectorAll('[data-target-row]')) as HTMLElement[];
     expect(within(tp1).getByText('Est. option (per share)').parentElement).toHaveTextContent('$8.00');
@@ -275,6 +301,8 @@ describe('Ladder card', () => {
 describe('stale and restored results stay labelled through comparison', () => {
   it('keeps restored Arithmetic and guarded restored race inputs after toggling comparison', () => {
     render(<TradeCard data={card()} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    fireEvent.click(box('Fixed % Ladder'));
     fireEvent.click(box('Arithmetic'));
     fireEvent.click(box('Arithmetic'));
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);

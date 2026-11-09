@@ -12,8 +12,8 @@ import styles from './MethodCompareSelector.module.css';
 export type ComparedMethod = 'arithmetic' | 'monte_carlo' | 'ladder';
 
 export const COMPARED_METHODS: readonly { method: ComparedMethod; label: string }[] = [
-  { method: 'arithmetic', label: 'Arithmetic' },
   { method: 'monte_carlo', label: 'Monte Carlo' },
+  { method: 'arithmetic', label: 'Arithmetic' },
   { method: 'ladder', label: 'Fixed % Ladder' },
 ];
 

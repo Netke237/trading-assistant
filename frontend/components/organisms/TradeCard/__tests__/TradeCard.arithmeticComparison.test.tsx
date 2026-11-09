@@ -1,8 +1,18 @@
 /** OPT-PRES-05: actual target rows and matched calculation-premium outcomes. */
 import '@testing-library/jest-dom';
-import { render, screen, within } from '@testing-library/react';
+import { render as renderCard, screen, within , fireEvent } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {

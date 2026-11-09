@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
+import { render as renderCard, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { api } from '@/lib/api';
@@ -8,6 +8,16 @@ import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import type { TradeCardData, StopCostOut } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -265,28 +275,23 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
-  // #577 moved Fundamental Health up, directly beneath Market Sentiment and
-  // ahead of the identity; the folded scores still follow the identity.
-  it('places Fundamental Health before identity and the folded score group directly after identity', () => {
+  it('keeps Fundamental Health above identity and independent qualification panels within identity', () => {
     render(<TradeCard data={mockTradeCard} />);
-    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
-    const group = toggle.closest('section')!;
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(toggle);
-    const identity = group.previousElementSibling!;
-    expect(identity).toContainElement(screen.getByTestId('symbol-header'));
+    const identity = screen.getByRole('region', { name: 'Selected stock and contract' });
     expect(identity.previousElementSibling).toHaveTextContent('Fundamental Health');
-    expect(group.nextElementSibling).not.toHaveTextContent('Fundamental Health');
-    expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
+    const stockToggle = screen.getByRole('button', { name: /Stock Qualification/ });
+    const contractToggle = screen.getByRole('button', { name: /Contract Qualification/ });
+    expect(stockToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(contractToggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(stockToggle);
+    const panel = within(stockToggle.closest('section')!).getByTestId('score-panel');
+    expect(panel).toBeVisible();
+    expect(within(contractToggle.closest('section')!).getByTestId('score-panel')).not.toBeVisible();
+    fireEvent.click(stockToggle);
+    expect(panel).not.toBeVisible();
+    fireEvent.click(stockToggle);
+    expect(within(stockToggle.closest('section')!).getByTestId('score-panel')).toBe(panel);
     expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
-    const panels = within(group).getAllByTestId('score-panel');
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(panels[0]).not.toBeVisible();
-    expect(panels[1]).not.toBeVisible();
-    expect(localStorage.getItem('bamendjou:tradecard-scores-collapsed')).toBe('1');
-    fireEvent.click(toggle);
-    expect(within(group).getAllByTestId('score-panel')[0]).toBe(panels[0]);
   });
 
   it('keeps real stock and contract evidence independent and mounted across outer toggles', async () => {
@@ -309,10 +314,11 @@ describe('TradeCard', () => {
     const view = render(<TradeCard data={captured} />);
     try {
       await act(async () => { await Promise.resolve(); });
-      const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
-      const group = outer.closest('section')!;
+      const outer = screen.getByRole('button', { name: /Stock Qualification/ });
+      const group = screen.getByRole('region', { name: 'Selected stock and contract' });
       expect(outer).toHaveAttribute('aria-expanded', 'false');
       fireEvent.click(outer);
+      fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
       const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
       const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
       expect(outer).toHaveAttribute('aria-expanded', 'true');
@@ -363,13 +369,13 @@ describe('TradeCard', () => {
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps handling controls before evidence and the latest result after method cards', () => {
+  it('keeps Exit Plan before methods, then entry and the latest result', () => {
     render(<TradeCard data={mockTradeCard} />);
     const order = screen.getByRole('region', { name: 'Order Entry' });
     const exit = screen.getByRole('region', { name: 'Exit Plan' });
     const latest = screen.getByText('Latest calculation');
     const arithmetic = screen.getByText('Arithmetic Profit Target');
-    expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(exit.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(arithmetic.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
