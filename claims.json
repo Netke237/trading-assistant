@@ -4,7 +4,7 @@
       "agent": "codex",
       "branch": "board/trade-card-reference-alignment-8b8ee0c6",
       "claimed_at": "2026-11-09T19:47:03Z",
-      "expires_at": "2026-11-09T22:47:03Z",
+      "expires_at": "2026-11-09T22:47:05Z",
       "note": "User explicitly instructed this session: take over and continue. Resume pushed60c4acb6; other-container batch3 unavailable; preserve all old branches.",
       "previous": [
         {
