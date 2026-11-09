@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "docs/trade-card-design-reference-8a325a1f",
-      "claimed_at": "2026-11-09T05:17:39Z",
-      "expires_at": "2026-11-09T08:19:11Z",
-      "note": "Move collapsed stock qualification below contract details in reference preview",
-      "task": "TRADE-CARD-DESIGN-REFERENCE"
-    }
-  ]
+  "claims": []
 }
