@@ -10262,7 +10262,7 @@
         "pattern": "export function directExpiryBlock",
         "note": "Presence only; request refusal, freshness and unchanged valid transport require tests and independent audit."
       },
-      "note": "Kenneth reassigned the item from the Codex session to a Claude session in chat on 2026-11-09; continued from board/direct-send-expiry-placeholder-4ff3bc02 @7b27d05. Plan round1 clean; code round1 (round 2 overall) clean. Built, PR pending; not merged.",
+      "note": "SELF-MERGE PENDING, PR #613, audited head 1cb7758 (code round1 clean on 86982b5..1cb7758; later commits are state/doc records only). Kenneth reassigned the item from the Codex session to a Claude session in chat on 2026-11-09. Not merged; pending exact-head CI.",
       "audit_history": [
         {
           "round": 1,
