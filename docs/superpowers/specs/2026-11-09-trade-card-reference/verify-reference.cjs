@@ -20,6 +20,9 @@ const { chromium } = require(require.resolve('playwright', { paths: [path.join(r
  assert(await page.locator('.method:not(.hidden)').count()===1);
  assert(await page.locator('#mc').isVisible());
  assert(await page.locator('#exitexplanation').getAttribute('open')===null);
+ assert(await page.locator('#stock-qualification').getAttribute('open')===null);
+ assert(await page.locator('#stock-qualification-panel').evaluate(e=>e.previousElementSibling.querySelector('h2').textContent)==='Contract Details');
+ assert(await page.getByText('Contract qualification · score & confidence',{exact:true}).count()===1);
  const initial=await page.locator('#mc').boundingBox();
  await page.screenshot({path:path.join(evidence,'reference-initial.png'),fullPage:true});
  await page.getByRole('button',{name:'Run Monte Carlo Estimate',exact:true}).click();

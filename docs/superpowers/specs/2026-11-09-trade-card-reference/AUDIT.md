@@ -22,3 +22,7 @@ No live deployment/mini-PC, real fills, live provider or notification testing. H
 ## Final tally
 
 Three independent rounds: R1 one numeric issue plus one coverage issue, both fixed; R2 zero gate findings for fixes; R3 zero gate findings for the later presentation-only alignment adjustment. Exact evidence is in the adjacent check JSON; `manifest.json` hashes the final reference assets and gap report. Documentation target complete and reviewable; production amendments remain unimplemented.
+
+## New user amendment: Stock Qualification placement
+
+Moved the unchanged Stock Qualification disclosure directly under Contract Details, closed by default. Contract Qualification retained because its scored criteria/explanations differ from raw contract metrics. Independent reviewer `qualification_placement_audit`: zero findings in this scoped amendment. Browser assertions verify exact placement, single stock disclosure, closed default and retained contract disclosure; all prior preview checks and frontend typecheck pass. No production changes.

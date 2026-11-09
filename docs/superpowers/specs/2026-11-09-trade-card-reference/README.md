@@ -22,7 +22,7 @@ Open `http://127.0.0.1:8090/preview.html`. The reference requires only its adjac
 | Area | Required presentation |
 | --- | --- |
 | Context | Existing Market Sentiment above the card; Fundamental Health directly beneath, with existing colors, score/quality/risk/safety badges and explanations. |
-| Identity | Symbol/chart jump remain; strike/right approximately30px and full expiry approximately25px in the reference. Contract Details remain visible. Adapt wrapping to the real app shell rather than shrinking back to microtext. |
+| Identity | Symbol/chart jump remain; strike/right approximately30px and full expiry approximately25px in the reference. Contract Details remain visible. Stock Qualification sits directly beneath Contract Details, collapsed by default. Adapt wrapping to the real app shell rather than shrinking back to microtext. |
 | Actual exits | One compact editable Exit Plan. Visible invalidation, premium-loss amount, loss percentage, remaining option value/loss per contract and readable time threshold. Detailed source, quantity breakdown, ATR and time explanation default closed. Preserve material missing/invalid warnings. |
 | Editability | Consistent tinted editable affordance across actual editable fields; max fill, time exit and calculated fields remain read-only. Prototype values are fixed examples except Contracts; do not copy its readonly samples into the actual app. |
 | Normal method view | Monte Carlo only, first. Existing calculation remains explicitly user-triggered. |
@@ -33,7 +33,7 @@ Open `http://127.0.0.1:8090/preview.html`. The reference requires only its adjac
 | Barrier Race | Existing graphic/table inside Monte Carlo's default-closed race expansion. Shares agree with numeric rows; preserve target selection, medians, edge, R:R and full risk explanations. |
 | Decision | One compact grouped method/target/basis choice with selected TP/probability/time/quantity outcome. Avoid another full latest/all-target summary. Preserve optional-row and fallback behavior. |
 | Destination review | Separate Portfolio tracking from named broker/account. Show authoritative requested/effective values, actual position settings and target-alert basis; keep estimates distinct from fills. Preserve existing server review/fingerprint/staleness logic rather than replacing it with demo arithmetic. |
-| Secondary content | Qualification, alternatives and detailed model/transport provenance stay reachable. Preserve chart actions, mode/candidate navigation, pin/basket, spread data, auto-trade, export and all supported feedback states. |
+| Secondary content | Stock Qualification sits directly beneath Contract Details, collapsed by default. Contract Qualification remains distinct and reachable: details are raw contract facts; qualification is the scored DTE/delta/IV/liquidity/spread assessment with explanations. Alternatives and detailed model/transport provenance stay reachable. Preserve chart actions, mode/candidate navigation, pin/basket, spread data, auto-trade, export and all supported feedback states. |
 
 ### Numeric and behavior boundaries
 
@@ -83,3 +83,7 @@ This writes reference screenshots/checks and aborts all network requests. For th
 ## Change status
 
 Reference and amendment documentation only. Production amendments D01–D12 are not implemented by this change. Existing server-backed review behavior, validated numeric sources, persistence and alert rules must remain intact. A later implementation needs its own checks, visual acceptance and independent audits; none of the old phase's audit counters are reset here.
+
+## Qualification placement clarification
+
+User amendment after the first reference publication: move the Stock Qualification disclosure directly under Contract Details and leave it closed initially. Keep Contract Qualification because it is not duplicate Contract Details: the latter contains strike/right/expiry/market metrics, while qualification contains component scores and evaluation explanations. No qualification information is removed. Production remains unchanged by this documentation update.

@@ -6,7 +6,7 @@
   "initialMethod": "mc",
   "initialMethodBox": {
     "x": 103,
-    "y": 1269.5,
+    "y": 1334,
     "width": 1160,
     "height": 354
   },
@@ -23,8 +23,8 @@
     }
   ],
   "targetTops": [
-    904.09375,
-    904.09375
+    904.59375,
+    904.59375
   ],
   "threeMethods": true,
   "mcTargets": 3,

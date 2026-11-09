@@ -25,7 +25,7 @@ Evidence classes: **Source-confirmed** means inspected current JSX/CSS/control s
 - Location: `TradeCard/index.tsx:2611` Order inputs & risk budget; `:2874` Structure & Stops; `:3097` Profit-target methods.
 - Trigger: trader wants invalidation, TP, time and probability after opening.
 - Current: Order Entry, Exit Plan, a full sizing/budget card, and a standalone structure section precede the method results. Stock/contract score expansion also precedes them.
-- Required: identity/details → compact shared Exit Plan → method essentials → entry/size → consistent decision review/actions; explanatory qualification/geometry follows or expands in place.
+- Required: identity/details → collapsed Stock Qualification → compact shared Exit Plan → method essentials → entry/size → consistent decision review/actions; explanatory qualification/geometry follows or expands in place.
 - Why: all desired values exist, but the user must traverse substantial unrelated material to reach the target evidence.
 - Evidence: source-confirmed and archived render corroboration. Amendment order: first-pass layout.
 
@@ -118,7 +118,7 @@ The parent executed the existing `capture-final-verification.cjs` against the is
 
 Current screenshots and check results are stored in `evidence/implemented-*.png` and `evidence/implementation-checks.json`. Fresh initial measurements: Arithmetic and Monte Carlo cards start at y2579 and both measure1394px high; Ladder starts below at y3989. All three methods are open. Equal-height row checks pass. In the two-card layout, target-slot alignment differs by8px according to the existing measurement. These figures describe the mock fixture and viewport, not the deployed mini-PC.
 
-The rebuilt reference at the same viewport/theme opens Monte Carlo only. Its method card starts at y1269.5; the reference two-card examples are572px wide and887.09px high each. This is a standalone content reference without the production navigation/context rails, so available content widths differ: those positions are evidence of reading-order/default-density differences, not a pixel-for-pixel performance or fit comparison. Test the amended design within the real app shell before acceptance.
+The rebuilt reference at the same viewport/theme opens Monte Carlo only. Its method card starts at y1334; the reference two-card examples are572px wide and887.09px high each. This is a standalone content reference without the production navigation/context rails, so available content widths differ: those positions are evidence of reading-order/default-density differences, not a pixel-for-pixel performance or fit comparison. Test the amended design within the real app shell before acceptance.
 
 ## Amendment execution order
 
@@ -139,3 +139,7 @@ The rebuilt reference at the same viewport/theme opens Monte Carlo only. Its met
 ## What this change does
 
 This documentation PR preserves an explicit, runnable design reference and amendment register. It does not implement the amendments, reopen closed phase audit counters, or assert the deployed mini-PC is on the reviewed commit. No production numerical/persistence defect is established by this review.
+
+### Latest user placement amendment
+
+Stock Qualification must sit directly beneath Contract Details and start collapsed. Contract Qualification is retained because its component scores/explanations are different from raw contract metrics. This placement is now in the reference; do not remove contract evaluation evidence as duplicate details. This adds an explicit acceptance condition to D03 without changing the frozen implementation review baseline.
