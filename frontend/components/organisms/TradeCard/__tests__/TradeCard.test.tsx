@@ -12,9 +12,9 @@ import type { TradeCardData, StopCostOut } from '@/types/domain';
 // These existing calculation/flow tests exercise all methods explicitly.
 const render = (...args: Parameters<typeof renderCard>) => {
   const view = renderCard(...args);
-  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+  for (const name of ['Arithmetic', 'Ladder']) {
     const toggle = screen.queryByRole('checkbox', { name });
-    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
   // Structure pricing scenarios explicitly inspect the preserved evidence,
   // inside the Exit Plan's one explanation disclosure (#610 G5).
@@ -1433,7 +1433,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
     expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
     expect(screen.getByText('72%')).toBeInTheDocument();       // T20% Probability
-    expect(screen.getByText('~5 calendar days')).toBeInTheDocument();       // T20% Expected time
+    expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time (calendar days, #610 G8)
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
     // The invalidation row moved off this card to the Barrier Race card
@@ -2590,8 +2590,9 @@ describe('TradeCard', () => {
       expect(within_.getByText('Target sits beyond the next real structural level.')).toBeInTheDocument();
       // The warning glyph appears only on the 4th (beyond) row's heading.
       // rrRatio is a plain JS number (5.0 === 5), so it renders as "5", not "5.0".
-      expect(within_.getByText('5:1 target ⚠')).toBeInTheDocument();
-      expect(within_.getByText('4:1 target')).toBeInTheDocument();
+      // #610 G8: the cell drops the repeated word; the column header says Target.
+      expect(within_.getByText('5:1 ⚠')).toBeInTheDocument();
+      expect(within_.getByText('4:1')).toBeInTheDocument();
     });
 
     it('stopJustification case 1 — structural found and won: clears the ATR floor, no widening needed', async () => {
@@ -3793,7 +3794,12 @@ describe('the estimate never races a level it depends on', () => {
     rerender(
       <TradeCard data={{ ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' }} />,
     );
-    expect(raceBarrier()).not.toHaveTextContent('$180.00');
+    // #610 G7: with no estimate for the new contract the stop context is the
+    // one "unavailable" line; no race number from the previous contract stays.
+    expect(raceBarrier()).toBeNull();
+    const stopSlot = document.querySelector('[aria-label="Monte Carlo Profit Target"] [data-slot="stop"]') as HTMLElement;
+    expect(stopSlot).not.toHaveTextContent('$180.00');
+    expect(within(stopSlot).getByText('Unavailable — run or re-run estimate to confirm barriers')).toBeInTheDocument();
     expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
   });
 });

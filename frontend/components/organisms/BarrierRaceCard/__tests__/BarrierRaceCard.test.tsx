@@ -157,9 +157,10 @@ describe('the bar geometry, on a row whose raw shares differ from its allocated 
   };
   const LABELS = ['Target first', 'Stock stop first', 'Premium stop first', 'Neither'];
 
-  const rowShares = (row: HTMLElement) => {
+  const rowShares = (row: HTMLElement, index: number) => {
     const cells = within(row).getAllByRole('cell').map((c) => c.textContent ?? '');
-    const bar = within(row).getByRole('img');
+    // #610 G9: each target's bar is drawn above the table, in row order.
+    const bar = screen.getAllByRole('img')[index];
     const widths = LABELS.map((label) => {
       const seg = bar.querySelector(`[data-testid="segment-${label}"]`) as HTMLElement | null;
       return seg ? seg.style.width : null;
@@ -168,20 +169,20 @@ describe('the bar geometry, on a row whose raw shares differ from its allocated 
       const m = new RegExp(`${label} (\\d+)%`).exec(bar.getAttribute('aria-label') ?? '');
       return m ? `${m[1]}%` : null;
     });
-    return { visible: cells.slice(2, 6), widths, spoken };
+    return { visible: cells.slice(1, 5), widths, spoken };
   };
 
   it('sizes every segment from the allocated weight, matching the visible and spoken labels', () => {
     renderCard({ race: RAW_VS_ALLOCATED });
-    const rows = within(screen.getAllByRole('table')[1]).getAllByRole('row').slice(1);
-    const first = rowShares(rows[0]);
+    const rows = within(screen.getByRole('table', { name: 'Barrier Race outcomes' })).getAllByRole('row').slice(1);
+    const first = rowShares(rows[0], 0);
     expect(first.visible).toEqual(['27%', '1%', '68%', '4%']);
     expect(first.spoken).toEqual(['27%', '1%', '68%', '4%']);
     expect(first.widths).toEqual(['27%', '1%', '68%', '4%']);
 
     // A raw share above zero whose allocated weight is 0 draws no segment,
     // exactly as the 0% beside it says.
-    const second = rowShares(rows[1]);
+    const second = rowShares(rows[1], 1);
     expect(second.visible).toEqual(['14%', '0%', '78%', '8%']);
     expect(second.spoken).toEqual(['14%', '0%', '78%', '8%']);
     expect(second.widths).toEqual(['14%', null, '78%', '8%']);
@@ -560,12 +561,10 @@ describe('stopCostShown — never name a readout that is not on screen', () => {
 // ── TRADE-CARD-BARRIER-PRESENTATION: one comparison row per target ──────────
 
 describe('the comparison row', () => {
-  // The rows of the outcome table, in target order. The barriers table is the
-  // first table on the card; the outcome table is the second.
-  const outcomeRows = () => {
-    const tables = screen.getAllByRole('table');
-    return within(tables[1]).getAllByRole('row').slice(1);   // drop the header row
-  };
+  // The rows of the outcome table, in target order (#610 G9: it now comes
+  // before the barriers table, so it is found by name).
+  const outcomeRows = () => within(screen.getByRole('table', { name: 'Barrier Race outcomes' }))
+    .getAllByRole('row').slice(1);   // drop the header row
 
   it('puts the four shares, the target median, the stock R:R and the edge in the same row', () => {
     renderCard();
@@ -573,23 +572,23 @@ describe('the comparison row', () => {
     expect(rows).toHaveLength(3);
     const cells = within(rows[0]).getAllByRole('cell').map((c) => c.textContent);
     expect(cells).toEqual([
-      '20%$6.24Estimated dollar outcomeUnavailable', '', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00',
+      'T20% · $6.24', '27%', '0%', '69%', '4%', '~7d', '0.20x', '-$193.00', 'Unavailable',
     ]);
-    // The bar is in the second cell, drawn from the same allocated weights.
-    expect(within(rows[0]).getByRole('img')).toBeInTheDocument();
-    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent).slice(2))
-      .toEqual(['14%', '0%', '78%', '8%', '~12d', '0.35x', '-$228.00']);
-    expect(within(rows[2]).getAllByRole('cell').map((c) => c.textContent).slice(2))
-      .toEqual(['8%', '0%', '81%', '11%', '~16d', '0.50x', '-$243.00']);
+    // #610 G9: the row's bar is drawn above the table, from the same allocated weights.
+    expect(screen.getAllByRole('img')[0]).toHaveAttribute('aria-label', expect.stringMatching(/^20% target: Target first 27%/));
+    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent).slice(1))
+      .toEqual(['14%', '0%', '78%', '8%', '~12d', '0.35x', '-$228.00', 'Unavailable']);
+    expect(within(rows[2]).getAllByRole('cell').map((c) => c.textContent).slice(1))
+      .toEqual(['8%', '0%', '81%', '11%', '~16d', '0.50x', '-$243.00', 'Unavailable']);
   });
 
   it('names its columns', () => {
     renderCard();
-    const headers = within(screen.getAllByRole('table')[1])
+    const headers = within(screen.getByRole('table', { name: 'Barrier Race outcomes' }))
       .getAllByRole('columnheader').map((h) => h.textContent);
     expect(headers).toEqual([
-      'Target / option', 'Split', 'Target first', 'Stock stop', 'Premium stop', 'Neither',
-      'Median to target', 'R:R vs stock stop', 'Edge / contract',
+      'Target / option', 'Target first', 'Stock stop', 'Premium stop', 'Neither',
+      'Median to target', 'R:R vs stock stop', 'Edge / contract', 'Est. dollar outcome',
     ]);
   });
 
@@ -616,7 +615,7 @@ describe('the comparison row', () => {
         />,
       );
       const cells = within(outcomeRows()[0]).getAllByRole('cell').map((c) => c.textContent);
-      expect([name, cells[7], cells[8]]).toEqual([name, rr, edge]);
+      expect([name, cells[6], cells[7]]).toEqual([name, rr, edge]);
       // And the full chain the disclosure prints ends in exactly those values.
       const rrChain = formatRaceRR(o);
       expect([name, rr === '—' ? rrChain.endsWith('= —') : rrChain.endsWith(`= ${rr}`)])
@@ -631,7 +630,7 @@ describe('the comparison row', () => {
 
   it('does not colour the edge: the card adds no gate', () => {
     renderCard({ race: { ...RACE, outcomes: [outcome({ edgePerContract: 298 })] } });
-    const edgeCell = within(outcomeRows()[0]).getAllByRole('cell')[8];
+    const edgeCell = within(outcomeRows()[0]).getAllByRole('cell')[7];
     expect(edgeCell.innerHTML).not.toMatch(/tone(Pass|Reject|Caution)/);
   });
 });
@@ -667,7 +666,8 @@ describe('the inline disclosure', () => {
   it('keeps the volatility-fallback warning above the barriers and results it qualifies', () => {
     renderCard({ race: { ...RACE, ivSolved: false } });
     const iv = screen.getByText(/implied volatility could not be backed out of its quote/);
-    const [barriers, outcomes] = screen.getAllByRole('table');
+    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers' });
+    const outcomes = screen.getByRole('table', { name: 'Barrier Race outcomes' });
     expect(iv.compareDocumentPosition(barriers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const weak = screen.getByText(/describes an outcome the simulation almost never reached/);
     expect(outcomes.compareDocumentPosition(weak) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -737,7 +737,7 @@ describe('controlled race shortcut', () => {
 
 // OPT-PRES-07: the target reward is already returned in the backend's cents.
 describe('selected-contract dollar outcomes', () => {
-  const rows = () => within(screen.getAllByRole('table')[1]).getAllByRole('row').slice(1);
+  const rows = () => within(screen.getByRole('table', { name: 'Barrier Race outcomes' })).getAllByRole('row').slice(1);
 
   it('scales every returned reward by entered quantity, retaining selection and per-contract edge', () => {
     const onSelectTarget = jest.fn();
@@ -790,5 +790,62 @@ describe('selected-contract dollar outcomes', () => {
     renderCard({ quantity: 2, barriersChanged: true });
     expect(screen.queryByText('$208.00')).not.toBeInTheDocument();
     expect(screen.queryByText('Estimated dollar outcome')).not.toBeInTheDocument();
+  });
+});
+
+// ── #610 G9: the graphic first, full-width labelled bars, readable table ─────
+describe('the race graphic (#610 G9)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readFileSync } = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { join } = require('path') as typeof import('path');
+  const css = readFileSync(join(__dirname, '..', 'BarrierRaceCard.module.css'), 'utf8');
+  const rule = (selector: string) => {
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('draws one labelled bar per target before the outcome and barrier tables', () => {
+    renderCard();
+    const bars = screen.getAllByRole('img');
+    expect(bars).toHaveLength(3);
+    expect(screen.getByText('T20% · $6.24 option')).toBeInTheDocument();
+    expect(screen.getByText('T50% · $7.80 option')).toBeInTheDocument();
+    const outcomes = screen.getByRole('table', { name: 'Barrier Race outcomes' });
+    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers' });
+    for (const bar of bars) {
+      expect(outcomes.contains(bar)).toBe(false);
+      expect(bar.compareDocumentPosition(outcomes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(outcomes.compareDocumentPosition(barriers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('prints each wide-enough share inside its segment, the same allocated value as the table', () => {
+    renderCard();
+    const [first] = screen.getAllByRole('img');
+    expect(within(first).getByTestId('segment-Target first')).toHaveTextContent('27%');
+    expect(within(first).getByTestId('segment-Premium stop first')).toHaveTextContent('69%');
+    const row = within(screen.getByRole('table', { name: 'Barrier Race outcomes' })).getAllByRole('row')[1];
+    expect(within(row).getByText('27%')).toBeInTheDocument();
+    expect(within(row).getByText('69%')).toBeInTheDocument();
+  });
+
+  it('gives the dollar outcome its own column and keeps the target action in the target cell', () => {
+    renderCard({ quantity: 2, onSelectTarget: jest.fn() });
+    const table = screen.getByRole('table', { name: 'Barrier Race outcomes' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toContain('Est. dollar outcome');
+    const row = within(table).getAllByRole('row')[1];
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[0]).toHaveTextContent('T20% · $6.24');
+    expect(within(cells[0]).getByRole('button', { name: 'Use Barrier Race T20%' })).toBeInTheDocument();
+    expect(cells[cells.length - 1]).toHaveTextContent('$208.00');
+  });
+
+  it('uses tall full-width bars and stops the inherited mid-word breaking', () => {
+    expect(rule('.card')).toMatch(/overflow-wrap:\s*normal/);
+    const bar = rule('.bar');
+    expect(bar).toMatch(/height:\s*(2[89]|3[0-2])px/);
+    expect(bar).not.toMatch(/max-width:\s*180px/);
+    expect(rule('.table th')).toMatch(/white-space:\s*nowrap|overflow-wrap:\s*normal/);
   });
 });

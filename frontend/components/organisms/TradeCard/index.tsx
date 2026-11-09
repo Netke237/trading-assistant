@@ -3095,10 +3095,12 @@ export function TradeCard({
             <Title as="h2" size={20}>Profit-target methods</Title>
             <MethodCompareSelector value={comparedMethods} onChange={setComparedMethods} />
           </div>
+          {/* #610 G6 — one short line under the segmented switch; the
+               independence note joins it while more than one card is open,
+               where it applies (each card's own disclosure repeats it). */}
           <Text size={12} tone="secondary">
-            Showing or comparing methods is display only: it does not run a calculation, choose the
-            decision's exit method or change the order and exit fields. Each card keeps its own
-            source, valuation basis and freshness; the methods are independent and can disagree.
+            {'Display only — switching or comparing runs no calculation and does not change the decision’s exit method or the order and exit fields.'}
+            {comparedMethods.length > 1 && ' Each card keeps its own source, valuation basis and freshness; the methods are independent and can disagree.'}
           </Text>
         <div
           className={styles.methodGrid}
@@ -3119,17 +3121,24 @@ export function TradeCard({
                complete basis, model and provenance prose is unchanged but sits
                in the default-closed disclosure at the end of the card. */}
           <div className={styles.methodSlot} data-slot="basis">
-          <Text size={12} tone="secondary">T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
-          <div className={styles.targetPctRow}>
+          {/* #610 G7 — the reference's input row: three compact % inputs, each
+               labelled on one line, and the primary Run action on the same
+               row. The bounds and the "Run estimates the entered targets"
+               sentence moved to the input title and the model disclosure. */}
+          <div className={styles.targetPctRow} data-mc-input-row>
             {(['t1', 't2', 't3'] as const).map((key) => (
               <label key={key} className={styles.targetPctInput}>
-                <Text size={11} tone="secondary">{key.toUpperCase()}</Text>
+                <span className={styles.editLabel}>
+                  <Text size={12} tone="secondary">{`${key.toUpperCase()} profit %`}</Text>
+                  <Text size={10} tone="accent" className={styles.editableTag}>Editable</Text>
+                </span>
                 <input
                   type="number"
                   className={styles.editInput}
                   data-editable="true"
                   min={1}
                   max={500}
+                  title="Option-profit percentage, 1–500%"
                   aria-label={`${key.toUpperCase()} profit target %`}
                   value={Math.round(targetPct[key] * 100)}
                   onChange={(e) => {
@@ -3137,11 +3146,8 @@ export function TradeCard({
                     setTargetPct((prev) => ({ ...prev, [key]: pct }));
                   }}
                 />
-                <Text size={11} tone="secondary">%</Text>
               </label>
             ))}
-          </div>
-          <div className={styles.structuralStop}>
             {/* Disabled while EITHER level the simulation depends on is still
                 in flight, not just while the estimate itself is. Awaiting the
                 auto-refresh inside the handler closed the case where nothing
@@ -3163,7 +3169,7 @@ export function TradeCard({
                 against the sharedStop memo the freshness check compares to. */}
             <button
               type="button"
-              className={styles.btn}
+              className={`${styles.btn} ${styles.btnPrimary}`}
               onClick={estimateFirstPassage}
               disabled={
                 firstPassageLoading || structuralLoading || exitPlanLoading || !data.contractDetails
@@ -3173,28 +3179,35 @@ export function TradeCard({
                 {firstPassageLoading ? 'Estimating…' : 'Run Monte Carlo Estimate'}
               </Text>
             </button>
-            {!firstPassageLoading && (structuralLoading || exitPlanLoading) && (
-              <Text size={12} tone="secondary">
-                Waiting for the stop this estimate races against…
-              </Text>
-            )}
-            {firstPassageError && (
-              <Text size={12} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
-            )}
           </div>
+          {!firstPassageLoading && (structuralLoading || exitPlanLoading) && (
+            <Text size={12} tone="secondary">
+              Waiting for the stop this estimate races against…
+            </Text>
+          )}
+          {firstPassageError && (
+            <Text size={12} tone="reject">Couldn&apos;t compute an estimate — try again.</Text>
+          )}
           {/* `undefined` is "never run" (or the frame before a run lands), as
               opposed to `null` after a failure, which has its own copy above. */}
           {firstPassage === undefined && !firstPassageLoading && (
             <Text size={12} tone="secondary">
-              No estimate yet. Nothing runs automatically — click Run Monte Carlo Estimate to
-              simulate the entered targets; results and the Barrier Race appear after it finishes.
+              No estimate yet. Nothing runs automatically — run the estimate to see target values,
+              probabilities and times; the Barrier Race appears after it finishes.
             </Text>
           )}
           {/* The premium every dollar outcome below subtracts, so it stays with
-               the figures it qualifies rather than in the disclosure. */}
-          <div className={styles.arithmeticBasis}>
-            <KV label={hasMcEcho ? 'Same-estimate echoed premium' : 'Captured request premium (rounded to cents)'} value={mcPremium != null && mcPremium > 0 ? `$${mcPremium.toFixed(2)}/share` : firstPassage ? 'Unavailable — estimate premium basis missing' : 'Not yet estimated'} mono />
-          </div>
+               the figures it qualifies rather than in the disclosure. Before
+               any estimate it is one short line (#610 G7); the same value. */}
+          {!(mcPremium != null && mcPremium > 0) && !firstPassage ? (
+            <Text size={12} tone="secondary">
+              {'Premium basis (captured request premium, rounded to cents): '}<span>Not yet estimated</span>
+            </Text>
+          ) : (
+            <div className={styles.arithmeticBasis}>
+              <KV label={hasMcEcho ? 'Same-estimate echoed premium' : 'Captured request premium (rounded to cents)'} value={mcPremium != null && mcPremium > 0 ? `$${mcPremium.toFixed(2)}/share` : firstPassage ? 'Unavailable — estimate premium basis missing' : 'Not yet estimated'} mono />
+            </div>
+          )}
           {data.spreadType && data.spreadType !== 'single' && <Text size={12} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
           </div>
           <div className={styles.methodSlot} data-slot="stop">
@@ -3205,12 +3218,23 @@ export function TradeCard({
               `mcStopConsequence`; the actual Exit Plan settings are not repeated
               here, only a pointer to them when an input differs. */}
           <Text size={11} weight={500}>Stop context · simulation inputs and barrier-time race values</Text>
+          {/* #610 G7 — before any estimate the four facts would all read the
+               same "Unavailable — run or re-run…", so they are one line that
+               names them. Once an estimate exists (fresh, restored or stale)
+               the four facts show as before, from the same guarded values. */}
+          {firstPassage === undefined && mcRace === undefined ? (
+            <Text size={12} tone="secondary">
+              {'Stock barrier, option-price barrier, and option value and loss at the stock stop (barrier time): '}
+              <span>Unavailable — run or re-run estimate to confirm barriers</span>
+            </Text>
+          ) : (
           <div className={styles.mcStopGrid}>
             <KV field="stock-barrier" label="Stock barrier (run input)" value={mcRace ? `$${mcRace.stockStopPrice.toFixed(2)} stock` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
             <KV field="premium-barrier" label="Option-price barrier (run input)" value={mcRace ? `$${mcRace.premiumStopPrice.toFixed(2)}/share` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
             <KV field="stop-value" label="Option value at stock stop (barrier time)" value={mcStopValue} mono />
             <KV field="stop-loss" label="Loss at stock stop (barrier time)" value={mcStopLoss} mono />
           </div>
+          )}
           {'outcome' in mcStopConsequence && mcRace && (
             <Text size={12} tone="secondary">
               {`Barrier Race estimate, per share, ${mcStopConsequence.scope}: ${formatRaceRisk(mcStopConsequence.outcome, mcRace.premiumUsed)}.`}
@@ -3251,8 +3275,8 @@ export function TradeCard({
                     <th scope="col">Target</th>
                     <th scope="col">Stock price</th>
                     <th scope="col">Option value</th>
-                    <th scope="col">Probability (independent touch)</th>
-                    <th scope="col">Conditional time</th>
+                    <th scope="col">Probability<span className={styles.thSub}> (independent touch)</span></th>
+                    <th scope="col">Conditional time<span className={styles.thSub}> (calendar days)</span></th>
                     <th scope="col">Est. dollar outcome</th>
                   </tr>
                 </thead>
@@ -3269,9 +3293,11 @@ export function TradeCard({
               </table>
             </div>
           )}
+          {/* #610 G8 — one short footnote; the full sentence it shortens is
+               in the model disclosure below. */}
           {firstPassage && (
             <Text size={12} tone="secondary">
-              {`Probability is each target's touch before expiry measured on its own, including paths that also reach a stop, so rows can sum past 100%. Time is the median in calendar days, conditional on reaching the target. ${overlay.contracts} entered contracts × 100 shares, selected-contract full exit, before costs.`}
+              {`Probability counts each target's touch on its own, so rows can sum past 100%; time is the conditional median. Outcome: ${overlay.contracts} contracts × 100 shares, full exit, before costs.`}
             </Text>
           )}
           {/* #606 (D09) — the graphical Barrier Race, nested here instead of a
@@ -3326,6 +3352,12 @@ export function TradeCard({
             <summary>Monte Carlo model, inputs &amp; provenance</summary>
             <div className={styles.methodDetailsBody}>
             <Text size={12} tone="secondary">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <Text size={12} tone="secondary">T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
+            {firstPassage && (
+              <Text size={12} tone="secondary">
+                {`Probability is each target's touch before expiry measured on its own, including paths that also reach a stop, so rows can sum past 100%. Time is the median in calendar days, conditional on reaching the target. ${overlay.contracts} entered contracts × 100 shares, selected-contract full exit, before costs.`}
+              </Text>
+            )}
             <div className={styles.arithmeticBasis}>
               <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
               <KV label="Scan stock reference" value={`$${data.price.toFixed(2)}`} mono />
@@ -3442,10 +3474,10 @@ export function TradeCard({
                   <thead>
                     <tr>
                       <th scope="col">Target</th>
-                      <th scope="col">Stock price (resolved target)</th>
+                      <th scope="col">Stock price<span className={styles.thSub}> (resolved target)</span></th>
                       <th scope="col">Option value</th>
-                      <th scope="col">Probability (before expiry)</th>
-                      <th scope="col">Conditional time</th>
+                      <th scope="col">Probability<span className={styles.thSub}> (before expiry)</span></th>
+                      <th scope="col">Conditional time<span className={styles.thSub}> (calendar days)</span></th>
                       <th scope="col">Est. dollar outcome</th>
                     </tr>
                   </thead>
@@ -3459,7 +3491,7 @@ export function TradeCard({
                       return (
                         <tr data-target-row key={`${t.rrRatio}-${i}`}>
                           <th scope="row">
-                            <Text size={12} weight={600}>{t.rrRatio}:1 target {compareState === 'beyond' ? '⚠' : ''}</Text>
+                            <Text size={12} weight={600}>{`${t.rrRatio}:1${compareState === 'beyond' ? ' ⚠' : ''}`}</Text>
                             {(capped || compareState === 'beyond') && (
                               <Text size={12} tone="caution">
                                 {capped ? 'Bearish target capped at the price floor. ' : ''}{compareState === 'beyond' ? targetCompareLabel(compareState) : ''}
@@ -3469,7 +3501,7 @@ export function TradeCard({
                           <td data-field="stock"><Data size={12}>{Number.isFinite(t.price) ? `$${t.price.toFixed(2)}` : 'Unavailable'}</Data></td>
                           <td data-field="option"><Data size={12}>{priceAvailable ? `$${t.contractPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
                           <td data-field="probability"><Data size={12}>{Number.isFinite(t.probability) && t.probability >= 0 && t.probability <= 1 ? `${(t.probability * 100).toFixed(0)}%` : 'Unavailable'}</Data></td>
-                          <td data-field="time"><Data size={12}>{t.expectedDays != null && Number.isFinite(t.expectedDays) && t.expectedDays >= 0 ? `~${Math.round(t.expectedDays)} calendar days` : 'Unavailable — no conditional median'}</Data></td>
+                          <td data-field="time"><Data size={12}>{t.expectedDays != null && Number.isFinite(t.expectedDays) && t.expectedDays >= 0 ? `~${Math.round(t.expectedDays)}d` : 'Unavailable — no conditional median'}</Data></td>
                           <td data-field="outcome"><Data size={12}>{outcome != null ? `$${outcome.toFixed(2)}` : arithmeticPremium == null ? 'Unavailable — calculation premium basis missing' : 'Unavailable'}</Data></td>
                         </tr>
                       );
@@ -3480,9 +3512,11 @@ export function TradeCard({
             )}
             {!exitPlan && <Text size={12} tone="secondary">Target estimates — not yet computed —</Text>}
             {exitPlan && exitPlan.targets.length === 0 && <Text size={12} tone="secondary">No target estimates returned.</Text>}
+            {/* #610 G8 — one short footnote; the full sentence it shortens is
+                 in "Arithmetic basis, inputs & provenance" below. */}
             {exitPlan && exitPlan.targets.length > 0 && (
               <Text size={12} tone="secondary">
-                {`Stock price is the resolved target used for option valuation and probability. Probability is the target touched before expiry; time is the conditional median in calendar days. ${overlay.contracts} entered contracts × 100 shares, selected-contract full exit, before commissions.`}
+                {`Stock price is the resolved target; probability is a touch before expiry; time is the conditional median. Outcome: ${overlay.contracts} contracts × 100 shares, full exit, before commissions.`}
               </Text>
             )}
             {exitPlan && exitPlan.targets.length > 0 && (
@@ -3516,6 +3550,11 @@ export function TradeCard({
                   <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
                   <KV label={arithmeticLiveStockPrice != null ? 'Latest calculation-input stock reference' : 'Scan stock reference'} value={`$${(arithmeticLiveStockPrice ?? data.price).toFixed(2)}`} mono />
                 </div>
+                {exitPlan && exitPlan.targets.length > 0 && (
+                  <Text size={12} tone="secondary">
+                    {`Stock price is the resolved target used for option valuation and probability. Probability is the target touched before expiry; time is the conditional median in calendar days. ${overlay.contracts} entered contracts × 100 shares, selected-contract full exit, before commissions.`}
+                  </Text>
+                )}
                 <Text size={12} tone="secondary">Stored calculation stock entry: unavailable in the returned plan. The reference above is the scan or latest calculation input; Check structure can also refresh it.</Text>
                 <Text size={12} tone="secondary">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − calculation's echoed premium) × quantity × 100, from displayed cent-rounded prices, before commissions; not a fill or guaranteed profit.`}</Text>
                 <Text size={12} tone="secondary">Risk reference: selected-contract full premium; stop-loss sizing remains separately shown with its scan-mid basis in Order inputs & risk budget. Ratios describe stock geometry, not guaranteed option R:R. Independent of the other profit-target methods on this page; they can disagree. The computed stock stop is shared by every returned target and does not replace execution invalidation.</Text>
@@ -3563,11 +3602,11 @@ export function TradeCard({
                 <thead>
                   <tr>
                     <th scope="col">Target</th>
-                    <th scope="col">Stock price (editable)</th>
-                    <th scope="col">Option value (est. per share)</th>
+                    <th scope="col">Stock price<span className={styles.thSub}> (editable)</span></th>
+                    <th scope="col">Option value<span className={styles.thSub}> (est. per share)</span></th>
                     <th scope="col">Probability</th>
-                    <th scope="col">Conditional time</th>
-                    <th scope="col">{`Full-position outcome (${overlay.contracts} contracts × 100 shares)`}</th>
+                    <th scope="col">Conditional time<span className={styles.thSub}> (calendar days)</span></th>
+                    <th scope="col">Full-position outcome<span className={styles.thSub}>{` (${overlay.contracts} contracts × 100 shares)`}</span></th>
                     <th scope="col">Rung outcome</th>
                   </tr>
                 </thead>
@@ -4664,7 +4703,7 @@ function ProfitTargetRow({
         <Data size={12}>{Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'}</Data>
       </td>
       <td data-field="time">
-        <Data size={12}>{target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)} calendar days` : 'Unavailable — no conditional median'}</Data>
+        <Data size={12}>{target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)}d` : 'Unavailable — no conditional median'}</Data>
       </td>
       <td data-field="outcome">
         <Data size={12}>{outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'}</Data>

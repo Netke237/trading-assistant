@@ -738,17 +738,38 @@
   min-width: 0;
 }
 
+/* #610 G7 — the reference's Monte Carlo input row: each % input is a compact
+   label-above box (its label on one line), and the primary Run action sits on
+   the same row, aligned to the inputs' bottom edge; the row wraps only when
+   the card is too narrow for all four. */
 .targetPctRow {
   flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
 }
 
 .targetPctInput {
-  flex: 1 1 100px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
   min-width: 0;
 }
 
+.targetPctInput .editLabel {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .targetPctInput .editInput {
-  min-width: 0;
+  width: 80px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.targetPctRow > .btn {
+  height: 34px;
+  white-space: nowrap;
 }
 
 /* The summary row itself is the shared disclosure row (#610 G13,
@@ -1024,16 +1045,37 @@
 .mcTargetTable th,
 .mcTargetTable td {
   text-align: left;
-  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  padding: var(--space-2) 5px;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
 }
 
+/* #610 G8 — the reference's readable header band: secondary (not dim) text
+   on a shaded row. Headers may wrap between words; a long qualifier sits on
+   its own smaller second line (.thSub). */
 .mcTargetTable thead th {
-  color: var(--text-dim);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-base) 50%, var(--bg-surface));
   font-size: 11px;
   font-weight: 400;
+  line-height: 1.35;
   vertical-align: bottom;
+}
+
+.thSub {
+  display: block;
+  font-size: 10px;
+}
+
+/* #610 G8 — one line per cell: a value, an unavailable reason or a rung's
+   quantity never breaks mid-cell. A card too narrow for every column scrolls
+   the table inside .mcTableScroll rather than wrapping a value. */
+.mcTargetTable td {
+  white-space: nowrap;
+}
+
+.mcTargetTable tbody th > :first-child {
+  white-space: nowrap;
 }
 
 /* The nested Barrier Race keeps its own bordered card inside the expansion. */

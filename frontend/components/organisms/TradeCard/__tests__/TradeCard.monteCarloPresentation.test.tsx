@@ -40,11 +40,15 @@ it('shows the captured estimate basis, all returned premiums and outcomes rather
   // disclosure — present, unchanged, one click away.
   expect(region.getByText('Captured request premium (rounded to cents)')).toBeVisible();
   expect(region.getByText('$4.00/share')).toBeVisible();
-  expect(region.getByText(/2 entered contracts × 100 shares, selected-contract full exit/)).toBeVisible();
+  // #610 G8: the quantity basis stays visible in the short footnote; its
+  // full sentence is in the model disclosure.
+  expect(region.getByText(/Outcome: 2 contracts × 100 shares, full exit, before costs/)).toBeVisible();
+  expect(region.getAllByText(/2 entered contracts × 100 shares, selected-contract full exit/).length).toBeGreaterThan(0);
   for (const amount of ['$200.00', '$400.00', '$600.00']) expect(region.getByText(amount)).toBeVisible();
   expect(region.getAllByRole('row')).toHaveLength(4);
   expect(region.getByRole('columnheader', { name: 'Probability (independent touch)' })).toBeVisible();
-  expect(region.getByText('~8 calendar days')).toBeVisible();
+  expect(region.getByRole('columnheader', { name: 'Conditional time (calendar days)' })).toBeVisible();
+  expect(region.getByText('~8d')).toBeVisible();
   expect(region.getByText('Unavailable — no conditional median')).toBeVisible();
   expect(region.getByText('not reachable')).toBeVisible();
   const provenance = region.getByText('Monte Carlo model, inputs & provenance').closest('details')!;
@@ -199,8 +203,9 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     expect(region.getByRole('button', { name: 'Run Monte Carlo Estimate' })).toBeEnabled();
     expect(region.getByText('Not yet estimated')).toBeVisible();
     expect(region.getByText(/No estimate yet\. Nothing runs automatically/)).toBeVisible();
-    // Both run barriers and both barrier-time stop values (#606).
-    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(4);
+    // Both run barriers and both barrier-time stop values (#606), stated once
+    // before any estimate (#610 G7).
+    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(1);
     expect(region.queryByRole('table', { name: 'Monte Carlo targets' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Same simulation as the Monte Carlo card above/)).not.toBeInTheDocument();
   });
@@ -211,9 +216,9 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     expect(region.queryByText(/No estimate yet/)).not.toBeInTheDocument();
     expect(within(region.getByRole('table', { name: 'Monte Carlo targets' })).getAllByRole('row')).toHaveLength(4);
     for (const [label, premium, stock, prob, time] of [
-      ['T25%', '$6.50', '$194.10', '61%', '~7 calendar days'],
-      ['T50%', '$7.80', '$198.20', '42%', '~11 calendar days'],
-      ['T75%', '$9.10', '$202.30', '27%', '~15 calendar days'],
+      ['T25%', '$6.50', '$194.10', '61%', '~7d'],
+      ['T50%', '$7.80', '$198.20', '42%', '~11d'],
+      ['T75%', '$9.10', '$202.30', '27%', '~15d'],
     ]) {
       // The label's id cell, then the row body that holds that target's own values.
       const row = within(region.getByText(label).parentElement!.parentElement!);

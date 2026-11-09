@@ -13,9 +13,9 @@ import type { BarrierRace, ExitPlan, ExitPlanTargetRow, FirstPassageContext, Fir
 // These existing calculation/flow tests exercise all methods explicitly.
 const render = (...args: Parameters<typeof renderCard>) => {
   const view = renderCard(...args);
-  for (const name of ['Arithmetic', 'Fixed % Ladder']) {
+  for (const name of ['Arithmetic', 'Ladder']) {
     const toggle = screen.queryByRole('checkbox', { name });
-    if (toggle && !(toggle as HTMLInputElement).checked) fireEvent.click(toggle);
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
   return view;
 };
@@ -188,7 +188,7 @@ describe('disclosure defaults on a fully computed card', () => {
     expect(warning.closest('details')).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Arithmetic' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Monte Carlo' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Fixed % Ladder' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Ladder' })).toBeChecked();
   });
 });
 
@@ -273,7 +273,7 @@ describe('a contract switch', () => {
   it('borrows nothing from the previous contract and keeps which methods are compared', async () => {
     const { rerender } = render(<TradeCard data={card()} contracts={3} />);
     await runEstimate();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Fixed % Ladder' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ladder' }));
     const before = callCounts();
 
     const next = card({
@@ -287,7 +287,7 @@ describe('a contract switch', () => {
     expect(fieldValues('arithmetic', 'outcome')).toEqual([]);
     expect(fieldValues('monte_carlo', 'outcome')).toEqual([]);
     expect(cardOf('arithmetic').getByText('Calculated stock stop').parentElement).toHaveTextContent('Not yet computed');
-    expect(screen.getByRole('checkbox', { name: 'Fixed % Ladder' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Ladder' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Arithmetic' })).toBeChecked();
     expect(callCounts()).toEqual(before);
   });
