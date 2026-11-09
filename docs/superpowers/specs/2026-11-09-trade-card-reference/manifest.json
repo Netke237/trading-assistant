@@ -1,0 +1,15 @@
+{
+  "reviewed_implementation_sha": "86982b583b35dcca39fafac4eaa966bbfc2e916b",
+  "production_files_changed": false,
+  "assets_sha256": {
+    "IMPLEMENTATION-GAPS.md": "f80ce43a0b848814d215d60b69a18b01692c2183ae082672b12534ffe5aa097f",
+    "historical-explanation-register.json": "be994958911aaa37676665e11d7574f48beb9e4ea8679e7ab5550db7fefa8a96",
+    "README.md": "e6d2d9c33b094d754bbf7345bff4ebed56f3e653083e25f5f7ac0998b2645439",
+    "reference.css": "70b03aca597fd6f46a017d262bef109a3521e93fb570eb69219a709f7e8fbebd",
+    "verify-reference.cjs": "024fa55ad3516155e404bc9aa74ae57c9f20d149e2cdc48a8d7e4daac67ddd34",
+    "historical-preview-v6.html": "695d7000e7cecab12e9de5ecfbaa26d2f2609f37133db29b4677c27380a162b1",
+    "preview.html": "a9b154115e0bfe2f493ab32a1407cc4e40fb29860c98d3b9ad6ec05a12b32ab4",
+    "reference.js": "48b40fa9c0a38a1643db46db6403c268710fc8fda649bebce424240827f70856",
+    "explanation-register.json": "6ebf36ce549b8a5bcfa4249f5b3c476bdda22f0fed7eb35e0f2f850ca806a659"
+  }
+}

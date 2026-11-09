@@ -1,0 +1,39 @@
+{
+  "viewport": {
+    "width": 1366,
+    "height": 1000
+  },
+  "initialMethod": "mc",
+  "initialMethodBox": {
+    "x": 103,
+    "y": 1269.5,
+    "width": 1160,
+    "height": 354
+  },
+  "comparison": [
+    {
+      "id": "mc",
+      "width": 572,
+      "height": 887.09375
+    },
+    {
+      "id": "arith",
+      "width": 572,
+      "height": 887.09375
+    }
+  ],
+  "targetTops": [
+    904.09375,
+    904.09375
+  ],
+  "threeMethods": true,
+  "mcTargets": 3,
+  "arithmeticTargets": 2,
+  "quantityTotals": true,
+  "staleRaceSuppressed": true,
+  "changedReviewRejected": true,
+  "trackingAndBrokerDemo": true,
+  "explanationEntries": 132,
+  "pageErrors": [],
+  "networkRequests": []
+}
