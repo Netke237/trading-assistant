@@ -453,6 +453,8 @@ describe('TC-UI-02 selected recommendation', () => {
   it('race dollar outcome follows edited entered quantity without another simulation or changing per-contract edge', async () => {
     render(<TradeCard data={card} contracts={2} />);
     await runEstimate();
+    // #606: the race is nested in Monte Carlo's default-closed expansion.
+    fireEvent.click(screen.getByText('Barrier Race · graphical outcomes & details'));
     const race = within(screen.getByText('Which barrier is reached first').closest('section')!);
     expect(race.getByText('$950.00')).toBeVisible();
     fireEvent.click(screen.getByLabelText('Edit Contracts'));
@@ -587,7 +589,10 @@ describe('TC-UI-02 selected recommendation', () => {
       });
       fireEvent.click(screen.getByText('Structure evidence · ATR, pricing & Check structure'));
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
-      await waitFor(() => expect(screen.getByText(/Barriers changed/)).toBeVisible());
+      // #606: the race now sits in Monte Carlo's closed expansion; the stale
+      // state stays visible on the Monte Carlo card itself.
+      await waitFor(() => expect(screen.getByText(/A barrier moved after this run/)).toBeVisible());
+      expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
     } else {
       fireEvent.click(screen.getByLabelText(`Edit ${field}`));
       const input = screen.getByLabelText(`Edit ${field}`);

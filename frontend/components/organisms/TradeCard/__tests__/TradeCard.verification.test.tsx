@@ -234,7 +234,7 @@ describe('stale to re-run', () => {
 
     expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/Barriers changed — re-run the estimate/)).not.toBeInTheDocument();
-    expect(cardOf('monte_carlo').getByText('Companion race premium exit-value barrier').parentElement).toHaveTextContent('$2.70/share');
+    expect(cardOf('monte_carlo').getByText('Option-price barrier (run input)').parentElement).toHaveTextContent('$2.70/share');
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('2.50');   // the setting is what was typed
     expect(onMethodPickChange).not.toHaveBeenCalledWith(expect.objectContaining({ method: 'barrier_race' }));
   });

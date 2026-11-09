@@ -27,7 +27,7 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useScanStore } from '@/lib/scanStore';
 import { rrOverridesForPlan } from '@/lib/tradeCardOverride';
 import { resolveParamsHorizon, presetByKey } from '@/lib/horizonPresets';
-import { premiumStopPctFromDollars, money, weightPercents, days } from '@/lib/barrierRace';
+import { premiumStopPctFromDollars, money, weightPercents, days, formatRaceRisk } from '@/lib/barrierRace';
 import { premiumStopDollarBounds, premiumStopPctLabel } from '@/lib/premiumStop';
 import { TIME_STOP_DTE } from '@/lib/alertEngine';
 import { horizonFieldsFrom } from '@/lib/tradeCardOverride';
@@ -41,7 +41,7 @@ import {
   planOverlay,
   restoredEdits,
 } from '@/lib/tradeCardEdits';
-import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, MethodPick, StopCostOut } from '@/types/domain';
+import type { TradeCardData, TargetLevel, StructuralStop, FirstPassageEstimate, FirstPassageContext, FirstPassageTarget, ExitPlan, ExitPlanTargetRow, MaxLossOverride, MethodPick, StopCostOut, BarrierRaceOutcome } from '@/types/domain';
 import {
   triggerDetailText,
   pullbackDetailText,
@@ -2269,6 +2269,40 @@ export function TradeCard({
       methodPick.rowStockPrice === null && methodPick.rowOptionPrice === o.targetOptionPrice)?.targetPct ?? null
     : null;
 
+  /** #606 — the Monte Carlo card's stop consequence: the CURRENT race's
+   *  barrier-time value and loss at the stock stop, beside the barriers that
+   *  produced them. Read from the race payload only (no new pricing), and only
+   *  behind `raceIsShowable`, the same gate every other race number obeys, so
+   *  a restored, other-contract or moved-barrier race never supplies it. The
+   *  stock-stop leg is computed once per stop, so it normally agrees across
+   *  targets; if it ever does not, the trader's existing Barrier Race target
+   *  selection names the row, and without one it is unavailable rather than an
+   *  unlabelled first outcome. */
+  const mcRace = raceIsShowable ? firstPassage?.race : undefined;
+  const mcStopConsequence: { outcome: BarrierRaceOutcome; scope: string } | { unavailable: string } = (() => {
+    if (mcRace === undefined) return { unavailable: 'Unavailable — run or re-run estimate to confirm barriers' };
+    if (mcRace === null) return { unavailable: 'Unavailable — not simulated (contract expires today)' };
+    const outs = mcRace.outcomes;
+    if (outs.length === 0) return { unavailable: 'Unavailable — no race outcome returned' };
+    const first = outs[0];
+    const agree = outs.every((o) => o.stopRepricedValue === first.stopRepricedValue
+      && o.riskStockStop === first.riskStockStop && o.repriceDaysStockStop === first.repriceDaysStockStop);
+    if (agree) return { outcome: first, scope: 'same for every target' };
+    const picked = selectedRaceTarget != null ? outs.find((o) => o.targetPct === selectedRaceTarget) : undefined;
+    if (picked) return { outcome: picked, scope: `for your selected Barrier Race target T${Math.round(picked.targetPct * 100)}%` };
+    return { unavailable: 'Unavailable — differs by target; choose a Barrier Race target' };
+  })();
+  const mcStopValue = 'outcome' in mcStopConsequence
+    ? mcStopConsequence.outcome.stopRepricedValue != null && mcStopConsequence.outcome.riskStockStop != null
+      ? `${money(mcStopConsequence.outcome.stopRepricedValue)}/share`
+      : 'Unavailable — could not reprice at the stop'
+    : mcStopConsequence.unavailable;
+  const mcStopLoss = 'outcome' in mcStopConsequence
+    ? mcStopConsequence.outcome.stopRepricedValue != null && mcStopConsequence.outcome.riskStockStop != null
+      ? `${money(mcStopConsequence.outcome.riskStockStop)}/share${mcStopConsequence.outcome.riskStockStop <= 0 ? ' · no loss (worth more at the stop than it cost)' : ''}`
+      : 'Unavailable — could not reprice at the stop'
+    : mcStopConsequence.unavailable;
+
   /** §6.1 — "picking a method whose numbers then go stale clears the pick".
    *
    *  STATED AS "THE PICKED METHOD IS NO LONGER SELECTABLE", which is wider than
@@ -2954,9 +2988,10 @@ export function TradeCard({
              control below owns that) and never writes an order/exit field.
              Every card is kept mounted and only hidden, so a hidden card keeps
              its results, edits and freshness exactly as they were. Each card
-             lays out the same slots in the same order — basis, stop, targets —
-             and the target rows list option premium, dollar outcome, stock
-             target, probability and time in Monte Carlo's order. */}
+             lays out the same slots in the same order — basis, stop, targets.
+             Monte Carlo's compact table (#606) lists target, stock price,
+             option value, probability, time and dollar outcome; Arithmetic and
+             Ladder rows still use the earlier field order until #607. */}
         <section className={styles.methodResults} aria-label="Profit-target methods">
           <div className={styles.methodResultsHead}>
             <Text size={16} weight={600}>Profit-target methods</Text>
@@ -2975,43 +3010,12 @@ export function TradeCard({
           <Text size={14} weight={600}>Monte Carlo Profit Target</Text>
           <Text size={10} tone="dim">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
           </div>
+          {/* #606 — essentials first: the editable percentages and the explicit
+               Run, then the stop context, then one compact target table. The
+               complete basis, model and provenance prose is unchanged but sits
+               in the default-closed disclosure at the end of the card. */}
           <div className={styles.methodSlot} data-slot="basis">
-          <div className={styles.arithmeticBasis}>
-            <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
-            <KV label="Scan stock reference" value={`$${data.price.toFixed(2)}`} mono />
-            <KV label={hasMcEcho ? 'Same-estimate echoed premium' : 'Captured request premium (rounded to cents)'} value={mcPremium != null && mcPremium > 0 ? `$${mcPremium.toFixed(2)}/share` : firstPassage ? 'Unavailable — estimate premium basis missing' : 'Not yet estimated'} mono />
-            <KV label="Editable order entry (separate basis)" value={`$${overlay.entryLimit.toFixed(2)}/share`} mono />
-          </div>
-          <Text size={10} tone="dim">Stored Monte Carlo run stock entry: unavailable in the saved context. The scan reference above is not the run&apos;s stock-entry snapshot.</Text>
-          {hasMcEcho && capturedMcValid && <Text size={10} tone="dim">Captured request premium: ${capturedMcPremium}/share; dollar outcomes use the same-estimate echoed cent basis when matched.</Text>}
-          <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − estimate premium basis) × quantity × 100, using displayed cent-rounded prices, before costs; not a fill or guaranteed profit.`}</Text>
-          {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
-          <Text size={11} tone="secondary">GBM simulated stock paths · Black-Scholes option repricing.</Text>
-          <Text size={10} tone="dim">{`Simulation uses calendar-day steps to expiry. Current selected-contract metadata: ${data.contractDetails?.dte ?? 'unavailable'} DTE; saved run DTE is unavailable in the stored context. Probability means target premium touched before expiry, even if a stop is also reached. Median time is conditional on target hits, in calendar days; independent target probabilities can sum past 100%.`}</Text>
-          <Text size={10} tone="dim">{`Current inherited holding/repricing settings (not saved run inputs): ${horizonPreset ?? 'backend default'}; hold minimum ${holdMin ?? 'default'}, maximum ${holdMax ?? 'default'} trading days. These are separate from the expiry simulation horizon.`}</Text>
-          </div>
-          <div className={styles.methodSlot} data-slot="stop">
-          <Text size={11} tone="secondary">Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.</Text>
-          {/* #579: the race barriers are simulation INPUTS and the execution
-              fields are the position's actual settings. Two labelled groups,
-              never merged, and the resolution that produced the inputs stated
-              once so a difference between the two reads as expected. */}
-          <Text size={11} weight={500}>Simulation inputs (captured at Run)</Text>
-          <div className={styles.arithmeticBasis}>
-            <KV label="Companion race stock barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.stockStopPrice.toFixed(2)} stock` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
-            <KV label="Companion race premium exit-value barrier" value={raceIsShowable && firstPassage?.race ? `$${firstPassage.race.premiumStopPrice.toFixed(2)}/share` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
-          </div>
-          <Text size={10} tone="dim">Simulation inputs are what the last run raced against, resolved at Run: stock barrier = Arithmetic Plan structural + ATR stop (computed for this contract on this visit), else the structural level, else the Exit Plan stock invalidation; premium barrier = the Premium stop field when you changed it to a loss below the run&apos;s premium, else the risk-rules default percentage. They can differ from the settings below. Monte Carlo never copies one into the other; moving a barrier after the run hides these inputs and the race until you re-run.</Text>
-          <Text size={11} weight={500}>Actual Exit Plan settings (not changed by Monte Carlo)</Text>
-          <div className={styles.arithmeticBasis}>
-            <KV label="Execution stock invalidation" value={overlay.invalidation != null ? `$${overlay.invalidation.toFixed(2)} stock` : 'Unavailable'} mono />
-            <KV label="Execution premium-stop loss amount" value={premiumStopReadOnly
-              ? premiumStopTouched && overlay.premiumStop != null ? `$${overlay.premiumStop.toFixed(2)}/share · pinned` : `Global loss allowance: ${Number((globalPremiumStopPct * 100).toFixed(2))}% (fill-derived)`
-              : effectivePremiumStop != null ? `$${effectivePremiumStop.toFixed(2)}/share${premiumStopTouched ? ' · override' : showsGlobalOnLiveMid ? ` · global ${Number((globalPremiumStopPct * 100).toFixed(2))}%` : ' · scan seed'}` : 'Unavailable'} mono />
-          </div>
-          </div>
-          <div className={styles.methodSlot} data-slot="targets">
-          <Text size={10} tone="dim">Independent stock-stop touch probability and time remain in the Barrier Race disclosure. T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
+          <Text size={10} tone="dim">T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
           <div className={styles.targetPctRow}>
             {(['t1', 't2', 't3'] as const).map((key) => (
               <label key={key} className={styles.targetPctInput}>
@@ -3082,54 +3086,194 @@ export function TradeCard({
               simulate the entered targets; results and the Barrier Race appear after it finishes.
             </Text>
           )}
-          {firstPassage && (
-            <div className={styles.targetsTable}>
-              {firstPassage.targets.map((t, i) => (
-                <ProfitTargetRow
-                  key={`${t.pct}-${i}`}
-                  target={t}
-                  estimatePremium={mcPremium != null && mcPremium > 0 ? mcPremium : null}
-                  quantity={overlay.contracts}
-                  structuralPaired={structuralPairing === 'ok'}
-                  structuralPending={structuralLoading}
-                  structuralUnavailable={structuralStop === null}
-                  structuralZeroRisk={
-                    sharedStop != null
-                    && firstPassageContext != null && structuralPairing === 'zero_risk'
-                    && !structuralLoading && structuralPairEligible
-                  }
-                  sharedStopPrice={sharedStop?.price ?? null}
-                />
-              ))}
-            </div>
-          )}
-          {/* Rendered INSIDE the estimate block on purpose. Outside it, this
-               ran before anything had been estimated — "each probability above
-               is measured on its own" with no probabilities above it, pointing
-               at a Barrier Race card that renders null — and in every race-less
-               state it described a move that had not happened, since the
-               invalidation row is only over there when the race is. */}
-          {/* The round-7 caution note that stood here is GONE ON PURPOSE, and
-               must not come back. It said the Fixed % Ladder still back-solved
-               at half the contract's life while "Stock price" above used the
-               resolved holding horizon. Both now call
-               reprice_horizon.display_reprice_years() with the same arguments,
-               so the disagreement it disclosed no longer exists and the note
-               would be a false disclosure — worse than none, because a trader
-               would discount two numbers that actually agree. The agreement is
-               pinned, not assumed: backend/tests/test_reprice_horizon_agreement.py
-               (equal inputs, equal horizon, per preset) and
-               frontend/lib/__tests__/repriceHorizonPayload.test.ts (the two
-               paths send equal inputs). Re-derive from those before writing any
-               note here again. */}
-          {firstPassage && raceIsShowable && (
+          {/* The premium every dollar outcome below subtracts, so it stays with
+               the figures it qualifies rather than in the disclosure. */}
+          <div className={styles.arithmeticBasis}>
+            <KV label={hasMcEcho ? 'Same-estimate echoed premium' : 'Captured request premium (rounded to cents)'} value={mcPremium != null && mcPremium > 0 ? `$${mcPremium.toFixed(2)}/share` : firstPassage ? 'Unavailable — estimate premium basis missing' : 'Not yet estimated'} mono />
+          </div>
+          {data.spreadType && data.spreadType !== 'single' && <Text size={10} tone="caution">Selected-contract basis only; this is not a whole-spread outcome.</Text>}
+          </div>
+          <div className={styles.methodSlot} data-slot="stop">
+          {/* #579/#606: the race barriers are simulation INPUTS, and the two
+              figures beside them are the race's own barrier-time repricing of
+              the stock stop — never the current-time stop cost (Arithmetic) and
+              never a saved race. All four share `raceIsShowable` via
+              `mcStopConsequence`; the actual Exit Plan settings are not repeated
+              here, only a pointer to them when an input differs. */}
+          <Text size={11} weight={500}>Stop context · simulation inputs and barrier-time race values</Text>
+          <div className={styles.mcStopGrid}>
+            <KV field="stock-barrier" label="Stock barrier (run input)" value={mcRace ? `$${mcRace.stockStopPrice.toFixed(2)} stock` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
+            <KV field="premium-barrier" label="Option-price barrier (run input)" value={mcRace ? `$${mcRace.premiumStopPrice.toFixed(2)}/share` : 'Unavailable — run or re-run estimate to confirm barriers'} mono />
+            <KV field="stop-value" label="Option value at stock stop (barrier time)" value={mcStopValue} mono />
+            <KV field="stop-loss" label="Loss at stock stop (barrier time)" value={mcStopLoss} mono />
+          </div>
+          {'outcome' in mcStopConsequence && mcRace && (
             <Text size={10} tone="dim">
-              Each probability above is measured on its own, so they can sum past 100% — a path that
-              hits the target and later the stop is counted in both. The Barrier Race card below
-              counts every path once, for whichever barrier it reached first. The invalidation row
-              moved there too, for the same reason.
+              {`Barrier Race estimate, per share, ${mcStopConsequence.scope}: ${formatRaceRisk(mcStopConsequence.outcome, mcRace.premiumUsed)}.`}
             </Text>
           )}
+          {mcRace && !mcRace.ivSolved && (
+            <Text size={10} tone="caution">
+              Fallback volatility: the contract&apos;s implied volatility could not be solved from its quote, so
+              these barrier-time values and the Barrier Race used a generic fallback volatility — re-check the quote.
+            </Text>
+          )}
+          {estimateIsFresh && firstPassage?.race != null && raceBarriersMoved && (
+            <Text size={10} tone="caution">
+              A barrier moved after this run — the barrier inputs, stop values and Barrier Race stay hidden
+              until you re-run Monte Carlo.
+            </Text>
+          )}
+          {mcRace && (
+            <Text size={10} tone="dim">
+              {overlay.invalidation == null
+                ? 'Stock barrier is the run’s resolved structural level; the Exit Plan invalidation is not set. '
+                : Math.abs(mcRace.stockStopPrice - overlay.invalidation) >= 0.005
+                  ? `Stock barrier differs from the Exit Plan invalidation $${overlay.invalidation.toFixed(2)} (run precedence: Arithmetic structural + ATR, then structural, then invalidation). `
+                  : 'Stock barrier is the Exit Plan invalidation level. '}
+              {raceBarriers?.fromField
+                ? 'Option-price barrier comes from your Exit Plan premium stop. '
+                : `Option-price barrier uses the risk-rules default ${Number((mcRace.premiumStopPct * 100).toFixed(2))}% loss, not the Exit Plan premium stop. `}
+              Monte Carlo never changes the <a href="#exit-plan">Exit Plan ↑</a>.
+            </Text>
+          )}
+          </div>
+          <div className={styles.methodSlot} data-slot="targets">
+          {firstPassage && (
+            <div className={styles.mcTableScroll}>
+              <table className={styles.mcTargetTable} aria-label="Monte Carlo targets">
+                <thead>
+                  <tr>
+                    <th scope="col">Target</th>
+                    <th scope="col">Stock price</th>
+                    <th scope="col">Option value</th>
+                    <th scope="col">Probability (independent touch)</th>
+                    <th scope="col">Conditional time</th>
+                    <th scope="col">Est. dollar outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {firstPassage.targets.map((t, i) => (
+                    <ProfitTargetRow
+                      key={`${t.pct}-${i}`}
+                      target={t}
+                      estimatePremium={mcPremium != null && mcPremium > 0 ? mcPremium : null}
+                      quantity={overlay.contracts}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {firstPassage && (
+            <Text size={10} tone="dim">
+              {`Probability is each target's touch before expiry measured on its own, including paths that also reach a stop, so rows can sum past 100%. Time is the median in calendar days, conditional on reaching the target. ${overlay.contracts} entered contracts × 100 shares, selected-contract full exit, before costs.`}
+            </Text>
+          )}
+          {/* #606 (D09) — the graphical Barrier Race, nested here instead of a
+               full-width sibling after the method grid. A native <details>
+               rendered unconditionally: closed by default, its content stays
+               mounted while closed, its open state survives a re-run, and
+               opening it is display only (no request, no pick). Every prop and
+               gate below is the one the standalone card had. */}
+          <details className={`${styles.methodDetails} ${styles.mcRaceDetails}`}>
+            <summary>Barrier Race · graphical outcomes &amp; details</summary>
+            {!(estimateIsFresh && firstPassage?.race !== undefined) && (
+              <Text size={11} tone="dim">
+                No current Barrier Race — it appears here after Run Monte Carlo Estimate completes on this visit.
+              </Text>
+            )}
+            {/* Barrier Race (barrier-race spec section 3.2) — off the SAME
+                 simulation and the same click as the card above. It proposes no
+                 level of its own; it only decides which of the three existing
+                 barriers each simulated path reaches first. */}
+            <BarrierRaceCard
+              quantity={overlay.contracts}
+              isSpread={!!data.spreadType && data.spreadType !== 'single'}
+              // Gated on freshness too: `firstPassage` holds the PREVIOUS
+              // contract's estimate for the frame between a contract switch and the
+              // reset effect, so an un-gated `race === null` put "Not simulated —
+              // contract expires today" under the new contract's header whenever
+              // the previous one was 0-DTE. The refusal copy depends on no live
+              // BARRIER, but it does depend on which contract is on screen.
+              race={estimateIsFresh ? firstPassage?.race : undefined}
+              invalidation={firstPassage?.invalidation ?? null}
+              // See stopCostShown's declaration: the race must not name a readout
+              // the page is not showing.
+              stopCostShown={stopCostShown && stopRisk != null}
+              premiumStopFromField={raceBarriers?.fromField ?? false}
+              premiumStopField={overlay.premiumStop ?? null}
+              // raceIsShowable, not the inline expression this used to carry. The
+              // hoisted gate was applied to the Monte Carlo note and the Final
+              // Recommendation but not to the card itself, so the card kept the
+              // one term the gate exists for — that raceBarriers belongs to THIS
+              // contract — and painted the previous contract's bars, medians, risk
+              // legs and dollar edge for the frame between commit and the reset
+              // effect. Verified with a useLayoutEffect probe: bars leaked, the
+              // Final Recommendation did not.
+              isFresh={estimateIsFresh}
+              barriersChanged={raceBarriersMoved}
+              stockStopMoved={stockStopMoved}
+              onSelectTarget={racePickOption?.unavailable == null ? selectRaceTarget : undefined}
+              selectedTargetPct={selectedRaceTarget}
+            />
+          </details>
+          <details className={styles.methodDetails}>
+            <summary>Monte Carlo model, inputs &amp; provenance</summary>
+            <div className={styles.methodDetailsBody}>
+            <div className={styles.arithmeticBasis}>
+              <KV label="Selected strike / right" value={data.contractDetails ? `$${data.contractDetails.strike.toFixed(2)} ${data.contractDetails.right === 'C' ? 'Call' : 'Put'}` : 'Unavailable'} mono />
+              <KV label="Scan stock reference" value={`$${data.price.toFixed(2)}`} mono />
+              <KV label="Editable order entry (separate basis)" value={`$${overlay.entryLimit.toFixed(2)}/share`} mono />
+            </div>
+            <Text size={10} tone="dim">Stored Monte Carlo run stock entry: unavailable in the saved context. The scan reference above is not the run&apos;s stock-entry snapshot.</Text>
+            {hasMcEcho && capturedMcValid && <Text size={10} tone="dim">Captured request premium: ${capturedMcPremium}/share; dollar outcomes use the same-estimate echoed cent basis when matched.</Text>}
+            <Text size={10} tone="dim">{`${overlay.contracts} entered contracts × 100 shares · selected-contract full exit. Estimated dollar outcome = (returned option premium − estimate premium basis) × quantity × 100, using displayed cent-rounded prices, before costs; not a fill or guaranteed profit.`}</Text>
+            <Text size={11} tone="secondary">GBM simulated stock paths · Black-Scholes option repricing.</Text>
+            <Text size={10} tone="dim">{`Simulation uses calendar-day steps to expiry. Current selected-contract metadata: ${data.contractDetails?.dte ?? 'unavailable'} DTE; saved run DTE is unavailable in the stored context. Probability means target premium touched before expiry, even if a stop is also reached. Median time is conditional on target hits, in calendar days; independent target probabilities can sum past 100%.`}</Text>
+            <Text size={10} tone="dim">{`Current inherited holding/repricing settings (not saved run inputs): ${horizonPreset ?? 'backend default'}; hold minimum ${holdMin ?? 'default'}, maximum ${holdMax ?? 'default'} trading days. These are separate from the expiry simulation horizon.`}</Text>
+            <Text size={11} tone="secondary">Monte Carlo does not propose a stop. Effective stock and premium barriers feed the companion Barrier Race; execution stops remain separate.</Text>
+            <Text size={10} tone="dim">Simulation inputs are what the last run raced against, resolved at Run: stock barrier = Arithmetic Plan structural + ATR stop (computed for this contract on this visit), else the structural level, else the Exit Plan stock invalidation; premium barrier = the Premium stop field when you changed it to a loss below the run&apos;s premium, else the risk-rules default percentage. They can differ from the Exit Plan&apos;s settings. Monte Carlo never copies one into the other; moving a barrier after the run hides these inputs and the race until you re-run.</Text>
+            <Text size={10} tone="dim">Independent stock-stop touch probability and time remain in the Barrier Race disclosure.</Text>
+            {firstPassage && (
+              <KV
+                label="Structural level found"
+                value={mcStructuralLevelValue({
+                  structuralPaired: structuralPairing === 'ok',
+                  structuralPending: structuralLoading,
+                  structuralUnavailable: structuralStop === null,
+                  structuralZeroRisk:
+                    sharedStop != null
+                    && firstPassageContext != null && structuralPairing === 'zero_risk'
+                    && !structuralLoading && structuralPairEligible,
+                  sharedStopPrice: sharedStop?.price ?? null,
+                })}
+                mono
+              />
+            )}
+            {/* The round-7 caution note that stood here is GONE ON PURPOSE, and
+                 must not come back. It said the Fixed % Ladder still back-solved
+                 at half the contract's life while "Stock price" above used the
+                 resolved holding horizon. Both now call
+                 reprice_horizon.display_reprice_years() with the same arguments,
+                 so the disagreement it disclosed no longer exists and the note
+                 would be a false disclosure — worse than none, because a trader
+                 would discount two numbers that actually agree. The agreement is
+                 pinned, not assumed: backend/tests/test_reprice_horizon_agreement.py
+                 (equal inputs, equal horizon, per preset) and
+                 frontend/lib/__tests__/repriceHorizonPayload.test.ts (the two
+                 paths send equal inputs). Re-derive from those before writing any
+                 note here again. */}
+            {firstPassage && raceIsShowable && (
+              <Text size={10} tone="dim">
+                Each probability above is measured on its own, so they can sum past 100% — a path that
+                hits the target and later the stop is counted in both. The Barrier Race above counts
+                every path once, for whichever barrier it reached first. The invalidation row moved
+                there too, for the same reason.
+              </Text>
+            )}
+            </div>
+          </details>
           </div>
         </section>
         </div>
@@ -3448,43 +3592,7 @@ export function TradeCard({
           </div>
         </section>
 
-        {/* Barrier Race (barrier-race spec section 3.2) — its own card, directly
-             below Monte Carlo, off the SAME simulation and the same click. It
-             proposes no level of its own; it only decides which of the three
-             existing barriers each simulated path reaches first. */}
-        <BarrierRaceCard
-          quantity={overlay.contracts}
-          isSpread={!!data.spreadType && data.spreadType !== 'single'}
-          // Gated on freshness too: `firstPassage` holds the PREVIOUS
-          // contract's estimate for the frame between a contract switch and the
-          // reset effect, so an un-gated `race === null` put "Not simulated —
-          // contract expires today" under the new contract's header whenever
-          // the previous one was 0-DTE. The refusal copy depends on no live
-          // BARRIER, but it does depend on which contract is on screen.
-          race={estimateIsFresh ? firstPassage?.race : undefined}
-          invalidation={firstPassage?.invalidation ?? null}
-          // See stopCostShown's declaration: the race must not name a readout
-          // the page is not showing.
-          stopCostShown={stopCostShown && stopRisk != null}
-          premiumStopFromField={raceBarriers?.fromField ?? false}
-          premiumStopField={overlay.premiumStop ?? null}
-          // raceIsShowable, not the inline expression this used to carry. The
-          // hoisted gate was applied to the Monte Carlo note and the Final
-          // Recommendation but not to the card itself, so the card kept the
-          // one term the gate exists for — that raceBarriers belongs to THIS
-          // contract — and painted the previous contract's bars, medians, risk
-          // legs and dollar edge for the frame between commit and the reset
-          // effect. Verified with a useLayoutEffect probe: bars leaked, the
-          // Final Recommendation did not.
-          isFresh={estimateIsFresh}
-          barriersChanged={raceBarriersMoved}
-          stockStopMoved={stockStopMoved}
-          onSelectTarget={racePickOption?.unavailable == null ? selectRaceTarget : undefined}
-          selectedTargetPct={selectedRaceTarget}
-        />
-
-
-
+        {/* The Barrier Race now lives inside the Monte Carlo card (#606). */}
 
         {/* Selected method's own results, with latest-run fallback before a choice. */}
         <section aria-label="Final Recommendation" className={`${styles.scoreCard} ${styles[`final_${data.finalStatus}`]}`}>
@@ -4250,63 +4358,37 @@ function KV({
   );
 }
 
-function ProfitTargetRow({
-  target,
-  estimatePremium,
-  quantity,
+/** "Structural level found" — Feature 2's line, carrying the SAME four gating
+ *  states the removed "R:R vs. structural stop" row used (Checking… / No
+ *  structural stop found / N/A (stop = price) / —), with a price as the success
+ *  case. It was repeated on every Monte Carlo target row with identical inputs;
+ *  #606 prints it once, in the Monte Carlo provenance disclosure.
+ *
+ *  `structuralPaired` is the freshness token: true means the structural stop
+ *  and the estimate were BOTH confirmed fresh this mount. That pairing is what
+ *  five audit rounds built, and the price is only honest under exactly the same
+ *  condition the ratio was. Deliberately gated on it (not merely
+ *  `structuralStop != null`) — a truthy structuralStop can be on screen while
+ *  this still shows '—' because the pairing hasn't been reconfirmed this mount.
+ *
+ *  `sharedStopPrice` is sourced from `sharedStop` (Piece 2: the exit plan's
+ *  structural+ATR stop when computed this mount, else the raw Check-Structure
+ *  level), NOT necessarily the same object the standalone "Check Structure"
+ *  block renders. */
+function mcStructuralLevelValue({
   structuralPaired,
   structuralPending,
   structuralUnavailable,
   structuralZeroRisk,
   sharedStopPrice,
 }: {
-  target: FirstPassageTarget;
-  estimatePremium: number | null;
-  quantity: number;
-  /** Both the stop and the estimate were confirmed fresh THIS mount, and the
-   *  stop is not sitting on the price it was measured against. Only then is
-   *  the level below honest to show. */
   structuralPaired: boolean;
   structuralPending: boolean;
   structuralUnavailable: boolean;
   structuralZeroRisk: boolean;
-  /** The stop level itself — sourced from `sharedStop`
-   *  (Piece 2: the exit plan's structural+ATR stop when computed this mount,
-   *  else the raw Check-Structure level), NOT necessarily the same object
-   *  the standalone "Check Structure" block above renders. Only the price is
-   *  needed here (for the "Structural level found" line), so this is a
-   *  number, not the full StructuralStop shape. */
   sharedStopPrice: number | null;
-}) {
-  const label = `T${Math.round(target.pct * 100)}%`;
-  const optionAvailable = Number.isFinite(target.optionPrice) && target.optionPrice >= 0;
-  const outcome = estimatePremium != null && optionAvailable && Number.isFinite(quantity) && quantity >= 0
-    ? (Math.round(Number(target.optionPrice.toFixed(2)) * 100) - Math.round(estimatePremium * 100)) * quantity
-    : null;
-  // The "R:R vs. structural stop" cell that used to stand here is gone
-  // (barrier-race spec section 3.4, Kenneth's OK obtained). Its risk leg was
-  // premium x a fixed percentage, so premium cancelled out and the ratio
-  // degenerated to the typed target % over the typed stop % — the same number
-  // on every contract. The Barrier Race card's stock-stop R:R replaces it with
-  // one whose risk leg is `premium - BS(stop, ...)`, which does not cancel.
-  //
-  // `structuralPaired` SURVIVES the removal as the freshness token for the
-  // "Structural level found" row below: true means the structural stop and the
-  // estimate were BOTH confirmed fresh this mount. That pairing is what five
-  // audit rounds built, and the price shown below is only honest under exactly
-  // the same condition the ratio was. (It was `structuralRRValue != null` when
-  // the ratio still existed; the prop carries the pairing now, not a number.)
-
-  // "Structural level found" — Feature 2's line, carrying the SAME four
-  // gating states the removed R:R row used (Checking… / No structural stop
-  // found / N/A (stop = price) / —), with a price as the success case.
-  // Deliberately gated on `structuralPaired`
-  // (not merely `structuralStop != null`) — a truthy structuralStop can
-  // be on screen while this cell still shows '—' because the freshness
-  // pairing hasn't been reconfirmed this mount (see the comment above); this
-  // line must show that SAME gated state, not a confident-looking price next
-  // to a gated ratio.
-  const structuralLevelValue = structuralPaired && sharedStopPrice != null
+}): string {
+  return structuralPaired && sharedStopPrice != null
     ? `$${sharedStopPrice.toFixed(2)}`
     : structuralPending
       ? 'Checking…'
@@ -4315,37 +4397,50 @@ function ProfitTargetRow({
         : structuralZeroRisk
           ? 'N/A (stop = price)'
           : '—';
+}
+
+/** One Monte Carlo target as a compact table row (#606, D07): target, stock
+ *  price, option value, independent touch probability, conditional time, then
+ *  the existing quantity-based outcome. Every returned row renders; genuinely
+ *  missing values stay unavailable. */
+function ProfitTargetRow({
+  target,
+  estimatePremium,
+  quantity,
+}: {
+  target: FirstPassageTarget;
+  estimatePremium: number | null;
+  quantity: number;
+}) {
+  const label = `T${Math.round(target.pct * 100)}%`;
+  const optionAvailable = Number.isFinite(target.optionPrice) && target.optionPrice >= 0;
+  const outcome = estimatePremium != null && optionAvailable && Number.isFinite(quantity) && quantity >= 0
+    ? (Math.round(Number(target.optionPrice.toFixed(2)) * 100) - Math.round(estimatePremium * 100)) * quantity
+    : null;
+  // The "R:R vs. structural stop" cell that used to stand here is gone
+  // (barrier-race spec section 3.4, Kenneth's OK obtained). Its risk leg was
+  // premium x a fixed percentage, so premium cancelled and the ratio
+  // degenerated to the typed target % over the typed stop % — the same number
+  // on every contract. The Barrier Race card's stock-stop R:R replaces it with
+  // one whose risk leg is `premium - BS(stop, ...)`, which does not cancel.
 
   return (
-    <div className={styles.targetRow} data-target-row>
-      <div className={styles.targetMain}>
-        <div className={styles.targetId}>
-          <Text size={12} weight={600}>{label}</Text>
-        </div>
-        <div className={styles.resultColumns}>
-        <div className={styles.targetValues}>
-          <KV field="option" label="Option premium" value={optionAvailable ? `$${target.optionPrice.toFixed(2)}` : 'Unavailable'} mono />
-          <KV field="outcome" label="Estimated dollar outcome" value={outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'} mono />
-          <KV
-            field="stock"
-            label="Stock-price equivalent (display approximation)"
-            value={target.stockPrice == null ? 'not reachable' : Number.isFinite(target.stockPrice) ? `$${target.stockPrice.toFixed(2)}` : 'Unavailable'}
-            mono
-          />
-          <KV field="structural" label="Structural level found" value={structuralLevelValue} mono />
-        </div>
-        <div className={styles.probabilityColumn}>
-          <KV field="probability" label="Probability before expiry" value={Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'} mono />
-          <KV
-            field="time"
-            label="Conditional median time"
-            value={target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)} calendar days` : 'Unavailable — no conditional median'}
-            mono
-          />
-        </div>
-        </div>
-      </div>
-    </div>
+    <tr data-target-row>
+      <th scope="row"><Text size={12} weight={600}>{label}</Text></th>
+      <td data-field="stock">
+        <Data size={12}>{target.stockPrice == null ? 'not reachable' : Number.isFinite(target.stockPrice) ? `$${target.stockPrice.toFixed(2)}` : 'Unavailable'}</Data>
+      </td>
+      <td data-field="option"><Data size={12}>{optionAvailable ? `$${target.optionPrice.toFixed(2)}` : 'Unavailable'}</Data></td>
+      <td data-field="probability">
+        <Data size={12}>{Number.isFinite(target.probability) ? `${(target.probability * 100).toFixed(0)}%` : 'Unavailable'}</Data>
+      </td>
+      <td data-field="time">
+        <Data size={12}>{target.expectedDays != null && Number.isFinite(target.expectedDays) ? `~${Math.round(target.expectedDays)} calendar days` : 'Unavailable — no conditional median'}</Data>
+      </td>
+      <td data-field="outcome">
+        <Data size={12}>{outcome != null ? `$${outcome.toFixed(2)}` : estimatePremium == null ? 'Unavailable — estimate premium basis missing' : 'Unavailable'}</Data>
+      </td>
+    </tr>
   );
 }
 

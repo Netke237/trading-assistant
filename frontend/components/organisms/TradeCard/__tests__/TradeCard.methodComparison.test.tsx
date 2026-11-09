@@ -176,7 +176,10 @@ describe('consistent stop/target field order', () => {
     fireEvent.click(box('Fixed % Ladder'));
     const mcRows = within(cardOf('monte_carlo')).getAllByText(/^T\d+%$/).map((n) => n.closest('[data-target-row]') as HTMLElement);
     expect(mcRows).toHaveLength(2);
-    expect(fieldOrder(mcRows[0])).toEqual(FIELD_ORDER);
+    // #606 (D07): Monte Carlo's compact table leads with the stock target and
+    // ends with the quantity outcome. Arithmetic and Ladder adopt the same
+    // order in #607; until then they keep the earlier one.
+    for (const r of mcRows) expect(fieldOrder(r)).toEqual(['stock', 'option', 'probability', 'time', 'outcome']);
     const arithRows = within(cardOf('arithmetic')).getAllByRole('listitem');
     expect(arithRows).toHaveLength(2);
     for (const r of arithRows) expect(fieldOrder(r)).toEqual(FIELD_ORDER);
@@ -307,7 +310,8 @@ describe('stale and restored results stay labelled through comparison', () => {
     fireEvent.click(box('Arithmetic'));
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText(/Restored Arithmetic calculation/)).toBeVisible();
-    expect(within(cardOf('monte_carlo')).getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(2);
-    expect(within(cardOf('monte_carlo')).getAllByText('Option premium')).toHaveLength(2);
+    // Both run barriers and both barrier-time stop values stay guarded.
+    expect(within(cardOf('monte_carlo')).getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(4);
+    expect(within(cardOf('monte_carlo')).getAllByRole('row')).toHaveLength(3);
   });
 });

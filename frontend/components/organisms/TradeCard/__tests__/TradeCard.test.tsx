@@ -2240,13 +2240,15 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     // The "R:R vs. structural stop" cell this test used to read is gone
     // (barrier-race spec section 3.4). What it was gating on is not: the
-    // "Structural level found" cell appears on all three rows only once BOTH
-    // the stop and the estimate have been confirmed fresh THIS mount, and it
-    // shows the FRESH stop, not the scan-time one.
+    // "Structural level found" line shows a level only once BOTH the stop and
+    // the estimate have been confirmed fresh THIS mount, and it shows the
+    // FRESH stop, not the scan-time one. #606 prints it once (in the Monte
+    // Carlo provenance disclosure) instead of on each of the three rows.
     await waitFor(() => {
-      expect(screen.getAllByText('Structural level found').length).toBe(3);
+      expect(screen.getAllByText('Structural level found').length).toBe(1);
     });
-    expect(screen.getAllByText('$190.00').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('Structural level found').parentElement).toHaveTextContent('$190.00');
+    expect(screen.getAllByText('$190.00').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
   });
 
@@ -2302,12 +2304,13 @@ describe('TradeCard', () => {
     // completed — ProfitTargetRow's structuralZeroRisk branch distinguishes
     // this from "not checked yet", so every row shows the explicit
     // "N/A (stop = price)" placeholder rather than a level.
-    // Three targets × one line each ("Structural level found", Feature 2) plus
-    // the one standalone Check Structure block above (Feature 3) = 4. It was 7
-    // until the "R:R vs. structural stop" line was removed alongside it
-    // (barrier-race spec section 3.4) — the state itself is unchanged, there is
-    // simply one cell per row carrying it now instead of two.
-    expect(screen.getAllByText('N/A (stop = price)').length).toBe(4);
+    // One "Structural level found" line (Feature 2) plus the one standalone
+    // Check Structure block above (Feature 3) = 2. It was 7 until the "R:R vs.
+    // structural stop" line was removed alongside it (barrier-race spec section
+    // 3.4), then 4 with one line per target row; #606 prints the line once,
+    // since all three rows carried the same state. The state is unchanged.
+    expect(screen.getAllByText('N/A (stop = price)').length).toBe(2);
+    expect(screen.getByText('Structural level found').parentElement).toHaveTextContent('N/A (stop = price)');
   });
 
   it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
