@@ -192,3 +192,27 @@
   display: flex;
   flex-direction: column;
 }
+
+/* #609 — the row review's destination-first groups and technical disclosure. */
+.reviewGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.reviewSpan {
+  grid-column: 2 / -1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reviewDetails {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.reviewDetails > summary {
+  cursor: pointer;
+  color: var(--accent);
+}

@@ -199,3 +199,28 @@ describe('#582 Step 7 — Track basket confirms server-reviewed values', () => {
     expect(api.postOptionOrder).not.toHaveBeenCalled();
   });
 });
+
+/* #609 — the destination reviews were re-arranged for reading only. The
+ * create bodies a basket confirmation posts for fixed inputs stay byte-for-
+ * byte what they were before (only the per-click stamps are normalised). */
+const STAMPS = new Set(['entryDate', 'orderedAt', 'recId', 'attempt_id', 'saved_rec_id']);
+const normalised = (v: unknown) => JSON.stringify(v, (k, x) => (STAMPS.has(k) ? '<stamp>' : x));
+const BASKET_CREATE_BODIES = '[{"recId":"<stamp>","symbol":"AAA","contract":"AAA 150C 05/15","direction":"Bullish","entryPrice":2.5,"qty":1,"entryDate":"<stamp>","stop":140,"structuralStop":null,"exitPlan":null,"maxLossOverride":null,"premiumStopDollar":null,"premiumStopPct":null,"targets":[{"id":"tp1","stockPrice":160,"targetPrice":160,"estimatedOptionPrice":4.1,"contractsToSell":1}],"dteTotal":24,"portfolioValue":100000,"scanStockPrice":150,"stopIsUserSet":false,"tradeCardSnapshot":{"stockScore":80,"stockConfidence":"PASS","stockBreakdown":{"trend":80,"pullback":80,"trigger":80,"event":80,"volatility":80},"contractScore":70,"contractConfidence":"PASS","contractBreakdown":{"dteFit":80,"delta":65,"ivAttractiveness":55,"liquidity":75,"spread":60},"rrRatio":2,"rrModel":"Heston repriced","strike":150},"pickedMethod":"ladder","pickedRowStockPrice":160,"pickedRowOptionPrice":null,"pickedStopBasis":"stock","pickedAt":"2026-09-14T10:00:00.000Z","holdMaxDays":null},{"recId":"<stamp>","symbol":"BBB","contract":"BBB 155C 05/15","direction":"Bullish","entryPrice":2.6,"qty":1,"entryDate":"<stamp>","stop":120,"structuralStop":null,"exitPlan":null,"maxLossOverride":null,"premiumStopDollar":null,"premiumStopPct":null,"targets":[{"id":"tp1","stockPrice":160,"targetPrice":160,"estimatedOptionPrice":4.1,"contractsToSell":1}],"dteTotal":24,"portfolioValue":100000,"scanStockPrice":150,"stopIsUserSet":false,"tradeCardSnapshot":{"stockScore":80,"stockConfidence":"PASS","stockBreakdown":{"trend":80,"pullback":80,"trigger":80,"event":80,"volatility":80},"contractScore":70,"contractConfidence":"PASS","contractBreakdown":{"dteFit":80,"delta":65,"ivAttractiveness":55,"liquidity":75,"spread":60},"rrRatio":2,"rrModel":"Heston repriced","strike":155},"pickedMethod":"ladder","pickedRowStockPrice":160,"pickedRowOptionPrice":null,"pickedStopBasis":"stock","pickedAt":"2026-09-14T10:00:00.000Z","holdMaxDays":null}]';
+
+describe('#609 — basket request parity after the review re-arrangement', () => {
+  beforeEach(() => { localStorage.clear(); setup(); });
+  afterEach(() => { cleanup(); global.fetch = originalFetch; });
+
+  it('posts byte-identical create bodies, with the reviewed fingerprints, and no broker order', async () => {
+    await openBasketWithBoth();
+    const dialog = within(screen.getByRole('dialog', { name: 'Track basket in Portfolio' }));
+    const submit = dialog.getByRole('button', { name: /^(Add 2 to Portfolio|Override & Submit)$/ });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
+    const sent = creates();
+    expect(sent.map((c) => c.fingerprint)).toEqual(['v1:AAA:1:1', 'v1:BBB:1:1']);
+    expect(normalised(sent.map((c) => c.body))).toBe(BASKET_CREATE_BODIES);
+    expect(api.postOptionOrder).not.toHaveBeenCalled();
+  });
+});

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render as renderCard, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
@@ -9,6 +9,17 @@ import type { TradeCardData, MethodPick } from '@/types/domain';
 // §6.2). Spec test 13 ("a pick on a stale estimate is cleared") is the
 // `clears a monte_carlo pick` case below. The control's own rules are in
 // components/molecules/MethodPickSelector/__tests__.
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  fireEvent.click(screen.getByText('Recorded decision details'));
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -79,8 +90,10 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     expect(radio('Arithmetic')).toBeDisabled();
     expect(radio('Monte Carlo')).toBeDisabled();
     expect(radio('Barrier Race')).toBeDisabled();
-    expect(screen.getByText('Compute Arithmetic Plan first')).toBeInTheDocument();
-    expect(screen.getAllByText('Run Monte Carlo Estimate first')).toHaveLength(2);
+    expect(radio('Arithmetic')).toHaveAttribute('title', 'Compute Arithmetic Plan first');
+    expect(radio('Monte Carlo')).toHaveAttribute('title', 'Run Monte Carlo Estimate first');
+    expect(radio('Barrier Race')).toHaveAttribute('title', 'Run Monte Carlo Estimate first');
+    expect(screen.getByText(/Arithmetic: Compute Arithmetic Plan first.*Monte Carlo: Run Monte Carlo Estimate first.*Barrier Race: Run Monte Carlo Estimate first/)).toBeVisible();
   });
 
   it('seeds from initialMethodPick and round-trips a click back to the parent', () => {
@@ -405,9 +418,10 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
 });
 
 
-// Scope assertions to the recommendation so calculator cards cannot mask
-// unrelated/stale targets in the selected-method summary.
-const recommendation = () => within(screen.getByRole('region', { name: 'Final Recommendation' }).lastElementChild as HTMLElement);
+// Scope assertions to the selected-target review (#608 — the Final
+// Recommendation's summary until then) so calculator cards cannot mask
+// unrelated/stale targets in it.
+const recommendation = () => within(screen.getByRole('region', { name: 'Selected target review' }));
 const arithmeticPlan: NonNullable<TradeCardData['exit']['exitPlan']> = {
   stop: { price: 178, source: 'atr_widened', contractPrice: 1.2, rrModel: 'Heston repriced',
     structuralSource: null, structuralConfidence: null, structuralPrice: null,
@@ -443,6 +457,8 @@ describe('TC-UI-02 selected recommendation', () => {
   it('race dollar outcome follows edited entered quantity without another simulation or changing per-contract edge', async () => {
     render(<TradeCard data={card} contracts={2} />);
     await runEstimate();
+    // #606: the race is nested in Monte Carlo's default-closed expansion.
+    fireEvent.click(screen.getByText('Barrier Race · graphical outcomes & details'));
     const race = within(screen.getByText('Which barrier is reached first').closest('section')!);
     expect(race.getByText('$950.00')).toBeVisible();
     fireEvent.click(screen.getByLabelText('Edit Contracts'));
@@ -456,12 +472,13 @@ describe('TC-UI-02 selected recommendation', () => {
 
   it('places the selector after method evidence and preserves initial ladder defaults with no pick', () => {
     render(<TradeCard data={card} />);
-    const heading = screen.getByText('Final Recommendation');
-    expect(within(heading.parentElement!).getByRole('radio', { name: 'Ladder' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ }).compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Arithmetic Profit Target' }).compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const decision = screen.getByRole('region', { name: 'Decision and execution' });
+    expect(within(decision).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ }).compareDocumentPosition(decision) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Arithmetic Profit Target' }).compareDocumentPosition(decision) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(recommendation().getByText(/No method explicitly run/)).toBeVisible();
-    expect(recommendation().getByText('$200.02')).toBeVisible();
+    // #608 (D10) — the default's targets stay in the Ladder card only.
+    expect(within(decision).queryByText('$200.02')).not.toBeInTheDocument();
   });
 
   it.each(['arithmetic', 'monte_carlo'] as const)('selected ladder overrides latest %s without computing or editing', (latest) => {
@@ -474,7 +491,9 @@ describe('TC-UI-02 selected recommendation', () => {
     const onMethodPickChange = jest.fn();
     render(<TradeCard data={data} onEditsChange={onEditsChange} onMethodPickChange={onMethodPickChange} />);
     fireEvent.click(radio('Ladder'));
-    expect(recommendation().getByText('$200.02')).toBeVisible();
+    expect(recommendation().getByText('Selected method: Fixed % Ladder Plan')).toBeVisible();
+    fireEvent.click(radio('TP1'));
+    expect(recommendation().getByText('$200.02 stock')).toBeVisible();
     expect(recommendation().queryByText(/computed via:/)).not.toBeInTheDocument();
     expect(onMethodPickChange).toHaveBeenCalledWith(expect.objectContaining({ method: 'ladder' }));
     expect(api.getExitPlan).not.toHaveBeenCalled();
@@ -490,8 +509,10 @@ describe('TC-UI-02 selected recommendation', () => {
     onEditsChange.mockClear();
     fireEvent.click(radio('Arithmetic'));
     expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
-    expect(recommendation().getByText('$210.50 (40%)')).toBeVisible();
-    expect(recommendation().queryByText(/Armed stop/)).not.toBeInTheDocument();
+    fireEvent.click(radio('2:1'));
+    expect(recommendation().getByText('$210.50 stock')).toBeVisible();
+    expect(recommendation().getByText('40%')).toBeVisible();
+    expect(recommendation().queryByText(/6\.24|7\.25|computed via: Monte Carlo/)).not.toBeInTheDocument();
     expect(recommendation().queryByText(/T20%/)).not.toBeInTheDocument();
     expect(api.getExitPlan).not.toHaveBeenCalled();
     expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
@@ -502,18 +523,24 @@ describe('TC-UI-02 selected recommendation', () => {
     render(<TradeCard data={card} />);
     await runEstimate(race);
     fireEvent.click(radio('Monte Carlo'));
-    expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
-    expect(recommendation().queryByText(/Armed stop|edge|target first/)).not.toBeInTheDocument();
+    fireEvent.click(radio('T20%'));
+    expect(recommendation().getByText('Matched result option premium').parentElement).toHaveTextContent('$6.24 /share');
+    expect(recommendation().getByText('Independent target probability before expiry').parentElement).toHaveTextContent('40%');
+    expect(recommendation().queryByText(/Armed stop|edge|target-first|target first/)).not.toBeInTheDocument();
     expect(recommendation().queryByText(/7.25/)).not.toBeInTheDocument();
   });
 
-  it('selected race shows its own premiums, exclusive probability, armed stop and edge only', async () => {
+  it('selected race shows its own premium, exclusive probability and edge only', async () => {
     render(<TradeCard data={card} />);
     await runEstimate();
     fireEvent.click(radio('Barrier Race'));
     expect(recommendation().getByText(/computed via: Barrier Race/)).toBeVisible();
-    expect(recommendation().getByText(/\$7.25 option \(25% target first\)/)).toBeVisible();
-    expect(recommendation().getByText(/\$1.50 option \/ \$179.64 stock/)).toBeVisible();
+    fireEvent.click(radio('T20%'));
+    expect(recommendation().getByText('Matched result option premium').parentElement).toHaveTextContent('$7.25 /share');
+    expect(recommendation().getByText('Allocated target-first probability').parentElement).toHaveTextContent('25%');
+    expect(recommendation().getByText('Barrier Race edge per contract').parentElement).toHaveTextContent('$120.00 at 1.80x');
+    // #608 — the armed barriers ($1.50 option / $179.64 stock) are the race's
+    // run inputs, shown once in the Monte Carlo stop context, not repeated here.
     expect(recommendation().queryByText(/6.24|40%|computed via: Monte Carlo/)).not.toBeInTheDocument();
   });
 
@@ -530,8 +557,9 @@ describe('TC-UI-02 selected recommendation', () => {
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await waitFor(() => expect(radio('Barrier Race')).toBeEnabled());
     fireEvent.click(radio('Barrier Race'));
-    expect(recommendation().getByText(/\$7.25 option \(1% target first\)/)).toBeVisible();
-    expect(recommendation().queryByText(/0% target first/)).not.toBeInTheDocument();
+    fireEvent.click(radio('T20%'));
+    expect(recommendation().getByText('Allocated target-first probability').parentElement).toHaveTextContent(/^Allocated target-first probability1%$/);
+    expect(recommendation().queryByText('0%')).not.toBeInTheDocument();
   });
 
   it.each(['arithmetic', 'monte_carlo', 'barrier_race'] as const)('missing selected %s clears persistence and retains a prompt instead of unrelated defaults', async (method) => {
@@ -542,7 +570,8 @@ describe('TC-UI-02 selected recommendation', () => {
     expect(recommendation().getByText(/Selected method results unavailable/)).toBeVisible();
     expect(recommendation().queryByText(/computed via:|No method explicitly run/)).not.toBeInTheDocument();
     fireEvent.click(radio('Ladder'));
-    expect(recommendation().getByText('$200.02')).toBeVisible();
+    fireEvent.click(radio('TP1'));
+    expect(recommendation().getByText('$200.02 stock')).toBeVisible();
   });
 
   it.each(['monte_carlo', 'barrier_race'] as const)('cached stale %s pick shows a prompt even after rerun until deliberate selection', async (method) => {
@@ -567,6 +596,7 @@ describe('TC-UI-02 selected recommendation', () => {
     render(<TradeCard data={card} onMethodPickChange={onMethodPickChange} />);
     await runEstimate();
     fireEvent.click(radio(method === 'monte_carlo' ? 'Monte Carlo' : 'Barrier Race'));
+    fireEvent.click(radio('T20%'));
     fireEvent.click(radio('Premium stop'));
     onMethodPickChange.mockClear();
     if (field === 'Stock stop') {
@@ -575,8 +605,12 @@ describe('TC-UI-02 selected recommendation', () => {
       (api.getStructuralStop as jest.Mock).mockResolvedValueOnce({
         available: true, price: Number(value), source: 'swing_low', confidence: 60, distancePct: 8.6,
       });
+      fireEvent.click(screen.getByText('Exit Plan explanation · stop basis, premium & time exit'));
       fireEvent.click(screen.getByRole('button', { name: /check structure/i }));
-      await waitFor(() => expect(screen.getByText(/Barriers changed/)).toBeVisible());
+      // #606: the race now sits in Monte Carlo's closed expansion; the stale
+      // state stays visible on the Monte Carlo card itself.
+      await waitFor(() => expect(screen.getByText(/A barrier moved after this run/)).toBeVisible());
+      expect(screen.getByText(/Barriers changed/)).toBeInTheDocument();
     } else {
       fireEvent.click(screen.getByLabelText(`Edit ${field}`));
       const input = screen.getByLabelText(`Edit ${field}`);
@@ -589,19 +623,24 @@ describe('TC-UI-02 selected recommendation', () => {
       expect(recommendation().queryByText(/7.25|Armed stop|6.24/)).not.toBeInTheDocument();
     } else {
       expect(onMethodPickChange).not.toHaveBeenCalledWith(null);
-      expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
+      expect(recommendation().getByText('Matched result option premium').parentElement).toHaveTextContent('$6.24 /share');
+      expect(recommendation().getByText('Independent target probability before expiry').parentElement).toHaveTextContent('40%');
       expect(radio('Premium stop')).toHaveAttribute('aria-checked', 'true');
     }
     expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(1);
   });
 
-  it('no selection preserves the latest arithmetic then MC with accompanying race fallback', async () => {
+  it('no selection names the latest arithmetic then MC without repeating their targets', async () => {
     render(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }} />);
     expect(recommendation().getByText(/computed via: Arithmetic/)).toBeVisible();
+    expect(recommendation().queryByText(/210\.50/)).not.toBeInTheDocument();
     await runEstimate();
     expect(recommendation().getByText(/computed via: Monte Carlo/)).toBeVisible();
-    expect(recommendation().getByText('$6.24 (40%)')).toBeVisible();
-    expect(recommendation().getByText('Armed stop (whichever fires first)')).toBeVisible();
+    // #608 (D10) — the targets and the accompanying race are in the Monte
+    // Carlo card (its table and nested Barrier Race), not repeated here.
+    expect(recommendation().queryByText(/6\.24|Armed stop/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Monte Carlo targets' })).getByText('$6.24')).toBeInTheDocument();
+    expect(screen.getByText('Barrier Race · graphical outcomes & details')).toBeInTheDocument();
   });
 
   it('candidate and scan resets discard invalidation memory and restore that card’s no-pick fallback', () => {
@@ -615,7 +654,7 @@ describe('TC-UI-02 selected recommendation', () => {
 });
 
 
-const chosenSummary = () => within(screen.getByRole('region', { name: 'Chosen method and target' }));
+const chosenSummary = () => within(screen.getByRole('region', { name: 'Selected target review' }));
 const summaryValue = (label: string) => chosenSummary().getByText(label).parentElement!;
 
 describe('OPT-PRES-08 explicit decision summary', () => {

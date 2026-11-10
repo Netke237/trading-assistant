@@ -1,0 +1,328 @@
+{
+  "16": {
+    "path": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+    "anchor": "const sendLabel = basketEmpty ? 'Track basket'",
+    "reason": "Live basket count/empty label now in Track basket label; enabled/disabled empty behavior preserved."
+  },
+  "20": {
+    "anchor": "{ticker}",
+    "all_hits": true,
+    "reason": "Both ticker markup branches belong to the same SymbolHeader conditional display."
+  },
+  "106": {
+    "anchor": "<DetailCell label=\"Delta\" title=\"\u0394\""
+  },
+  "107": {
+    "anchor": "<DetailCell label=\"Theta / day\" title=\"\u0398 / day\"",
+    "reason": "Same signed two-decimal theta; negative sign moved before dollar symbol; original symbol remains title."
+  },
+  "110": {
+    "anchor": "<DetailCell label=\"Capital at risk\" title=\"CaR\""
+  },
+  "121": {
+    "anchor": "Alternative contracts (${data.alternatives.length})"
+  },
+  "145": {
+    "anchor": "Structure + ATR \u00b7 ${data.direction}",
+    "reason": "Direction still accompanies Arithmetic Structure+ATR visible readout; duplicate direction remains SymbolHeader."
+  },
+  "165": {
+    "anchor": "MAX LOSS IF THE STOP IS HIT",
+    "pick": "last"
+  },
+  "176": {
+    "anchor": "exitPlan.stop.price.toFixed(2)",
+    "pick": "first"
+  },
+  "227": {
+    "anchor": "optionAvailable ? `$${target.optionPrice.toFixed(2)}`",
+    "reason": "Live ProfitTargetRow helper used by firstPassage.targets.map, not unused TargetRow helper."
+  },
+  "228": {
+    "anchor": "target.stockPrice == null ? 'not reachable'"
+  },
+  "229": {
+    "anchor": "Number.isFinite(target.probability) ?"
+  },
+  "230": {
+    "anchor": "target.expectedDays != null && Number.isFinite(target.expectedDays) ?"
+  },
+  "234": {
+    "same_as": "227"
+  },
+  "235": {
+    "same_as": "228"
+  },
+  "236": {
+    "same_as": "229"
+  },
+  "237": {
+    "same_as": "230"
+  },
+  "241": {
+    "same_as": "227"
+  },
+  "242": {
+    "same_as": "228"
+  },
+  "243": {
+    "same_as": "229"
+  },
+  "244": {
+    "same_as": "230"
+  },
+  "248": {
+    "anchor": "every path once, for whichever barrier it reached first"
+  },
+  "249": {
+    "anchor": "there too, for the same reason"
+  },
+  "254": {
+    "anchor": "Barriers changed \u2014 re-run",
+    "pick": "last",
+    "reason": "BarrierRaceCard refuses both stale-current barrier variants before rendering results; both branches kept."
+  },
+  "256": {
+    "anchor": "per row above"
+  },
+  "261": {
+    "anchor": "yes \u2014 whichever fires first",
+    "pick": "first"
+  },
+  "265": {
+    "anchor": "yes \u2014 whichever fires first",
+    "pick": "last"
+  },
+  "342": {
+    "anchor": "Untouched premium stop: the global"
+  },
+  "346": {
+    "anchor": "${TIME_STOP_DTE} days to expiry"
+  },
+  "354": {
+    "anchor": "premiumAvailable ? `$${estOptionPrice.toFixed(2)}`",
+    "reason": "Live EditableTargetRow uses the same ladderTargetFigures per-share availability; old dead TargetRow is not evidence."
+  },
+  "355": {
+    "anchor": "f.showRr ? `${f.rr.toFixed(1)}x`",
+    "reason": "R:R moved to Ladder R:R, allocation & pricing, using same shared ladderTargetFigures as editable row."
+  },
+  "356": {
+    "anchor": "t.contractsToSell !== undefined ? `${t.contractsToSell}`"
+  },
+  "362": {
+    "same_as": "354"
+  },
+  "363": {
+    "same_as": "355"
+  },
+  "364": {
+    "same_as": "356"
+  },
+  "370": {
+    "same_as": "354"
+  },
+  "371": {
+    "same_as": "355"
+  },
+  "372": {
+    "same_as": "356"
+  },
+  "375": {
+    "anchor": "<PanelHead title=\"Decision & execution\"",
+    "reason": "Final Recommendation title intentionally replaced; all unique context accounted separately and final status in identity."
+  },
+  "383": {
+    "anchor": "exitPlan.targets.map((t, i) =>",
+    "pick": "first",
+    "reason": "Removed duplicate latest/all-target recommendation; authoritative Arithmetic target table retains every returned ratio, premium, probability/time and separate target-source details."
+  },
+  "387": {
+    "path": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "anchor": "yes \u2014 whichever fires first",
+    "pick": "first",
+    "reason": "Removed duplicate race stop summary; both barriers and whichever-first status remain in Barrier Race barriers table; stock/option run inputs also remain in MC."
+  },
+  "388": {
+    "path": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "anchor": "raceEdgeValue(o, race.premiumUsed)",
+    "reason": "Removed duplicate recommendation edge rows; every race outcome is retained in the race table and full chain formatter. Matched choice also retains edge."
+  },
+  "389": {
+    "path": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+    "anchor": "{raceRRValue(o)}",
+    "reason": "Removed duplicate recommendation stock R:R; exact formatter chain result retained per live race row, with chosen-row review evidence."
+  },
+  "398": {
+    "anchor": "options.filter((o) => o.unavailable != null).map",
+    "reason": "Visible method-specific reasons are below compact radios; same reason remains radio title."
+  },
+  "462": {
+    "anchor": "Earnings outside reject window",
+    "all_hits": true,
+    "reason": "Distinct no-earnings/known-earnings condition branches; both preserved rather than incorrectly resolving to one."
+  },
+  "464": {
+    "anchor": "label: 'R:R \u2265 2.0'",
+    "all_hits": true,
+    "reason": "PASS/CAUTION/REJECT/PENDING branch-specific labels remain in full checklist conditional logic."
+  },
+  "479": {
+    "anchor": "aria-label={`Contracts for ${c.symbol}`}",
+    "all_hits": true
+  },
+  "480": {
+    "anchor": "${Math.round(est).toLocaleString()}",
+    "all_hits": true
+  },
+  "518": {
+    "anchor": "{src.status}",
+    "all_hits": true,
+    "reason": "Status dot plus status label/tooltip remain in QuickLook source list, preserving conditional source states."
+  },
+  "N01": {
+    "anchor": "Stock and contract snapshots \u00b7 live quotes, calculation results and order inputs are shown separately.",
+    "all_hits": true,
+    "reason": "Two mutually exclusive contract-details present/missing snapshot contexts; score/confidence moved to Stock Qualification summary; raw contract/expiry remains."
+  },
+  "N03": {
+    "anchor": "title=\"Stock Qualification\"",
+    "reason": "Stock and contract qualifications split; each preserved keepMounted and its storage key, with separate contract disclosure after Decision."
+  },
+  "N04": {
+    "anchor": "Dollar outcomes compare each alternative exit with the editable entry limit"
+  },
+  "N08": {
+    "anchor": "Risk-derived size &amp; budget override",
+    "reason": "Wait for final writer source; budget editor/recommendation and entered quantity detail move under this disclosure; warnings must stay outside."
+  },
+  "N15": {
+    "anchor": "Simulation uses calendar-day steps to expiry."
+  },
+  "N17": {
+    "anchor": "<ProfitTargetRow",
+    "reason": "Dynamic every-returned-target rendering with option, stock/unreachable, probability/time/outcome; structural pairing retained as common method provenance."
+  },
+  "N21": {
+    "anchor": "Selected-contract basis only; this is not a whole-spread outcome.",
+    "reason": "Race table and graphical bars use same weightPercents; action shortcut stays selected/unavailable guarded; all outcomes dynamic."
+  },
+  "N25": {
+    "anchor": "No method explicitly run \u2014 the Fixed % Ladder Plan is the default",
+    "reason": "Explicit chosen method vs latest/default fallback retained by reviewSource; duplicate all-target lists stay only in method origins."
+  },
+  "N34": {
+    "anchor": "data-field=\"outcome\"><Data size={12} tone={rowTone}>{dollarOutcome(totalContracts)}"
+  },
+  "N35": {
+    "anchor": "target.contractsToSell !== undefined ? dollarOutcome(target.contractsToSell)"
+  },
+  "N38": {
+    "anchor": "(t.contractPrice - arithmeticPremium) * overlay.contracts * 100"
+  },
+  "N41": {
+    "anchor": "const outcome = estimatePremium != null && optionAvailable"
+  },
+  "N42": {
+    "anchor": "Stored Monte Carlo run stock entry: unavailable in the saved context"
+  },
+  "N43": {
+    "anchor": "Current inherited holding/repricing settings (not saved run inputs)"
+  },
+  "N44": {
+    "anchor": "Simulation inputs are what the last run raced against, resolved at Run:"
+  },
+  "N45": {
+    "anchor": "{raceTargetOutcome(o, quantity)}"
+  },
+  "N48": {
+    "anchor": "Recorded stock target",
+    "reason": "Separate recorded stock/option slots stay explicit; Barrier Race stock missing is never borrowed."
+  },
+  "N49": {
+    "anchor": "chosenRace ? 'Allocated target-first probability'"
+  },
+  "N50": {
+    "anchor": "Execution fields below are the current order inputs.",
+    "reason": "Standalone fallback remains when no SubmissionReview prop; embedded review carries authoritative sent settings in its disclosure."
+  },
+  "N59": {
+    "same_as": "N01"
+  },
+  "N60": {
+    "anchor": "Bearish target capped to keep stock targets above the price floor."
+  },
+  "N63": {
+    "anchor": "exitPlan.targets.length === 0"
+  },
+  "N67": {
+    "anchor": "firstPassage.targets.map((t, i) =>",
+    "reason": "No assumed fixed three rows; every returned MC target renders; zero rows leaves table header without invented placeholders."
+  },
+  "H23": {
+    "anchor": "const chosenMatches = !recommendationUnavailable",
+    "reason": "Selected evidence matched by exact persisted stock/option pair; chosenArithmetic only matched current plan; arithmeticPremium requires bs_today matching stop. No independent transport inferred."
+  },
+  "138": {
+    "anchor": "Order type {data.entry.orderType}"
+  },
+  "141": {
+    "anchor": "Max fill ${data.entry.maxFill.toFixed(2)}"
+  },
+  "352": {
+    "anchor": "aria-label={`Edit target stock price",
+    "all_hits": true,
+    "reason": "Both live EditableTargetRow editing and display controls retain same label and save handlers."
+  },
+  "357": {
+    "anchor": "Scale out: sell",
+    "pick": "first",
+    "reason": "Live EditableTargetRow warning retains isScaleOut and contractsToSell supplied guards."
+  },
+  "358": {
+    "anchor": "{t.pricingMethod ?? '\u2014'}",
+    "reason": "Ladder model provenance moved to per-target row under Ladder R:R, allocation & pricing."
+  },
+  "399": {
+    "anchor": "title={o.unavailable ?? `${o.rows.length}",
+    "reason": "Enabled method target counts retained in native hover title; disabled method reason keeps priority and is also visible below radios. Count is tooltip metadata rather than permanent text."
+  },
+  "402": {
+    "anchor": "r.rowStockPrice != null ?",
+    "reason": "Stock and option values explicitly distinguished; missing stock explicit, separate display option/time from same row; never persisted display props."
+  },
+  "N05": {
+    "anchor": "Order type {data.entry.orderType}",
+    "reason": "Read-only order type and max-fill combined into concise visible line; limit/contracts editable controls unchanged."
+  },
+  "N27": {
+    "anchor": "options.filter((o) => o.unavailable != null).map",
+    "reason": "Controlled method/row/basis/clear callbacks unchanged; reasons moved to shared visible line. Count399 separately unresolved."
+  },
+  "N07": {
+    "anchor": "const showsGlobalOnLiveMid =",
+    "reason": "Read-only tiny-premium/global/touched branches unchanged; UI moves do not alter helper bounds or effectivePremiumStop."
+  },
+  "H22": {
+    "anchor": "const estimateIsFresh",
+    "reason": "Same freshness plus captured/echoed matching and race barrier guards remain, read alongside pickEstimateIsFresh/raceIsShowable."
+  },
+  "360": {
+    "same_as": "352"
+  },
+  "368": {
+    "same_as": "352"
+  },
+  "365": {
+    "same_as": "357"
+  },
+  "373": {
+    "same_as": "357"
+  },
+  "366": {
+    "same_as": "358"
+  },
+  "374": {
+    "same_as": "358"
+  }
+}

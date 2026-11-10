@@ -1,8 +1,9 @@
 .review {
+  container: broker-review / inline-size;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
+  gap: var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
@@ -11,8 +12,8 @@
 
 .list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-2);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-6);
   margin: 0;
 }
 
@@ -26,18 +27,30 @@
 .label {
   font-size: 12px;
   font-weight: 400;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .value {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
+
+.hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-dm), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.materialHint { color: var(--text-primary); }
 
 .exact {
   font-size: 12px;
@@ -82,3 +95,24 @@
 }
 
 .confirm:disabled, .secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.detailsList {
+  margin-top: var(--space-2);
+}
+
+.technicalNote { margin: var(--space-2) 0 0; }
+
+@container broker-review (max-width: 600px) {
+  .list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container broker-review (max-width: 380px) {
+  .list { grid-template-columns: minmax(0, 1fr); }
+}

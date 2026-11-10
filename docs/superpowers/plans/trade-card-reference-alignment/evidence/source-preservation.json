@@ -1,0 +1,47 @@
+{
+  "baseline": "86982b58",
+  "lost": [
+    [
+      "arithmetic",
+      1
+    ],
+    [
+      "ladder",
+      1
+    ],
+    [
+      "Stock & contract scores",
+      1
+    ],
+    [
+      "Calculation does not replace your execution stock invalidation. Edit it in Order inputs &amp; risk budget.",
+      1
+    ],
+    [
+      "Source: shared Exit Plan Invalidation field — the execution stock stop, set in Order inputs &amp; risk budget.",
+      1
+    ]
+  ],
+  "added": [
+    [
+      "Stock Qualification",
+      1
+    ],
+    [
+      "Contract Qualification",
+      1
+    ],
+    [
+      "bamendjou:tradecard-contract-qualification-collapsed",
+      1
+    ],
+    [
+      "Calculation does not replace your execution stock invalidation. Edit it in Exit Plan.",
+      1
+    ],
+    [
+      "Source: shared Exit Plan Invalidation field — the execution stock stop, set in Exit Plan.",
+      1
+    ]
+  ]
+}

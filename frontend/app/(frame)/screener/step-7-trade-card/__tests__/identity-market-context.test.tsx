@@ -18,6 +18,10 @@ const pick = (): MethodPick => ({
   pickedAt: '2026-09-14T10:00:00.000Z',
 });
 
+// Echo CSS-module keys so the shared disclosure row class is observable.
+jest.mock('@/styles/disclosure.module.css', () =>
+  new Proxy({}, { get: (_t, k) => (k === '__esModule' ? false : k) }));
+
 jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn().mockResolvedValue({ price: 150 }),
@@ -113,6 +117,17 @@ describe('step-7-trade-card — identity and market context (#577)', () => {
     expect(follows(healthTitle, identity)).toBe(true);
     expect(screen.getByText('negative equity')).toBeInTheDocument();
     expect(screen.getByText('Score definitions & safety flags')).toBeInTheDocument();
+  });
+
+  it('gives "How this page works" the shared disclosure row, closed, and keeps the inline candidate row (#610 G2)', async () => {
+    seed();
+    render(<Step7TradeCardPage />);
+    await screen.findByRole('region', { name: 'Selected stock and contract' });
+    const help = screen.getByText('How this page works').closest('details')!;
+    expect(help).toHaveClass('disclosureRow');
+    expect(help).not.toHaveAttribute('open');
+    expect(screen.getByRole('button', { name: 'Previous candidate' })).toHaveTextContent('‹ Previous');
+    expect(screen.getByText('Basket — empty')).toBeInTheDocument();
   });
 
   it('follows the active candidate, including its missing-data state', async () => {

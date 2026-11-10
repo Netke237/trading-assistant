@@ -33,6 +33,7 @@ import {
   MISSING_METHOD_PICK_MESSAGE, MISSING_METHOD_PICK_TITLE,
 } from '@/lib/risk';
 import { stampPosition, type SubmissionDraft, type SubmissionStamps } from '@/lib/submissionDraft';
+import { TIME_STOP_DTE } from '@/lib/alertEngine';
 import {
   changedSince, resolvedValue, reviewLines,
   type ReviewedTrackingOrder, type TrackingPreview, type TrackingSubmitResult,
@@ -273,6 +274,7 @@ export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBy
     <TrackingReviewBlock
       symbol={c.symbol}
       review={trackingDraftFor ? reviewFor(c) : null}
+      draft={drafts[c.symbol] ?? null}
       available={!!trackingDraftFor && !!stampsFor}
       globalPremiumStopPct={globalPremiumStopPct ?? null}
       onRetry={() => setRetries((r) => ({ ...r, [c.symbol]: (r[c.symbol] ?? 0) + 1 }))}
@@ -317,11 +319,11 @@ export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBy
         </header>
 
         <div className={styles.tableHead}>
-          <Text size={10} tone="dim">SYMBOL</Text>
-          <Text size={10} tone="dim">CONTRACT</Text>
-          <Text size={10} tone="dim" className={styles.right}>MID</Text>
-          <Text size={10} tone="dim">QTY</Text>
-          <Text size={10} tone="dim" className={styles.right}>EST $</Text>
+          <Text size={10} tone="secondary">SYMBOL</Text>
+          <Text size={10} tone="secondary">CONTRACT</Text>
+          <Text size={10} tone="secondary" className={styles.right}>MID</Text>
+          <Text size={10} tone="secondary">QTY</Text>
+          <Text size={10} tone="secondary" className={styles.right}>EST $</Text>
         </div>
 
         <div className={styles.tableBody}>
@@ -437,12 +439,24 @@ export function SendToBrokerDialog({ cards, quoteWarningsByContract, contractsBy
   );
 }
 
-/** #582 — one row's requested-vs-server-resolved review. */
+/** #609 — the row's review lines, grouped destination-first. */
+const REVIEW_GROUPS: { id: string; name: string; title: string; keys: string[] }[] = [
+  { id: 'destination', name: 'Destination and request', title: 'Destination & request', keys: ['contract', 'qty', 'entry', 'value'] },
+  { id: 'settings', name: 'Position settings', title: 'Position settings · in-app alerts', keys: ['stop', 'structuralStop', 'premiumStop'] },
+  { id: 'target', name: 'Target alert basis', title: 'Target alert basis', keys: ['targets', 'targetAlert'] },
+];
+
+/** #582 — one row's requested-vs-server-resolved review. #609 — grouped
+ *  destination-first (destination and request; the actual position settings
+ *  with the ≤3 DTE time-exit alert; the target-alert basis), with the review
+ *  fingerprint and saved-row id in one closed disclosure. */
 function TrackingReviewBlock({
-  symbol, review, available, globalPremiumStopPct, onRetry,
+  symbol, review, draft, available, globalPremiumStopPct, onRetry,
 }: {
   symbol: string;
   review: RowReview | null;
+  /** The row's current draft, for its supplied expiry and the time-exit rule. */
+  draft: SubmissionDraft | null;
   available: boolean;
   globalPremiumStopPct: number | null;
   onRetry: () => void;
@@ -458,7 +472,7 @@ function TrackingReviewBlock({
   if (!review || review.status === 'loading') {
     return (
       <div className={styles.review} role="region" aria-label={label} aria-busy="true">
-        <Text size={11} tone="dim">Resolving the tracked values with the server…</Text>
+        <Text size={11} tone="secondary">Resolving the tracked values with the server…</Text>
       </div>
     );
   }
@@ -471,9 +485,29 @@ function TrackingReviewBlock({
     );
   }
   const lines = reviewLines(review.request, review.preview, globalPremiumStopPct);
+  const expiry = draft?.identity.expiry && draft.identity.expiry.trim() !== '' ? draft.identity.expiry : null;
+  const dte = draft?.identity.dte ?? null;
+  const expiryText = expiry
+    ? `${expiry}${dte != null ? ` · ${dte} DTE` : ''}`
+    : `Not supplied${review.request.expiry ? ` — tracked as ${review.request.expiry}, derived from the DTE` : ''}`;
+  const lineRow = (l: ReturnType<typeof reviewLines>[number]) => (
+    <div key={l.key} className={styles.reviewLine} data-field={l.key} data-adjusted={l.adjusted ? 'true' : 'false'}>
+      <Text size={11} tone="secondary">{l.label}</Text>
+      <Data size={11}>{l.requested}</Data>
+      <div>
+        <Data size={11} tone={l.adjusted ? 'caution' : 'primary'}>{l.effective}</Data>
+        {l.note && <Text size={12} tone="caution">Adjusted — {l.note}</Text>}
+      </div>
+    </div>
+  );
+  const fixedRow = (label: string, value: string) => (
+    <div className={styles.reviewLine}>
+      <Text size={11} tone="secondary">{label}</Text>
+      <div className={styles.reviewSpan}><Data size={11}>{value}</Data></div>
+    </div>
+  );
   return (
     <div className={styles.review} role="region" aria-label={label}>
-      <Text size={11} tone="secondary">Portfolio tracking · no broker order · values resolved by the server now</Text>
       {review.changed && (
         <Text size={11} tone="caution">
           Changed since your review — nothing was saved. Check the new values and confirm again
@@ -481,23 +515,41 @@ function TrackingReviewBlock({
         </Text>
       )}
       <div className={styles.reviewGrid}>
-        <Text size={10} tone="dim">FIELD</Text>
-        <Text size={10} tone="dim">REQUESTED</Text>
-        <Text size={10} tone="dim">SERVER-RESOLVED</Text>
-        {lines.map((l) => (
-          <div key={l.key} className={styles.reviewLine} data-field={l.key} data-adjusted={l.adjusted ? 'true' : 'false'}>
-            <Text size={11} tone="secondary">{l.label}</Text>
-            <Data size={11}>{l.requested}</Data>
-            <div>
-              <Data size={11} tone={l.adjusted ? 'caution' : 'primary'}>{l.effective}</Data>
-              {l.note && <Text size={10} tone="caution">Adjusted — {l.note}</Text>}
-            </div>
-          </div>
-        ))}
+        <Text size={10} tone="secondary">FIELD</Text>
+        <Text size={10} tone="secondary">REQUESTED</Text>
+        <Text size={10} tone="secondary">SERVER-RESOLVED</Text>
       </div>
+      {REVIEW_GROUPS.map((g) => (
+        <div key={g.name} role="group" aria-label={g.name} className={styles.reviewGroup} data-review-group={g.id}>
+          {g.id === 'destination'
+            ? <Text size={11} tone="secondary">Portfolio tracking · no broker order · values resolved by the server now</Text>
+            : <Text size={11} tone="secondary">{g.title}</Text>}
+          <div className={styles.reviewGrid}>
+            {lines.filter((l) => g.keys.includes(l.key)).map(lineRow)}
+            {g.id === 'destination' && fixedRow('Expiry', expiryText)}
+            {g.id === 'settings' && fixedRow('Time-exit alert', `≤${draft?.stops.timeExitDte ?? TIME_STOP_DTE} days to expiry — an alert, not a close`)}
+          </div>
+          {g.id === 'settings' && (
+            <Text size={11} tone="secondary">No protective stop-loss or take-profit order is sent to a broker.</Text>
+          )}
+        </div>
+      ))}
       {review.preview.premiumStopUnapplied && (
-        <Text size={10} tone="caution">{review.preview.premiumStopUnapplied}</Text>
+        <Text size={12} tone="caution">{review.preview.premiumStopUnapplied}</Text>
       )}
+      <details className={styles.reviewDetails} data-review-details>
+        <summary>Technical details</summary>
+        <div className={styles.reviewGrid}>
+          <div className={styles.reviewLine}>
+            <Text size={11} tone="secondary">Review fingerprint</Text>
+            <div className={styles.reviewSpan}><Data size={11}>{review.preview.fingerprint}</Data></div>
+          </div>
+          <div className={styles.reviewLine}>
+            <Text size={11} tone="secondary">Saved-row id</Text>
+            <div className={styles.reviewSpan}><Data size={11}>{review.request.recId}</Data></div>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
@@ -575,7 +627,7 @@ function RiskSummary({
         }
         if (!worst || worst.rc.maxLossLimitDollar == null) return null;
         return (
-          <Text size={11} tone="dim">
+          <Text size={11} tone="secondary">
             Max loss at stop ({worst.symbol}) ≈ ${Math.round(worst.rc.maxLossAtStop!).toLocaleString('en-US')}
             {' '}(limit ${Math.round(worst.rc.maxLossLimitDollar).toLocaleString('en-US')})
           </Text>

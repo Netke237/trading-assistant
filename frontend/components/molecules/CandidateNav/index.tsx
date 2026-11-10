@@ -3,8 +3,7 @@
 /*
  * CandidateNav — header strip above the Step 7 TradeCard.
  *
- *   [ ← Prev ]   AAPL (2 / 8)   [ Next → ]
- *                [ ★ Pin to basket ]   [ AAPL × ] [ NVDA × ] ...
+ *   ‹ Previous · AAPL 2 / 8 · Next ›      [ ☆ Pin to basket ]  Basket (2) [ AAPL × ] [ NVDA × ]
  *
  * Callers own the basket state; this component is pure presentation.
  */
@@ -45,7 +44,10 @@ export function CandidateNav({
   const pinned  = basket.includes(activeSymbol);
 
   return (
-    <div className={styles.wrap}>
+    // #610 G2 — a thin inline row, as in the frozen trade-card reference:
+    // "‹ Previous · AAPL 1 / 2 · Next ›" on the left; Pin to basket and the
+    // basket on the right. Every control, chip, title and handler is the same.
+    <div className={styles.wrap} data-candidate-nav-row="">
       <div className={styles.navRow}>
         <button
           type="button"
@@ -54,15 +56,17 @@ export function CandidateNav({
           disabled={atFirst}
           aria-label="Previous candidate"
         >
-          ← Prev
+          ‹ Previous
         </button>
 
+        <span className={styles.sep} aria-hidden="true">·</span>
         <div className={styles.position}>
-          <Data size={14} weight={500}>{activeSymbol}</Data>
-          <Text size={11} tone="secondary">
+          <Data size={13} weight={500}>{activeSymbol}</Data>
+          <Text size={12} tone="secondary">
             {idx < 0 ? '—' : `${idx + 1} / ${symbols.length}`}
           </Text>
         </div>
+        <span className={styles.sep} aria-hidden="true">·</span>
 
         <button
           type="button"
@@ -71,9 +75,11 @@ export function CandidateNav({
           disabled={atLast}
           aria-label="Next candidate"
         >
-          Next →
+          Next ›
         </button>
+      </div>
 
+      <div className={styles.basketSide}>
         <button
           type="button"
           className={`${styles.pinBtn} ${pinned ? styles.pinBtnOn : ''}`}
@@ -84,35 +90,35 @@ export function CandidateNav({
         >
           {pinned ? '★ Pinned' : '☆ Pin to basket'}
         </button>
-      </div>
 
-      <div className={styles.basketRow} aria-label="Basket">
-        <Text size={11} tone="dim">
-          BASKET {basket.length > 0 ? `(${basket.length})` : '— empty'}
-        </Text>
-        <div className={styles.chips}>
-          {basket.map((sym) => (
-            <span
-              key={sym}
-              className={`${styles.chip} ${sym === activeSymbol ? styles.chipActive : ''}`}
-            >
-              <button
-                type="button"
-                className={styles.chipSelect}
-                onClick={() => onSelect(sym)}
+        <div className={styles.basketRow} aria-label="Basket">
+          <Text size={12} tone="secondary">
+            {basket.length > 0 ? `Basket (${basket.length})` : 'Basket — empty'}
+          </Text>
+          <div className={styles.chips}>
+            {basket.map((sym) => (
+              <span
+                key={sym}
+                className={`${styles.chip} ${sym === activeSymbol ? styles.chipActive : ''}`}
               >
-                {sym}
-              </button>
-              <button
-                type="button"
-                className={styles.chipRemove}
-                onClick={() => onRemovePin(sym)}
-                aria-label={`Remove ${sym} from basket`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
+                <button
+                  type="button"
+                  className={styles.chipSelect}
+                  onClick={() => onSelect(sym)}
+                >
+                  {sym}
+                </button>
+                <button
+                  type="button"
+                  className={styles.chipRemove}
+                  onClick={() => onRemovePin(sym)}
+                  aria-label={`Remove ${sym} from basket`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </div>

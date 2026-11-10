@@ -26,6 +26,11 @@ interface CollapsibleSectionProps {
   /** Keep child state alive in hidden DOM while collapsed; legacy callers unmount. */
   keepMounted?: boolean;
   className?: string;
+  /** Title size; 14 by default. Presentation only. */
+  titleSize?: 14 | 16;
+  /** Short secondary facts after the title on the summary row (#610 G2),
+   *  e.g. "82/100 · PASS". Part of the toggle's accessible name. */
+  meta?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -35,6 +40,8 @@ export function CollapsibleSection({
   defaultCollapsed = false,
   keepMounted = false,
   className,
+  titleSize = 14,
+  meta,
   children,
 }: CollapsibleSectionProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -75,8 +82,11 @@ export function CollapsibleSection({
         onClick={() => setCollapsed((v) => !v)}
         aria-expanded={!collapsed}
       >
-        <Text size={14} weight={600}>{title}</Text>
-        <Text size={12} tone="dim">{collapsed ? '▸' : '▾'}</Text>
+        {/* The trade card's one disclosure marker (#610 G13): an accent "›"
+            before the title that turns when open. */}
+        <span className={styles.chevron} data-open={collapsed ? undefined : ''} aria-hidden="true">›</span>
+        <Text size={titleSize} weight={600}>{title}</Text>
+        {meta != null && <Text size={12} tone="secondary" className={styles.meta}>{meta}</Text>}
       </button>
       {keepMounted
         ? <div hidden={collapsed}><div className={styles.body}>{children}</div></div>

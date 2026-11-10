@@ -5,10 +5,20 @@
 import '@testing-library/jest-dom';
 import * as fs from 'fs';
 import * as path from 'path';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render as renderCard, screen, waitFor, within } from '@testing-library/react';
 import { api } from '@/lib/api';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import type { BarrierRace, ExitPlan, ExitPlanTargetRow, FirstPassageContext, FirstPassageEstimate, MethodPick, TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -83,6 +93,9 @@ const cardOf = (method: 'arithmetic' | 'monte_carlo' | 'ladder') =>
 const fieldValues = (method: 'arithmetic' | 'monte_carlo' | 'ladder', field: string) =>
   Array.from((document.querySelector(`[data-method-card="${method}"]`) as HTMLElement).querySelectorAll(`[data-target-row] [data-field="${field}"]`))
     .map((n) => n.textContent);
+// #607: per-target Ladder R:R sits in the "Ladder R:R, allocation & pricing" table.
+const ladderRr = () => Array.from(document.querySelectorAll('table[aria-label="Ladder R:R and allocation"] tbody [data-field="rr"]'))
+  .map((n) => n.textContent);
 const raceCount = () => screen.queryAllByTestId('segment-Target first').length;
 
 async function typeInto(label: string, value: string) {
@@ -114,17 +127,37 @@ beforeEach(() => {
 
 describe('comparison layout', () => {
   /* jsdom applies no CSS. The browser check is capture-final-verification.cjs
-     (`squeezedTargetRows`); this pins the rule that fixes it. A Ladder row has
-     a source note and a pricing badge beside its values. In a comparison-width
-     card those two left `.targetMain` (flex: 1, basis 0) no width at all. */
-  it('gives a target row\'s values a full line inside the comparison grid', () => {
+     (`squeezedTargetRows`); this pins the rules that keep target values
+     readable. #607 replaced the Ladder's flex rows (and their #584 wrap rule)
+     with the shared compact table: a comparison-width card scrolls the table
+     rather than squeezing it, and a cell never breaks a price mid-number. */
+  it('keeps every method\'s target table readable inside the comparison grid', () => {
     const css = fs.readFileSync(path.join(__dirname, '..', 'TradeCard.module.css'), 'utf8');
     const rule = (selector: string) => {
       const at = css.indexOf(`${selector} {`);
       return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
     };
-    expect(rule('.methodGrid .targetRow')).toMatch(/flex-wrap:\s*wrap/);
-    expect(rule('.methodGrid .targetMain')).toMatch(/flex:\s*1 1 100%/);
+    expect(rule('.mcTableScroll')).toMatch(/overflow-x:\s*auto/);
+    expect(rule('.mcTargetTable')).toMatch(/overflow-wrap:\s*normal/);
+    expect(rule('.methodGrid .methodCard')).toMatch(/grid-template-rows:\s*subgrid/);
+  });
+});
+
+describe('Ladder comparison width (#607)', () => {
+  // Browser checks verify shared rows and reachable scrolling table columns.
+  it('shares the two-method minimum width and wraps the third Ladder card at narrower widths', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'TradeCard.module.css'), 'utf8');
+    const block = (query: string) => {
+      const at = css.indexOf(`@container (${query}) {`);
+      if (at < 0) return '';
+      const end = css.indexOf('\n}', at);
+      return css.slice(at, end);
+    };
+    expect(css).not.toMatch(/\.methodGrid\[data-compare-count="2"\]\[data-compare-ladder\]/);
+    const three = block('max-width: 1540px');
+    expect(three).toMatch(/\.methodGrid\[data-compare-count="3"\]\s*\{\s*grid-template-columns:\s*repeat\(auto-fit, minmax\(min\(100%, max\(360px, 34%\)\), 1fr\)\);/);
+    expect(three).toMatch(/\.methodGrid\[data-compare-count="3"\] > \[data-method-card="ladder"\] > \.methodCard\s*\{\s*grid-column:\s*1 \/ -1;/);
+    expect(css).not.toContain('@container (max-width: 1111px)');
   });
 });
 
@@ -143,14 +176,14 @@ describe('disclosure defaults on a fully computed card', () => {
     const details = Array.from(document.querySelectorAll('details'));
     expect(details.length).toBeGreaterThanOrEqual(5);
     expect(details.filter((d) => d.open).map((d) => d.querySelector('summary')?.textContent)).toEqual([]);
-    expect(screen.getByRole('button', { name: /Stock & contract scores/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /ALTERNATIVES/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Stock Qualification/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Alternative contracts/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: /Fixed % Ladder Plan/ })).toHaveAttribute('aria-expanded', 'true');
     const warning = screen.getByText(/Invalidation stop required — Send to broker/);
     expect(warning.closest('details')).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Arithmetic' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Monte Carlo' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: 'Fixed % Ladder' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Ladder' })).toBeChecked();
   });
 });
 
@@ -174,7 +207,8 @@ describe('one edit, every method, each on its own basis', () => {
     expect(fieldValues('monte_carlo', 'outcome')[0]).toContain('$650.00');
     expect(fieldValues('ladder', 'outcome')[0]).toContain('$1500.00');
     expect(fieldValues('ladder', 'outcome-rung')[0]).toContain('$300.00');
-    expect(fieldValues('ladder', 'outcome')[0]).toContain('5 contracts');
+    // #607: the Ladder table names the full-position quantity in its header.
+    expect(cardOf('ladder').getByRole('columnheader', { name: 'Full-position outcome (5 contracts × 100 shares)' })).toBeInTheDocument();
     expect(screen.getByText('Loss for 5 entered contracts')).toBeInTheDocument();
     expect(screen.getAllByText(/-\$120\.00/).length).toBeGreaterThan(0);     // race edge stays per contract
     expect(raceCount()).toBe(2);
@@ -184,12 +218,12 @@ describe('one edit, every method, each on its own basis', () => {
   it('an entry edit moves only the Ladder: calculation premiums are separate bases', async () => {
     await computedCard();
     const before = callCounts();
-    expect(fieldValues('ladder', 'rr')[0]).toContain('0.6x');   // the backend's ratio, at the plan's entry
+    expect(ladderRr()[0]).toContain('0.6x');   // the backend's ratio, at the plan's entry
 
     await typeInto('Limit', '4');
 
     expect(fieldValues('ladder', 'outcome')[0]).toContain('$1200.00');      // (8.00 − 4.00) × 3 × 100
-    expect(fieldValues('ladder', 'rr')[0]).toContain('1.0x');               // (8 − 4) / 4, full premium
+    expect(ladderRr()[0]).toContain('1.0x');               // (8 − 4) / 4, full premium
     expect(fieldValues('arithmetic', 'outcome')[0]).toContain('$750.00');
     expect(fieldValues('monte_carlo', 'outcome')[0]).toContain('$390.00');
     expect(cardOf('arithmetic').getByText('Calculation premium used').parentElement).toHaveTextContent('$4.00/share');
@@ -224,7 +258,7 @@ describe('stale to re-run', () => {
 
     expect(api.getFirstPassageEstimate).toHaveBeenCalledTimes(2);
     expect(screen.queryByText(/Barriers changed — re-run the estimate/)).not.toBeInTheDocument();
-    expect(cardOf('monte_carlo').getByText('Companion race premium exit-value barrier').parentElement).toHaveTextContent('$2.70/share');
+    expect(cardOf('monte_carlo').getByText('Option-price barrier (run input)').parentElement).toHaveTextContent('$2.70/share');
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('2.50');   // the setting is what was typed
     expect(onMethodPickChange).not.toHaveBeenCalledWith(expect.objectContaining({ method: 'barrier_race' }));
   });
@@ -234,7 +268,7 @@ describe('a contract switch', () => {
   it('borrows nothing from the previous contract and keeps which methods are compared', async () => {
     const { rerender } = render(<TradeCard data={card()} contracts={3} />);
     await runEstimate();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Fixed % Ladder' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ladder' }));
     const before = callCounts();
 
     const next = card({
@@ -248,7 +282,7 @@ describe('a contract switch', () => {
     expect(fieldValues('arithmetic', 'outcome')).toEqual([]);
     expect(fieldValues('monte_carlo', 'outcome')).toEqual([]);
     expect(cardOf('arithmetic').getByText('Calculated stock stop').parentElement).toHaveTextContent('Not yet computed');
-    expect(screen.getByRole('checkbox', { name: 'Fixed % Ladder' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Ladder' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Arithmetic' })).toBeChecked();
     expect(callCounts()).toEqual(before);
   });

@@ -53,7 +53,7 @@ describe('MethodPickSelector — the method radiogroup', () => {
     // Present, not hidden — the absence of a run must not read as "this card
     // does not have Monte Carlo".
     expect(radio('Monte Carlo')).toBeDisabled();
-    expect(screen.getByText('Run Estimate first')).toBeInTheDocument();
+    expect(screen.getByText('Monte Carlo: Run Estimate first')).toBeInTheDocument();
   });
 
   it('a disabled method cannot be picked', () => {
@@ -181,6 +181,25 @@ describe('MethodPickSelector — the row radiogroup and the §6.1 price split', 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       rowStockPrice: null, rowOptionPrice: 6.24,
     }));
+  });
+
+  it('keeps same-row display evidence separate from the stored option target', () => {
+    const opts = options();
+    opts[2].rows[0] = { ...opts[2].rows[0], displayOptionPrice: 7.1, displayDays: 9 };
+    const pick: MethodPick = {
+      method: 'monte_carlo', rowStockPrice: null, rowOptionPrice: null,
+      stopBasis: 'stock', pickedAt: NOW,
+    };
+    const onChange = jest.fn();
+    const { rerender } = render(<MethodPickSelector options={opts} pick={pick} onChange={onChange} now={now} />);
+    const target = screen.getByRole('radio', { name: 'T20%' });
+    expect(target).toHaveTextContent('$7.10 option');
+    expect(target).toHaveTextContent('~9d (calendar days)');
+    fireEvent.click(target);
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ rowStockPrice: 197.5, rowOptionPrice: 6.24 }));
+    opts[2].rows[0] = { ...opts[2].rows[0], displayOptionPrice: null };
+    rerender(<MethodPickSelector options={[...opts]} pick={pick} onChange={onChange} now={now} />);
+    expect(screen.getByRole('radio', { name: 'T20%' })).toHaveTextContent('Option estimate not supplied');
   });
 
   it('a ladder row stores a NULL option price', () => {

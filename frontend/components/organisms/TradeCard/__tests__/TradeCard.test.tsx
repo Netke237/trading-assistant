@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import * as React from 'react';
-import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
+import { render as renderCard, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { ScoreCardPanel } from '@/components/molecules/ScoreCardPanel';
 import { api } from '@/lib/api';
@@ -8,6 +8,22 @@ import { useRiskStore } from '@/lib/riskStore';
 import { useScanStore } from '@/lib/scanStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import type { TradeCardData, StopCostOut } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  // Structure pricing scenarios explicitly inspect the preserved evidence,
+  // inside the Exit Plan's one explanation disclosure (#610 G5).
+  const evidence = screen.queryByText('Exit Plan explanation · stop basis, premium & time exit');
+  if (evidence) fireEvent.click(evidence);
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
+  fireEvent.click(screen.getByText('Recorded decision details'));
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -145,9 +161,13 @@ describe('TradeCard', () => {
     }] } };
     render(<TradeCard data={data} contracts={3} />);
     const ladder = screen.getByRole('region', { name: 'Fixed ladder targets' });
-    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent(full);
-    expect(within(ladder).getByText('Rung outcome (1 contracts × 100 shares)').parentElement).toHaveTextContent(rung);
-    expect(within(ladder).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
+    // #607: one table row per target; the quantity basis is in the header/cell.
+    const row = ladder.querySelector('[data-target-row]') as HTMLElement;
+    expect(within(ladder).getByRole('columnheader', { name: 'Full-position outcome (3 contracts × 100 shares)' })).toBeInTheDocument();
+    expect(row.querySelector('[data-field="outcome"]')).toHaveTextContent(full);
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent(rung);
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent('1 contracts × 100 shares');
+    expect(within(row).getByText('Scale out: sell 1 of 3')).toBeInTheDocument();
     expect(within(ladder).getByText(/do not add alternative outcomes/)).toBeInTheDocument();
   });
 
@@ -156,7 +176,8 @@ describe('TradeCard', () => {
       ...mockTradeCard.exit.targets[0], contractsToSell: undefined,
     }] } };
     render(<TradeCard data={data} contracts={3} />);
-    expect(screen.getByText('Rung outcome (allocation unavailable)').parentElement).toHaveTextContent('Unavailable');
+    const row = screen.getByRole('region', { name: 'Fixed ladder targets' }).querySelector('[data-target-row]') as HTMLElement;
+    expect(row.querySelector('[data-field="outcome-rung"]')).toHaveTextContent('Unavailable · allocation unavailable');
   });
 
   it('keeps the same editable ladder state and local pricing approximation without running a model', () => {
@@ -171,7 +192,7 @@ describe('TradeCard', () => {
     expect(within(ladder).getByText('edited')).toBeInTheDocument();
     expect(onEditsChange).toHaveBeenCalledWith(expect.objectContaining({ targets: [201] }), expect.anything());
     // Existing local formula: 2.5 + 0.5 * abs(201 - 185.2) = 10.40.
-    expect(within(ladder).getByText('Full-position outcome (3 contracts × 100 shares)').parentElement).toHaveTextContent('$2370.00');
+    expect(ladder.querySelector('[data-target-row] [data-field="outcome"]')).toHaveTextContent('$2370.00');
     expect(api.getExitPlan).not.toHaveBeenCalled();
     expect(api.getFirstPassageEstimate).not.toHaveBeenCalled();
   });
@@ -203,12 +224,12 @@ describe('TradeCard', () => {
     expect(within(context).getByTestId('symbol-header')).toHaveTextContent('AAPL — Apple Inc.');
     expect(within(context).getByText('Contract Details')).toBeInTheDocument();
     expect(within(context).getByText('Contract snapshot')).toBeInTheDocument();
-    expect(within(context).getByText('IV RANK')).toBeInTheDocument();
+    expect(within(context).getByText('IV rank')).toBeInTheDocument();
     expect(within(context).getByText('45')).toBeInTheDocument();
-    const mid = within(context).getByText('MID').parentElement!;
+    const mid = within(context).getByText('Mid').parentElement!;
     expect(mid).toHaveTextContent('$2.50');
     expect(mid).not.toHaveTextContent('$7.50');
-    expect(within(context).getByText('CAR').parentElement).toHaveTextContent('$250');
+    expect(within(context).getByText('Capital at risk').parentElement).toHaveTextContent('$250');
   });
 
   it('preserves absolute IV and missing details without substituting rank or live mid', () => {
@@ -218,11 +239,11 @@ describe('TradeCard', () => {
     const context = screen.getByRole('region', { name: 'Selected stock and contract' });
     expect(within(context).getByText('IV')).toBeInTheDocument();
     expect(within(context).getByText('38.0%')).toBeInTheDocument();
-    expect(within(context).queryByText('IV RANK')).not.toBeInTheDocument();
+    expect(within(context).queryByText('IV rank')).not.toBeInTheDocument();
     rerender(<TradeCard data={{ ...mockTradeCard, contractDetails: undefined }} liveMid={7.5} />);
     expect(within(context).getAllByText(mockTradeCard.contract).length).toBeGreaterThan(0);
     expect(within(context).queryByText('Contract Details')).not.toBeInTheDocument();
-    expect(within(context).queryByText('CAR')).not.toBeInTheDocument();
+    expect(within(context).queryByText('Capital at risk')).not.toBeInTheDocument();
   });
 
   it('keeps conditional spread values and alternative reasons in the same selected context', () => {
@@ -248,11 +269,15 @@ describe('TradeCard', () => {
     }
     expect(within(context).getByText('BUY')).toBeInTheDocument();
     expect(within(context).getByText('SELL')).toBeInTheDocument();
-    const alternatives = within(context).getByRole('button', { name: /ALTERNATIVES/ });
+    // #610 G4 — the alternatives follow Decision & execution, outside the
+    // identity, in the shared disclosure style.
+    const alternatives = screen.getByRole('button', { name: /Alternative contracts \(1\)/ });
+    expect(context).not.toContainElement(alternatives);
     expect(alternatives).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(alternatives);
-    expect(within(context).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
-    expect(within(context).getByText('0')).toBeInTheDocument();
+    const altSection = alternatives.closest('section')!;
+    expect(within(altSection).getByText('Lower premium with a smaller delta')).toBeInTheDocument();
+    expect(within(altSection).getByText('0')).toBeInTheDocument();
   });
   it('renders symbol and company in header', () => {
     render(<TradeCard data={mockTradeCard} />);
@@ -265,28 +290,23 @@ describe('TradeCard', () => {
     expect(screen.getByText('Contract — AAPL 190C 05/15')).toBeInTheDocument();
   });
 
-  // #577 moved Fundamental Health up, directly beneath Market Sentiment and
-  // ahead of the identity; the folded scores still follow the identity.
-  it('places Fundamental Health before identity and the folded score group directly after identity', () => {
+  it('keeps Fundamental Health above identity and the two independent qualification panels on the card', () => {
     render(<TradeCard data={mockTradeCard} />);
-    const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
-    const group = toggle.closest('section')!;
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(toggle);
-    const identity = group.previousElementSibling!;
-    expect(identity).toContainElement(screen.getByTestId('symbol-header'));
+    const identity = screen.getByRole('region', { name: 'Selected stock and contract' });
     expect(identity.previousElementSibling).toHaveTextContent('Fundamental Health');
-    expect(group.nextElementSibling).not.toHaveTextContent('Fundamental Health');
-    expect(within(group).getAllByTestId('score-panel')).toHaveLength(2);
+    const stockToggle = screen.getByRole('button', { name: /Stock Qualification/ });
+    const contractToggle = screen.getByRole('button', { name: /Contract Qualification/ });
+    expect(stockToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(contractToggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(stockToggle);
+    const panel = within(stockToggle.closest('section')!).getByTestId('score-panel');
+    expect(panel).toBeVisible();
+    expect(within(contractToggle.closest('section')!).getByTestId('score-panel')).not.toBeVisible();
+    fireEvent.click(stockToggle);
+    expect(panel).not.toBeVisible();
+    fireEvent.click(stockToggle);
+    expect(within(stockToggle.closest('section')!).getByTestId('score-panel')).toBe(panel);
     expect(screen.getAllByTestId('score-panel')).toHaveLength(2);
-    const panels = within(group).getAllByTestId('score-panel');
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(panels[0]).not.toBeVisible();
-    expect(panels[1]).not.toBeVisible();
-    expect(localStorage.getItem('bamendjou:tradecard-scores-collapsed')).toBe('1');
-    fireEvent.click(toggle);
-    expect(within(group).getAllByTestId('score-panel')[0]).toBe(panels[0]);
   });
 
   it('keeps real stock and contract evidence independent and mounted across outer toggles', async () => {
@@ -309,10 +329,13 @@ describe('TradeCard', () => {
     const view = render(<TradeCard data={captured} />);
     try {
       await act(async () => { await Promise.resolve(); });
-      const outer = screen.getByRole('button', { name: /Stock & contract scores/ });
-      const group = outer.closest('section')!;
+      const outer = screen.getByRole('button', { name: /Stock Qualification/ });
+      // #610 G4 — Stock Qualification is in the identity; Contract
+      // Qualification follows Decision & execution. Both are on the card.
+      const group = view.container;
       expect(outer).toHaveAttribute('aria-expanded', 'false');
       fireEvent.click(outer);
+      fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
       const stock = within(group).getByRole('button', { name: /Captured stock scoring evidence/ });
       const contract = within(group).getByRole('button', { name: /Captured contract scoring evidence/ });
       expect(outer).toHaveAttribute('aria-expanded', 'true');
@@ -356,20 +379,21 @@ describe('TradeCard', () => {
     expect(screen.getByText('2026-05-15')).toBeInTheDocument();
     expect(screen.getByText('Call')).toBeInTheDocument();
     expect(screen.getByText('0.45')).toBeInTheDocument();
-    expect(screen.getByText('$-0.09')).toBeInTheDocument();
+    expect(screen.getByText('−$0.09')).toBeInTheDocument();
     expect(screen.getByText('45')).toBeInTheDocument();
     expect(screen.getByText('24d')).toBeInTheDocument();
     const mids = screen.getAllByText('$2.50');
     expect(mids.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps handling controls before evidence and the latest result after method cards', () => {
+  it('keeps Exit Plan before methods, then entry and the decision', () => {
     render(<TradeCard data={mockTradeCard} />);
     const order = screen.getByRole('region', { name: 'Order Entry' });
     const exit = screen.getByRole('region', { name: 'Exit Plan' });
-    const latest = screen.getByText('Latest calculation');
+    // #608 — the decision section replaced the latest-result summary.
+    const latest = screen.getByRole('region', { name: 'Decision and execution' });
     const arithmetic = screen.getByText('Arithmetic Profit Target');
-    expect(order.compareDocumentPosition(exit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(exit.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(exit.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(arithmetic.compareDocumentPosition(latest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const label of ['Edit Limit', 'Edit Contracts', 'Edit Invalidation', 'Edit Premium stop']) {
@@ -382,14 +406,14 @@ describe('TradeCard', () => {
 
   it('renders the Order Entry strip (Feature 6 — Entry Plan card was folded into this strip)', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByText('Order type')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
     // Max fill is READ-ONLY (round 7 finding 3): nothing outside its own input
     // ever consumed it, and rendering it with the same click-to-edit affordance
     // as the three fields that DO reach the broker made the two
     // indistinguishable. See the row's own comment in TradeCard.
     expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
-    expect(screen.getByText('Max fill')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
@@ -959,7 +983,7 @@ describe('TradeCard', () => {
     // P2-03 (decision Q8): the exit the alert actually makes, read-only.
     expect(screen.queryByLabelText('Edit Time exit')).not.toBeInTheDocument();
     expect(screen.getByText('Time exit')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 DTE')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Exit Plan' })).getByText('3 days to expiry')).toBeInTheDocument();
     expect(screen.queryByText('Time stop')).not.toBeInTheDocument();
     expect(screen.queryByText(`${mockTradeCard.exit.timeStopDays}d`)).not.toBeInTheDocument();
   });
@@ -1411,7 +1435,7 @@ describe('TradeCard', () => {
     expect(screen.getByText('$3.30')).toBeInTheDocument();     // T20% Est. option
     expect(screen.getByText('$190.50')).toBeInTheDocument();   // T20% Stock price
     expect(screen.getByText('72%')).toBeInTheDocument();       // T20% Probability
-    expect(screen.getByText('~5 calendar days')).toBeInTheDocument();       // T20% Expected time
+    expect(screen.getByText('~5d')).toBeInTheDocument();       // T20% Expected time (calendar days, #610 G8)
     expect(screen.getByText('$193.20')).toBeInTheDocument();   // T35% Stock price
     expect(screen.getByText('not reachable')).toBeInTheDocument(); // T50% Stock price (null)
     // The invalidation row moved off this card to the Barrier Race card
@@ -2231,13 +2255,15 @@ describe('TradeCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     // The "R:R vs. structural stop" cell this test used to read is gone
     // (barrier-race spec section 3.4). What it was gating on is not: the
-    // "Structural level found" cell appears on all three rows only once BOTH
-    // the stop and the estimate have been confirmed fresh THIS mount, and it
-    // shows the FRESH stop, not the scan-time one.
+    // "Structural level found" line shows a level only once BOTH the stop and
+    // the estimate have been confirmed fresh THIS mount, and it shows the
+    // FRESH stop, not the scan-time one. #606 prints it once (in the Monte
+    // Carlo provenance disclosure) instead of on each of the three rows.
     await waitFor(() => {
-      expect(screen.getAllByText('Structural level found').length).toBe(3);
+      expect(screen.getAllByText('Structural level found').length).toBe(1);
     });
-    expect(screen.getAllByText('$190.00').length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText('Structural level found').parentElement).toHaveTextContent('$190.00');
+    expect(screen.getAllByText('$190.00').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('R:R vs. structural stop')).not.toBeInTheDocument();
   });
 
@@ -2293,12 +2319,13 @@ describe('TradeCard', () => {
     // completed — ProfitTargetRow's structuralZeroRisk branch distinguishes
     // this from "not checked yet", so every row shows the explicit
     // "N/A (stop = price)" placeholder rather than a level.
-    // Three targets × one line each ("Structural level found", Feature 2) plus
-    // the one standalone Check Structure block above (Feature 3) = 4. It was 7
-    // until the "R:R vs. structural stop" line was removed alongside it
-    // (barrier-race spec section 3.4) — the state itself is unchanged, there is
-    // simply one cell per row carrying it now instead of two.
-    expect(screen.getAllByText('N/A (stop = price)').length).toBe(4);
+    // One "Structural level found" line (Feature 2) plus the one standalone
+    // Check Structure block above (Feature 3) = 2. It was 7 until the "R:R vs.
+    // structural stop" line was removed alongside it (barrier-race spec section
+    // 3.4), then 4 with one line per target row; #606 prints the line once,
+    // since all three rows carried the same state. The state is unchanged.
+    expect(screen.getAllByText('N/A (stop = price)').length).toBe(2);
+    expect(screen.getByText('Structural level found').parentElement).toHaveTextContent('N/A (stop = price)');
   });
 
   it('does not affect the original R:R card or the sell-to-close R:R column', async () => {
@@ -2460,12 +2487,9 @@ describe('TradeCard', () => {
         render(<TradeCard data={withStop} />);
         expect(screen.queryByText(/Bottom \(final stop\) — not/)).not.toBeInTheDocument();
         expect(screen.getByText('Bottom (final stop)')).toBeInTheDocument();
-        // THREE TIMES: "Price" and "ATR-floor price" in this row -- the same
-        // number here precisely because the floor is what decided the stop,
-        // which is the case this fixture exists to render -- plus the Exit
-        // Plan's Invalidation (169.00 in this fixture), which is always
-        // visible since P2-21 moved it out of the collapsed ladder group.
-        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(3);
+        // Price and ATR floor match because the floor decided this stop.
+        // Execution invalidation remains visible once in the actual Exit Plan.
+        expect(within(screen.getByRole('region', { name: 'Structure & Stops' })).getAllByText('$169.00')).toHaveLength(2);
         expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$169.00');
         // The LOSING candidate rides along: the row prints both levels and the
         // gap, so a reader can see the floor was what widened the stop.
@@ -2487,7 +2511,7 @@ describe('TradeCard', () => {
         expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
         // And the risk-derived size, which sizes off that contract price, is
         // not offered either.
-        expect(screen.queryByText(/Risk-derived size/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Risk-derived size:/)).not.toBeInTheDocument();
       });
 
       it('falls back to "re-run the scan" for a card with no resolved stop', () => {
@@ -2568,8 +2592,9 @@ describe('TradeCard', () => {
       expect(within_.getByText('Target sits beyond the next real structural level.')).toBeInTheDocument();
       // The warning glyph appears only on the 4th (beyond) row's heading.
       // rrRatio is a plain JS number (5.0 === 5), so it renders as "5", not "5.0".
-      expect(within_.getByText('5:1 target ⚠')).toBeInTheDocument();
-      expect(within_.getByText('4:1 target')).toBeInTheDocument();
+      // #610 G8: the cell drops the repeated word; the column header says Target.
+      expect(within_.getByText('5:1 ⚠')).toBeInTheDocument();
+      expect(within_.getByText('4:1')).toBeInTheDocument();
     });
 
     it('stopJustification case 1 — structural found and won: clears the ATR floor, no widening needed', async () => {
@@ -2686,11 +2711,12 @@ describe('TradeCard', () => {
   });
 
   describe('Final Recommendation (Feature 8)', () => {
-    it('empty state — before any method is run, falls back to the Fixed % Ladder Plan\'s live T1/T2/T3 targets, explicitly labeled as a default', () => {
+    it('empty state — before any method is run, names the Fixed % Ladder Plan as the default without repeating its targets', () => {
       render(<TradeCard data={mockTradeCard} />);
-      expect(screen.getByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).toBeInTheDocument();
-      // mockTradeCard's single target: stockPrice/targetPrice 200.02.
-      expect(within(screen.getByRole('region', { name: 'Final Recommendation' })).getByText('$200.02')).toBeInTheDocument();
+      expect(screen.getByText('No method explicitly run — the Fixed % Ladder Plan is the default; its targets are in the Ladder card')).toBeInTheDocument();
+      // #608 (D10) — the decision no longer repeats the ladder's T1/T2/T3; they
+      // stay in the Ladder card (mockTradeCard's single target: 200.02).
+      expect(within(screen.getByRole('region', { name: 'Decision and execution' })).queryByText('$200.02')).not.toBeInTheDocument();
       // The targets, and ONLY the targets. This branch used to carry the
       // Ladder's "Projected R/R (+8% stock move)" as well — the copy that
       // survived the readout's removal from the Ladder section itself, and the
@@ -2734,12 +2760,14 @@ describe('TradeCard', () => {
         fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i }));
         await screen.findByText(/computed via: Arithmetic/);
         const expectedHHMM = `${String(fixedNow.getHours()).padStart(2, '0')}:${String(fixedNow.getMinutes()).padStart(2, '0')}`;
-        expect(screen.getByText(`computed via: Arithmetic, ${expectedHHMM}`)).toBeInTheDocument();
+        // #608 — named in the selected-target review as the latest
+        // calculation (not a choice); the caveat now sits on the Arithmetic card.
+        expect(screen.getByText(`Latest calculation, not a choice · computed via: Arithmetic, ${expectedHHMM}`)).toBeInTheDocument();
         expect(screen.getByText(
           /This stop price is not automatically monitored by alerts unless copied into the position's stop field after opening\./,
         )).toBeInTheDocument();
         // The empty-state Ladder fallback is gone now that a method has run.
-        expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+        expect(screen.queryByText(/No method explicitly run/)).not.toBeInTheDocument();
       } finally {
         jest.useRealTimers();
       }
@@ -2754,7 +2782,7 @@ describe('TradeCard', () => {
       fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
       await screen.findByText(/computed via: Monte Carlo/);
       expect(screen.queryByText(/not automatically monitored by alerts/)).not.toBeInTheDocument();
-      expect(screen.queryByText('No method explicitly run — showing Fixed % Ladder Plan (default)')).not.toBeInTheDocument();
+      expect(screen.queryByText(/No method explicitly run/)).not.toBeInTheDocument();
     });
 
     it('does not build any cross-method comparison — Arithmetic\'s output never references Monte Carlo/Ladder figures or vice versa', async () => {
@@ -2775,7 +2803,7 @@ describe('TradeCard', () => {
       // method cards legitimately carry their own "...they can disagree"
       // disclaimers elsewhere on the page (Features 1/2/3), which is
       // unrelated to this card building its own comparison.
-      const finalRecSection = screen.getByText('Final Recommendation').closest('section')!;
+      const finalRecSection = screen.getByRole('region', { name: 'Decision and execution' });
       expect(within(finalRecSection).queryByText(/disagree/i)).not.toBeInTheDocument();
       expect(within(finalRecSection).queryByText(/agrees?/i)).not.toBeInTheDocument();
     });
@@ -2791,7 +2819,7 @@ describe('TradeCard', () => {
     // as the three fields that DO reach the broker made the two
     // indistinguishable. See the row's own comment in TradeCard.
     expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
-    expect(screen.getByText('Max fill')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();
@@ -3074,7 +3102,7 @@ describe('TradeCard — stop-vs-premium gate', () => {
     expect(section.getByText('Estimated loss for 2 entered contracts').parentElement).toHaveTextContent('$440');
     expect(section.getByText(/Selected contract only.*100 shares/)).toBeVisible();
     expect(section.getByText(/Calculation does not replace/)).toBeVisible();
-    expect(section.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
     expect(section.getByText(/\$4.00 premium − \$1.80 at \$178.50/)).toBeVisible();
     fireEvent.click(screen.getByLabelText('Edit Limit'));
     fireEvent.change(screen.getByLabelText('Edit Limit'), { target: { value: '8' } });
@@ -3288,7 +3316,7 @@ describe('TradeCard — Piece 2: shared stop unifies the gate and structuralRR',
     expect(stops.getByText('Estimated loss for 1 entered contract').parentElement).toHaveTextContent('$260');
     expect(stops.getByText('Arithmetic contract value at stop').parentElement).toHaveTextContent('$1.00/share');
     expect(stops.getByText('Stop-cost source: Arithmetic calculation stop.')).toBeVisible();
-    expect(stops.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64');
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
 
 
     // 3) Run Monte Carlo Estimate — fresh premium/delta for firstPassageContext.
@@ -3451,6 +3479,10 @@ describe('TradeCard — piece 1/2 gap: cache-restored exit plan with no fresh cl
 // response with no `race` key at all, so no test in the suite had ever rendered
 // the race through the component that owns it. Both of the bugs below were
 // reachable by a ten-line test and shipped anyway.
+
+/** #608 — the Monte Carlo stop context's stock barrier, a race number shown
+ *  only behind raceIsShowable (it reads "Unavailable …" otherwise). */
+const raceBarrier = () => document.querySelector('[data-field="stock-barrier"]') as HTMLElement;
 
 const RACE_RESPONSE = {
   // ONE real `estimate_first_passage` call, whole: targets, invalidation and
@@ -3757,12 +3789,19 @@ describe('the estimate never races a level it depends on', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('segment-Target first')).toHaveLength(3);
     });
-    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+    // #608 — the race's armed barriers are read from the Monte Carlo stop
+    // context now that the decision no longer repeats them.
+    expect(raceBarrier()).toHaveTextContent('$180.00 stock');
 
     rerender(
       <TradeCard data={{ ...mockTradeCard, symbol: 'MSFT', contract: 'MSFT 300C 06/19' }} />,
     );
-    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    // #610 G7: with no estimate for the new contract the stop context is the
+    // one "unavailable" line; no race number from the previous contract stays.
+    expect(raceBarrier()).toBeNull();
+    const stopSlot = document.querySelector('[aria-label="Monte Carlo Profit Target"] [data-slot="stop"]') as HTMLElement;
+    expect(stopSlot).not.toHaveTextContent('$180.00');
+    expect(within(stopSlot).getByText('Unavailable — run or re-run estimate to confirm barriers')).toBeInTheDocument();
     expect(screen.queryAllByTestId('segment-Target first')).toHaveLength(0);
   });
 });
@@ -4006,16 +4045,18 @@ describe('the race gates, mutation-pinned', () => {
     expect(screen.queryByText(/Not simulated/)).not.toBeInTheDocument();
   });
 
-  it('stops printing race numbers in the Final Recommendation once a barrier moves', async () => {
+  it('stops printing race numbers outside the race card once a barrier moves', async () => {
     // raceIsShowable = raceIsFresh && !raceBarriersMoved. Dropping the second
     // term left every test green, because the card has its own
-    // barriers-changed branch and the Final Recommendation does not.
+    // barriers-changed branch. #608 — the Final Recommendation that used to
+    // repeat the armed barriers is gone; the Monte Carlo stop context reads
+    // the same gate, so it pins the term now.
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(RACE_RESPONSE);
     render(<TradeCard data={mockTradeCard} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     });
-    expect(screen.getByText(/Armed stop/)).toBeInTheDocument();
+    expect(raceBarrier()).toHaveTextContent(/\$\d+\.\d\d stock/);
 
     expandLadder();
     await act(async () => {
@@ -4027,7 +4068,8 @@ describe('the race gates, mutation-pinned', () => {
       fireEvent.blur(input);
     });
 
-    expect(screen.queryByText(/Armed stop/)).not.toBeInTheDocument();
+    expect(raceBarrier()).not.toHaveTextContent(/\$\d+\.\d\d stock/);
+    expect(raceBarrier()).toHaveTextContent(/Unavailable/);
     // The gate's whole job now: show the race's numbers or show none. It no
     // longer swaps in a standalone invalidation probability, which counted
     // paths that touched the stock stop even where the premium stop had
@@ -4261,7 +4303,7 @@ describe('TradeCard — the card-level edited indicator', () => {
 // restored estimate reinstated the whole monte_carlo branch at whatever vintage
 // it was cached at. With the invalidation fallback removed, those rows are the
 // only numbers left in the branch — so an ungated vintage WAS the branch.
-describe('TradeCard — Final Recommendation target rows gate on freshness', () => {
+describe('TradeCard — decision review target figures gate on freshness', () => {
   beforeEach(() => {
     localStorage.clear();
     // estimateFirstPassage awaits getStructuralStop before it ever reaches
@@ -4293,7 +4335,7 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
   } as unknown as TradeCardData;
 
   const staleNotice = () => screen.queryByText(/Not re-run this session/);
-  // SCOPED TO THE FINAL RECOMMENDATION, deliberately. The standalone Monte
+  // SCOPED TO THE DECISION REVIEW (the Final Recommendation until #608), deliberately. The standalone Monte
   // Carlo card above renders the same restored `firstPassage.targets` ungated —
   // that is its own readout and outside TARGET-VINTAGE's scope — so a
   // document-wide query for the option price matches THAT row and would pass
@@ -4313,16 +4355,28 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     expect(staleNotice()).toBeInTheDocument();
   });
 
+  // #608 (D10) — the decision no longer lists every target; it reviews the
+  // ONE selected target. A fresh run makes Monte Carlo choosable and only then
+  // does the review print a Monte Carlo figure.
+  const review = () => within(screen.getByRole('region', { name: 'Selected target review' }));
+  const chooseT20 = () => {
+    fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'T20%' }));
+  };
+
   it('prints them once Estimate has actually been clicked this mount', async () => {
     (api.getFirstPassageEstimate as jest.Mock).mockResolvedValueOnce(ESTIMATE);
     render(<TradeCard data={restored} />);
     expect(staleNotice()).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     // The in-flight state clears `firstPassage`, so the branch unmounts and
     // remounts — wait for it to come BACK before reading inside it.
     await screen.findByText(/computed via: Monte Carlo/);
-    expect(finalRec().getByText('T20%')).toBeInTheDocument();
     expect(staleNotice()).not.toBeInTheDocument();
+    chooseT20();
+    expect(review().getByText('Matched result option premium').parentElement).toHaveTextContent('$3.30 /share');
+    expect(review().getByText('72%')).toBeInTheDocument();
   });
 
   it('goes back to withholding them when the user navigates to another candidate', async () => {
@@ -4330,7 +4384,8 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
     const { rerender } = render(<TradeCard data={restored} />);
     fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i }));
     await screen.findByText(/computed via: Monte Carlo/);
-    expect(finalRec().getByText('T20%')).toBeInTheDocument();
+    chooseT20();
+    expect(review().getByText('Matched result option premium').parentElement).toHaveTextContent('$3.30 /share');
 
     // Away to another candidate carrying ITS OWN cached estimate. Freshness is
     // per-mount, so the incoming card starts stale however fresh this one was.
@@ -4338,6 +4393,8 @@ describe('TradeCard — Final Recommendation target rows gate on freshness', () 
       ...restored, symbol: 'MSFT', contract: 'MSFT|400|2026-05-16|C',
     };
     rerender(<TradeCard data={other} />);
+    expect(review().queryByText(/\$3\.30|72%/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeDisabled();
     expect(finalRec().queryByText('T20%')).not.toBeInTheDocument();
     expect(staleNotice()).toBeInTheDocument();
   });

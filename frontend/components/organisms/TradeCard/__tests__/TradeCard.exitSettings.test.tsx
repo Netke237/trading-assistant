@@ -4,13 +4,24 @@
  * from calculation or method selection.
  */
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render as renderCard, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import { premiumStopDollarToSend } from '@/lib/premiumStop';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -53,6 +64,11 @@ const PLAN_RESPONSE = {
 const exitPlan = () => within(screen.getByRole('region', { name: 'Exit Plan' }));
 const values = () => within(exitPlan().getByRole('group', { name: 'Premium-loss values' }));
 const value = (label: string) => values().getByText(label).parentElement;
+// #610 G5 — the Exit Plan's ONE explanation (premium breakdown, how settings
+// resolve, structure evidence with Check structure), default closed.
+const EXPLANATION = 'Exit Plan explanation · stop basis, premium & time exit';
+const openExplanation = () => fireEvent.click(exitPlan().getByText(EXPLANATION));
+const summary = () => within(exitPlan().getByRole('group', { name: 'Premium-loss summary' }));
 const edit = (label: string, v: string) => {
   fireEvent.click(screen.getByLabelText(`Edit ${label}`));
   const input = screen.getByLabelText(`Edit ${label}`);
@@ -69,11 +85,59 @@ beforeEach(() => {
   (api.getContractQuote as jest.Mock).mockResolvedValue({ price: 5.2 });
 });
 
+describe('compact actual Exit Plan (D04/D05)', () => {
+  it('shows editable essentials and a readable expiry alert while quantity, basis and time prose start closed', () => {
+    renderCard(<TradeCard data={card()} contracts={2} />);
+    expect(exitPlan().getByLabelText('Edit Invalidation')).toBeVisible();
+    expect(exitPlan().getByLabelText('Edit Premium stop')).toBeVisible();
+    // #610 G5 — the loss % as a chip beside the premium stop, and two concise
+    // remaining/loss lines; the full readout is in the closed explanation.
+    expect(exitPlan().getByText('60% loss')).toBeVisible();
+    expect(summary().getByText('Remaining: $2.08/share · $208.00 / contract')).toBeVisible();
+    expect(summary().getByText('Loss: $312.00 / contract')).toBeVisible();
+    for (const label of ['Premium-loss %', 'Remaining option value per share', 'Loss per contract (×100 shares)']) {
+      expect(exitPlan().getByText(label)).not.toBeVisible();
+    }
+    expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
+    expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
+    for (const label of ['Premium basis', 'Loss for 2 entered contracts', 'Remaining option value for 2 entered contracts']) {
+      expect(exitPlan().getByText(label)).not.toBeVisible();
+    }
+    expect(exitPlan().getByText(/not 3 days after entry/i)).not.toBeVisible();
+    expect(api.getStructuralStop).not.toHaveBeenCalled();
+    expect(api.getExitPlan).not.toHaveBeenCalled();
+  });
+
+  it('keeps all structure and pricing evidence inside the single Exit Plan, closed until requested', async () => {
+    renderCard(<TradeCard data={card({ exit: { ...card().exit, finalStop: FINAL_STOP } })} />);
+    const evidence = exitPlan().getByText('Structure evidence · ATR, pricing & Check structure').closest('details')!;
+    expect(evidence.querySelector('summary')).toHaveTextContent(EXPLANATION);
+    expect(evidence).not.toHaveAttribute('open');
+    const stops = within(evidence);
+    expect(stops.getByText('Bottom (final stop)')).not.toBeVisible();
+    expect(stops.getByText('Check structure')).not.toBeVisible();
+    openExplanation();
+    expect(stops.getByText('Bottom (final stop)')).toBeVisible();
+    expect(api.getStructuralStop).not.toHaveBeenCalled();
+    fireEvent.click(stops.getByRole('button', { name: 'Check structure' }));
+    await waitFor(() => expect(stops.getByText('Structural check stock reference')).toBeVisible());
+    expect(stops.getByText(/Standalone structural check refreshed this session/)).toBeVisible();
+    expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$179.64');
+  });
+
+  it('keeps missing-invalidation and small-premium notices visible with disclosures closed', () => {
+    renderCard(<TradeCard data={card({ exit: { ...card().exit, invalidation: null } })} liveMid={0.01} />);
+    expect(exitPlan().getByText(/Invalidation stop required — Send to broker stays disabled/)).toBeVisible();
+    expect(exitPlan().getByText(/too small for a per-contract premium stop/)).toBeVisible();
+    expect(exitPlan().queryByLabelText('Edit Premium stop')).not.toBeInTheDocument();
+  });
+});
+
 describe('premium-loss values use the execution field basis', () => {
   it('live mid + untouched: global % on the live mid, per share / per contract / entered quantity', () => {
     render(<TradeCard data={card()} liveMid={1.0} contracts={2} />);
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('$0.60');
-    expect(screen.getByText('(global 60%)')).toBeInTheDocument();
+    expect(exitPlan().getByText('60% loss · global')).toBeVisible();
     expect(value('Premium basis')).toHaveTextContent('$1.00/share · live mid');
     expect(value('Premium-loss %')).toHaveTextContent('60%');
     expect(value('Loss per share')).toHaveTextContent('$0.60/share');
@@ -125,7 +189,8 @@ describe('premium-loss values use the execution field basis', () => {
     render(<TradeCard data={card()} liveMid={1.0} initialPremiumStop={0.5} initialInvalidation={175} />);
     expect(screen.getByLabelText('Edit Premium stop')).toHaveTextContent('$0.50');
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('$175.00');
-    expect(screen.queryByText('(global 60%)')).not.toBeInTheDocument();
+    expect(exitPlan().queryByText(/· global/)).not.toBeInTheDocument();
+    expect(exitPlan().getByText('50% loss')).toBeVisible();
     expect(value('Premium basis')).toHaveTextContent('$1.00/share · live mid');
     expect(value('Premium-loss %')).toHaveTextContent('50%');
     expect(value('Remaining option value per share')).toHaveTextContent('$0.50/share');
@@ -178,7 +243,9 @@ describe('premium-loss values use the execution field basis', () => {
 describe('time exit, warnings and disclosures', () => {
   it('explains 3 DTE as an alert at three or fewer days until expiry, read-only', () => {
     render(<TradeCard data={card()} />);
-    expect(exitPlan().getByText('3 DTE')).toBeVisible();
+    expect(exitPlan().getByText('3 days to expiry')).toBeVisible();
+    expect(exitPlan().getByText(/Alert at ≤3 DTE/)).toBeVisible();
+    openExplanation();
     expect(exitPlan().getByText(/alert when 3 or fewer calendar days remain until expiry/i)).toBeVisible();
     expect(exitPlan().getByText(/not 3 days after entry/i)).toBeVisible();
     expect(exitPlan().getByText(/not an automatic close/i)).toBeVisible();
@@ -190,7 +257,7 @@ describe('time exit, warnings and disclosures', () => {
     const explanation = exitPlan().getByText(/Invalidation is the editable execution stock stop/);
     expect(explanation).not.toBeVisible();
     expect(exitPlan().getByText(/Invalidation stop required — Send to broker stays disabled/)).toBeVisible();
-    fireEvent.click(exitPlan().getByText('How these exit settings are resolved'));
+    openExplanation();
     expect(explanation).toBeVisible();
     expect(exitPlan().getByText(/Monte Carlo and Arithmetic premiums are separate calculation inputs/)).toBeVisible();
   });
@@ -200,8 +267,9 @@ describe('time exit, warnings and disclosures', () => {
     expect(exitPlan().queryByText(/Invalidation stop required — Send to broker stays disabled/)).not.toBeInTheDocument();
   });
 
-  it('collapses stop source / ATR / structure detail but keeps the final stop price visible', () => {
+  it('keeps final stop and nested source details reachable in closed structure evidence', () => {
     render(<TradeCard data={card({ exit: { ...card().exit, invalidation: 169, finalStop: FINAL_STOP } })} />);
+    openExplanation();
     const stops = within(screen.getByRole('region', { name: 'Structure & Stops' }));
     expect(stops.getByText('Bottom (final stop)')).toBeVisible();
     expect(stops.getByText('Price')).toBeVisible();
@@ -239,9 +307,10 @@ describe('editable versus read-only styling', () => {
 
   it('read-only max fill, order type, time exit and computed values do not look editable', () => {
     render(<TradeCard data={card()} />);
-    for (const label of ['Max fill', 'Order type', 'Time exit']) {
-      const row = screen.getByText(label).parentElement as HTMLElement;
+    for (const label of [/Order type Limit · Max fill \$5\.40/, 'Time exit']) {
+      const row = screen.getByText(label);
       expect(row.querySelector('[data-editable]')).toBeNull();
+      expect(row.closest('[data-editable], [role="button"]')).toBeNull();
       expect(within(row).queryByRole('button')).not.toBeInTheDocument();
     }
     const list = exitPlan().getByRole('group', { name: 'Premium-loss values' });
