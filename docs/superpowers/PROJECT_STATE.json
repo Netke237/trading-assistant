@@ -10301,7 +10301,7 @@
       "name": "Trade card durable-reference presentation alignment (#603)",
       "owner": "agent",
       "status": "built",
-      "summary": "All seven builds and full-text/visual acceptance complete; independent code round1 clean; PR/CI pending.",
+      "summary": "SELF-MERGE PENDING, PR #615, audited head79d5027e; final-head CI pending, not merged.",
       "tracking_issue": 603,
       "branch": "board/trade-card-reference-alignment-8b8ee0c6",
       "plan": "docs/superpowers/plans/2026-11-09-trade-card-reference-alignment-plan.md",
@@ -10357,7 +10357,7 @@
           "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/code-audit-1.md"
         }
       ],
-      "note": "Independent code round1 completed clean after full exact9067538f..79d5027e review and adjacent-path recheck; plan3/code1clean (continuous4), original575 history preserved. Source app02169adf unchanged since review; full explanations preserved with restored MC qualifier. Statusbuilt/unmerged at85%; publish replacement PR, exact-head CI and board self-merge conditions remain.",
+      "note": "SELF-MERGE PENDING, PR #615, audited head79d5027ecd149394790a66b1160789480ea0d6f2. Plan3/code1clean, all7builds and full explanatory-text acceptance complete. Only documentation records the clean verdict and pending merge after audited source. Keepbuilt/unmerged until exact final PR head passes every CI check and board conditions are reverified; never record shipment in advance.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
@@ -10448,7 +10448,15 @@
           "reason": "Usage limit before any verdict; independent replacement performed full target review",
           "counted_as_round": false
         }
-      ]
+      ],
+      "self_merge_pending": {
+        "pull_request": 615,
+        "url": "https://github.com/Netke237/trading-assistant/pull/615",
+        "audited_head": "79d5027ecd149394790a66b1160789480ea0d6f2",
+        "application_commit": "02169adf213693309404a9c0f166089f820320ae",
+        "pre_pending_head": "f902a1404d9382679cc36bf003df3732898a8b51",
+        "state": "SELF-MERGE PENDING; final-head CI must pass; no merge performed"
+      }
     }
   ],
   "already_shipped": [
