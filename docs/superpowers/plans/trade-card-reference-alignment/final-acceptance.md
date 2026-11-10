@@ -54,3 +54,7 @@ The full invocation's original failures are retained; it is not described as an 
 [Source binding](evidence/610/final/source-binding.json) ties every final capture to committed application02169adf and the same63 application-file hashes. Every capture run checks those files remain unchanged through completion. The final source and text maps pin the same application. [Evidence integrity verifier](verify-final-acceptance.py) checks source/image/report hashes, browser/write guards, saved test coverage and both preservation maps; it does not claim a new test execution or formal audit.
 
 Plan stage3 closed clean; original phase575 history and current counters are preserved. All seven build tasks now meet local acceptance. The independent integrated phase code audit remains a separate requirement before merge, followed by exact-head CI and board self-merge conditions.
+
+## Independent integrated code audit
+
+Fresh reviewer alignment_code_audit_fresh applied the required adversarial code gate to9067538f7d992b2fdf74efb387e963acc77a6ffe..79d5027ecd149394790a66b1160789480ea0d6f2 and rechecked adjacent numeric/order/persistence paths: **GATE FINDINGS:0**. [Full report](evidence/code-audit-1.md). This is completed code-stage round1 (continuous4 after plan3); an earlier attempt ended at a usage limit without a verdict and is not counted. The application remains unchanged; only documentation records the verdict. Exact-head CI and the pending/verified merge record remain separate shipping requirements.
