@@ -3283,7 +3283,7 @@ export function TradeCard({
                 <thead>
                   <tr>
                     <th scope="col">Target</th>
-                    <th scope="col">Stock price</th>
+                    <th scope="col">Stock price (approx.)</th>
                     <th scope="col">Option value</th>
                     <th scope="col">Probability<span className={styles.thSub}> (independent touch)</span></th>
                     <th scope="col">Conditional time<span className={styles.thSub}> (calendar days)</span></th>
@@ -3368,6 +3368,7 @@ export function TradeCard({
 
             <div className={styles.methodDetailsBody}>
             <Text size={12} tone="secondary">Monte Carlo estimate — independent of the other profit-target methods on this page; they can disagree.</Text>
+            <Text size={12} tone="secondary">Stock-price equivalent (display approximation) is shown in the target table.</Text>
             <Text size={12} tone="secondary">T1/T2/T3 are editable option-profit percentages, 1–500%; Run estimates the entered targets.</Text>
             {firstPassage && (
               <Text size={12} tone="secondary">

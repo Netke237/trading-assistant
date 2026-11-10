@@ -191,7 +191,7 @@ describe('compact target table', () => {
     await run();
     const table = mc().getByRole('table', { name: 'Monte Carlo targets' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Target', 'Stock price', 'Option value', 'Probability (independent touch)', 'Conditional time (calendar days)', 'Est. dollar outcome',
+      'Target', 'Stock price (approx.)', 'Option value', 'Probability (independent touch)', 'Conditional time (calendar days)', 'Est. dollar outcome',
     ]);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows.map((r) => Array.from(r.querySelectorAll('th,td')).map((c) => c.textContent))).toEqual([
