@@ -1,12 +1,12 @@
 Skip to content
 BAMENDJOU
 Options Screener
-Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 9 · 09:13 PM
-COMPLETED · STARTED NOV 9 · 09:13 PM
+Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 10 · 05:41 AM
+COMPLETED · STARTED NOV 10 · 05:41 AM
 PENDING
-AFTER
+CLOSED
 ·
-3h 46m
+opens 15:30 CET
 Config OK · 10 checks
 Market Regime
 Universe
@@ -18,7 +18,7 @@ Contracts
 Trade Card
 ← Exit Workflow
 COMPLETED
-09:13 PM
+05:41 AM
 Options
 Stocks
 Pre-Breakout
@@ -132,7 +132,7 @@ Option value at stock stop (barrier time)
 Unavailable — run or re-run estimate to confirm barriers
 Loss at stock stop (barrier time, per contract)
 Unavailable — run or re-run estimate to confirm barriers
-Target	Stock price	Option value	Probability
+Target	Stock price (approx.)	Option value	Probability
 (independent touch)
 	Conditional time
 (calendar days)
@@ -157,7 +157,7 @@ Option value at stock stop (current time)
 $0.65/share
 Loss at stock stop (current time, per contract)
 $150.00/contract
-Restored Arithmetic calculation · 21:13.
+Restored Arithmetic calculation · 05:42.
 This stop price is not automatically monitored by alerts unless copied into the position's stop field after opening.
 Black–Scholes at current expiry; differs from barrier-time race pricing. Exit Plan unchanged.
 Target	Stock price
@@ -267,7 +267,7 @@ Contract Qualification
 Alternative contracts (1)
 View chart
 Export JSON
-REC-1794258819482-O27T
+REC-1794289316930-9D0S
 ←
 Back: Contracts
 STEP 7 OF 7

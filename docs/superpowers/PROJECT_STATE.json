@@ -10301,7 +10301,7 @@
       "name": "Trade card durable-reference presentation alignment (#603)",
       "owner": "agent",
       "status": "built",
-      "summary": "All seven builds accepted locally; final preview independently accepted, integrated code audit pending.",
+      "summary": "All seven builds locally accepted; full text preservation PASS after MC qualifier restored; integrated code audit pending.",
       "tracking_issue": 603,
       "branch": "board/trade-card-reference-alignment-8b8ee0c6",
       "plan": "docs/superpowers/plans/2026-11-09-trade-card-reference-alignment-plan.md",
@@ -10343,7 +10343,7 @@
           "outcome": "clean"
         }
       ],
-      "note": "Application e98f4d88226b8c03004aaa0f58889914dcc8260a. Fresh independent visual ACCEPT covers D01\u2013D12/V1\u2013V5;625IDs source-accounted,0unresolved;18mocked browserruns960assertions0pageerrors0writes. Full345suitebaseline completed with15failures; final27suite623testunion covers every failed/changed suite green, no timeouts/goldens weakened. Typecheck green. Plan3clean/code0pending; original phase575 and counters preserved; no merge clearance.",
+      "note": "Application02169adf. Final visual ACCEPT plus narrow qualifier recheck;625IDs/types0unresolved; complete paragraph/label map128longText106changedcandidates0remaininguniqueexplanatorylosses after restoring originalMCapproximationqualifier. 18source-pinned mockedruns978checks0pageerrors0writes. Prior345-suitefullbaseline completed; final27/623failed+changeduniongreen; textcorrection11/168andTSCgreen. No timeouts/goldens weakened. Plan3clean/code0pending, no counters reset or merge clearance.",
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
@@ -10397,7 +10397,7 @@
           "issue": 610,
           "status": "built",
           "completion_pct": 70,
-          "commit": "e98f4d88226b8c03004aaa0f58889914dcc8260a",
+          "commit": "02169adf213693309404a9c0f166089f820320ae",
           "evidence": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md"
         }
       ],
@@ -10405,7 +10405,25 @@
         "rounds": 0,
         "clean": false,
         "note": "Integrated phase code audit starts after all seven build tickets close. Draft first-slice publication is not code audit clearance."
-      }
+      },
+      "acceptance_reviews": [
+        {
+          "kind": "visual, separate from formal gate",
+          "reviewer": "accept_final_rendered_preview",
+          "verdict": "ACCEPT",
+          "source": "02169adf",
+          "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/visual-qualifier-recheck.md"
+        },
+        {
+          "kind": "complete paragraph/label preservation, separate from formal gate",
+          "reviewer": "verify_all_explanation_text",
+          "before_findings": 1,
+          "resolved": "Original MC Stock-price equivalent (display approximation) restored in existing closed provenance and concise approximate header",
+          "remaining_unique_explanation_losses": 0,
+          "source": "02169adf",
+          "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/information-preservation/paragraph-preservation-final-report.md"
+        }
+      ]
     }
   ],
   "already_shipped": [

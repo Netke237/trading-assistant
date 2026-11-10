@@ -11,6 +11,11 @@ const args = require('util').parseArgs({ options: {
 } }).values;
 const repoRoot = path.resolve(args['repo-root'] || path.resolve(__dirname, '../../../..'));
 const frontendRoot = path.join(repoRoot, 'frontend');
+const captureRevision = require('child_process').execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+const crypto = require('crypto');
+const sourceBinding = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/source-binding.json'), 'utf8'));
+const captureSourcePins = sourceBinding.application_source_pins.map(({ path: p }) => ({ path: p, sha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, p))).digest('hex') }));
+
 if (!args.output) throw new Error('--output is required');
 const output = path.resolve(args.output);
 fs.mkdirSync(output, { recursive: true });
@@ -230,6 +235,14 @@ async function runOne(browser, width, theme) {
   await page.getByRole('button',{name:/Run Monte Carlo Estimate/i}).click();
   await page.getByRole('table',{name:'Monte Carlo targets',exact:true}).waitFor({timeout:60000});
   await shot('monte-carlo',page.locator('[data-method-card="monte_carlo"] > section'));
+  assert(await page.getByRole('table', { name: 'Monte Carlo targets', exact: true }).getByRole('columnheader', { name: 'Stock price (approx.)', exact: true }).isVisible(), 'Monte Carlo stock-price display is visibly qualified as approximate');
+  const modelDetails = page.locator('[data-method-card="monte_carlo"] details').filter({ has: page.locator('summary', { hasText: 'Monte Carlo model, inputs & provenance' }) }).first();
+  assert(await modelDetails.evaluate(d => !d.open), 'complete Monte Carlo model explanation closed by default');
+  await modelDetails.locator('summary').first().click();
+  assert(await modelDetails.getByText('Stock-price equivalent (display approximation) is shown in the target table.', { exact: true }).isVisible(), 'full original stock-price approximation explanation is reachable in existing expansion');
+  await shot('mc-model-details', modelDetails);
+  await modelDetails.locator('summary').first().click();
+
   const race=page.locator('[data-method-card="monte_carlo"] details').filter({has:page.locator('summary',{hasText:'Barrier Race · graphical outcomes & details'})}).first();
   await race.locator('summary').first().click();
   await shot('barrier-race',race);
@@ -281,7 +294,10 @@ async function runOne(browser, width, theme) {
   } finally {
     await browser.close();
   }
-  fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ states: STATES, baseUrl: baseUrl.href, runs }, null, 1));
+  for (const pin of captureSourcePins) {
+    if (crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, pin.path))).digest('hex') !== pin.sha256) throw new Error(`Application source changed during capture: ${pin.path}`);
+  }
+  fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ captureRevision, captureSourcePins, states: STATES, baseUrl: baseUrl.href, runs }, null, 1));
   const failed = runs.flatMap((r) => r.pageErrors);
   process.stdout.write(`done: ${runs.length} runs; page errors ${failed.length}\n`);
 })().catch((e) => { console.error(e); process.exit(1); });

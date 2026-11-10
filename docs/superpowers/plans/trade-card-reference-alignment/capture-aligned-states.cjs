@@ -11,6 +11,11 @@ const args = require('util').parseArgs({ options: {
 } }).values;
 const repoRoot = path.resolve(args['repo-root'] || path.resolve(__dirname, '../../../..'));
 const frontendRoot = path.join(repoRoot, 'frontend');
+const captureRevision = require('child_process').execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+const crypto = require('crypto');
+const sourceBinding = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/source-binding.json'), 'utf8'));
+const captureSourcePins = sourceBinding.application_source_pins.map(({ path: p }) => ({ path: p, sha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, p))).digest('hex') }));
+
 if (!args.output) throw new Error('--output is required');
 const output = path.resolve(args.output);
 fs.mkdirSync(output, { recursive: true });
@@ -337,7 +342,10 @@ async function runOne(browser, width, theme) {
   } finally {
     await browser.close();
   }
-  fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ states: STATES, baseUrl: baseUrl.href, runs }, null, 1));
+  for (const pin of captureSourcePins) {
+    if (crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, pin.path))).digest('hex') !== pin.sha256) throw new Error(`Application source changed during capture: ${pin.path}`);
+  }
+  fs.writeFileSync(path.join(output, 'checks.json'), JSON.stringify({ captureRevision, captureSourcePins, states: STATES, baseUrl: baseUrl.href, runs }, null, 1));
   const failed = runs.flatMap((r) => r.pageErrors);
   process.stdout.write(`done: ${runs.length} runs; page errors ${failed.length}\n`);
 })().catch((e) => { console.error(e); process.exit(1); });

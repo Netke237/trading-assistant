@@ -1,7 +1,7 @@
 {
-  "capture_git_base": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
-  "captured_source": "Frozen application working tree, rather than the base commit alone",
-  "verified_application_commit": "e98f4d88226b8c03004aaa0f58889914dcc8260a",
+  "capture_git_base": "02169adf213693309404a9c0f166089f820320ae",
+  "captured_source": "Committed frozen application at02169adf; all63 source files pinned throughout each capture run",
+  "verified_application_commit": "02169adf213693309404a9c0f166089f820320ae",
   "independent_source_review_files": 58,
   "application_source_pins": [
     {
@@ -190,7 +190,7 @@
     },
     {
       "path": "frontend/components/organisms/TradeCard/index.tsx",
-      "sha256": "7c3e79761db21f6f583db7f7a40bb2166fbea7a818dcc59e9bac20aff739f070"
+      "sha256": "b11c55d1f589e54f9ad0f9cb9368abcbf6fa73152b4c2073acd2a5ad49334a4b"
     },
     {
       "path": "frontend/lib/alertEngine.ts",
@@ -260,18 +260,18 @@
   "reports": {
     "layout": {
       "runs": 6,
-      "assertions": 126,
-      "sha256": "5eeb1c5aa4a1e33950e63e42887fe9f1ec0814ca256bae760b92957906246b2c"
+      "assertions": 144,
+      "sha256": "80428a4c72e82e684700eb107db21934824295a3ce0270b6010e005aee46fe9e"
     },
     "states": {
       "runs": 6,
       "assertions": 642,
-      "sha256": "9ba799cc674835b3c8afdcb9ea77a5086f4dd4a469f3b9d190f35f1c40488876"
+      "sha256": "f08598c69612248b16b19e07dfa21d45d9d09a48bb62e8acf6a04f1af9ba4869"
     },
     "reviews": {
       "runs": 6,
       "assertions": 192,
-      "sha256": "5f87e39be663e5558ee168517916289ffbaa2421d57512238a4f414211101939"
+      "sha256": "5a38af308f35df44ea2fb2adfcb34ed71336d263b0755d39209d696e8eeeeb61"
     }
   }
 }

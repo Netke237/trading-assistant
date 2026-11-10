@@ -1,12 +1,12 @@
 Skip to content
 BAMENDJOU
 Options Screener
-Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 9 · 09:11 PM
-COMPLETED · STARTED NOV 9 · 09:11 PM
+Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 10 · 05:41 AM
+COMPLETED · STARTED NOV 10 · 05:41 AM
 PENDING
-AFTER
+CLOSED
 ·
-3h 49m
+opens 15:30 CET
 Config OK · 10 checks
 Market Regime
 Universe
@@ -18,7 +18,7 @@ Contracts
 Trade Card
 ← Exit Workflow
 COMPLETED
-09:11 PM
+05:41 AM
 Options
 Stocks
 Pre-Breakout
@@ -250,7 +250,7 @@ Contract Qualification
 Alternative contracts (1)
 View chart
 Export JSON
-REC-1794258718828-3WFX
+REC-1794289271693-D472
 ←
 Back: Contracts
 STEP 7 OF 7
