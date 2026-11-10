@@ -1,0 +1,277 @@
+{
+  "capture_git_base": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+  "captured_source": "Frozen application working tree, rather than the base commit alone",
+  "verified_application_commit": "e98f4d88226b8c03004aaa0f58889914dcc8260a",
+  "independent_source_review_files": 58,
+  "application_source_pins": [
+    {
+      "path": "backend/app/routers/contracts.py",
+      "sha256": "56ee61b91615024c136f338c1d3b4d1e6678fb83c7810ca887e1a1b92c37eb82"
+    },
+    {
+      "path": "backend/app/scoring/first_passage.py",
+      "sha256": "176ba2316f7625d9e6161f9788744e42e92f70b196d2f0ee17903cffbc9e91a8"
+    },
+    {
+      "path": "backend/app/scoring/reprice_horizon.py",
+      "sha256": "9161b12db789664aa55fee5571ed51697af5a893a447865c8510c15ad04cd48b"
+    },
+    {
+      "path": "backend/app/scoring/reward_risk.py",
+      "sha256": "c3d2a550ddab7542816fb9322bd2ee14097eada7d4449c8292d0f6492096a316"
+    },
+    {
+      "path": "backend/app/scoring/stop_cost.py",
+      "sha256": "b81bed51bbc7986c3cf5ad453527506939725ce18d408531b11138daa11db6a3"
+    },
+    {
+      "path": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "sha256": "1eefb511795e6f3e531221d083e11fb2329e8029ef2630663ce92751e8d080fb"
+    },
+    {
+      "path": "frontend/app/(frame)/layout.tsx",
+      "sha256": "9027c40ecb45eb00087c70b95c215845fcb3503550300d20f4ccdd4289b08ebd"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/layout.tsx",
+      "sha256": "91ca75a87a3d3b798377891b58fb5cec067a33c294a30bc9211afab29a5469b8"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-7-trade-card/page.module.css",
+      "sha256": "d85a43b915dcde2c17753c415973252f350bc62e3eb446fee01e4735012b254c"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "sha256": "c7ddf913d3d952acb40ab33d94be886e2df9e293d325db1b33908b1a15018747"
+    },
+    {
+      "path": "frontend/components/MinWidthGate/index.tsx",
+      "sha256": "bf78a7bea76ec07e2374d85b8b3156f6398e03fccab0a586d1c01e60bba354ff"
+    },
+    {
+      "path": "frontend/components/atoms/ConfidenceBadge/index.tsx",
+      "sha256": "aa65baad8b3fe1e9a039b0c41795be15c2800f3385abd6d6b8b6524a78a8377f"
+    },
+    {
+      "path": "frontend/components/atoms/OpenChartButton/index.tsx",
+      "sha256": "3570dc04d497bb305eae547e7ba77d02f80bc302bd1ccb09c3af6dc763e5b36b"
+    },
+    {
+      "path": "frontend/components/atoms/ScoreBar/index.tsx",
+      "sha256": "ce22c51e9d2f97655fedad3a6deaee2c0b23149bb82d3dc4ef1d85589dc3e947"
+    },
+    {
+      "path": "frontend/components/atoms/StatusBadge/StatusBadge.module.css",
+      "sha256": "3a8d8967fc4e24f87bd2c786fd3321e11e8675498b3c5884c9c7c82f5be62c43"
+    },
+    {
+      "path": "frontend/components/atoms/StatusBadge/index.tsx",
+      "sha256": "688cf095d018c0216207ce15b7a9cabc9dd9a1df4f828235b8667704a3372813"
+    },
+    {
+      "path": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+      "sha256": "5aa92536c4be88c26d074ca1233c504c2d3e76da0f75b49133e9ab6889ce85c9"
+    },
+    {
+      "path": "frontend/components/molecules/CandidateNav/CandidateNav.module.css",
+      "sha256": "7763e9e1c446b8754a89dbb0b1b45c9f510a7359d177fdd0bb369b5646e9eba8"
+    },
+    {
+      "path": "frontend/components/molecules/CandidateNav/index.tsx",
+      "sha256": "e33e24425087740c3cddf93b6d1bba642e9e2f77be3b4c7a2fbddc95d5bff439"
+    },
+    {
+      "path": "frontend/components/molecules/ChartPanelHeader/index.tsx",
+      "sha256": "84e5dc7b3dc727d17f2fc99397db523b10216f9aafa78e0ee4cfe2c79d7b485c"
+    },
+    {
+      "path": "frontend/components/molecules/CollapsibleSection/CollapsibleSection.module.css",
+      "sha256": "592134babdca9e9c868792ca3f46ea413ff4f5de1e7466b7afdc280925ed104e"
+    },
+    {
+      "path": "frontend/components/molecules/CollapsibleSection/index.tsx",
+      "sha256": "2b96eac296d40b2fb05527b10b7317f4dc60f6f4651c2b0090155a2f3c586ba5"
+    },
+    {
+      "path": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+      "sha256": "6febf982fd9bf7a85584786fb1737f1623df5859985752511d6d6a4ec6eff35d"
+    },
+    {
+      "path": "frontend/components/molecules/MarketSentiment/index.tsx",
+      "sha256": "1e6bd115356effecade67be778e42e46182fa46696c2f4cb4671c580f8612eb7"
+    },
+    {
+      "path": "frontend/components/molecules/MethodCompareSelector/MethodCompareSelector.module.css",
+      "sha256": "80b370775e23337df72cd12456a5a76968cff7e1d901401977f52f0cf72bbecb"
+    },
+    {
+      "path": "frontend/components/molecules/MethodCompareSelector/index.tsx",
+      "sha256": "587e0d80ecedbdd4ba6771b814d11c334d89faa1b777734d53d087a3711b6c57"
+    },
+    {
+      "path": "frontend/components/molecules/MethodPickSelector/MethodPickSelector.module.css",
+      "sha256": "bef1473d9bd945c441aac6179b2057e9c0569f40a2edf29d7abf9892e46b5e04"
+    },
+    {
+      "path": "frontend/components/molecules/MethodPickSelector/index.tsx",
+      "sha256": "ed9207d22f927a1aa9ca8f25d49ed442ca0aa20b14387380e2cce6f6b70e2213"
+    },
+    {
+      "path": "frontend/components/molecules/ScoreCardPanel/index.tsx",
+      "sha256": "afeb75d3165e26c91b6c41ebfd43df5c692148a1165cb909f028ec8a21340c1a"
+    },
+    {
+      "path": "frontend/components/molecules/SymbolHeader/index.tsx",
+      "sha256": "527747af18fd9e5b5ac00f441e431179aa5b5c10012dc5fa1a2ad61e736b4c7a"
+    },
+    {
+      "path": "frontend/components/molecules/TradeCardQualification/index.tsx",
+      "sha256": "359a5ac7b3dfb171360ba363d1e3cd436a2a524a9118479db5ea1ea50f63abb8"
+    },
+    {
+      "path": "frontend/components/organisms/AutoTradeArm/index.tsx",
+      "sha256": "56704ce8826f15951121091184c8b258aa8f696d1a661d7a805b018601f99fd3"
+    },
+    {
+      "path": "frontend/components/organisms/BarrierRaceCard/BarrierRaceCard.module.css",
+      "sha256": "d8ebdb0adbc04c83ce83f7dd1a0afc3c7ed40ae36bed8b3e01bf3efecd8a92a5"
+    },
+    {
+      "path": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "sha256": "fae59cc4961a095bb7585a2f40c795028e7f2aad8e93a26c7fc837b1066eef06"
+    },
+    {
+      "path": "frontend/components/organisms/BrokerOrderReview/BrokerOrderReview.module.css",
+      "sha256": "65c6ee9a471679605b1cdcec5a33821d5b0decb00521503bee37bd1382652236"
+    },
+    {
+      "path": "frontend/components/organisms/BrokerOrderReview/index.tsx",
+      "sha256": "b573db2284acedcf1cb4d975678ebc09da36453a9eb180c8db9ff47939b548cc"
+    },
+    {
+      "path": "frontend/components/organisms/BrokerPicker/index.tsx",
+      "sha256": "774aa541e4f92688bd22c0dff9679516bac1ce5c28d596a60a0f4aad57806efe"
+    },
+    {
+      "path": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "sha256": "928ba35632f258d704385adc2eb428c8da0921dcc42c3cc6c53fcd801b6f2997"
+    },
+    {
+      "path": "frontend/components/organisms/InlineChartPanel/index.tsx",
+      "sha256": "e1b4e1fe5e3b9163152534572a82cee60d70559dd3fa899ae0a2f74b1a55c678"
+    },
+    {
+      "path": "frontend/components/organisms/NavRail/index.tsx",
+      "sha256": "9c86086bc04a88fa53cd3b1efc44127a7aa39d68b8e64761cee1671dca8484a2"
+    },
+    {
+      "path": "frontend/components/organisms/SendToBrokerDialog/SendToBrokerDialog.module.css",
+      "sha256": "5566c78c51540ba4bf54fb9d13505063123dc7da5daeb257f643d3786db8e714"
+    },
+    {
+      "path": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "sha256": "0b6b3736b777adde7b15dead090859a93ff90185ec432da6531d3e0b3e31648c"
+    },
+    {
+      "path": "frontend/components/organisms/StepNavBar/index.tsx",
+      "sha256": "1c551c09224a09743ac6cc43a4a23d92b371a073c28928ecf276820945c5c6a1"
+    },
+    {
+      "path": "frontend/components/organisms/SubmissionReview/SubmissionReview.module.css",
+      "sha256": "5d056a6cb13d6231885c3ec0bf65bf9c4673a445402547bbd9c3fe2880aee885"
+    },
+    {
+      "path": "frontend/components/organisms/SubmissionReview/index.tsx",
+      "sha256": "0783f93775e816ee2cd1f1bed20660b3fc288c23872741298bf4252a9a06b475"
+    },
+    {
+      "path": "frontend/components/organisms/TradeCard/TradeCard.module.css",
+      "sha256": "ceea9a30ee7c86f37f7b777879ebc77e3018c9953adb40d1c7087c4f043fd72b"
+    },
+    {
+      "path": "frontend/components/organisms/TradeCard/index.tsx",
+      "sha256": "7c3e79761db21f6f583db7f7a40bb2166fbea7a818dcc59e9bac20aff739f070"
+    },
+    {
+      "path": "frontend/lib/alertEngine.ts",
+      "sha256": "3c48a76d8b5fb79600c331d19429a9efdaca2a9fe68f3edcc0e60aee3863e62c"
+    },
+    {
+      "path": "frontend/lib/barrierRace.ts",
+      "sha256": "85ca787080952fdccda04ecd5c1b30a39e1dc383446d2440d8e44bc25d0813b4"
+    },
+    {
+      "path": "frontend/lib/confidenceText.ts",
+      "sha256": "1c4dc3c7c5d71b11cea877a7962fb5f6222fcd65d493296d2bfaad15e7ab8014"
+    },
+    {
+      "path": "frontend/lib/directOrder.ts",
+      "sha256": "b25ed338663e74bb2b662ea81d0c4f090a873c5b0e0bb314051c5294453bc75b"
+    },
+    {
+      "path": "frontend/lib/exitPlanLabels.ts",
+      "sha256": "8121b14db8f450f9facdeccc68325675ce60d532a82353891beb79b166e4b275"
+    },
+    {
+      "path": "frontend/lib/ivBasis.ts",
+      "sha256": "bd977f5a35705784fe3bad5c01fbb2e72a946ba5a430b304a7ffd362ef1697f6"
+    },
+    {
+      "path": "frontend/lib/portfolioTotals.ts",
+      "sha256": "8eac651fb72bf5bbf1de14b48316820ccb7a93ff7052f7c791832ca0c4ed05bb"
+    },
+    {
+      "path": "frontend/lib/premiumStop.ts",
+      "sha256": "41d666e8045f45785c89cb3a073adb0df2d503a0e6805a75d7d88588464a8bed"
+    },
+    {
+      "path": "frontend/lib/quoteWarning.ts",
+      "sha256": "539c760dfd53de37af333a97f422e8ab866dc6dd2716f24d69fb8684c6d86a81"
+    },
+    {
+      "path": "frontend/lib/regimeDuration.ts",
+      "sha256": "0de1bbac9a2f168dcf44b6e2ad615704602bb4fb0c053282e521d12db58aa692"
+    },
+    {
+      "path": "frontend/lib/risk.ts",
+      "sha256": "f6a2e75175b691be7e3cfd43e8ef29711326edf90b35a9f7ac911dbc96902531"
+    },
+    {
+      "path": "frontend/lib/scoreDetailText.ts",
+      "sha256": "79fbebe0304f2ae6de98e9b2078be054c31e117ab504d0106f31e5572577f0d2"
+    },
+    {
+      "path": "frontend/lib/status.ts",
+      "sha256": "7b62874d49d2153c9d73bafdc6bd3036c29ef0d1e75afe0ba06f425bcbc9841d"
+    },
+    {
+      "path": "frontend/lib/statusTooltips.ts",
+      "sha256": "0fa3b3d99acf2372b77a378b2aecb9693b1b991e3617e1e1820fe4a710696902"
+    },
+    {
+      "path": "frontend/lib/tradeCardEdits.ts",
+      "sha256": "173183c0b9649eadc915a843f003fb4bc1e18b1a438ad9718a4e90e88959632b"
+    },
+    {
+      "path": "frontend/styles/disclosure.module.css",
+      "sha256": "61bd72c6cc7ecfad32393bb7242e389729706191ec09fc57ffde53031eda2639"
+    }
+  ],
+  "reports": {
+    "layout": {
+      "runs": 6,
+      "assertions": 126,
+      "sha256": "5eeb1c5aa4a1e33950e63e42887fe9f1ec0814ca256bae760b92957906246b2c"
+    },
+    "states": {
+      "runs": 6,
+      "assertions": 642,
+      "sha256": "9ba799cc674835b3c8afdcb9ea77a5086f4dd4a469f3b9d190f35f1c40488876"
+    },
+    "reviews": {
+      "runs": 6,
+      "assertions": 192,
+      "sha256": "5f87e39be663e5558ee168517916289ffbaa2421d57512238a4f414211101939"
+    }
+  }
+}

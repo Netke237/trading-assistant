@@ -1,0 +1,293 @@
+Skip to content
+BAMENDJOU
+Options Screener
+Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 9 · 09:13 PM
+COMPLETED · STARTED NOV 9 · 09:13 PM
+PENDING
+AFTER
+·
+3h 46m
+Config OK · 10 checks
+Market Regime
+Universe
+Direction + Horizon
+Stock Ranking
+Vol + Events
+Contracts
+7
+Trade Card
+← Exit Workflow
+COMPLETED
+09:13 PM
+Options
+Stocks
+Pre-Breakout
+STEP 7 OF 7
+Trade Card
+How this page works
+Market Sentiment
+Swing · Daily
+Conviction
++73%
+Bullish — Measured market context for this horizon.
+State Bullish · sticky 73% · ≈12 strides
+Alignment
+OMM/HMM Aligned
+Fundamental Health
+74
+Strong quality · Low risk
+Growth
+80
+Quality
+75
+Risk
+65
+High debt
+Score definitions & safety flags
+‹ Previous
+·
+AAPL
+1 / 2
+·
+Next ›
+☆ Pin to basket
+Basket — empty
+UNDERLYING
+📈
+AAPL
+Apple Inc.
+$185.20
+PASS
+BULLISH
+Edited
+Final Status
+PASS
+SELECTED CONTRACT
+$185 Call
+Expires 18 December 2026
+75 days to expiry · Option mid $2.15 / share
+Contract Details
+Contract snapshot
+·
+AAPL|185|2026-12-18|C
+Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.
+Strike
+$185
+Expiry
+2026-12-18
+Right
+Call
+Mid
+$2.15
+Delta
+0.52
+Theta / day
+−$0.05
+IV
+42.0%
+DTE
+75d
+Capital at risk
+$215
+›
+Stock Qualification
+82/100 · PASS · backtested confidence 72%
+Exit Plan
+Invalidation · stock price
+EDITABLE
+$180.00
+Premium stop · loss / share
+EDITABLE
+$0.80
+37.21% loss
+Remaining: $1.35/share · $135.00 / contract
+Loss: $80.00 / contract
+Time exit
+3 days to expiry
+Alert at ≤3 DTE · no automatic close
+Exit Plan explanation · stop basis, premium & time exit
+Profit-target methods
+Monte Carlo
+Arithmetic
+Ladder
+Compare
+Display only — switching or comparing runs no calculation and does not change the decision’s exit method or the order and exit fields. Each card keeps its own source, valuation basis and freshness; the methods are independent and can disagree.
+Monte Carlo Profit Target
+Your percentage targets
+T1 profit %
+EDITABLE
+T2 profit %
+EDITABLE
+T3 profit %
+EDITABLE
+Run Monte Carlo Estimate
+Same-estimate echoed premium
+$2.15/share
+Stop context · simulation inputs and barrier-time race values
+Stock barrier (run input)
+Unavailable — run or re-run estimate to confirm barriers
+Option-price barrier (run input)
+Unavailable — run or re-run estimate to confirm barriers
+Option value at stock stop (barrier time)
+Unavailable — run or re-run estimate to confirm barriers
+Loss at stock stop (barrier time, per contract)
+Unavailable — run or re-run estimate to confirm barriers
+Target	Stock price	Option value	Probability
+(independent touch)
+	Conditional time
+(calendar days)
+	Est. dollar outcome
+T20%	$195.00	$2.58	50%	~7d	$43.00
+T35%	$199.00	$2.90	40%	~10d	$75.00
+T50%	$203.00	$3.22	30%	~13d	$107.00
+Probability counts each target's touch on its own, so rows can sum past 100%; time is the conditional median. Outcome: 1 contracts × 100 shares, full exit, before costs.
+Barrier Race · graphical outcomes & details
+Monte Carlo model, inputs & provenance
+Arithmetic Profit Target
+Structure + ATR · Bullish
+Compute Arithmetic Plan
+Calculation premium used
+$2.15/share
+Stop context · calculated stop and current-time stop cost
+Calculated stock stop
+$180.00 · atr_widened
+Option-price threshold (shared Exit Plan premium stop)
+$1.35/share
+Option value at stock stop (current time)
+$0.65/share
+Loss at stock stop (current time, per contract)
+$150.00/contract
+Restored Arithmetic calculation · 21:13.
+This stop price is not automatically monitored by alerts unless copied into the position's stop field after opening.
+Black–Scholes at current expiry; differs from barrier-time race pricing. Exit Plan unchanged.
+Target	Stock price
+(resolved target)
+	Option value	Probability
+(before expiry)
+	Conditional time
+(calendar days)
+	Est. dollar outcome
+2:1	$195.00	$3.70	50%	~9d	$155.00
+3:1	$200.00	$4.70	40%	~13d	$255.00
+Stock price is the resolved target; probability is a touch before expiry; time is the conditional median. Outcome: 1 contracts × 100 shares, full exit, before commissions.
+Original targets, snap geometry & pricing model
+Arithmetic basis, inputs & provenance
+›
+Fixed % Ladder Plan
+Sell-to-Close Plan
+Editable order entry (outcome and R:R basis)
+$2.10/share
+R/R risk: full premium (no protective stop order).
+Stop context · shared Exit Plan settings (not Ladder calculations)
+Exit Plan stock invalidation
+$180.00 stock
+Exit Plan premium-stop option threshold
+$1.35/share
+Ladder option value at stock stop
+Not calculated — the Ladder does not price its stock stop
+Ladder loss at stock stop
+Not calculated — the Ladder does not price its stock stop
+Source: shared Exit Plan Invalidation field — the execution stock stop, set in Exit Plan.
+Source: shared Exit Plan Premium stop — premium basis $2.15/share · live mid minus loss $0.80/share; the option value at which the premium-stop alert fires.
+Target	Stock price
+(editable)
+	Option value
+(est. per share)
+	Probability	Conditional time
+(calendar days)
+	Full-position outcome
+(1 contracts × 100 shares)
+	Rung outcome
+
+TP1
+PENDING
+	$194.25	$3.50	Not supplied	Not supplied	$140.00	$140.00
+1 contracts × 100 shares
+
+
+TP2
+PENDING
+	$195.00	$4.20	Not supplied	Not supplied	$210.00	$210.00
+1 contracts × 100 shares
+Scan-plan targets and stored option estimates. Edited stock targets use the existing local approximation; editing does not run a pricing model. Restored method choices are shown in the decision section below.
+Dollar outcomes compare each alternative exit with the editable entry limit, using displayed premiums rounded to cents. Full-position exits and rung allocations are separate; do not add alternative outcomes.
+Ladder R:R, allocation & pricing
+Entry & position size
+Existing fields
+Limit
+EDITABLE
+$2.10
+Order type Limit · Max fill $2.20
+Contracts
+EDITABLE
+1
+Full-premium exposure
+$215
+Max loss budget
+$3,750
+Account default
+Risk-derived size & budget override
+Decision & execution
+Exit method for this trade
+Ladder
+Arithmetic
+Monte Carlo
+Barrier Race
+Monte Carlo: Estimate not re-run this session · Barrier Race: Barriers moved since the estimate
+Judged on
+Stock stop
+Premium stop
+A record of which stop this trade was judged on. It does not change which alerts fire — the stock stop and the premium stop both keep firing exactly as they do today.
+Your selected target
+Not re-run this session — click Estimate to price these targets against the current premium.
+Chosen method
+Not selected — latest-calculation fallback is not a choice
+Not selected — choose a method and a target row to see that target’s estimates.
+Contracts
+1
+Recorded decision details
+Review the single Exit Plan ↑ — selecting a method or target does not replace those settings or run a calculation.
+What Track basket and direct sends will submit
+Execute via
+IBKR Paper
+Tradier Paper
+NOT CONFIGURED
+Tastytrade Paper
+NOT CONFIGURED
+Track basket
+Entry basis is provisional — the server re-quotes at save; saved entry, quantity, premium-stop fraction and effective target alert remain unresolved until server review. Not a fill.
+Exit settings are in-app alerts; no protective stop-loss or take-profit order is sent to a broker.
+Sending stays blocked until a method is chosen.
+Live mid: $2.15
+Live stock: $185.20
+›
+Contract Qualification
+78/100 · PASS
+›
+Alternative contracts (1)
+View chart
+Export JSON
+REC-1794258819482-O27T
+←
+Back: Contracts
+STEP 7 OF 7
+Done
+→
+PRE-TRADE CHECKLIST · AAPL
+Gates for this candidate. Portfolio-level checks live below.
+IV acceptable
+Score ≥ 55
+R:R ≥ 2.0
+Spread < 5% of price
+HISTORICAL ANALOGS
+Not yet available.
+WATCHLIST · TOP 5
+PORTFOLIO
+Positions
+0
+Deployed
+$0
+Open P&L
+$0
+Winners
+0 / 0

@@ -1,0 +1,2414 @@
+{
+ "states": [
+  "initial",
+  "calculated",
+  "mc+arithmetic",
+  "barrier-race",
+  "selected-target"
+ ],
+ "baseUrl": "http://127.0.0.1:3098/",
+ "runs": [
+  {
+   "width": 1200,
+   "theme": "dark",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"arithmetic\"],[\"monte_carlo\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 632
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 632
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1447,
+       "left": 244,
+       "width": 632,
+       "height": 749
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1464
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1511
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1629
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1868
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [
+      "THEAD. 81>1 hidden",
+      "TR. 81>1 visible",
+      "TH. 39>16 visible",
+      "TH. 38>16 visible",
+      "TH. 35>16 visible",
+      "TH. 51>16 visible",
+      "TH. 43>16 visible",
+      "TH. 43>16 visible",
+      "TH. 34>16 visible",
+      "TH. 50>16 visible",
+      "TH. 52>16 visible",
+      "THEAD. 44>1 hidden"
+     ],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 659.234375,
+      "right": 832.046875,
+      "width": 172.8125
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 876
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 598,
+     "wrapperWidth": 598,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 564,
+     "wrapperWidth": 564,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 564,
+     "wrapperWidth": 564,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 598,
+     "wrapperWidth": 598,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 632,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 459.109375,
+     "width": 632,
+     "height": 3448.3125,
+     "bottom": 3907.421875
+    },
+    "methods": {
+     "x": 244,
+     "y": 1343.546875,
+     "width": 632,
+     "height": 852.484375,
+     "bottom": 2196.03125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2482.546875,
+     "width": 632,
+     "height": 1174.28125,
+     "bottom": 3656.828125
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 2212.03125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2889.25,
+     "height": 344.828125
+    },
+    {
+     "label": "actions",
+     "top": 3344.703125,
+     "height": 111.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  },
+  {
+   "width": 1200,
+   "theme": "light",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"arithmetic\"],[\"monte_carlo\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 632
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 632
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1447,
+       "left": 244,
+       "width": 632,
+       "height": 749
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1464
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1511
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1629
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1447,
+        "top": 1868
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [
+      "THEAD. 81>1 hidden",
+      "TR. 81>1 visible",
+      "TH. 39>16 visible",
+      "TH. 38>16 visible",
+      "TH. 35>16 visible",
+      "TH. 51>16 visible",
+      "TH. 43>16 visible",
+      "TH. 43>16 visible",
+      "TH. 34>16 visible",
+      "TH. 50>16 visible",
+      "TH. 52>16 visible",
+      "THEAD. 44>1 hidden"
+     ],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 598,
+       "children": [
+        52,
+        82,
+        90,
+        129,
+        114,
+        131
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 659.234375,
+      "right": 832.046875,
+      "width": 172.8125
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 876
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 598,
+     "wrapperWidth": 598,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 564,
+     "wrapperWidth": 564,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 564,
+     "wrapperWidth": 564,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 598,
+     "wrapperWidth": 598,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 632,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 459.109375,
+     "width": 632,
+     "height": 3448.3125,
+     "bottom": 3907.421875
+    },
+    "methods": {
+     "x": 244,
+     "y": 1343.546875,
+     "width": 632,
+     "height": 852.484375,
+     "bottom": 2196.03125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2482.546875,
+     "width": 632,
+     "height": 1174.28125,
+     "bottom": 3656.828125
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 2212.03125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2889.25,
+     "height": 344.828125
+    },
+    {
+     "label": "actions",
+     "top": 3344.703125,
+     "height": 111.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  },
+  {
+   "width": 1366,
+   "theme": "dark",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"monte_carlo\",\"arithmetic\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 391
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 391
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1270,
+       "left": 244,
+       "width": 798,
+       "height": 681
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1287
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1334
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1451
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1623
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 808.875,
+      "right": 1010.484375,
+      "width": 201.609375
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 1042
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 357,
+     "wrapperWidth": 357,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 323,
+     "wrapperWidth": 323,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 323,
+     "wrapperWidth": 323,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 357,
+     "wrapperWidth": 357,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 798,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 459.109375,
+     "width": 798,
+     "height": 2886.953125,
+     "bottom": 3346.0625
+    },
+    "methods": {
+     "x": 244,
+     "y": 1183.65625,
+     "width": 798,
+     "height": 767.421875,
+     "bottom": 1951.078125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2237.59375,
+     "width": 798,
+     "height": 857.875,
+     "bottom": 3095.46875
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 1967.078125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2303.59375,
+     "height": 386.515625
+    },
+    {
+     "label": "actions",
+     "top": 2783.34375,
+     "height": 111.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  },
+  {
+   "width": 1366,
+   "theme": "light",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"monte_carlo\",\"arithmetic\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 391
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 391
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1270,
+       "left": 244,
+       "width": 798,
+       "height": 681
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1287
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1334
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1451
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1270,
+        "top": 1623
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 764,
+       "children": [
+        67,
+        105,
+        115,
+        164,
+        146,
+        167
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 808.875,
+      "right": 1010.484375,
+      "width": 201.609375
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 1042
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 357,
+     "wrapperWidth": 357,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 323,
+     "wrapperWidth": 323,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 323,
+     "wrapperWidth": 323,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 357,
+     "wrapperWidth": 357,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 798,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 459.109375,
+     "width": 798,
+     "height": 2886.953125,
+     "bottom": 3346.0625
+    },
+    "methods": {
+     "x": 244,
+     "y": 1183.65625,
+     "width": 798,
+     "height": 767.421875,
+     "bottom": 1951.078125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2237.59375,
+     "width": 798,
+     "height": 857.875,
+     "bottom": 3095.46875
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 1967.078125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2303.59375,
+     "height": 386.515625
+    },
+    {
+     "label": "actions",
+     "top": 2783.34375,
+     "height": 111.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  },
+  {
+   "width": 1920,
+   "theme": "dark",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"monte_carlo\",\"arithmetic\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 668
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 668
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1188,
+       "left": 244,
+       "width": 1352,
+       "height": 629
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1205
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1252
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1370
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1507
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 1197.5,
+      "right": 1399.109375,
+      "width": 201.609375
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 1596
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 634,
+     "wrapperWidth": 634,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 600,
+     "wrapperWidth": 600,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 600,
+     "wrapperWidth": 600,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 634,
+     "wrapperWidth": 634,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 1352,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 435.171875,
+     "width": 1352,
+     "height": 2670.015625,
+     "bottom": 3105.1875
+    },
+    "methods": {
+     "x": 244,
+     "y": 1102.03125,
+     "width": 1352,
+     "height": 715.25,
+     "bottom": 1817.28125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2103.796875,
+     "width": 1352,
+     "height": 750.796875,
+     "bottom": 2854.59375
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 1833.28125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2169.796875,
+     "height": 344.828125
+    },
+    {
+     "label": "actions",
+     "top": 2607.859375,
+     "height": 63.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  },
+  {
+   "width": 1920,
+   "theme": "light",
+   "results": [
+    "initial load runs no Monte Carlo or Arithmetic calculation",
+    "initial: no horizontal page overflow",
+    "initial: cards sharing a row have equal height",
+    "initial: slot header aligned across a row (max offset 0px)",
+    "initial: slot basis aligned across a row (max offset 0px)",
+    "initial: slot stop aligned across a row (max offset 0px)",
+    "initial: slot targets aligned across a row (max offset 0px)",
+    "initial: no target table spills outside its card",
+    "initial: rows [[\"monte_carlo\"]]; scrolling tables []",
+    "Monte Carlo alone on initial load",
+    "initial explanatory details closed",
+    "complete time-exit threshold fits inside Exit Plan",
+    "mc+arithmetic: no horizontal page overflow",
+    "mc+arithmetic: cards sharing a row have equal height",
+    "mc+arithmetic: slot header aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot basis aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot stop aligned across a row (max offset 0px)",
+    "mc+arithmetic: slot targets aligned across a row (max offset 0px)",
+    "mc+arithmetic: no target table spills outside its card",
+    "mc+arithmetic: rows [[\"monte_carlo\",\"arithmetic\"]]; scrolling tables []",
+    "record, size, submission, execution and race assumptions default closed"
+   ],
+   "layout": {
+    "initial-tables": [],
+    "mc+arithmetic-tables": [
+     {
+      "name": "Monte Carlo targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price",
+       "Option value",
+       "Probability (independent touch)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 3,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 668
+     },
+     {
+      "name": "Arithmetic targets",
+      "present": true,
+      "heads": [
+       "Target",
+       "Stock price (resolved target)",
+       "Option value",
+       "Probability (before expiry)",
+       "Conditional time (calendar days)",
+       "Est. dollar outcome"
+      ],
+      "rows": 2,
+      "scrolls": false,
+      "overflowCard": false,
+      "cardWidth": 668
+     }
+    ],
+    "current": {
+     "state": "current",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "monte_carlo",
+       "top": 1188,
+       "left": 244,
+       "width": 1352,
+       "height": 629
+      }
+     ],
+     "cardRows": [
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1205
+       }
+      ],
+      "basis": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1252
+       }
+      ],
+      "stop": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1370
+       }
+      ],
+      "targets": [
+       {
+        "method": "monte_carlo",
+        "row": 1188,
+        "top": 1507
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "table": true,
+       "rowWidth": 1318,
+       "children": [
+        115,
+        181,
+        198,
+        284,
+        252,
+        288
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "mcTableOverflow": [
+      false
+     ],
+     "editable": {
+      "count": 7,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "Exit Plan explanation · stop basis, premium & time exit",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Barrier Race · graphical outcomes & details",
+       "open": false
+      },
+      {
+       "summary": "Three barriers & assumptions",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      },
+      {
+       "summary": "Monte Carlo model, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Original targets, snap geometry & pricing model",
+       "open": false
+      },
+      {
+       "summary": "Arithmetic basis, inputs & provenance",
+       "open": false
+      },
+      {
+       "summary": "Ladder R:R, allocation & pricing",
+       "open": false
+      },
+      {
+       "summary": "Risk-derived size & budget override",
+       "open": false
+      },
+      {
+       "summary": "Recorded decision details",
+       "open": false
+      },
+      {
+       "summary": "What Track basket and direct sends will submit",
+       "open": false
+      },
+      {
+       "summary": "Technical details and provenance",
+       "open": false
+      },
+      {
+       "summary": "Execution requirements, tracking & auto-trade",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "›Stock Qualification82/100 · PASS · back",
+       "expanded": "false"
+      },
+      {
+       "text": "›Contract Qualification78/100 · PASS",
+       "expanded": "false"
+      },
+      {
+       "text": "›Alternative contracts (1)",
+       "expanded": "false"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/stock-scan/last-run",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+   ],
+   "timeBounds": {
+    "text": "3 days to expiry",
+    "bounds": [
+     {
+      "left": 1197.5,
+      "right": 1399.109375,
+      "width": 201.609375
+     }
+    ],
+    "section": {
+     "left": 244,
+     "right": 1596
+    },
+    "visible": true
+   },
+   "comparisonTables": [
+    {
+     "name": "Monte Carlo targets",
+     "tableWidth": 634,
+     "wrapperWidth": 634,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race outcomes",
+     "tableWidth": 600,
+     "wrapperWidth": 600,
+     "scrolls": false
+    },
+    {
+     "name": "Barrier Race barriers",
+     "tableWidth": 600,
+     "wrapperWidth": 600,
+     "scrolls": false
+    },
+    {
+     "name": "Arithmetic targets",
+     "tableWidth": 634,
+     "wrapperWidth": 634,
+     "scrolls": false
+    }
+   ],
+   "sectionBounds": {
+    "title": {
+     "x": 244,
+     "y": 142.9375,
+     "width": 1352,
+     "height": 28.796875,
+     "bottom": 171.734375
+    },
+    "card": {
+     "x": 244,
+     "y": 435.171875,
+     "width": 1352,
+     "height": 2670.015625,
+     "bottom": 3105.1875
+    },
+    "methods": {
+     "x": 244,
+     "y": 1102.03125,
+     "width": 1352,
+     "height": 715.25,
+     "bottom": 1817.28125
+    },
+    "decision": {
+     "x": 244,
+     "y": 2103.796875,
+     "width": 1352,
+     "height": 750.796875,
+     "bottom": 2854.59375
+    }
+   },
+   "captureRevision": "39db95a807c806bdbbf30fa17b0a854988d8ae3c",
+   "scope": "Approved remaining preview layout; source frozen, no real writes",
+   "previewPanels": [
+    {
+     "label": "Entry & position size",
+     "top": 1833.28125,
+     "height": 254.515625
+    },
+    {
+     "label": "Selected target review",
+     "top": 2169.796875,
+     "height": 344.828125
+    },
+    {
+     "label": "actions",
+     "top": 2607.859375,
+     "height": 63.328125
+    }
+   ],
+   "disclosureDefaults": [
+    {
+     "summary": "Three barriers & assumptions",
+     "open": false
+    },
+    {
+     "summary": "Risk-derived size & budget override",
+     "open": false
+    },
+    {
+     "summary": "Recorded decision details",
+     "open": false
+    },
+    {
+     "summary": "What Track basket and direct sends will submit",
+     "open": false
+    },
+    {
+     "summary": "Execution requirements, tracking & auto-trade",
+     "open": false
+    }
+   ]
+  }
+ ]
+}
