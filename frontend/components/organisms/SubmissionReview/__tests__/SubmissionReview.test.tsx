@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { render, screen, within } from '@testing-library/react';
-import { SubmissionReview } from '@/components/organisms/SubmissionReview';
+import { SubmissionReview, SubmissionReviewWarnings } from '@/components/organisms/SubmissionReview';
 import { buildSubmissionDraft, type SubmissionInputs } from '@/lib/submissionDraft';
 import type { ExitPlan, MethodPick, TradeCardData } from '@/types/domain';
 
@@ -187,5 +187,35 @@ describe('SubmissionReview — concise destination-first arrangement (#609)', ()
     const region = screen.getByRole('region', { name: 'Submission review' });
     expect(region).not.toHaveTextContent(/Final Recommendation/);
     expect(within(details()).getByText(/Your selected target/)).toBeInTheDocument();
+  });
+});
+
+
+describe('#610 notices outside the closed inline transport detail', () => {
+  it('keeps provisional/server resolution, missing-selection and route refusals visible', () => {
+    const draft = buildSubmissionDraft(inputs({ invalidation: null, pick: null }), { broker: 'tastytrade_paper', globalPremiumStopPct: 0.6 });
+    const { container } = render(<>
+      <details><summary>Request detail</summary><SubmissionReview draft={draft} generation={1} /></details>
+      <SubmissionReviewWarnings draft={draft} />
+    </>);
+    const notices = within(container.querySelector('[data-submission-notices]') as HTMLElement);
+    for (const pattern of [/Entry basis is provisional/, /Exit settings are in-app alerts; no protective stop-loss or take-profit order/, /Sending stays blocked until a method is chosen/, /Missing — sending is blocked until a stock stop is set/, /Right Now — Market refused before sending/]) {
+      expect(notices.getByText(pattern)).toBeVisible();
+    }
+    expect(container.querySelector('details')).not.toHaveAttribute('open');
+  });
+
+  it('keeps spread and race fallback scope visible without borrowing a stock target', () => {
+    const spread: TradeCardData = {
+      ...card, spreadType: 'bear_put',
+      legs: [
+        { action: 'BUY', qty: 1, strike: 150, right: 'P', expiry: '2026-05-15', bid: 2.4, ask: 2.6 },
+        { action: 'SELL', qty: 1, strike: 145, right: 'P', expiry: '2026-05-15', bid: 1.1, ask: 1.3 },
+      ],
+    };
+    const draft = buildSubmissionDraft(inputs({ card: spread, pick: pick({ method: 'barrier_race', rowStockPrice: null, rowOptionPrice: 7.25 }) }), { broker: null, globalPremiumStopPct: 0.6 });
+    render(<SubmissionReviewWarnings draft={draft} />);
+    expect(screen.getByText(/only the selected contract is submitted/)).toBeVisible();
+    expect(screen.getByText(/Barrier Race rows carry an option premium and no stock level/)).toBeVisible();
   });
 });

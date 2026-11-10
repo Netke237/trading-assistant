@@ -93,6 +93,29 @@ describe('BrokerOrderReview — concise destination-first arrangement (#609)', (
     expect(inside.getByTestId('broker-request').textContent).toBe(JSON.stringify(data().request));
   });
 
+  it.each([
+    ['DU123', 'DU123', 'As entered in Settings → Brokers; the server sends with its stored credentials and does not echo the account'],
+    [null, 'Not set', 'Not set in Settings → Brokers; the server sends with its stored credentials'],
+  ])('keeps account %s concise while retaining the credential explanation in technical details', (account, value, explanation) => {
+    const { r, region } = show(data({ account }));
+    const dest = within(r.getByRole('group', { name: 'Destination and request' }));
+    expect(dd(dest, 'Account')).toHaveTextContent(new RegExp(`^${value}$`));
+    expect(dd(dest, 'Account')).toBeVisible();
+    const technical = detailsOf(region);
+    expect(technical.open).toBe(false);
+    expect(within(technical).getByText(explanation!)).not.toBeVisible();
+    fireEvent.click(within(technical).getByText('Technical details · exact broker request'));
+    expect(within(technical).getByText(explanation!)).toBeVisible();
+  });
+
+  it('makes the outlay estimate easy to scan and keeps the limit-fill qualification visible', () => {
+    const { r } = show();
+    const dest = within(r.getByRole('group', { name: 'Destination and request' }));
+    const outlay = within(dd(dest, 'Premium outlay (estimate)'));
+    expect(outlay.getByText('Up to $500.00', { exact: true })).toBeVisible();
+    expect(outlay.getByText(/2 × limit × 100; a buy limit fills at or below it, if at all \(estimate\)/)).toBeVisible();
+  });
+
   it('keeps the changed-since-review and server-change warnings visible and still blocks sending', () => {
     const { r, region, onConfirm, onRefresh } = show(data({ changedSinceReview: ['Tracked entry price'] }), ['limitPrice']);
     const changed = r.getByText(/The server values changed since your review/);

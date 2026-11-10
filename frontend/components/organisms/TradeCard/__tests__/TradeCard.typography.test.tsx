@@ -159,10 +159,11 @@ describe('G15 — editable fields carry an Editable tag', () => {
       .find((el) => el.classList.contains('toneSecondary'))!.closest('[class*="kvRow"]') as HTMLElement;
     expect(within(row(exit, 'Invalidation')).getByText('Editable')).toHaveClass('toneAccent');
     expect(within(row(exit, 'Premium stop')).getByText('Editable')).toBeInTheDocument();
-    const order = screen.getByRole('region', { name: 'Order Entry' });
-    expect(within(row(order, 'Limit')).getByText('Editable')).toBeInTheDocument();
-    expect(within(row(order, 'Contracts')).getByText('Editable')).toBeInTheDocument();
-    expect(within(row(order, 'Max fill')).queryByText('Editable')).not.toBeInTheDocument();
-    expect(within(row(order, 'Order type')).queryByText('Editable')).not.toBeInTheDocument();
+    const entry = screen.getByRole('region', { name: 'Entry & position size' });
+    expect(within(row(entry, 'Limit')).getByText('Editable')).toBeInTheDocument();
+    expect(within(row(entry, 'Contracts')).getByText('Editable')).toBeInTheDocument();
+    const orderFacts = within(entry).getByText(/Order type Limit · Max fill \$2\.63/);
+    expect(within(orderFacts).queryByText('Editable')).not.toBeInTheDocument();
+    expect(orderFacts.closest('[data-editable], [role="button"]')).toBeNull();
   });
 });

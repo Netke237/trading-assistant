@@ -17,6 +17,9 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
+  fireEvent.click(screen.getByText('Recorded decision details'));
+  const transport = screen.queryByText('What Track basket and direct sends will submit');
+  if (transport) fireEvent.click(transport);
   return view;
 };
 
@@ -105,4 +108,15 @@ describe('the decision section hosts the submission review', () => {
     expect(summary.getByText('Estimated dollar outcome (full position, before costs)').parentElement!)
       .toHaveTextContent('Unavailable — no matched calculation premium basis');
   });
+});
+
+it('starts inline transport review closed and keeps chart/export in the footer', () => {
+  renderCard(<TradeCard data={card()} submissionReview={<section aria-label="Submission review">REVIEW</section>} />);
+  const disclosure = final().getByText('What Track basket and direct sends will submit').closest('details')!;
+  expect(disclosure).not.toHaveAttribute('open');
+  expect(screen.getByText('REVIEW')).not.toBeVisible();
+  fireEvent.click(final().getByText('What Track basket and direct sends will submit'));
+  expect(screen.getByText('REVIEW')).toBeVisible();
+  expect(final().queryByRole('button', { name: /export json/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /export json/i })).toBeVisible();
 });

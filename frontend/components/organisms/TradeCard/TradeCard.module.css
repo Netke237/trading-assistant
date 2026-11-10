@@ -682,24 +682,10 @@
 .methodCardSlot { display: contents; }
 .methodCardSlot[hidden] { display: none; }
 
-/* #607 — the Ladder's seven-column table needs a card about 490px wide
-   (table ~455px plus the card's side padding); narrower, its outcome columns
-   would hide behind the table's sideways scroll. So a row is shared with the
-   Ladder only when every card in it gets at least ~500px:
-   - two methods including the Ladder: side by side only from 1024px of
-     results width (2 × 504px + gap); below that the two cards stack, each
-     taking the full width;
-   - all three methods: three per row only from 1541px (3 × 503px + gaps);
-     below that the grid holds at most two per row and the Ladder (last)
-     wraps onto a row of its own, which it takes in full.
-   Cards that do share a row keep the subgrid's equal heights and aligned
-   slots. Monte Carlo + Arithmetic is unaffected. */
+/* All two-method combinations share the same minimum card width. Tables
+   scroll within their own card when needed; with three methods the Ladder
+   can still wrap onto a full-width row. */
 .methodResults { container-type: inline-size; }
-@container (max-width: 1023px) {
-  .methodGrid[data-compare-count="2"][data-compare-ladder] {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 @container (max-width: 1540px) {
   .methodGrid[data-compare-count="3"] {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, max(360px, 34%)), 1fr));
@@ -889,6 +875,14 @@
   align-items: flex-start;
   gap: var(--space-2);
 }
+.exitEssentials .editLabel > :first-child,
+.exitEssentials .editLabel > :first-child > span,
+.exitColumn > .kvRow:not(.kvRowEditable) > :first-child,
+.entryColumns .editLabel > :first-child,
+.entryColumn .kvRow:not(.kvRowEditable) > :first-child,
+[data-method-card] .methodSlot[data-slot='basis'] .kvRow > :first-child {
+  color: var(--text-primary);
+}
 
 .exitColumn > .kvRow > .editValue,
 .exitColumn > .kvRow > .editValue > span,
@@ -1017,6 +1011,7 @@
   gap: var(--space-3);
 }
 .mcStopGrid > div { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.mcStopGrid .kvRow > :first-child { color: var(--text-primary); }
 
 .mcTableScroll {
   max-width: 100%;
@@ -1054,7 +1049,7 @@
    on a shaded row. Headers may wrap between words; a long qualifier sits on
    its own smaller second line (.thSub). */
 .mcTargetTable thead th {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-base) 50%, var(--bg-surface));
   font-size: 11px;
   font-weight: 400;
@@ -1219,4 +1214,69 @@
 .ladderCard > button[aria-expanded='true'] {
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: var(--space-3);
+}
+
+/* Entry stays one compact panel at the real app-shell width. */
+.handling {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.entryColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.entryColumn {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.entryColumn .kvRowEditable {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.entryColumn .editValue,
+.entryColumn .editInput {
+  width: 150px;
+  max-width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 2px var(--space-2);
+  text-align: left;
+}
+.entryColumn .editValue > span,
+.entryColumn .editInput,
+.entryBudgetValue { font-size: 21px; line-height: 1.4; }
+.entryColumn .kvRow:not(.kvRowEditable) {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+.budgetDetails { display: flex; flex-direction: column; gap: var(--space-3); }
+.decisionCard { container-type: inline-size; }
+.decisionGrid { grid-template-columns: minmax(0, 1fr); }
+.selectedReview { padding: var(--space-3); gap: var(--space-3); }
+.reviewEssentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.reviewEssentials > .reviewGroup,
+.reviewEssentials > .reviewGroup > .reviewGrid { display: contents; }
+.reviewEssentials .kvRow > :nth-child(2) { font-size: 18px; line-height: 1.35; text-align: left; }
+.reviewEssentials .kvRow > :first-child { font-size: 12px; color: var(--text-primary); }
+.actions { flex-wrap: wrap; align-items: center; }
+@container (min-width: 760px) {
+  .decisionGrid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+}
+@media (max-width: 1250px) {
+  .entryColumns { grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr)); }
+  .exitTime .exitTimeValue { font-size: 18px; white-space: normal; }
+}
+@media (min-width: 761px) and (max-width: 1250px) {
+  .exitEssentials {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+    gap: var(--space-4);
+  }
 }

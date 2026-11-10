@@ -22,7 +22,7 @@ import { quoteWarning } from '@/lib/quoteWarning';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import type { ReviewedTrackingOrder, TrackingPreview, TrackingSubmitResult } from '@/lib/trackingReview';
 import { changedSince, differenceFor, reasonText, reviewLines } from '@/lib/trackingReview';
-import { SubmissionReview } from '@/components/organisms/SubmissionReview';
+import { SubmissionReview, SubmissionReviewWarnings } from '@/components/organisms/SubmissionReview';
 import { BrokerOrderReview } from '@/components/organisms/BrokerOrderReview';
 import { BrokerOrderOutcome } from '@/components/organisms/BrokerOrderOutcome';
 import {
@@ -474,7 +474,7 @@ export default function Step7Page() {
     });
   }, [cards]);
 
-  const { selectedBroker, setSelectedBroker } = useAutoTradeStore();
+  const { selectedBroker, setSelectedBroker, armed, autoMode } = useAutoTradeStore();
   const [limitPlacing,   setLimitPlacing]     = useState(false);
   const [marketPlacing,  setMarketPlacing]    = useState(false);
   // Carries the contract label: a direct send's result can land after Prev/Next.
@@ -1578,27 +1578,9 @@ export default function Step7Page() {
   // on its own below the card column instead (its notices must not vanish).
   // The live-quote notices moved in from the card column: the no-live-quote
   // confirmation gates these sends, so it belongs beside them.
-  const executionPanel = effectiveCard ? (
-    <div className={paperStyles.paperSection} role="group" aria-label="Broker execution and auto-trade">
-      <Text size={13} weight={600}>Broker execution &amp; auto-trade</Text>
-      {fetchingQuote && (
-        <Text size={11} tone="dim">Fetching live price…</Text>
-      )}
-      {quoteWarning(liveQuoteForCard) && (
-        <div role="status">
-          <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
-          <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
-        </div>
-      )}
-      {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
-        <Text size={11} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
-      )}
-      {liveStockPriceForCard != null && !fetchingQuote && (
-        <Text size={11} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
-      )}
+  const executionActions = effectiveCard ? <>
       <BrokerPicker selected={selectedBroker} onChange={setSelectedBroker} />
       {selectedBroker && (
-        <>
           <div className={paperStyles.paperButtons}>
             <button
               type="button"
@@ -1633,6 +1615,30 @@ export default function Step7Page() {
               {marketPlacing ? 'Placing…' : 'Right Now — Market'}
             </button>
           </div>
+      )}
+  </> : null;
+
+  const executionPanel = effectiveCard ? (
+    <div className={paperStyles.paperSection} role="group" aria-label="Broker execution and auto-trade">
+      {activeDraft && <SubmissionReviewWarnings draft={activeDraft} /> }
+      {fetchingQuote && (
+        <Text size={12} tone="secondary">Fetching live price…</Text>
+      )}
+      {quoteWarning(liveQuoteForCard) && (
+        <div role="status">
+          <Text size={12} tone="caution">{quoteWarning(liveQuoteForCard)}</Text>
+          <label><input type="checkbox" aria-label="Confirm sending without a live quote" checked={!!contractKey && quoteConfirmation?.contractKey === contractKey} onChange={(e) => updateQuoteConfirmation(e.target.checked && contractKey ? { contractKey } : null)} /> I understand this contract has no confirmed live quote and want to send anyway.</label>
+        </div>
+      )}
+      {liveQuoteForCard?.quoteLive === true && !fetchingQuote && (
+        <Text size={12} tone="secondary">Live mid: ${liveQuoteForCard.price.toFixed(2)}</Text>
+      )}
+      {liveStockPriceForCard != null && !fetchingQuote && (
+        <Text size={12} tone="secondary">Live stock: ${liveStockPriceForCard.toFixed(2)}</Text>
+      )}
+      {isOverride && !planReady && <div className={paperStyles.executionActions}>{executionActions}</div>}
+      {selectedBroker && (
+        <>
           {/* #583 — the destination-specific review. Nothing is saved or
             * sent until its final action, which posts the request shown. */}
           {brokerReview && (() => {
@@ -1717,6 +1723,8 @@ export default function Step7Page() {
             * veto now refuses Arm / Fire now inside the component, and the
             * sentence is the one printed above. */}
           {planReady && (
+            <details className={disclosure.disclosureRow} open={armed || autoMode !== 'manual' ? true : undefined} data-execution-details>
+              <summary>Execution requirements, tracking &amp; auto-trade{armed ? ' · Armed' : ''}</summary>
             <AutoTradeArm
               armBlockedReason={bearishUnvalidated ? BEARISH_UNVALIDATED_MESSAGE : earningsGate.armBlockedReason}
               // The same live quote TradeCard gets as `liveMid` and the
@@ -1761,6 +1769,7 @@ export default function Step7Page() {
               // refuse on two different readings of one field.
               methodPick={resolvedMethodPickForCard}
             />
+            </details>
           )}
         </>
       )}
@@ -1928,6 +1937,7 @@ export default function Step7Page() {
               submissionReview={activeDraft && activeSubmissionToken
                 ? <SubmissionReview draft={activeDraft} generation={activeSubmissionToken.generation} />
                 : undefined}
+              executionActions={executionActions}
               destinations={executionPanel}
             />
           )}

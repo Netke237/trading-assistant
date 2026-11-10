@@ -19,6 +19,7 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
   return view;
 };
 
@@ -306,9 +307,10 @@ describe('editable versus read-only styling', () => {
 
   it('read-only max fill, order type, time exit and computed values do not look editable', () => {
     render(<TradeCard data={card()} />);
-    for (const label of ['Max fill', 'Order type', 'Time exit']) {
-      const row = screen.getByText(label).parentElement as HTMLElement;
+    for (const label of [/Order type Limit · Max fill \$5\.40/, 'Time exit']) {
+      const row = screen.getByText(label);
       expect(row.querySelector('[data-editable]')).toBeNull();
+      expect(row.closest('[data-editable], [role="button"]')).toBeNull();
       expect(within(row).queryByRole('button')).not.toBeInTheDocument();
     }
     const list = exitPlan().getByRole('group', { name: 'Premium-loss values' });

@@ -210,7 +210,7 @@ describe('G8 — readable target tables', () => {
 
   it('styles the tables with readable shaded headers and single-line cells', () => {
     const head = rule('.mcTargetTable thead th');
-    expect(head).toMatch(/color:\s*var\(--text-secondary\)/);
+    expect(head).toMatch(/color:\s*var\(--text-primary\)/);
     expect(head).not.toMatch(/--text-dim/);
     expect(head).toMatch(/background:/);
     expect(rule('.mcTargetTable td')).toMatch(/white-space:\s*nowrap/);

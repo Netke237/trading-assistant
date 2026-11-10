@@ -212,6 +212,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
       expect(button).toHaveAttribute('title', BEARISH_REASON);
       fireEvent.click(button);
     }
+    fireEvent.click(screen.getByText('Execution requirements, tracking & auto-trade'));
     fireEvent.click(screen.getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
     expect(screen.getByRole('button', { name: /^Arm —/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);

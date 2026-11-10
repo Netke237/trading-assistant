@@ -200,7 +200,7 @@ describe('the three barriers', () => {
 
   it('labels the barriers as simulation inputs, separate from the Exit Plan settings', () => {
     const { container } = renderCard();
-    const d = container.querySelector('details') as HTMLElement;
+    const d = container.querySelector('[data-race-assumptions]') as HTMLElement;
     const inputs = screen.getByText(/Simulation inputs, captured when the estimate ran/);
     expect(inputs).toHaveTextContent(/not the Exit Plan's settings/);
     expect(inputs).toHaveTextContent(/never copied into the Exit Plan/);
@@ -208,20 +208,20 @@ describe('the three barriers', () => {
     expect(precedence).toHaveTextContent(
       /Arithmetic Plan's structural \+ ATR stop.*else the structural level.*else the Exit Plan's stock invalidation/,
     );
-    expect(d.contains(inputs)).toBe(false);
-    expect(d.contains(precedence)).toBe(false);
+    expect(d.contains(inputs)).toBe(true);
+    expect(d.contains(precedence)).toBe(true);
     // The existing source copy stays.
     expect(screen.getByText('Structural level, or structural + ATR once an Arithmetic Plan has run')).toBeInTheDocument();
   });
 
-  it('shows the barrier-time stock-stop value and loss with its time basis, outside the disclosure', () => {
+  it('shows the barrier-time stock-stop value and loss with its time basis, inside the assumptions disclosure', () => {
     const { container } = renderCard();
-    const d = container.querySelector('details') as HTMLElement;
+    const d = container.querySelector('[data-race-assumptions]') as HTMLElement;
     const line = screen.getByText(/Stock-stop value at barrier time/);
     expect(line).toHaveTextContent(
       '$5.20 premium - $0.03 at the stop (repriced at 26d — the median day any path reaches the stop) = $5.17',
     );
-    expect(d.contains(line)).toBe(false);
+    expect(d.contains(line)).toBe(true);
   });
 
   it('says when the stop could not be repriced instead of inventing a barrier-time value', () => {
@@ -636,7 +636,7 @@ describe('the comparison row', () => {
 });
 
 describe('the inline disclosure', () => {
-  const details = (container: HTMLElement) => container.querySelector('details') as HTMLElement;
+  const details = (container: HTMLElement) => container.querySelector('details:not([data-race-assumptions])') as HTMLElement;
 
   it('is closed by default and holds the stop medians, the full chains and the prose', () => {
     const { container } = renderCard({ stopCostShown: true });
@@ -666,7 +666,7 @@ describe('the inline disclosure', () => {
   it('keeps the volatility-fallback warning above the barriers and results it qualifies', () => {
     renderCard({ race: { ...RACE, ivSolved: false } });
     const iv = screen.getByText(/implied volatility could not be backed out of its quote/);
-    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers' });
+    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers', hidden: true });
     const outcomes = screen.getByRole('table', { name: 'Barrier Race outcomes' });
     expect(iv.compareDocumentPosition(barriers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const weak = screen.getByText(/describes an outcome the simulation almost never reached/);
@@ -812,7 +812,7 @@ describe('the race graphic (#610 G9)', () => {
     expect(screen.getByText('T20% · $6.24 option')).toBeInTheDocument();
     expect(screen.getByText('T50% · $7.80 option')).toBeInTheDocument();
     const outcomes = screen.getByRole('table', { name: 'Barrier Race outcomes' });
-    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers' });
+    const barriers = screen.getByRole('table', { name: 'Barrier Race barriers', hidden: true });
     for (const bar of bars) {
       expect(outcomes.contains(bar)).toBe(false);
       expect(bar.compareDocumentPosition(outcomes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -848,4 +848,14 @@ describe('the race graphic (#610 G9)', () => {
     expect(bar).not.toMatch(/max-width:\s*180px/);
     expect(rule('.table th')).toMatch(/white-space:\s*nowrap|overflow-wrap:\s*normal/);
   });
+});
+
+it('keeps the race bars visible and the Three barriers & assumptions disclosure closed', () => {
+  renderCard();
+  expect(screen.getAllByRole('img')).toHaveLength(3);
+  const details = screen.getByText('Three barriers & assumptions').closest('details')!;
+  expect(details).not.toHaveAttribute('open');
+  expect(screen.getByText('The three barriers')).not.toBeVisible();
+  fireEvent.click(screen.getByText('Three barriers & assumptions'));
+  expect(screen.getByText('The three barriers')).toBeVisible();
 });

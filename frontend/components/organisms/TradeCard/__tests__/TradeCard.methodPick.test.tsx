@@ -17,6 +17,7 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
+  fireEvent.click(screen.getByText('Recorded decision details'));
   return view;
 };
 
@@ -89,8 +90,10 @@ describe('TradeCard — the method-pick control (§6.1)', () => {
     expect(radio('Arithmetic')).toBeDisabled();
     expect(radio('Monte Carlo')).toBeDisabled();
     expect(radio('Barrier Race')).toBeDisabled();
-    expect(screen.getByText('Compute Arithmetic Plan first')).toBeInTheDocument();
-    expect(screen.getAllByText('Run Monte Carlo Estimate first')).toHaveLength(2);
+    expect(radio('Arithmetic')).toHaveAttribute('title', 'Compute Arithmetic Plan first');
+    expect(radio('Monte Carlo')).toHaveAttribute('title', 'Run Monte Carlo Estimate first');
+    expect(radio('Barrier Race')).toHaveAttribute('title', 'Run Monte Carlo Estimate first');
+    expect(screen.getByText(/Arithmetic: Compute Arithmetic Plan first.*Monte Carlo: Run Monte Carlo Estimate first.*Barrier Race: Run Monte Carlo Estimate first/)).toBeVisible();
   });
 
   it('seeds from initialMethodPick and round-trips a click back to the parent', () => {

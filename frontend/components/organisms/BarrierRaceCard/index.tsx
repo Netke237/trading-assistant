@@ -112,7 +112,7 @@ export default function BarrierRaceCard({
     return (
       <section className={styles.card}>
         <Header />
-        <Text size={12} tone="secondary">
+        <Text size={12}>
           Not simulated — contract expires today. A zero-length simulation has no paths to
           attribute, and four zeroes would read as a result rather than a refusal.
         </Text>
@@ -157,7 +157,7 @@ export default function BarrierRaceCard({
              printed — with the level it was measured against named, which is
              the fact that makes it stale. */}
         {invalidation && (
-          <Text size={12} tone="secondary">
+          <Text size={12}>
             {stockStopMoved
               ? `${(invalidation.probability * 100).toFixed(0)}% of paths touched the stock stop at
                  some point — but measured against the $${race.stockStopPrice.toFixed(2)} stop this
@@ -296,7 +296,7 @@ export default function BarrierRaceCard({
             </tbody>
           </table>
         </div>
-        <Text size={12} tone="secondary">
+        <Text size={12}>
           {quantity != null && Number.isFinite(quantity) && quantity >= 0
             ? `${quantity} entered contracts × 100 shares`
             : 'Entered quantity unavailable'}
@@ -320,8 +320,13 @@ export default function BarrierRaceCard({
           </Text>
         )}
 
-        {/* The assumptions every number in the row rests on, short enough to
-            stay on screen. Each is stated in full in the disclosure below. */}
+
+      </div>
+
+      <details className={`${styles.details} ${disclosure.disclosureRow}`} data-race-assumptions>
+        <summary>Three barriers &amp; assumptions</summary>
+        <div className={styles.detailsBody}>
+        {/* Supporting assumptions stay mounted behind this disclosure. */}
         <div className={styles.assumptions}>
           <Text size={12} tone="secondary">{race.nPaths.toLocaleString()} paths · each row sums to 100%</Text>
           <Text size={12} tone="secondary">Medians are conditional on the outcome</Text>
@@ -329,8 +334,6 @@ export default function BarrierRaceCard({
           <Text size={12} tone="secondary">IV unchanged at the barriers</Text>
           <Text size={12} tone="secondary">Edge before commissions</Text>
         </div>
-      </div>
-
       {/* 2. The three barriers ------------------------------------------- */}
       <div className={styles.block}>
         <Text size={12} weight={600}>The three barriers</Text>
@@ -422,6 +425,9 @@ export default function BarrierRaceCard({
           </Text>
         )}
       </div>
+
+        </div>
+      </details>
 
       {/* 3. Everything else, one click away ------------------------------- */}
       {/* A native <details>: its content stays mounted while closed, so the
@@ -584,7 +590,7 @@ function Header({ withNote = true }: { withNote?: boolean }) {
 
 function HeaderNote() {
   return (
-    <Text size={12} tone="secondary">
+    <Text size={12}>
       Same simulation as the Monte Carlo card above, read differently: every path is attributed to
       whichever barrier it reached first. It proposes no level of its own.
     </Text>
@@ -595,7 +601,7 @@ function LegendKey({ className, label }: { className: string; label: string }) {
   return (
     <span className={styles.legendKey}>
       <span className={`${styles.swatch} ${className}`} aria-hidden="true" />
-      <Text size={11} tone="secondary">{label}</Text>
+      <Text size={12}>{label}</Text>
     </span>
   );
 }

@@ -111,10 +111,37 @@ describe('Arithmetic in Monte Carlo order', () => {
     expect(kv('arithmetic', 'Calculated stock stop')).toHaveTextContent('$180.00 · structural');
     expect(kv('arithmetic', 'Option-price threshold (shared Exit Plan premium stop)')).toHaveTextContent('$3.00/share');
     expect(kv('arithmetic', 'Option value at stock stop (current time)')).toHaveTextContent('$1.80/share');
-    expect(kv('arithmetic', 'Loss at stock stop (current time)')).toHaveTextContent('$2.20/share');
-    const basis = within(slot('arithmetic', 'stop')).getByText(/Black-Scholes today/);
+    expect(kv('arithmetic', 'Loss at stock stop (current time, per contract)')).toHaveTextContent('$220.00/contract');
+    expect(within(slot('arithmetic', 'stop')).getByText('Black–Scholes at current expiry; differs from barrier-time race pricing. Exit Plan unchanged.')).toBeVisible();
+    const basis = within(cardEl('arithmetic')).getByText(/Black-Scholes today/);
+    expect(basis).not.toBeVisible();
+    expect(basis).toHaveTextContent(/today's days to expiry \(no elapsed time\).*calculation's echoed premium, per share.*barrier-time/);
+    fireEvent.click(within(cardEl('arithmetic')).getByText('Arithmetic basis, inputs & provenance'));
     expect(basis).toBeVisible();
-    expect(basis).toHaveTextContent(/barrier-time/);
+  });
+
+  it.each<[number, string, string | null]>([
+    [2.2, '$220.00/contract', '$2.20/share'],
+    [0, '$0.00/contract', '$0.00/share'],
+    [-1.25, '-$125.00/contract', '$-1.25/share'],
+    [Number.NaN, 'Unavailable — no stop-cost estimate on the calculation premium basis', null],
+  ])('retains the current-time source and units for returned loss %s', (loss, headline, perShare) => {
+    const computed = plan();
+    computed.stop.stopCost = { ...computed.stop.stopCost!, lossDollar: loss,
+      valueAtStop: 4 - loss, fraction: loss / 4 };
+    render(<TradeCard data={card({ exitPlan: computed })} contracts={3} />);
+    fireEvent.click(box('Arithmetic'));
+    expect(kv('arithmetic', 'Loss at stock stop (current time, per contract)')).toHaveTextContent(headline);
+    const arith = within(cardEl('arithmetic'));
+    if (perShare == null) {
+      expect(arith.queryByText('Current-time stop loss per share')).not.toBeInTheDocument();
+    } else {
+      const detail = arith.getByText('Current-time stop loss per share').parentElement!;
+      expect(detail).toHaveTextContent(perShare);
+      expect(detail).not.toBeVisible();
+      fireEvent.click(arith.getByText('Arithmetic basis, inputs & provenance'));
+      expect(detail).toBeVisible();
+    }
   });
 
   it('keeps original targets, snap geometry and model detail in a closed, mounted disclosure', () => {

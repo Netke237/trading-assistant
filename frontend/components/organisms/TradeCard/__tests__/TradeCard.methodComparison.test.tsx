@@ -89,7 +89,7 @@ describe('display-only comparison in the same results area', () => {
     fireEvent.click(box('Ladder'));
     expect(Array.from(document.querySelectorAll('[data-method-card]')).map(n => n.getAttribute('data-method-card')))
       .toEqual(['monte_carlo', 'arithmetic', 'ladder']);
-    const nodes = ['Exit Plan', 'Profit-target methods', 'Order Entry', 'Max loss budget', 'Decision and execution']
+    const nodes = ['Exit Plan', 'Profit-target methods', 'Entry & position size', 'Decision and execution']
       .map(name => screen.getByRole('region', { name }));
     nodes.slice(1).forEach((node, i) => expect(nodes[i].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
   });
@@ -213,8 +213,8 @@ describe('Arithmetic card', () => {
     const stop = within(cardOf('arithmetic').querySelector('[data-slot="stop"]') as HTMLElement);
     expect(stop.getByText('Calculated stock stop').parentElement).toHaveTextContent('$180.00 · structural');
     expect(stop.getByText('Option value at stock stop (current time)').parentElement).toHaveTextContent('$1.80/share');
-    expect(stop.getByText('Loss at stock stop (current time)').parentElement).toHaveTextContent('$2.20/share');
-    expect(stop.getByText(/today's days to expiry/)).toBeVisible();
+    expect(stop.getByText('Loss at stock stop (current time, per contract)').parentElement).toHaveTextContent('$220.00/contract');
+    expect(stop.getByText('Black–Scholes at current expiry; differs from barrier-time race pricing. Exit Plan unchanged.')).toBeVisible();
     expect(stop.getByText(/Restored Arithmetic calculation/)).toBeVisible();
     // #607: one compact table row per target, in Monte Carlo's column order.
     const rows = Array.from(cardOf('arithmetic').querySelectorAll('[data-target-row]')) as HTMLElement[];

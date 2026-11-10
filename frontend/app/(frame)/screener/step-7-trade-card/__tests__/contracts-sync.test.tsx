@@ -114,16 +114,18 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
     expect(group.getByRole('radiogroup', { name: 'Judged on' })).toBeVisible();
     expect(group.getByRole('region', { name: 'Selected target review' })).toBeVisible();
+    fireEvent.click(await screen.findByText('What Track basket and direct sends will submit'));
     await waitFor(() => expect(group.getByRole('region', { name: 'Submission review' })).toBeInTheDocument());
     expect(group.getByRole('button', { name: /track basket/i })).toBeInTheDocument();
-    expect(group.getByRole('button', { name: /export json/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export json/i })).toBeInTheDocument();
     // The page's broker execution is a sub-group of the same section; the
     // method selector stays outside it.
     const execution = group.getByRole('group', { name: 'Broker execution and auto-trade' });
     expect(within(execution).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
-    fireEvent.click(within(execution).getByRole('button', { name: /ibkr paper/i }));
-    expect(await within(execution).findByRole('button', { name: /place limit/i })).toBeInTheDocument();
-    expect(within(execution).getByRole('button', { name: /right now — market/i })).toBeInTheDocument();
+    fireEvent.click(group.getByRole('button', { name: /ibkr paper/i }));
+    expect(await group.findByRole('button', { name: /place limit/i })).toBeInTheDocument();
+    expect(group.getByRole('button', { name: /right now — market/i })).toBeInTheDocument();
+    fireEvent.click(await within(execution).findByText('Execution requirements, tracking & auto-trade'));
     expect(await within(execution).findByRole('button', { name: /armed — fire on next qualifying condition/i })).toBeInTheDocument();
   });
 

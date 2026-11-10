@@ -74,6 +74,7 @@
   background: color-mix(in srgb, var(--bg-base) 50%, var(--bg-surface));
   padding: 6px 10px 6px 6px;
 }
+.outcomeTable thead th > span { color: var(--text-primary); }
 
 .outcomeTable td:first-child {
   padding-left: 6px;
@@ -318,6 +319,7 @@
     color: var(--text-secondary);
     white-space: normal;
   }
+  .outcomeTable td[data-label]::before { color: var(--text-primary); font-size: 12px; }
 
   .barrierTable,
   .barrierTable tbody {

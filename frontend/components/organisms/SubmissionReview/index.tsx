@@ -210,3 +210,19 @@ export function SubmissionReview({ draft, generation }: SubmissionReviewProps) {
     </section>
   );
 }
+
+/** Concise material notices remain visible when the inline request detail is closed.
+ * Destination reviews still render their complete authoritative review separately. */
+export function SubmissionReviewWarnings({ draft }: { draft: SubmissionDraft }) {
+  const { identity, selection, stops, direct } = draft;
+  const note = basisNote(selection.targetBasis);
+  return <div className={styles.notices} data-submission-notices>
+    <Text size={12}>Entry basis is provisional — the server re-quotes at save; saved entry, quantity, premium-stop fraction and effective target alert remain unresolved until server review. Not a fill.</Text>
+    <Text size={12}>Exit settings are in-app alerts; no protective stop-loss or take-profit order is sent to a broker.</Text>
+    {identity.spread && <Text size={12} tone="caution">{identity.spread.name}: only the selected contract is submitted; the other legs are not part of this request.</Text>}
+    {stops.stockStop == null && <Text size={12} tone="reject">Missing — sending is blocked until a stock stop is set</Text>}
+    {note && selection.targetBasis.kind !== 'requested_stock_level' && <Text size={12} tone={selection.targetBasis.kind === 'ladder_fallback' ? 'caution' : 'reject'}>{note}</Text>}
+    {direct?.limit.blocked && <Text size={12} tone="reject">{direct.brokerLabel} · Place Limit refused before sending: {direct.limit.blocked}</Text>}
+    {direct?.market.blocked && <Text size={12} tone="reject">{direct.brokerLabel} · Right Now — Market refused before sending: {direct.market.blocked}</Text>}
+  </div>;
+}

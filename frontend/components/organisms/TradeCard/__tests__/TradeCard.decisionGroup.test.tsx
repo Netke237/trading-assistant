@@ -32,6 +32,7 @@ const render = (...args: Parameters<typeof renderCard>) => {
     const toggle = screen.queryByRole('checkbox', { name });
     if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
   }
+  fireEvent.click(screen.getByText('Recorded decision details'));
   return view;
 };
 
@@ -127,8 +128,8 @@ describe('#608 one grouped decision section', () => {
     expect(group.getByRole('radiogroup', { name: 'Judged on' })).toBeVisible();
     expect(group.getByRole('region', { name: 'Selected target review' })).toBeVisible();
     expect(group.getByRole('button', { name: 'Track basket' })).toBeEnabled();
-    expect(group.getByRole('button', { name: /view chart/i })).toBeInTheDocument();
-    expect(group.getByRole('button', { name: /export json/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /view chart/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export json/i })).toBeInTheDocument();
     expect(group.getByRole('group', { name: 'Broker execution' })).toHaveTextContent('BROKER PANEL');
     const exitLinks = Array.from(decision().querySelectorAll('a[href="#exit-plan"]'));
     expect(exitLinks).toHaveLength(1);
@@ -192,7 +193,7 @@ describe('#608 one grouped decision section', () => {
     const recorded = within(review().getByRole('group', { name: 'Recorded choice' }));
     const estimates = within(review().getByRole('group', { name: 'Estimates at this target' }));
     expect(recorded.getByText('Recorded stock target')).toBeInTheDocument();
-    expect(recorded.getByText('Judged on basis')).toBeInTheDocument();
+    expect(review().getByText('Judged on basis')).toBeInTheDocument();
     expect(estimates.getByText('Matched result option premium')).toBeInTheDocument();
     expect(estimates.getByText('Estimated dollar outcome (full position, before costs)')).toBeInTheDocument();
     expect(estimates.queryByText('Recorded stock target')).not.toBeInTheDocument();
@@ -252,4 +253,16 @@ describe('#608 one grouped decision section', () => {
     expect(onEditsChange).not.toHaveBeenCalled();
     expect(within(decision()).getByText(/the stock stop and the premium stop both keep firing/)).toBeVisible();
   });
+});
+
+it('keeps selected essentials visible while recorded decision metadata starts closed', () => {
+  renderCard(<TradeCard data={{ ...card, exit: { ...card.exit, exitPlan: arithmeticPlan } }}
+    contracts={2} initialMethodPick={pick({ method: 'arithmetic', rowStockPrice: 210.5, rowOptionPrice: null })} />);
+  const details = review().getByText('Recorded decision details').closest('details')!;
+  expect(details).not.toHaveAttribute('open');
+  expect(review().getByText('Decision timestamp')).not.toBeVisible();
+  expect(review().getByText('40%')).toBeVisible();
+  expect(review().getByText('$500.00')).toBeVisible();
+  fireEvent.click(review().getByText('Recorded decision details'));
+  expect(review().getByText('Decision timestamp')).toBeVisible();
 });

@@ -88,62 +88,64 @@ export function BrokerOrderReview({ data, stale, busy, onConfirm, onCancel, onRe
   const isLimit = req.order_type === 'LMT';
   const staleText = [...new Set(stale.map((s) => STALE_LABEL[s] ?? s))].join(', ');
   const outlay = isLimit
-    ? `Up to ${money(req.quantity * (req.limit_price ?? 0) * 100)} — ${req.quantity} × limit × 100; a buy limit fills at or below it, if at all (estimate)`
-    : `About ${money(req.quantity * data.savedEntry * 100)} at the tracked quote — the market fill is unknown until execution (estimate)`;
+    ? `Up to ${money(req.quantity * (req.limit_price ?? 0) * 100)}`
+    : `About ${money(req.quantity * data.savedEntry * 100)}`;
+  const outlayHint = isLimit
+    ? ` — ${req.quantity} × limit × 100; a buy limit fills at or below it, if at all (estimate)`
+    : ' at the tracked quote — the market fill is unknown until execution (estimate)';
   const resolved = (keys: Set<string>) => data.lines.filter((l) => keys.has(l.key)).map((l) => (
     <div key={l.key} className={styles.row}>
       <dt className={styles.label}>{SETTING_LABEL[l.key] ?? l.label}</dt>
       <dd className={styles.value}>
         {l.effective}
-        {l.adjusted ? ` (requested ${l.requested}${l.note ? ` — ${l.note}` : ''})` : ''}
+        {l.adjusted && <span className={styles.hint}>{` (requested ${l.requested}${l.note ? ` — ${l.note}` : ''})`}</span>}
       </dd>
     </div>
   ));
   return (
     <section role="region" aria-label="Broker order review" className={styles.review}>
-      <Text size={13} weight={500}>{`Review before sending to ${data.brokerLabel}`}</Text>
+      <Text size={14} weight={600}>{`Review before sending to ${data.brokerLabel}`}</Text>
 
       <div role="group" aria-label="Destination and request" className={styles.group} data-review-group="destination">
-        <Text size={12} weight={500}>Destination &amp; request</Text>
+        <Text size={13} weight={600}>Destination &amp; request</Text>
         <dl className={styles.list}>
           <div className={styles.row}><dt className={styles.label}>Destination</dt><dd className={styles.value}>{data.brokerLabel}</dd></div>
           <div className={styles.row}>
             <dt className={styles.label}>Account</dt>
-            <dd className={styles.value}>
-              {data.account
-                ? `${data.account} — as entered in Settings → Brokers; the server sends with its stored credentials and does not echo the account`
-                : 'Not set in Settings → Brokers; the server sends with its stored credentials'}
-            </dd>
+            <dd className={styles.value}>{data.account || 'Not set'}</dd>
           </div>
-          <div className={styles.row}><dt className={styles.label}>Contract</dt><dd className={styles.value}>{`${data.label} · ${req.option_symbol}`}</dd></div>
+          <div className={styles.row}><dt className={styles.label}>Contract</dt><dd className={styles.value}>{data.label}<span className={styles.hint}>{` · ${req.option_symbol}`}</span></dd></div>
           <div className={styles.row}><dt className={styles.label}>Expiry</dt><dd className={styles.value}>{data.expiry ?? 'Not supplied'}</dd></div>
           <div className={styles.row}><dt className={styles.label}>Action</dt><dd className={styles.value}>{`${req.action} to ${req.effect === 'OPEN' ? 'open' : 'close'}`}</dd></div>
           <div className={styles.row}>
             <dt className={styles.label}>Quantity</dt>
             <dd className={styles.value}>
-              {req.quantity === data.requestedQuantity
-                ? contracts(req.quantity)
-                : `${contracts(req.quantity)} (requested ${data.requestedQuantity}${data.quantityNote ? ` — ${data.quantityNote}` : ''})`}
+              {contracts(req.quantity)}
+              {req.quantity !== data.requestedQuantity && (
+                <span className={styles.hint}>{` (requested ${data.requestedQuantity}${data.quantityNote ? ` — ${data.quantityNote}` : ''})`}</span>
+              )}
             </dd>
           </div>
           <div className={styles.row}><dt className={styles.label}>Order type</dt><dd className={styles.value}>{orderTypeText(req)}</dd></div>
           <div className={styles.row}>
             <dt className={styles.label}>Limit price</dt>
             <dd className={styles.value}>
-              {isLimit && req.limit_price != null ? money(req.limit_price) : 'None — market order; fills at the market price, unknown until execution'}
+              {isLimit && req.limit_price != null ? money(req.limit_price) : (
+                <>None<span className={`${styles.hint} ${styles.materialHint}`}> — market order; fills at the market price, unknown until execution</span></>
+              )}
             </dd>
           </div>
           <div className={styles.row}>
             <dt className={styles.label}>Market price (estimate)</dt>
             <dd className={styles.value}>{data.marketMid != null ? `Live mid ${money(data.marketMid)} at review time` : 'No confirmed live quote at review time'}</dd>
           </div>
-          <div className={styles.row}><dt className={styles.label}>Premium outlay (estimate)</dt><dd className={styles.value}>{outlay}</dd></div>
+          <div className={styles.row}><dt className={styles.label}>Premium outlay (estimate)</dt><dd className={styles.value}><span>{outlay}</span><span className={`${styles.hint}${!isLimit ? ` ${styles.materialHint}` : ''}`}>{outlayHint}</span></dd></div>
           {resolved(REQUEST_LINES)}
         </dl>
       </div>
 
       <div role="group" aria-label="Position settings" className={styles.group} data-review-group="settings">
-        <Text size={12} weight={500}>Position settings · saved row, as the server resolves it</Text>
+        <Text size={13} weight={600}>Position settings · saved row, as the server resolves it</Text>
         <dl className={styles.list}>
           {resolved(SETTING_LINES)}
           <div className={styles.row}>
@@ -151,13 +153,13 @@ export function BrokerOrderReview({ data, stale, busy, onConfirm, onCancel, onRe
             <dd className={styles.value}>{`≤${TIME_STOP_DTE} days to expiry — an alert, not a close`}</dd>
           </div>
         </dl>
-        <Text size={11} tone="secondary">
+        <Text size={12} tone="primary">
           These stops and the target alert below are in-app alerts on the saved Portfolio row. No stop-loss or take-profit order is sent to the broker — only this one opening order.
         </Text>
       </div>
 
       <div role="group" aria-label="Target alert basis" className={styles.group} data-review-group="target">
-        <Text size={12} weight={500}>Target alert basis</Text>
+        <Text size={13} weight={600}>Target alert basis</Text>
         <dl className={styles.list}>
           {resolved(TARGET_LINES)}
         </dl>
@@ -176,6 +178,11 @@ export function BrokerOrderReview({ data, stale, busy, onConfirm, onCancel, onRe
 
       <details className={styles.exact} data-review-details>
         <summary>Technical details · exact broker request</summary>
+        <Text as="p" size={12} tone="secondary" className={styles.technicalNote}>
+          {data.account
+            ? 'As entered in Settings → Brokers; the server sends with its stored credentials and does not echo the account'
+            : 'Not set in Settings → Brokers; the server sends with its stored credentials'}
+        </Text>
         <dl className={`${styles.list} ${styles.detailsList}`}>
           <div className={styles.row}><dt className={styles.label}>Mode</dt><dd className={styles.value}>{brokerModeOf(req.broker)}</dd></div>
           <div className={styles.row}><dt className={styles.label}>Time in force</dt><dd className={styles.value}>{req.tif}</dd></div>

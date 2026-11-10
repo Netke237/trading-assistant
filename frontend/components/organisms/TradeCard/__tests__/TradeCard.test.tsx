@@ -20,6 +20,8 @@ const render = (...args: Parameters<typeof renderCard>) => {
   // inside the Exit Plan's one explanation disclosure (#610 G5).
   const evidence = screen.queryByText('Exit Plan explanation · stop basis, premium & time exit');
   if (evidence) fireEvent.click(evidence);
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
+  fireEvent.click(screen.getByText('Recorded decision details'));
   return view;
 };
 
@@ -404,14 +406,14 @@ describe('TradeCard', () => {
 
   it('renders the Order Entry strip (Feature 6 — Entry Plan card was folded into this strip)', () => {
     render(<TradeCard data={mockTradeCard} />);
-    expect(screen.getByText('Order type')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument();
     // Max fill is READ-ONLY (round 7 finding 3): nothing outside its own input
     // ever consumed it, and rendering it with the same click-to-edit affordance
     // as the three fields that DO reach the broker made the two
     // indistinguishable. See the row's own comment in TradeCard.
     expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
-    expect(screen.getByText('Max fill')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
     expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
   });
 
@@ -2509,7 +2511,7 @@ describe('TradeCard', () => {
         expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
         // And the risk-derived size, which sizes off that contract price, is
         // not offered either.
-        expect(screen.queryByText(/Risk-derived size/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Risk-derived size:/)).not.toBeInTheDocument();
       });
 
       it('falls back to "re-run the scan" for a card with no resolved stop', () => {
@@ -2817,7 +2819,7 @@ describe('TradeCard', () => {
     // as the three fields that DO reach the broker made the two
     // indistinguishable. See the row's own comment in TradeCard.
     expect(screen.queryByLabelText('Edit Max fill')).not.toBeInTheDocument();
-    expect(screen.getByText('Max fill')).toBeInTheDocument();
+    expect(screen.getByText(/Order type Limit · Max fill/)).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Contracts')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Invalidation')).toBeInTheDocument();
       expect(screen.getByLabelText('Edit Premium stop')).toBeInTheDocument();

@@ -110,8 +110,9 @@ describe('stop consequence beside the barriers', () => {
     expect(kv('Stock barrier (run input)')).toHaveTextContent('$180.00 stock');
     expect(kv('Option-price barrier (run input)')).toHaveTextContent('$2.08/share');
     expect(kv('Option value at stock stop (barrier time)')).toHaveTextContent('$1.10/share');
-    expect(kv('Loss at stock stop (barrier time)')).toHaveTextContent('$4.10/share');
-    const basis = stopSlot().getByText(/Barrier Race estimate, per share, same for every target/);
+    expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('$410.00/contract');
+    fireEvent.click(mc().getByText('Monte Carlo model, inputs & provenance'));
+    const basis = mc().getByText(/Barrier Race estimate, per share, same for every target/);
     expect(basis).toBeVisible();
     expect(basis).toHaveTextContent('repriced at 18d — the median day any path reaches the stop');
     // Never the current-time (Arithmetic / stop-cost) basis.
@@ -125,17 +126,17 @@ describe('stop consequence beside the barriers', () => {
     render(<TradeCard data={card} />);
     await run();
     expect(kv('Option value at stock stop (barrier time)')).toHaveTextContent(/Unavailable — differs by target/);
-    expect(kv('Loss at stock stop (barrier time)')).toHaveTextContent(/Unavailable — differs by target/);
+    expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent(/Unavailable — differs by target/);
     fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T50%' }));
     expect(kv('Option value at stock stop (barrier time)')).toHaveTextContent('$1.20/share');
-    expect(kv('Loss at stock stop (barrier time)')).toHaveTextContent('$4.00/share');
-    expect(stopSlot().getByText(/Barrier Race estimate, per share, for your selected Barrier Race target T50%/)).toBeVisible();
+    expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('$400.00/contract');
+    expect(stopSlot().getByText(/Barrier Race estimate · for your selected Barrier Race target T50%/)).toBeVisible();
   });
 
   it('restored: an earlier saved race never supplies the barriers or stop values', () => {
     render(<TradeCard data={{ ...card, exit: { ...card.exit, firstPassage: response(), firstPassageContext: context } }} />);
     for (const label of ['Stock barrier (run input)', 'Option-price barrier (run input)',
-      'Option value at stock stop (barrier time)', 'Loss at stock stop (barrier time)']) {
+      'Option value at stock stop (barrier time)', 'Loss at stock stop (barrier time, per contract)']) {
       expect(kv(label)).toHaveTextContent(/Unavailable/);
     }
     expect(stopSlot().queryByText('$1.10/share')).not.toBeInTheDocument();
@@ -149,7 +150,7 @@ describe('stop consequence beside the barriers', () => {
     await run();
     await editPremiumStop('2.50');
     expect(kv('Option value at stock stop (barrier time)')).toHaveTextContent(/Unavailable/);
-    expect(kv('Loss at stock stop (barrier time)')).toHaveTextContent(/Unavailable/);
+    expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent(/Unavailable/);
     const notice = stopSlot().getByText(/A barrier moved after this run/);
     expect(notice).toBeVisible();
     expect(notice.closest('details')).toBeNull();
@@ -157,7 +158,7 @@ describe('stop consequence beside the barriers', () => {
     await run();
     expect(stopSlot().queryByText(/A barrier moved after this run/)).not.toBeInTheDocument();
     expect(kv('Option-price barrier (run input)')).toHaveTextContent('$2.70/share');
-    expect(kv('Loss at stock stop (barrier time)')).toHaveTextContent('$4.10/share');
+    expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('$410.00/contract');
   });
 
   it('keeps the fallback-volatility caution visible beside the values while the race is closed', async () => {
@@ -261,4 +262,33 @@ describe('disclosures', () => {
     expect(spread).toHaveLength(1);
     expect(spread[0]).toBeVisible();
   });
+});
+
+// The headline changes units only. Signed, true-zero and missing returned risks
+// retain exactly the same availability and time/source basis as the full chain.
+it.each<[number | null, number | null, string]>([
+  [-1.25, 6.45, '-$125.00/contract · no loss (worth at least as much at the stop as it cost)'],
+  [0, 5.2, '$0.00/contract · no loss (worth at least as much at the stop as it cost)'],
+  [null, null, 'Unavailable — could not reprice at the stop'],
+])('keeps returned stock-stop risk %s honest in the per-contract headline', async (riskStockStop, stopRepricedValue, expected) => {
+  (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(response(race({}, () => ({ riskStockStop, stopRepricedValue }))));
+  render(<TradeCard data={card} />);
+  await run();
+  expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent(expected);
+  expect(stopSlot().getByText(/Barrier Race estimate · same for every target/)).toBeVisible();
+});
+
+it.each([undefined, Number.NaN, -1, Infinity])('keeps a sparse race with invalid repricing time %s renderable', async (elapsed) => {
+  (api.getFirstPassageEstimate as jest.Mock).mockResolvedValue(response(race({}, () => ({
+    repriceDaysStockStop: elapsed as number, riskStockStop: null, stopRepricedValue: null,
+  }))));
+  render(<TradeCard data={card} />);
+  await run();
+  // NaN timestamps cannot establish equal stop consequences across rows.
+  // Use the existing target selection so the displayed source is explicit.
+  fireEvent.click(mc().getByText('Barrier Race · graphical outcomes & details'));
+  fireEvent.click(screen.getByRole('button', { name: 'Use Barrier Race T50%' }));
+  expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('Unavailable — could not reprice at the stop');
+  expect(stopSlot().getByText(/Stock-stop repricing time unavailable/)).toBeVisible();
+  expect(kv('Stock barrier (run input)')).toHaveTextContent('$180.00 stock');
 });
