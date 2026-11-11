@@ -2685,6 +2685,25 @@ export function TradeCard({
           />
         </CollapsibleSection>
 
+        {/* Both qualification panels stay together beneath Contract Details. */}
+        <CollapsibleSection
+          title="Contract Qualification"
+          meta={`${data.contractScore}/100 · ${data.contractConfidence}`}
+          storageKey="bamendjou:tradecard-contract-qualification-collapsed"
+          defaultCollapsed
+          keepMounted
+        >
+          <ScoreCardPanel
+            title={`Contract — ${data.contract}`}
+            qualification={{ card: data, kind: 'contract' }}
+            bars={contractBars}
+            total={data.contractScore}
+            confidence={data.contractConfidence}
+            statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
+            statusTooltipAlignRight
+          />
+        </CollapsibleSection>
+
         {/* 5b. Spread legs panel — shown only for multi-leg spreads */}
         {data.spreadType && data.spreadType !== 'single' && data.legs && data.legs.length > 0 && (
           <section className={styles.contextDetails}>
@@ -3969,26 +3988,8 @@ export function TradeCard({
         </section>
       </div>
 
-      {/* #610 G4 — Contract Qualification and the alternative contracts follow
-          Decision & execution, as in the frozen reference; both closed. */}
+      {/* Alternative contracts remain after Decision & execution, closed. */}
       <div className={styles.trailingSections}>
-        <CollapsibleSection
-          title="Contract Qualification"
-          meta={`${data.contractScore}/100 · ${data.contractConfidence}`}
-          storageKey="bamendjou:tradecard-contract-qualification-collapsed"
-          defaultCollapsed
-          keepMounted
-        >
-          <ScoreCardPanel
-            title={`Contract — ${data.contract}`}
-            qualification={{ card: data, kind: 'contract' }}
-            bars={contractBars}
-            total={data.contractScore}
-            confidence={data.contractConfidence}
-            statusTooltip="Overall contract quality verdict. Combines DTE fit, delta, IV attractiveness, liquidity, and spread. CAUTION means at least one component is borderline — try a different strike or expiry for a cleaner contract."
-            statusTooltipAlignRight
-          />
-        </CollapsibleSection>
         {data.alternatives && data.alternatives.length > 0 && (
           // #610 G4 — the same bordered disclosure row as the qualification
           // sections (accent "›", sentence-case title), replacing the dim

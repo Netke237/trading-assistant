@@ -330,8 +330,7 @@ describe('TradeCard', () => {
     try {
       await act(async () => { await Promise.resolve(); });
       const outer = screen.getByRole('button', { name: /Stock Qualification/ });
-      // #610 G4 — Stock Qualification is in the identity; Contract
-      // Qualification follows Decision & execution. Both are on the card.
+      // Both qualification panels are in the identity beneath Contract Details.
       const group = view.container;
       expect(outer).toHaveAttribute('aria-expanded', 'false');
       fireEvent.click(outer);

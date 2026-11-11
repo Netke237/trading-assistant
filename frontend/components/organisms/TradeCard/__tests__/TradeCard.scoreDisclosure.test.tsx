@@ -61,6 +61,7 @@ it('separates closed qualifications immediately after visible raw contract detai
   expect(contract).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('Contract Details')).toBeVisible();
   expect(screen.getByText('Contract Details').closest('section')!.nextElementSibling).toBe(stock.closest('section'));
+  expect(stock.closest('section')!.nextElementSibling).toBe(contract.closest('section'));
   fireEvent.click(contract);
   expect(screen.getByText('Stock Scorecard')).not.toBeVisible();
   expect(screen.getByRole('button', { name: /Captured contract scoring evidence/ })).toBeVisible();
@@ -76,8 +77,7 @@ it('starts fresh scores folded and reveals both complete panels without replacin
   expect(screen.getByText('negative equity')).toBeVisible();
   fireEvent.click(toggle);
   fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
-  // #610 G4 — Contract Qualification follows Decision & execution, outside
-  // the identity; both panels are read from the whole card.
+  // Both independent qualification panels sit beneath Contract Details.
   const section = within(document.body);
   const values = [85, 78, 72, 90, 65, 80, 66, 55, 75, 60];
   const labels = ['Trend', 'Pullback', 'Trigger', 'Event', 'Volatility', 'DTE fit', 'Delta', 'IV', 'Liquidity', 'Spread'];
