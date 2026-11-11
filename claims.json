@@ -7,6 +7,14 @@
       "expires_at": "2026-11-11T23:39:35Z",
       "note": "Implement approved November 11 Stocks reference with complete source preservation",
       "task": "STOCKS-REFERENCE-ALIGNMENT"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/setup-scanner-reference-alignment-3505fddf",
+      "claimed_at": "2026-11-11T21:40:04Z",
+      "expires_at": "2026-11-12T00:40:04Z",
+      "note": "Implement approved Pre-Breakout, EMA Pullback and Fib scanner presentation",
+      "task": "SETUP-SCANNER-REFERENCE-ALIGNMENT"
     }
   ]
 }
