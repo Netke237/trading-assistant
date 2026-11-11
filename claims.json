@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "docs/stocks-prebreakout-information-flow-34181032",
-      "claimed_at": "2026-11-11T10:54:11Z",
-      "expires_at": "2026-11-11T14:22:56Z",
-      "note": "Create permanent offline Stocks and Setup Scanner HTML design previews; no application changes",
-      "task": "STOCKS-PREBREAKOUT-HTML-PREVIEWS"
-    }
-  ]
+  "claims": []
 }
