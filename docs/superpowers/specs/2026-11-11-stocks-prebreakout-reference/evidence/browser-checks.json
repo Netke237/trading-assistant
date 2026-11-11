@@ -101,6 +101,10 @@
       "passed": true
     },
     {
+      "message": "stocks-1200-dark: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
+      "passed": true
+    },
+    {
       "message": "stocks-1200-dark: existing structural reference reachable",
       "passed": true
     },
@@ -330,6 +334,10 @@
     },
     {
       "message": "stocks-1200-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
       "passed": true
     },
     {
@@ -565,6 +573,10 @@
       "passed": true
     },
     {
+      "message": "stocks-1366-dark: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
+      "passed": true
+    },
+    {
       "message": "stocks-1366-dark: existing structural reference reachable",
       "passed": true
     },
@@ -794,6 +806,10 @@
     },
     {
       "message": "stocks-1366-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
       "passed": true
     },
     {
@@ -1029,6 +1045,10 @@
       "passed": true
     },
     {
+      "message": "stocks-1920-dark: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
+      "passed": true
+    },
+    {
       "message": "stocks-1920-dark: existing structural reference reachable",
       "passed": true
     },
@@ -1258,6 +1278,10 @@
     },
     {
       "message": "stocks-1920-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100",
       "passed": true
     },
     {

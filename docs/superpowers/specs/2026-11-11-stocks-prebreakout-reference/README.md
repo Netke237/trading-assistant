@@ -32,7 +32,7 @@ No `frontend/`, `backend/`, store, API, transport, validation authority, workflo
 
 ## Browser verification
 
-350 browser checks passed over1200/1366/1920px in dark/light themes, covering12browser contexts and all three Setup Scanner modes;0pageerrors,0API/outboundrequests. Only static preview document GETs were allowed. Application typecheck passed. The harness hides temporary demo toasts when taking reference screenshots so figures remain readable.
+356 browser checks passed over1200/1366/1920px in dark/light themes, covering12browser contexts and all three Setup Scanner modes;0pageerrors,0API/outboundrequests. Only static preview document GETs were allowed. Application typecheck passed. The harness hides temporary demo toasts when taking reference screenshots so figures remain readable.
 
 For an environment that blocks direct file navigation, serve this folder locally:
 

@@ -67,6 +67,12 @@ async function stocks(browser,width,theme){
  await page.getByRole('button',{name:'Close preview dialog',exact:true}).click();
  await page.locator('[data-method=arith] details[data-detail=arith-race] > summary').click();
  check(await page.locator('[data-detail=arith-race]').innerText().then(t=>t.includes('55%')&&t.includes('35%')&&t.includes('10%')),tag+': graphical race remains under Arithmetic');
+ const race=await page.locator('[data-detail=arith-race] .race .mono').allTextContents();
+ const evidence=await page.locator('[data-detail=arith-evidence]').textContent();
+ const independentStop=Number(evidence.match(/risk\s*\/\s*share[^·]*·\s*(\d+)% reached/i)[1]);
+ const independentTargets=await page.locator('[data-method=arith] .targets tbody tr').evaluateAll(rs=>rs.map(r=>Number(r.children[2].textContent.replace('%',''))));
+ const exclusive=race.map(x=>Number(x.replace('%','')));
+ check(independentTargets.every((p,i)=>exclusive[i*3]<=p&&exclusive[i*3+1]<=independentStop&&exclusive.slice(i*3,i*3+3).reduce((a,b)=>a+b,0)===100),tag+': every first-hit event is bounded by its independent touch probability and exclusive outcomes sum to100');
  await page.locator('#stop-explanation > summary').click();await page.locator('#check-structure').click();
  check(await page.locator('#structure-result').isVisible(),tag+': existing structural reference reachable');
  check(await page.locator('[aria-label="Execution stock stop"]').inputValue()==='194.00',tag+': structure lookup never overwrites execution stop');

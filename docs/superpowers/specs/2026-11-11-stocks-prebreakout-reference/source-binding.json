@@ -71,17 +71,17 @@
     },
     {
       "path": "stocks-preview.html",
-      "sha256": "8b37ff795fa5fa54dd50fac781389e5412d2ea4b9540a5803174d6998ebb4271"
+      "sha256": "59f9cba5a3b41541ae39a3f986fcbec4311eff268d5a30cce73e505ce848108c"
     }
   ],
   "harness_pin": {
     "path": "verify-previews.cjs",
-    "sha256": "8f885f27328bb43620dd819bf4100e55405d9e2a61e657ed0e86c23a10102e1a"
+    "sha256": "26c42632a2f4a321c17c73a88bcf80f25dc208ab19a218f0cfb87ec10961eb50"
   },
   "evidence_pins": [
     {
       "path": "evidence/browser-checks.json",
-      "sha256": "3e3d2db0a044ea93149954ce2d857aef4488881fdfb59d1ced0b1efad2ee0bbe"
+      "sha256": "dfed4f43f52fa1c18cf70f6fd1e96e1d1f3d5ed3b7cdb1e4668c4ff6c71196ea"
     },
     {
       "path": "evidence/scanner-1366-dark-initial.png",
