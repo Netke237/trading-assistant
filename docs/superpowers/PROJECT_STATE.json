@@ -10648,7 +10648,7 @@
         "pattern": "STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
         "note": "Completion marker reserved for integrated acceptance of all planned build tasks."
       },
-      "note": "Task #623 implemented at414c5621; typecheck,346suites/6371tests and8mocked browser scenarios passed.1/2 build tasks complete. Phase stays in_progress/20% because #624 method comparison and integrated acceptance/code audit remain. Setup Scanner separately queued in #622. Draft PR checkpoint; not ready to merge.",
+      "note": "Task #623 implemented at 414c5621 and closed after push; typecheck, 346 suites / 6371 tests and 8 mocked browser scenarios passed. 1/2 build tasks complete. Phase stays in_progress / 20% because #624 method comparison and integrated acceptance / code audit remain. Draft PR #625 is not ready to merge. Setup Scanner is separately queued in #622.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -10659,7 +10659,8 @@
       "code_stage": {
         "rounds": 0,
         "clean": false
-      }
+      },
+      "pull_request": 625
     }
   ],
   "already_shipped": [
