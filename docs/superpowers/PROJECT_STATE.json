@@ -10485,7 +10485,7 @@
       "name": "Group trade-card qualifications beneath Contract Details (#617)",
       "owner": "agent",
       "status": "built",
-      "summary": "Screenshot amendment acceptance verified; independent plan1/code1 clean; PR and CI pending.",
+      "summary": "Plan1/code1 independently clean, acceptance verified; SELF-MERGE PENDING PR619, exact-head CI required.",
       "tracking_issue": 617,
       "branch": "board/trade-card-qualification-placement-37f624d5",
       "plan": "docs/superpowers/plans/2026-11-11-trade-card-qualification-placement-plan.md",
@@ -10563,7 +10563,9 @@
         "audited_head": "0b0d556989b863b67f0654d9c9e58e0fff3fa965",
         "reviewed_range": "1f861cbf68897ec9ecbfd4c34982508d7bf0e8b8..0b0d556989b863b67f0654d9c9e58e0fff3fa965",
         "report": "docs/superpowers/plans/trade-card-qualification-placement/code-audit.md"
-      }
+      },
+      "pr": 619,
+      "merge_status": "SELF-MERGE PENDING, PR #619, audited head 0b0d556989b863b67f0654d9c9e58e0fff3fa965"
     }
   ],
   "already_shipped": [
