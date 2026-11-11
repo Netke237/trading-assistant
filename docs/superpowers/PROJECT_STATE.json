@@ -10515,6 +10515,7 @@
       "plan_stage": {
         "rounds": 1,
         "clean": true,
+        "closed_by": "clean",
         "reviewer": "qualification_plan_audit",
         "reviewed_head": "fff9011f5ee07c432d2331f4c4bc121d16251b09"
       },
