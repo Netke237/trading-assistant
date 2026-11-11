@@ -1,0 +1,20 @@
+{
+  "base": "1f861cbf68897ec9ecbfd4c34982508d7bf0e8b8",
+  "contract_qualification_jsx_identical": true,
+  "contract_qualification_jsx_sha256": "409c0863e3a5a33be7cffeff6eef88f7fe5b1692bbe6933a2e0163e8d32f877a",
+  "instances": 1,
+  "source_path": "frontend/components/organisms/TradeCard/index.tsx",
+  "retained": [
+    "meta and score data",
+    "storage key",
+    "defaultCollapsed",
+    "keepMounted",
+    "qualification card binding",
+    "contract bars",
+    "total",
+    "confidence",
+    "full status tooltip",
+    "tooltip alignment"
+  ],
+  "implementation_commit": "1c15c200382d415fa88159dbf5b082523f9f2a96"
+}
