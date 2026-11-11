@@ -10315,14 +10315,14 @@
         "rounds": 3,
         "clean": true,
         "closed_by": "clean",
-        "closure_evidence": "alignment_plan_remaining_review checked added Tasks2–7 and interactions with Task1 against frozen reference and source: zero gate findings; plan stage closed clean at cap3."
+        "closure_evidence": "alignment_plan_remaining_review checked added Tasks2\u20137 and interactions with Task1 against frozen reference and source: zero gate findings; plan stage closed clean at cap3."
       },
       "audit_history": [
         {
           "round": 1,
           "stage": "plan",
           "reviewer": "amendment_ticket_plan_audit",
-          "scope": "Seven-ticket publication manifest, GitHub #604–610 and frozen reference d8245e66; historical review from publication session",
+          "scope": "Seven-ticket publication manifest, GitHub #604\u2013610 and frozen reference d8245e66; historical review from publication session",
           "gate_findings": 0,
           "outcome": "clean"
         },
@@ -10330,7 +10330,7 @@
           "round": 2,
           "stage": "plan",
           "reviewer": "alignment_plan_detail_audit",
-          "scope": "Added Task1 detail in 2026-11-09-trade-card-reference-alignment-plan.md against TradeCard/selector/disclosures/reference D01–D03",
+          "scope": "Added Task1 detail in 2026-11-09-trade-card-reference-alignment-plan.md against TradeCard/selector/disclosures/reference D01\u2013D03",
           "gate_findings": 0,
           "outcome": "clean"
         },
@@ -10338,7 +10338,7 @@
           "round": 3,
           "stage": "plan",
           "reviewer": "alignment_plan_remaining_review",
-          "scope": "Remaining execution details Tasks2–7 in 2026-11-09-trade-card-reference-alignment-plan.md against source and frozen d8245e66 reference",
+          "scope": "Remaining execution details Tasks2\u20137 in 2026-11-09-trade-card-reference-alignment-plan.md against source and frozen d8245e66 reference",
           "gate_findings": 0,
           "outcome": "clean"
         },
@@ -10484,22 +10484,39 @@
       "id": "TRADE-CARD-QUALIFICATION-PLACEMENT",
       "name": "Group trade-card qualifications beneath Contract Details (#617)",
       "owner": "agent",
-      "status": "not_started",
+      "status": "in_progress",
       "summary": "Screenshot-requested placement-only follow-up to shipped #603.",
       "tracking_issue": 617,
       "branch": "board/trade-card-qualification-placement-37f624d5",
       "plan": "docs/superpowers/plans/2026-11-11-trade-card-qualification-placement-plan.md",
       "size": "XS",
       "complexity": 1,
-      "completion_pct": 10,
-      "audit_rounds": 0,
+      "completion_pct": 20,
+      "audit_rounds": 1,
       "audit_clean": false,
-      "plan_audit_clean": false,
-      "audit_history": [],
+      "plan_audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "qualification_plan_audit",
+          "reviewed_head": "fff9011f5ee07c432d2331f4c4bc121d16251b09",
+          "gate_findings": 0,
+          "findings": [],
+          "outstanding": [],
+          "outcome": "clean"
+        }
+      ],
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/trade-card-qualification-placement/acceptance.md",
         "pattern": "QUALIFICATION-PLACEMENT-VERIFIED"
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "qualification_plan_audit",
+        "reviewed_head": "fff9011f5ee07c432d2331f4c4bc121d16251b09"
       }
     }
   ],
