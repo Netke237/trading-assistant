@@ -108,21 +108,25 @@ describe('G2 — two-column identity', () => {
 });
 
 describe('G4 — qualification and alternatives placement', () => {
-  it('keeps Stock Qualification under Contract Details and puts Contract Qualification and Alternatives after Decision & execution', () => {
+  it('groups closed qualifications below Contract Details and keeps Alternatives after Decision & execution', () => {
     render(<TradeCard data={card} />);
     const identity = screen.getByRole('region', { name: 'Selected stock and contract' });
     const decision = screen.getByRole('region', { name: 'Decision and execution' });
+    expect(screen.getAllByRole('button', { name: /Stock Qualification/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Contract Qualification/ })).toHaveLength(1);
     const stockQ = screen.getByRole('button', { name: /Stock Qualification/ });
     const contractQ = screen.getByRole('button', { name: /Contract Qualification/ });
     const alternatives = screen.getByRole('button', { name: /Alternative contracts \(1\)/ });
+    const details = within(identity).getByRole('region', { name: 'Contract Details' });
     expect(identity).toContainElement(stockQ);
-    expect(follows(within(identity).getByRole('region', { name: 'Contract Details' }), stockQ)).toBe(true);
-    for (const el of [contractQ, alternatives]) {
-      expect(identity).not.toContainElement(el);
-      expect(decision).not.toContainElement(el);
-      expect(follows(decision, el)).toBe(true);
-    }
-    expect(follows(contractQ, alternatives)).toBe(true);
+    expect(identity).toContainElement(contractQ);
+    expect(details.nextElementSibling).toBe(stockQ.closest('section'));
+    expect(stockQ.closest('section')!.nextElementSibling).toBe(contractQ.closest('section'));
+    expect(decision).not.toContainElement(stockQ);
+    expect(decision).not.toContainElement(contractQ);
+    expect(identity).not.toContainElement(alternatives);
+    expect(decision).not.toContainElement(alternatives);
+    expect(follows(decision, alternatives)).toBe(true);
     expect(stockQ).toHaveAttribute('aria-expanded', 'false');
     expect(contractQ).toHaveAttribute('aria-expanded', 'false');
     expect(alternatives).toHaveAttribute('aria-expanded', 'false');
