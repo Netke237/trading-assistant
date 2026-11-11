@@ -1,0 +1,1430 @@
+{
+  "checks": [
+    {
+      "message": "stocks-1200-dark: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-dark: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-dark: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1200-light: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1200-light: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-dark: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-dark: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1366-light: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1366-light: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-dark: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-dark: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: one method initially",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: available edited Ladder on initial view",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: details initially closed",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: no decision selected by viewing",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: qualification and backtest adjacent",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light initial: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: compare has two methods",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: comparing does not compute",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: differing calculation and execution stops explicit",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: running methods does not select decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: compared cards have equal height",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: compared cards have equal width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: common target table headers align despite the Arithmetic stop warning",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light comparison: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: selected Arithmetic outcome and both stops",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: all three methods supported",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: method-view changes preserve selected decision",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: third card keeps the same width",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: quantity changes selected outcome",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: current execution risk uses194stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: position value uses entered shares",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: Ladder has correct outcome and no borrowed statistics",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: basket sample review opens",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: basket entered quantity and execution block",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: graphical race remains under Arithmetic",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: existing structural reference reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: structure lookup never overwrites execution stop",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: full backtest evidence reachable",
+      "passed": true
+    },
+    {
+      "message": "stocks-1920-light: broker execution remains blocked",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: supporting detail initially closed",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: pre candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: pre keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: pre distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: pre original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: pre no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light pre: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: ema candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: ema keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: ema distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: ema original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: ema no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light ema: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fib candidates retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fib keyboard selection owns chart",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fib distinct metric meanings",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fib original/supplementary context labelled",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fib no invented parameter",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: all five existing Fib-level choices retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: source default38.2/61.8levels selected",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light fib: no page horizontal overflow",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: saved report is reachable without scan",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: full news fields and limitation retained",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: missing context does not retain a live quote",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: empty result state",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: no stale quote in empty context",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: fixed example restores sample rows",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: existing chart action preview",
+      "passed": true
+    },
+    {
+      "message": "scanner-1920-light: no real alert submission",
+      "passed": true
+    },
+    {
+      "message": "No browser page errors",
+      "passed": true
+    },
+    {
+      "message": "No API or outbound network requests; only static preview documents",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "networkRequests": [],
+  "staticDocumentRequests": [
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html",
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html",
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html",
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html",
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html",
+    "http://127.0.0.1:3196/stocks-preview.html",
+    "http://127.0.0.1:3196/prebreakout-preview.html"
+  ],
+  "screenshots": [
+    "stocks-1366-dark-initial.png",
+    "stocks-1366-dark-compare.png",
+    "stocks-1366-light-compare.png",
+    "scanner-1366-dark-initial.png",
+    "scanner-1366-light-ema-collapsed.png",
+    "scanner-1366-light-fib-collapsed.png"
+  ],
+  "generated_screenshot_count": 20,
+  "screenshot_note": "Six representative captures retained in the repository; all assertions from all contexts remain in this report."
+}
