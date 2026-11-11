@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/trade-card-qualification-placement-37f624d5",
       "claimed_at": "2026-11-11T06:52:24Z",
-      "expires_at": "2026-11-11T10:28:41Z",
+      "expires_at": "2026-11-11T10:36:23Z",
       "note": "Move intact contract qualification below stock qualification; both default closed",
       "task": "TRADE-CARD-QUALIFICATION-PLACEMENT"
     }
