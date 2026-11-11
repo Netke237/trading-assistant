@@ -107,6 +107,8 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.goto('/screener/step-7-position-card');
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
   await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible();
+  await page.locator('summary').filter({ hasText: /^Stock Qualification/ }).click();
+  await page.locator('summary').filter({ hasText: /^Backtest Evidence/ }).click();
   await expect(page.getByText('Final verdict: CAUTION')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Backtest evidence' }).getByText('70%', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -120,6 +122,7 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.getByText('Auto-trade execution', { exact: true }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('link', { name: 'Calculations', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Latest calculation$/ }).click();
   await page.getByRole('button', { name: 'Estimate', exact: true }).click();
   await expect(page.getByText('Latest: Monte Carlo')).toBeVisible();
   await page.getByRole('button', { name: 'Arithmetic plan', exact: true }).click();
@@ -130,6 +133,7 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await expect(summary).toContainText('$360.00');
   await expect(summary).toContainText('7.5 trading days');
   await expect(summary).toContainText('Arithmetic final stop');
+  await page.locator('summary').filter({ hasText: /^Structure & Stops$/ }).click();
   await expect(page.getByRole('region', { name: 'Entered execution stop' })).toContainText(`$${executionStop.toFixed(2)}`);
   await page.getByRole('radio', { name: 'Ladder', exact: true }).click();
   await expect(summary).toContainText('Choose a target');
@@ -149,6 +153,7 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.evaluate(() => document.querySelectorAll('*').forEach(el => { el.scrollTop = 0; }));
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}.png`), fullPage: true });
   await page.getByRole('link', { name: 'Which comes first', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Which comes first · graphical outcomes & full details$/ }).click();
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-calculations.png`), fullPage: true });
   await page.getByRole('link', { name: 'Qualification', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-qualification.png`), fullPage: true });
