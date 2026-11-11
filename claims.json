@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "docs/stocks-prebreakout-information-flow-34181032",
+      "claimed_at": "2026-11-11T09:59:36Z",
+      "expires_at": "2026-11-11T12:59:36Z",
+      "note": "Documentation-only source-checked information-flow proposal; no implementation",
+      "task": "STOCKS-PREBREAKOUT-INFO-FLOW-PROPOSAL"
+    }
+  ]
 }
