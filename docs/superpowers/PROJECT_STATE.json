@@ -10628,19 +10628,37 @@
           "report": "docs/superpowers/plans/stocks-reference-alignment/plan-audit-1.md"
         }
       ],
-      "build_tickets": [],
+      "build_tickets": [
+        {
+          "issue": 623,
+          "status": "built",
+          "completion_pct": 70,
+          "commit": "414c5621",
+          "evidence": "docs/superpowers/plans/stocks-reference-alignment/first-build-checkpoint.md"
+        },
+        {
+          "issue": 624,
+          "status": "not_started",
+          "completion_pct": 20
+        }
+      ],
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/stocks-reference-alignment/acceptance.md",
         "pattern": "STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
         "note": "Completion marker reserved for integrated acceptance of all planned build tasks."
       },
-      "note": "Plan independently approved; build ticket publication and first implementation follow. Setup Scanner separately queued in #622.",
+      "note": "Task #623 implemented at414c5621; typecheck,346suites/6371tests and8mocked browser scenarios passed.1/2 build tasks complete. Phase stays in_progress/20% because #624 method comparison and integrated acceptance/code audit remain. Setup Scanner separately queued in #622. Draft PR checkpoint; not ready to merge.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
         "reviewer": "stocks_plan_audit_1",
-        "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c"
+        "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c",
+        "closed_by": "clean"
+      },
+      "code_stage": {
+        "rounds": 0,
+        "clean": false
       }
     }
   ],
