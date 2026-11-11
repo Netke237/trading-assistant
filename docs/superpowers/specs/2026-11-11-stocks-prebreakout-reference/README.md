@@ -56,3 +56,7 @@ node docs/superpowers/specs/2026-11-11-stocks-prebreakout-reference/verify-previ
 - [Fib Pullback — initial, light](evidence/scanner-1366-light-fib-collapsed.png)
 
 The example comparison notice space deliberately aligns the two table headers and card heights. Supporting material remains collapsed on first load.
+
+## Independent acceptance
+
+[Review record](REVIEW.md): two fresh preview-review rounds, one probability-fixture finding fixed, zero outstanding. Independent rerun356checks passed. Application implementation and exhaustive source-text preservation remain separate future requirements.

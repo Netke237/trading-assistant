@@ -10,4 +10,4 @@ Application typecheck passed. No application test suite was rerun because fronte
 
 Independent preview-source audit is recorded separately in REVIEW.md after its verdict.
 
-Independent preview round1 found one inconsistent illustrative race value: 45% stop-first exceeded the same stop’s41% independent reach. The3Rexample is corrected to40%target /40%stop /20%neither. A browser invariant now verifies each exclusive first-hit event is bounded by its independent touch probability and the exclusive outcomes sum to100%. These values are fixture data; no application/model changed. Fresh narrow review follows.
+Independent preview round1 found one inconsistent illustrative race value: 45% stop-first exceeded the same stop’s41% independent reach. The3Rexample is corrected to40%target /40%stop /20%neither. A browser invariant now verifies each exclusive first-hit event is bounded by its independent touch probability and the exclusive outcomes sum to100%. These values are fixture data; no application/model changed. Fresh narrow review is complete:0gatefindings; see REVIEW.md.
