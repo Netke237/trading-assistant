@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "docs/stocks-prebreakout-information-flow-34181032",
-      "claimed_at": "2026-11-11T19:12:40Z",
-      "expires_at": "2026-11-11T22:18:44Z",
-      "note": "Persist achievements, references and next steps for continuation without chat history",
-      "task": "SCREENING-DESIGN-SESSION-HANDOFF"
-    }
-  ]
+  "claims": []
 }
