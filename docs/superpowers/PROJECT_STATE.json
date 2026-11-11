@@ -10608,12 +10608,26 @@
       "tracking_issue": 621,
       "size": "L",
       "complexity": 3,
-      "completion_pct": 10,
+      "completion_pct": 20,
       "plan": "docs/superpowers/plans/2026-11-11-stocks-reference-alignment-plan.md",
-      "audit_rounds": 0,
+      "audit_rounds": 1,
       "audit_clean": false,
-      "plan_audit_clean": false,
-      "audit_history": [],
+      "plan_audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "stocks_plan_audit_1",
+          "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/stocks-reference-alignment/plan-audit-1.md"
+        }
+      ],
       "build_tickets": [],
       "verify": {
         "kind": "present",
@@ -10621,7 +10635,13 @@
         "pattern": "STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
         "note": "Completion marker reserved for integrated acceptance of all planned build tasks."
       },
-      "note": "User approved implementation in the active chat. Plan drafted; independent review pending. Setup Scanner is separately queued in #622."
+      "note": "Plan independently approved; build ticket publication and first implementation follow. Setup Scanner separately queued in #622.",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "stocks_plan_audit_1",
+        "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c"
+      }
     }
   ],
   "already_shipped": [
