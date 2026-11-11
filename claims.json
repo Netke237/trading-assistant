@@ -1,3 +1,12 @@
 {
-  "claims": []
+  "claims": [
+    {
+      "agent": "claude",
+      "branch": "board/trade-card-qualification-placement-37f624d5",
+      "claimed_at": "2026-11-11T09:05:38Z",
+      "expires_at": "2026-11-11T12:05:38Z",
+      "note": "User explicitly approved merge of PR619; verify and reconcile shipping",
+      "task": "TRADE-CARD-QUALIFICATION-PLACEMENT"
+    }
+  ]
 }
