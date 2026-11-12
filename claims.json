@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/stocks-reference-alignment-9c971482",
       "claimed_at": "2026-11-12T15:02:14Z",
-      "expires_at": "2026-11-12T18:16:32Z",
+      "expires_at": "2026-11-12T18:16:58Z",
       "note": "User approved PR628; integrate merged scanner and verify combined head",
       "task": "STOCKS-REFERENCE-ALIGNMENT"
     }
