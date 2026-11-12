@@ -10604,11 +10604,11 @@
     {
       "id": "SETUP-SCANNER-REFERENCE-ALIGNMENT",
       "name": "Align Pre-Breakout, EMA and Fib scanner presentation with approved reference",
-      "status": "in_progress",
+      "status": "built",
       "tracking_issue": 622,
       "size": "L",
       "complexity": 3,
-      "completion_pct": 20,
+      "completion_pct": 70,
       "plan": "docs/superpowers/plans/2026-11-11-setup-scanner-reference-alignment-plan.md",
       "audit_rounds": 1,
       "audit_clean": false,
@@ -10628,19 +10628,32 @@
           "report": "docs/superpowers/plans/setup-scanner-reference-alignment/plan-audit-1.md"
         }
       ],
-      "build_tickets": [],
+      "build_tickets": [
+        {
+          "issue": 626,
+          "status": "built",
+          "completion_pct": 70,
+          "commit": "47c229a1ab85d9bdf2ffca0f2697506475039d57",
+          "evidence": "docs/superpowers/plans/setup-scanner-reference-alignment/acceptance.md"
+        }
+      ],
       "verify": {
         "kind": "present",
         "path": "docs/superpowers/plans/setup-scanner-reference-alignment/acceptance.md",
-        "pattern": "SETUP-SCANNER-REFERENCE-ALIGNMENT-FINAL-VERIFIED"
+        "pattern": "SETUP-SCANNER-REFERENCE-ALIGNMENT-LOCAL-VERIFIED",
+        "note": "Local acceptance marker establishes built source, not independent audit or merge/shipping."
       },
-      "note": "Exact plan independently approved; child build ticket and fresh implementation follow. Code audit not started.",
+      "note": "All three scanner modes implemented at47c229a1; typecheck,346Jest suites/6368tests and28mocked browser cases passed. Full preservation/local acceptance recorded. Build1/1 locally complete; independent phase-wide code audit next. Resume branch board/setup-scanner-reference-alignment-f0055da0; original clean plan round retained.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
         "closed_by": "clean",
         "reviewer": "scanner_plan_audit_1",
         "plan_sha256": "bce5c617c733bedcb34b69094d8dedb08e1c07de630964eb534e36dc7dcc1441"
+      },
+      "code_stage": {
+        "rounds": 0,
+        "clean": false
       }
     }
   ],
