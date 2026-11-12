@@ -9,6 +9,16 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
+
+/** #583 — a direct send opens the server review first; its final action saves
+ *  and sends. A send refused before the review (a gate, a quote warning)
+ *  opens none, and nothing is clicked. */
+async function confirmReview() {
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
+}
+
 // Phase G piece 5, build step 4 — this suite is isolating the INVALIDATION
 // gate, so every fixture also needs a satisfied METHOD PICK gate or the new
 // `pickMissing` check would leave both direct buttons disabled regardless of
@@ -80,6 +90,11 @@ jest.mock('@/lib/api', () => ({
  * and `recId` the page sent; every other request keeps the old `{}` reply. */
 function echoFetch(): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      // #583 — the server review of a direct send: the request echoed as the would-be row.
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
       const body = JSON.parse(String(init.body));
       return { ok: true, status: 201, json: async () => body };
@@ -197,6 +212,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
       expect(button).toHaveAttribute('title', BEARISH_REASON);
       fireEvent.click(button);
     }
+    fireEvent.click(screen.getByText('Execution requirements, tracking & auto-trade'));
     fireEvent.click(screen.getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
     expect(screen.getByRole('button', { name: /^Arm —/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);
@@ -221,7 +237,9 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     // Disabled is not the claim — not ordering is. A build that greys the
     // button and still posts on click passes the two assertions above.
     fireEvent.click(limitBtn);
+    await confirmReview();
     fireEvent.click(marketBtn);
+    await confirmReview();
     await Promise.resolve();
     expect(api.postOptionOrder).not.toHaveBeenCalled();
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
@@ -260,6 +278,8 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument();
 
     fireEvent.click(limitBtn);
+
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].stop).toBe(TYPED_STOP);
   });
@@ -276,6 +296,8 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     await waitFor(() => expect(limitBtn).toBeEnabled());
 
     fireEvent.click(limitBtn);
+
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     expect(usePortfolioStore.getState().positions[0].stop).toBe(140);
   });
@@ -311,7 +333,10 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     expect(marketBtn).toBeDisabled();
 
     fireEvent.click(limitBtn);
+
+    await confirmReview();
     fireEvent.click(marketBtn);
+    await confirmReview();
     await Promise.resolve();
     expect(api.postOptionOrder).not.toHaveBeenCalled();
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
@@ -347,6 +372,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     const limitBtn = screen.getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const created = usePortfolioStore.getState().positions[0]!;
     expect(created.pickedMethod).toBe('ladder');
@@ -399,7 +425,9 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
 
     // Disabled is not the claim -- not ordering is.
     fireEvent.click(limitBtn);
+    await confirmReview();
     fireEvent.click(marketBtn);
+    await confirmReview();
     await Promise.resolve();
     expect(api.postOptionOrder).not.toHaveBeenCalled();
     expect(usePortfolioStore.getState().positions).toHaveLength(0);
@@ -463,6 +491,8 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
 
     fireEvent.click(limitBtn);
+
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
   });
 });
@@ -591,6 +621,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
     expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
     fireEvent.click(limitBtn);
+    await confirmReview();
     await act(async () => {});
     expect(api.postOptionOrder).not.toHaveBeenCalled();
     expect(usePortfolioStore.getState().positions).toEqual([]);

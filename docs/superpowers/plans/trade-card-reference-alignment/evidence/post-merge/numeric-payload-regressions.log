@@ -1,0 +1,11 @@
+
+> bamendjou-frontend@0.1.0 test
+> jest --runInBand --silent --runTestsByPath components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx
+
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx (12.713 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx (10.466 s)
+
+Test Suites: 2 passed, 2 total
+Tests:       19 passed, 19 total
+Snapshots:   0 total
+Time:        23.739 s

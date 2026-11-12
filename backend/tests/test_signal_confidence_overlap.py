@@ -106,8 +106,10 @@ def test_sample_size_matches_harness_non_overlapping_count():
     assert res.sample_size == c.non_overlapping
 
 
-def test_cache_key_carries_basis_b3():
+def test_cache_key_carries_basis_b4():
+    # b3 was this item's bump; b4 (PROVIDER-FALLBACK-FORMING-BAR, #536) supersedes
+    # it, and an overlapping-era b3 value still misses.
     from app.data.confidence_cache import cache_key
 
     key = cache_key("AAPL", "Bullish", "Swing", None, None, scoring_mode="stock")
-    assert key.endswith("|b3")
+    assert key.endswith("|b4")

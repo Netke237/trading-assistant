@@ -21,6 +21,12 @@ import type { TradeCardData, MethodPick, PortfolioPosition } from '@/types/domai
  * 2026-09-25-p1b1-step7-save-first-core-plan.md §5, A4 and X1).
  */
 
+/* #583 — every direct send here is now a server review, a confirmation and a
+ * dispatch, and these tests run up to two sends across a navigation. Measured
+ * alone they finish well inside the 5 s default; under the full parallel run
+ * they ran out of it ("Exceeded timeout of 5000 ms", a different test each run). */
+jest.setTimeout(15_000);
+
 jest.mock('@/lib/api', () => ({
   api: {
     getStockQuote: jest.fn(),
@@ -77,6 +83,11 @@ const originalFetch = global.fetch;
 function installFetch() {
   global.fetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     const u = String(url);
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      // #583 — the server review of a direct send: the request echoed as the would-be row.
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
     if (u.endsWith('/api/portfolio') && init?.method === 'POST') {
       callLog.push('persist');
       return persistReply(JSON.parse(String(init.body)));
@@ -143,6 +154,12 @@ async function send(kind: 'LMT' | 'MKT' = 'LMT') {
 async function sendAndSettle(kind: 'LMT' | 'MKT' = 'LMT') {
   await send(kind);
   await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  // #583 — confirm the server review when the send opened one.
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) {
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  }
   await settle();
 }
 

@@ -11,6 +11,16 @@ import { api } from '@/lib/api';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
+
+/** #583 — a direct send opens the server review first; its final action saves
+ *  and sends. A send refused before the review (a gate, a quote warning)
+ *  opens none, and nothing is clicked. */
+async function confirmReview() {
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
+}
+
 // Phase G piece 5, build step 4 — this suite is about the edited-field sync
 // paths, not the method-pick gate, so every fixture below stamps a satisfied
 // pick for every contract key it sends through (base AAA/BBB, and the two
@@ -75,14 +85,28 @@ jest.mock('@/lib/api', () => ({
  * sending its own fraction (PREMIUM-STOP-FALLBACK-ALIGN): the dropped-stop
  * disclosure tests below rely on this reply reading as "the server stored no
  * per-position stop". What the page POSTS is read off the request instead. */
-function echoFetch(): typeof fetch {
+
+/** #582 — Track basket confirms only server-reviewed rows. The review
+ *  (POST /api/portfolio/preview) is answered with the request echoed as the
+ *  would-be saved row; every other request goes to `inner`. */
+function withPreview(inner: typeof fetch): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
+    return (inner as unknown as (u: string, i?: RequestInit) => Promise<unknown>)(url, init);
+  }) as unknown as typeof fetch;
+}
+
+function echoFetch(): typeof fetch {
+  return withPreview(jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
       const body = { ...JSON.parse(String(init.body)), premiumStopPct: null };
       return { ok: true, status: 201, json: async () => body };
     }
     return { ok: true, json: async () => ({}) };
-  }) as unknown as typeof fetch;
+  }) as unknown as typeof fetch);
 }
 
 const CARD_INVALIDATION = 140;
@@ -201,6 +225,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
+    await confirmReview();
   }
 
   it('sends the EDITED invalidation as the position stop, not the card\'s original', async () => {
@@ -288,6 +313,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder as jest.Mock).toHaveBeenCalled());
     expect((api.postOptionOrder as jest.Mock).mock.calls[0][0].limit_price).toBe(CARD_LIMIT);
   });
@@ -332,6 +358,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: 2.71, order_type: 'LMT' }),
     ));
@@ -380,6 +407,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     // ...and the order and the position USE them.
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: 2.71 }),
@@ -467,6 +495,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: BBB_LIMIT }),
     ));
@@ -497,6 +526,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: CARD_LIMIT }),
     ));
@@ -747,6 +777,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const [pos] = usePortfolioStore.getState().positions;
     expect(pos.symbol).toBe('AAA');
@@ -760,6 +791,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
+    await confirmReview();
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
     const direct = usePortfolioStore.getState().positions[0]!;
     // P2-06: `premiumStopDollar` is create-only transport and is dropped from
@@ -942,11 +974,11 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   });
 
   it('shows the rejection banner for a BASKET order with no broker selected', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = withPreview(jest.fn().mockResolvedValue({
       ok: false,
       status: 422,
       json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-    }) as unknown as typeof fetch;
+    }) as unknown as typeof fetch);
 
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
@@ -970,9 +1002,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
      * gated behind a selected broker; reachable the moment it was hoisted. */
     {
       // ── Submit 1: the backend refuses it.
-      global.fetch = jest.fn().mockResolvedValue({
+      global.fetch = withPreview(jest.fn().mockResolvedValue({
         ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-      }) as unknown as typeof fetch;
+      }) as unknown as typeof fetch);
       render(<Step7TradeCardPage />);
       await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
@@ -984,9 +1016,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
       // ── Submit 2: the backend accepts it. Same page, same card, no
       //    navigation -- so nothing else clears the banner.
-      global.fetch = jest.fn().mockResolvedValue({
+      global.fetch = withPreview(jest.fn().mockResolvedValue({
         ok: true, json: async () => ({}),
-      }) as unknown as typeof fetch;
+      }) as unknown as typeof fetch);
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
       fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
       submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
@@ -1008,9 +1040,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
    * a `finally`, so a failing assertion (a mutation run) cannot leak a spent
    * slot into the tests after it. */
   const reject422 = () => {
-    global.fetch = jest.fn().mockResolvedValue({
+    global.fetch = withPreview(jest.fn().mockResolvedValue({
       ok: false, status: 422, json: async () => ({ detail: 'single_trade_exposure_too_high' }),
-    }) as unknown as typeof fetch;
+    }) as unknown as typeof fetch);
   };
   const acceptAll = () => {
     global.fetch = echoFetch();
@@ -1069,6 +1101,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
       await waitFor(() => expect(limitBtn).toBeEnabled());
       fireEvent.click(limitBtn);
+      await confirmReview();
       await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
       expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
     } finally {
@@ -1089,6 +1122,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       const marketBtn = await screen.findByRole('button', { name: /right now — market/i });
       await waitFor(() => expect(marketBtn).toBeEnabled());
       fireEvent.click(marketBtn);
+      await confirmReview();
       await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
       expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
     } finally {
@@ -1103,6 +1137,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
+    await confirmReview();
     // P1b-i: the position is saved FIRST, so a plain Error from the broker
     // call leaves the order's fate UNKNOWN -- the row is kept and a
     // persistent ORDER-UNKNOWN note is pushed. The banner is `String(e)`.
@@ -1129,6 +1164,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
       await waitFor(() => expect(limitBtn).toBeEnabled());
       fireEvent.click(limitBtn);
+      await confirmReview();
       expect(await screen.findByText(/broker down/)).toBeInTheDocument();
       // P1b-i: that send KEPT its AAA row (order status unknown). Left in the
       // store, the basket dialog flags it as a duplicate and waits for an
@@ -1173,6 +1209,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       await waitFor(() => expect(btn).toBeEnabled());
       fireEvent.click(btn);
 
+      await confirmReview();
       expect(await screen.findByText(/IBKR said: Are you sure/)).toBeInTheDocument();
       expect(api.postOptionOrder).toHaveBeenCalledTimes(1);
       const posts = (global.fetch as jest.Mock).mock.calls.filter(
@@ -1207,9 +1244,10 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const added: Array<{ symbol: string; source?: string }> = [];
     act(() => {
       usePortfolioStore.setState({
-        addPosition: ((p: Parameters<typeof realAddPosition>[0]) => {
+        // #582 — forward the review, so the basket's reviewed confirmation runs.
+        addPosition: ((p: Parameters<typeof realAddPosition>[0], opts?: Parameters<typeof realAddPosition>[1]) => {
           added.push({ symbol: p.symbol, source: p.source });
-          return realAddPosition(p);
+          return (realAddPosition as (x: typeof p, o?: typeof opts) => ReturnType<typeof realAddPosition>)(p, opts);
         }) as typeof realAddPosition,
       });
     });

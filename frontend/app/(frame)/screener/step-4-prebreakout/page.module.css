@@ -1,4 +1,4 @@
-.main { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
+.main { min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px 24px; }
 .header { display: flex; flex-direction: column; gap: 4px; }
 .inputRow { display: flex; gap: 10px; align-items: flex-start; }
 .symbolInput {
@@ -17,7 +17,7 @@
 .tableWrap { border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
 .tableHeader, .tableRow {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 72px 90px 60px;
+  grid-template-columns: minmax(180px, 1fr) 32px 96px 80px 72px 90px 60px;
   gap: 8px; align-items: center; padding: 6px 12px;
 }
 .tableHeader { background: var(--bg-surface); border-bottom: 1px solid var(--border-subtle); }
@@ -65,7 +65,7 @@
 .fibTableHeader,
 .fibTableRow {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 32px 80px 72px 72px 72px 60px;
+  grid-template-columns: minmax(180px, 1fr) 32px 80px 72px 72px 112px 60px;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
@@ -171,12 +171,12 @@
 .evidenceGroup { padding-left: var(--space-2); border-left: 1px solid var(--border-subtle); }
 .evidenceGroup > .evidenceFields { margin: var(--space-2) 0; }
 
-.pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 90px 60px; }
+.pullbackTable { grid-template-columns: minmax(180px, 1fr) 32px 80px 80px 120px 60px; }
 .selectedChart { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .chartMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 .contextSection { display: flex; flex-direction: column; gap: 12px; padding: 16px 0; }
-.contextGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.contextGrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .scoreContextGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .contextCard { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; }
 .contextDisclosure { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
@@ -197,3 +197,17 @@
 .newsItem { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); min-width: 0; overflow-wrap: anywhere; }
 .newsLink { font-size: 11px; color: var(--accent); text-decoration: none; align-self: flex-start; }
 .newsLink:hover, .newsLink:focus-visible { text-decoration: underline; }
+
+/* Native details keep their closed-state hiding; layout belongs to summary/body. */
+.researchPanel { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); }
+.researchSummary { padding: 14px 16px; cursor: pointer; color: var(--text-primary); }
+.researchSummary > span { margin-left: 6px; }
+.researchSummary > span:not(:first-child) { display: block; margin: 6px 0 0 18px; }
+.researchBody { padding: 0 16px 16px; min-width: 0; border-top: 1px solid var(--border-subtle); }
+.researchSummary:focus-visible, .paramsSummary:focus-visible, .modeBtn:focus-visible, .breakdownBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chartShell, .resultsGrid, .contextSection, .breakdownPanel { min-width: 0; }
+.tableHeader, .tableRow { min-width: 682px; }
+.pullbackTable { min-width: 652px; }
+.fibTableHeader, .fibTableRow { min-width: 672px; }
+.modeToggle { max-width: 100%; flex-wrap: wrap; }
+@media (max-width: 700px) { .main { padding: 16px; } .pullbackParamsGrid { grid-template-columns: 1fr; } }

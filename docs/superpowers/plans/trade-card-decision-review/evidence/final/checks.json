@@ -1,0 +1,9796 @@
+{
+ "states": [
+  "initial",
+  "calculated",
+  "stale",
+  "restored",
+  "basket-review",
+  "broker-review",
+  "outcome"
+ ],
+ "baseUrl": "http://127.0.0.1:3097/",
+ "runs": [
+  {
+   "width": 1200,
+   "theme": "dark",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 0px)",
+    "card rows: [[\"ladder\"],[\"arithmetic\"],[\"monte_carlo\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2698,
+       "left": 244,
+       "width": 632,
+       "height": 646
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3360,
+       "left": 244,
+       "width": 632,
+       "height": 941
+      },
+      {
+       "method": "ladder",
+       "top": 4317,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 2715
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3377
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 2747
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3450
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4382
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 3046
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3786
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4532
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 3252
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 4102
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4816
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -1441,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -380,
+       "left": 244,
+       "width": 632,
+       "height": 1480
+      },
+      {
+       "method": "ladder",
+       "top": 1116,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "ladder"
+      ],
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1424
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": -363
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1392
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": -290
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1181
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1111
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": 87
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1331
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -878
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": 387
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1615
+       }
+      ]
+     },
+     "scrollers": [
+      "DIV.BarrierRaceCard_tableScroll__V8k9q 612>598"
+     ],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 0
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2597,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3658,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": 5100,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2614
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 3675
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2646
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 3748
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5166
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2927
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 4125
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5316
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 3160
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 4442
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5599
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 3144,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": 4206,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": 5648,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3161
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4223
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3194
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4296
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 5714
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3475
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4673
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 5864
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3708
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4989
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 6147
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -4909,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -3847,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -2405,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4892
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3830
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4859
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3757
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -2339
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4578
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3380
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -2189
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4345
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3064
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -1906
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5883,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -4821,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -3379,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5866
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4804
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5833
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4731
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -3313
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5552
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4354
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -3163
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5319
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4038
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -2880
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5713,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -4651,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -3209,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5696
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4634
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5663
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4561
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -3143
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5382
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4184
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -2993
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5149
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -3868
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -2710
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144087835-D8KU",
+     "recId": "REC-1794144087835-D8KU"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144087835-D8KU",
+      "saved_rec_id": "REC-1794144087835-D8KU"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  },
+  {
+   "width": 1200,
+   "theme": "light",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 0px)",
+    "card rows: [[\"ladder\"],[\"arithmetic\"],[\"monte_carlo\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2698,
+       "left": 244,
+       "width": 632,
+       "height": 646
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3360,
+       "left": 244,
+       "width": 632,
+       "height": 941
+      },
+      {
+       "method": "ladder",
+       "top": 4317,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 2715
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3377
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 2747
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3450
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4382
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 3046
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 3786
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4532
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2698,
+        "top": 3252
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3360,
+        "top": 4102
+       },
+       {
+        "method": "ladder",
+        "row": 4317,
+        "top": 4816
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -1441,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -380,
+       "left": 244,
+       "width": 632,
+       "height": 1480
+      },
+      {
+       "method": "ladder",
+       "top": 1116,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "ladder"
+      ],
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1424
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": -363
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1392
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": -290
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1181
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -1111
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": 87
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1331
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -1441,
+        "top": -878
+       },
+       {
+        "method": "monte_carlo",
+        "row": -380,
+        "top": 387
+       },
+       {
+        "method": "ladder",
+        "row": 1116,
+        "top": 1615
+       }
+      ]
+     },
+     "scrollers": [
+      "DIV.BarrierRaceCard_tableScroll__V8k9q 612>598"
+     ],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 0
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2597,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3658,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": 5100,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2614
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 3675
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2646
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 3748
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5166
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 2927
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 4125
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5316
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2597,
+        "top": 3160
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3658,
+        "top": 4442
+       },
+       {
+        "method": "ladder",
+        "row": 5100,
+        "top": 5599
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 3144,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": 4206,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": 5648,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3161
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4223
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3194
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4296
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 5714
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3475
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4673
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 5864
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 3144,
+        "top": 3708
+       },
+       {
+        "method": "monte_carlo",
+        "row": 4206,
+        "top": 4989
+       },
+       {
+        "method": "ladder",
+        "row": 5648,
+        "top": 6147
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -4909,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -3847,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -2405,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4892
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3830
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4859
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3757
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -2339
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4578
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3380
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -2189
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -4909,
+        "top": -4345
+       },
+       {
+        "method": "monte_carlo",
+        "row": -3847,
+        "top": -3064
+       },
+       {
+        "method": "ladder",
+        "row": -2405,
+        "top": -1906
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5883,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -4821,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -3379,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5866
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4804
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5833
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4731
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -3313
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5552
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4354
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -3163
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5883,
+        "top": -5319
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4821,
+        "top": -4038
+       },
+       {
+        "method": "ladder",
+        "row": -3379,
+        "top": -2880
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1200,
+     "pageClientW": 1200,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5713,
+       "left": 244,
+       "width": 632,
+       "height": 1046
+      },
+      {
+       "method": "monte_carlo",
+       "top": -4651,
+       "left": 244,
+       "width": 632,
+       "height": 1426
+      },
+      {
+       "method": "ladder",
+       "top": -3209,
+       "left": 244,
+       "width": 632,
+       "height": 1151
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic"
+      ],
+      [
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5696
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4634
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5663
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4561
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -3143
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5382
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -4184
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -2993
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5713,
+        "top": -5149
+       },
+       {
+        "method": "monte_carlo",
+        "row": -4651,
+        "top": -3868
+       },
+       {
+        "method": "ladder",
+        "row": -3209,
+        "top": -2710
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 598,
+       "children": [
+        572
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 598,
+       "children": [
+        572,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144099895-OEUL",
+     "recId": "REC-1794144099895-OEUL"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144099895-OEUL",
+      "saved_rec_id": "REC-1794144099895-OEUL"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  },
+  {
+   "width": 1366,
+   "theme": "dark",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 8px)",
+    "card rows: [[\"ladder\"],[\"arithmetic\",\"monte_carlo\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2579,
+       "left": 244,
+       "width": 391,
+       "height": 1394
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2579,
+       "left": 651,
+       "width": 391,
+       "height": 1394
+      },
+      {
+       "method": "ladder",
+       "top": 3989,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2596
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2596
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2670
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2670
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4055
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3222
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3222
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4205
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3738
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3730
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4639
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -702,
+       "left": 244,
+       "width": 391,
+       "height": 2206
+      },
+      {
+       "method": "monte_carlo",
+       "top": -702,
+       "left": 651,
+       "width": 391,
+       "height": 2206
+      },
+      {
+       "method": "ladder",
+       "top": 1520,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "ladder"
+      ],
+      [
+       "arithmetic",
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -685
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -685
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -612
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -612
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 1585
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -18
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -18
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 1736
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": 464
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": 456
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 2169
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 8
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2449,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2449,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 4606,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 2466
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 2466
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 2539
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 2539
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 4671
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 3133
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 3133
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 4821
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 3648
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 3640
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 5255
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2997,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2997,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 5154,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3014
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3014
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3087
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3087
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5219
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3681
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3681
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5369
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 4196
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 4188
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5803
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 3002,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3002,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 5159,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3019
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3019
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3092
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3092
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5224
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3686
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3686
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5374
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 4201
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 4193
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5808
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5845,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": -5845,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": -3688,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5828
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5828
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5755
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5755
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3623
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5161
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5161
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3473
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -4646
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -4654
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3039
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5676,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": -5676,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": -3519,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -5659
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -5659
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -5586
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -5586
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -3454
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -4992
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -4992
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -3304
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -4477
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -4485
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -2870
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144112401-DCCS",
+     "recId": "REC-1794144112401-DCCS"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144112401-DCCS",
+      "saved_rec_id": "REC-1794144112401-DCCS"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  },
+  {
+   "width": 1366,
+   "theme": "light",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 8px)",
+    "card rows: [[\"ladder\"],[\"arithmetic\",\"monte_carlo\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2579,
+       "left": 244,
+       "width": 391,
+       "height": 1394
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2579,
+       "left": 651,
+       "width": 391,
+       "height": 1394
+      },
+      {
+       "method": "ladder",
+       "top": 3989,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2596
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2596
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2670
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2670
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4055
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3222
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3222
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4205
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3738
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3730
+       },
+       {
+        "method": "ladder",
+        "row": 3989,
+        "top": 4639
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -702,
+       "left": 244,
+       "width": 391,
+       "height": 2206
+      },
+      {
+       "method": "monte_carlo",
+       "top": -702,
+       "left": 651,
+       "width": 391,
+       "height": 2206
+      },
+      {
+       "method": "ladder",
+       "top": 1520,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "ladder"
+      ],
+      [
+       "arithmetic",
+       "monte_carlo"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -685
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -685
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -612
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -612
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 1585
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": -18
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": -18
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 1736
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -702,
+        "top": 464
+       },
+       {
+        "method": "monte_carlo",
+        "row": -702,
+        "top": 456
+       },
+       {
+        "method": "ladder",
+        "row": 1520,
+        "top": 2169
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 8
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2449,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2449,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 4606,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 2466
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 2466
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 2539
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 2539
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 4671
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 3133
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 3133
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 4821
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2449,
+        "top": 3648
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2449,
+        "top": 3640
+       },
+       {
+        "method": "ladder",
+        "row": 4606,
+        "top": 5255
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2997,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2997,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 5154,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3014
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3014
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3087
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3087
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5219
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 3681
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 3681
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5369
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2997,
+        "top": 4196
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2997,
+        "top": 4188
+       },
+       {
+        "method": "ladder",
+        "row": 5154,
+        "top": 5803
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 3002,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": 3002,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": 5159,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3019
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3019
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3092
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3092
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5224
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 3686
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 3686
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5374
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 3002,
+        "top": 4201
+       },
+       {
+        "method": "monte_carlo",
+        "row": 3002,
+        "top": 4193
+       },
+       {
+        "method": "ladder",
+        "row": 5159,
+        "top": 5808
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5845,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": -5845,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": -3688,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5828
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5828
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5755
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5755
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3623
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -5161
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -5161
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3473
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5845,
+        "top": -4646
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5845,
+        "top": -4654
+       },
+       {
+        "method": "ladder",
+        "row": -3688,
+        "top": -3039
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1366,
+     "pageClientW": 1366,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": -5676,
+       "left": 244,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "monte_carlo",
+       "top": -5676,
+       "left": 651,
+       "width": 391,
+       "height": 2141
+      },
+      {
+       "method": "ladder",
+       "top": -3519,
+       "left": 244,
+       "width": 391,
+       "height": 1702
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -5659
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -5659
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -5586
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -5586
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -3454
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -4992
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -4992
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -3304
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": -5676,
+        "top": -4477
+       },
+       {
+        "method": "monte_carlo",
+        "row": -5676,
+        "top": -4485
+       },
+       {
+        "method": "ladder",
+        "row": -3519,
+        "top": -2870
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 357,
+       "children": [
+        331
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 357,
+       "children": [
+        331,
+        331,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144124050-7CLL",
+     "recId": "REC-1794144124050-7CLL"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144124050-7CLL",
+      "saved_rec_id": "REC-1794144124050-7CLL"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  },
+  {
+   "width": 1920,
+   "theme": "dark",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 8px)",
+    "card rows: [[\"arithmetic\",\"monte_carlo\"],[\"ladder\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2122,
+       "left": 244,
+       "width": 520,
+       "height": 1049
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2122,
+       "left": 780,
+       "width": 520,
+       "height": 1049
+      },
+      {
+       "method": "ladder",
+       "top": 3187,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2139
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2139
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2213
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2213
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3252
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2609
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2609
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3402
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2966
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2958
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3686
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2579,
+       "left": 244,
+       "width": 520,
+       "height": 1674
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2579,
+       "left": 780,
+       "width": 520,
+       "height": 1674
+      },
+      {
+       "method": "ladder",
+       "top": 4269,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2596
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2596
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2669
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2669
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4334
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3090
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3090
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4484
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3429
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3421
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4768
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 8
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2550,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2550,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4187,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 2567
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 2567
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 2640
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 2640
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4252
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 3061
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 3061
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4402
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 3417
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 3409
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4686
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2385,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2385,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4022,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2402
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2402
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2476
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2476
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4087
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2896
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2896
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4237
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 3252
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 3244
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4521
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "dark",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144136351-9XW4",
+     "recId": "REC-1794144136351-9XW4"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144136351-9XW4",
+      "saved_rec_id": "REC-1794144136351-9XW4"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  },
+  {
+   "width": 1920,
+   "theme": "light",
+   "results": [
+    "requested theme applied",
+    "every <details> disclosure closed by default",
+    "scores disclosure collapsed by default",
+    "ladder card open by default (existing preference key)",
+    "alternatives collapsed by default",
+    "editable affordances visible",
+    "on-demand: no estimate runs on load",
+    "on-demand: no Monte Carlo or Arithmetic request on load",
+    "three method cards compared",
+    "no horizontal page overflow when calculated",
+    "every target row keeps readable width for its values",
+    "every compared card has readable width",
+    "cards sharing a row have equal height",
+    "slot header: aligned across cards sharing a row (max offset 0px)",
+    "slot basis: aligned across cards sharing a row (max offset 0px)",
+    "slot stop: aligned across cards sharing a row (max offset 0px)",
+    "slot targets: aligned across cards sharing a row (max offset 8px)",
+    "card rows: [[\"arithmetic\",\"monte_carlo\"],[\"ladder\"]]",
+    "two cards compare without overflow",
+    "stale: race shortcuts suppressed",
+    "no horizontal page overflow when stale",
+    "same-vintage race returns after the premium stop is restored",
+    "contract switch hides the previous race",
+    "no horizontal page overflow when restored",
+    "basket: tracking creates no broker order, said on the dialog",
+    "no horizontal page overflow in basket review",
+    "broker review: in-app alerts are not broker orders",
+    "no horizontal page overflow in broker review",
+    "no save or order before the final confirmation",
+    "outcome: fill price and quantity unavailable",
+    "outcome: acceptance is not a fill",
+    "save carried the reviewed fingerprint",
+    "order carried the saved row identity",
+    "exactly one mocked save and one mocked order",
+    "unsafe-write guard: no write attempted outside the allow-list",
+    "no arm or fire request"
+   ],
+   "layout": {
+    "initial": {
+     "state": "initial",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2122,
+       "left": 244,
+       "width": 520,
+       "height": 1049
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2122,
+       "left": 780,
+       "width": 520,
+       "height": 1049
+      },
+      {
+       "method": "ladder",
+       "top": 3187,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2139
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2139
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2213
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2213
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3252
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2609
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2609
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3402
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2122,
+        "top": 2966
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2122,
+        "top": 2958
+       },
+       {
+        "method": "ladder",
+        "row": 3187,
+        "top": 3686
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "calculated": {
+     "state": "calculated",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2579,
+       "left": 244,
+       "width": 520,
+       "height": 1674
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2579,
+       "left": 780,
+       "width": 520,
+       "height": 1674
+      },
+      {
+       "method": "ladder",
+       "top": 4269,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2596
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2596
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 2669
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 2669
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4334
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3090
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3090
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4484
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2579,
+        "top": 3429
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2579,
+        "top": 3421
+       },
+       {
+        "method": "ladder",
+        "row": 4269,
+        "top": 4768
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Stop medians, full risk / R:R / edge arithmetic and explanations",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ],
+     "slotOffsetPx": {
+      "header": 0,
+      "basis": 0,
+      "stop": 0,
+      "targets": 8
+     }
+    },
+    "stale": {
+     "state": "stale",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2550,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2550,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4187,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 2567
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 2567
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 2640
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 2640
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4252
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 3061
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 3061
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4402
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2550,
+        "top": 3417
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2550,
+        "top": 3409
+       },
+       {
+        "method": "ladder",
+        "row": 4187,
+        "top": 4686
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "restored": {
+     "state": "restored",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "basket-review": {
+     "state": "basket-review",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2385,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2385,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4022,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2402
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2402
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2476
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2476
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4087
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 2896
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 2896
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4237
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2385,
+        "top": 3252
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2385,
+        "top": 3244
+       },
+       {
+        "method": "ladder",
+        "row": 4022,
+        "top": 4521
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "broker-review": {
+     "state": "broker-review",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Exact broker request",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    },
+    "outcome": {
+     "state": "outcome",
+     "pageScrollW": 1920,
+     "pageClientW": 1920,
+     "horizontalPageOverflow": false,
+     "dataTheme": "light",
+     "cards": [
+      {
+       "method": "arithmetic",
+       "top": 2380,
+       "left": 244,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "monte_carlo",
+       "top": 2380,
+       "left": 780,
+       "width": 520,
+       "height": 1621
+      },
+      {
+       "method": "ladder",
+       "top": 4017,
+       "left": 244,
+       "width": 520,
+       "height": 1274
+      }
+     ],
+     "cardRows": [
+      [
+       "arithmetic",
+       "monte_carlo"
+      ],
+      [
+       "ladder"
+      ]
+     ],
+     "rowHeightsEqual": true,
+     "slots": {
+      "header": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2397
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2397
+       }
+      ],
+      "basis": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2471
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4082
+       }
+      ],
+      "stop": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 2891
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4232
+       }
+      ],
+      "targets": [
+       {
+        "method": "arithmetic",
+        "row": 2380,
+        "top": 3247
+       },
+       {
+        "method": "monte_carlo",
+        "row": 2380,
+        "top": 3239
+       },
+       {
+        "method": "ladder",
+        "row": 4017,
+        "top": 4516
+       }
+      ]
+     },
+     "scrollers": [],
+     "clippedInMethods": [],
+     "beyondViewport": [],
+     "targetRows": [
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "arithmetic",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "monte_carlo",
+       "rowWidth": 486,
+       "children": [
+        460
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      },
+      {
+       "method": "ladder",
+       "rowWidth": 486,
+       "children": [
+        460,
+        336,
+        159
+       ]
+      }
+     ],
+     "squeezedTargetRows": 0,
+     "editable": {
+      "count": 9,
+      "cursors": [
+       "pointer",
+       "text"
+      ],
+      "borderStyles": [
+       "solid"
+      ]
+     },
+     "details": [
+      {
+       "summary": "How this page works",
+       "open": false
+      },
+      {
+       "summary": "Score definitions & safety flags",
+       "open": false
+      },
+      {
+       "summary": "How these exit settings are resolved",
+       "open": false
+      },
+      {
+       "summary": "Stop source, ATR and structure detail",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      },
+      {
+       "summary": "Original target, snap geometry and pricing",
+       "open": false
+      }
+     ],
+     "collapsibles": [
+      {
+       "text": "Config OK · 10 checks",
+       "expanded": "false"
+      },
+      {
+       "text": "ALTERNATIVES (1)▼",
+       "expanded": "false"
+      },
+      {
+       "text": "Stock & contract scores▸",
+       "expanded": "false"
+      },
+      {
+       "text": "Fixed % Ladder Plan▾",
+       "expanded": "true"
+      },
+      {
+       "text": "View chart",
+       "expanded": "false"
+      }
+     ]
+    }
+   },
+   "blockedWrites": [],
+   "mockedWrites": [
+    {
+     "method": "POST",
+     "path": "/api/portfolio",
+     "fingerprintHeader": "mock-fingerprint-REC-1794144148583-QVW5",
+     "recId": "REC-1794144148583-QVW5"
+    },
+    {
+     "method": "POST",
+     "path": "/broker/option-order",
+     "body": {
+      "broker": "ibkr_paper",
+      "symbol": "AAPL",
+      "option_symbol": "AAPL|185|2026-12-18|C",
+      "action": "BUY",
+      "effect": "OPEN",
+      "quantity": 1,
+      "order_type": "LMT",
+      "limit_price": 2.1,
+      "tif": "DAY",
+      "attempt_id": "opt-REC-1794144148583-QVW5",
+      "saved_rec_id": "REC-1794144148583-QVW5"
+     }
+    }
+   ],
+   "unmocked": [
+    "GET /api/stock-scan/last",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/data-sources",
+    "GET /api/stock-scan/last-run"
+   ],
+   "externalAborted": [],
+   "pageErrors": [],
+   "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+   ],
+   "guard": {
+    "blockedWrites": [],
+    "mockedWrites": [
+     "POST /api/portfolio",
+     "POST /broker/option-order"
+    ],
+    "unmocked": [
+     "GET /api/stock-scan/last",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/data-sources",
+     "GET /api/stock-scan/last-run"
+    ],
+    "externalAborted": []
+   }
+  }
+ ]
+}

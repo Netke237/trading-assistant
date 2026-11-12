@@ -1,8 +1,9 @@
 import '@testing-library/jest-dom';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
 import { SendToBrokerDialog } from '@/components/organisms/SendToBrokerDialog';
 import { usePortfolioStore } from '@/lib/portfolioStore';
 import { useRiskStore } from '@/lib/riskStore';
+import { buildSubmissionDraft } from '@/lib/submissionDraft';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
 // Phase G piece 5, build step 4 — every render below must supply a pick for
@@ -252,12 +253,34 @@ describe('SendToBrokerDialog — tracks the basket, places no broker order (revi
     expect(screen.queryByText(/send it from its own card/i)).not.toBeInTheDocument();
   });
 
-  it('submits drafts that carry no autoSend field', () => {
-    const onSubmit = jest.fn();
-    render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }} onClose={noop} onSubmit={onSubmit} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Add 1 to Portfolio' }));
-    expect(onSubmit).toHaveBeenCalledTimes(1);
-    expect(Object.keys(onSubmit.mock.calls[0][0][0]).sort()).toEqual(['card', 'contracts']);
+  it('submits reviewed drafts that carry no autoSend field', async () => {
+    // #582 — a row is confirmable only once the server has reviewed it.
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init!.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: 'v1:fp', position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }) as unknown as typeof fetch;
+    try {
+      const onSubmit = jest.fn();
+      const draftFor = (c: TradeCardData, contracts: number) => buildSubmissionDraft({
+        card: c, contracts, livePrice: null, invalidation: c.exit.invalidation, invalidationIsUserSet: false,
+        entryLimit: c.entry.limit, premiumStopDollar: null, structuralStop: null, exitPlan: null,
+        maxLossOverride: null, pick: pick(),
+      }, { broker: null, globalPremiumStopPct: 0.6 });
+      render(<SendToBrokerDialog cards={[cleanCard()]} contractsBySymbol={{}} overridesBySymbol={{}} invalidationBySymbol={{}} methodPickBySymbol={{ AAA: pick() }}
+        trackingDraftFor={draftFor} stampsFor={() => ({ entryDate: '2026-11-08', orderedAt: '2026-11-08T10:00:00', recId: 'REC-AAA' })}
+        onClose={noop} onSubmit={onSubmit} />);
+      const submit = screen.getByRole('button', { name: 'Add 1 to Portfolio' });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      const [order] = onSubmit.mock.calls[0][0];
+      expect(Object.keys(order).sort()).toEqual(['card', 'contracts', 'draftFingerprint', 'preview', 'request']);
+      expect(order.request).not.toHaveProperty('autoSend');
+      expect(order.request.source).toBe('manual');
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
 

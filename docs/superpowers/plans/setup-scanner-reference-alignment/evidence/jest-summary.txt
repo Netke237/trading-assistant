@@ -1,0 +1,4 @@
+Test Suites: 346 passed, 346 total
+Tests:       6368 passed, 6368 total
+Snapshots:   0 total
+Time:        368.951 s
