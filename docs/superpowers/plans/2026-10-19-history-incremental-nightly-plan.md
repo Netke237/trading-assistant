@@ -196,8 +196,29 @@ Each stage is one layer and one PR with its own code audit (audit_rule: one laye
 ### Stage C — Settings → Data line (frontend, ~150 lines + tests) — per D5
 **C1** `frontend/lib/api.ts` type for `tiingo_usage` + run counters; a small `TiingoBudget` molecule under the existing Data section (four meters `used / limit`, last run: duration, Tiingo requests, rescaled / confirmed / lag-window counts). Jest tests for rendering, missing fields (older backend) and the degraded state; `npm run typecheck`.
 
+**C1b — persisted last-run summary (backend + C1 adjustment).** Added 2026-11-12 by Kenneth's decision (`HISTORY-INCREMENTAL-C-LAST-RUN-2026-11-12`): the run state in `ingestion_job._state` lives in memory only, so after any backend restart the endpoint returns `status: "idle"`, `started_at: null`, and C1 shows "No run since the backend started" most of the time. The fix is to persist each run's summary and serve the latest one after a restart. The four Tiingo meters already survive restarts (Stage A ledger) and do not change.
+- **Table** `ingestion_run` (new model `app/models/ingestion_run.py`, own declarative base registered in `migrations/env.py` like `provider_usage`; one Alembic revision on the current single head, `downgrade` drops the table; no change to existing tables or rows). Columns: `id` integer PK; `started_at` DateTime(tz) not null; `finished_at` DateTime(tz) null; `status` String(16) not null — `running` | `completed` | `error`; `summary` Text null — JSON of `get_ingestion_state()` taken at finish (NULL while running).
+- **Writes** (`ingestion_job.run_ingestion`): (1) at run start, right after `_state.update({... "status": "running" ...})`, insert one row (`status='running'`, `started_at` = the same instant as `_state["started_at"]`) and keep its id in a local; in the same transaction delete all but the newest 50 rows (by `started_at`, then `id`). (2) In the `completed` branch and in the `error` branch, after the final `_state.update(...)`, update that row: `status` = `_state["status"]`, `finished_at` = `_state["finished_at"]`, `summary` = `json.dumps(get_ingestion_state(), default=str)`. **Fail-open:** any exception from either write (including a missing table on SQLite dev/test DBs) is logged at error level and swallowed — it never changes the run, its counters, or its return value; if the start insert failed, the finish write is skipped. A run cancelled or killed by a process exit leaves its row `running` with `finished_at` NULL.
+- **Read** (`routers/ingestion.ingest_status`): the live top-level fields are unchanged. Two new keys: `last_run` = the newest row (by `started_at` desc, then `id` desc) as `{"id", "status", "started_at", "finished_at", "summary"}` (times ISO UTC; `summary` the parsed JSON object or `null`), or `null` when the table is empty; `last_run_error` = `null`, or a string when the read fails, in which case `last_run` is `null` and the endpoint still answers 200 (as for `tiingo_usage`).
+- **Display rule (C1 `TiingoBudget`, adjusted):** while the live state has a run of this process (`started_at` set) the live state is shown exactly as today — running, completed or error. Only when the live state has no run since the restart (`status == "idle"` and `started_at` null) is `last_run` shown, under its own label "Recorded run (stored before the last backend restart)" with its started and finished times — never as live and never with the live status tone. For a stored row:
+  - `completed` or `error` with a `summary`: the same last-run fields as C1, read from `summary`. A null `tiingo_requests` or `tiingo_bytes` reads "unknown (ledger missed an attempt)", never "counted at run end".
+  - `running` (finished_at NULL): "Interrupted: the backend stopped before this run finished; no counters were recorded", with no counters, because the row has none.
+  - `last_run` null: "No run recorded". `last_run_error` set: that text, with no numbers. `last_run` key absent (older backend): C1's existing "No run since the backend started".
+- **Tests (first).** Backend (Python 3.11, in-memory SQLite with the table created):
+  1. A completed run writes one row whose `summary` equals the state snapshot at finish.
+  2. An error run writes `status='error'` with the error text in `summary`.
+  3. A failing start insert, and separately a failing finish update, leave the run's result and `_state` unchanged.
+  4. The newest-50 retention.
+  5. After a simulated restart (`_state` reset to its initial dict), the status endpoint returns the stored `last_run` and live `status: "idle"`.
+  6. An empty table returns `last_run: null`.
+  7. A failing read returns 200 with `last_run_error` set.
+  8. A `running` row is returned as is.
+  9. The migration upgrades and downgrades, and there is still one head.
+
+  Frontend Jest: stored completed, stored error, stored interrupted (no counters shown), `last_run` null, `last_run_error`, live run overrides stored, and older-backend absence.
+
 ### Stage D — coordinator: verify, audit, PR (per stage)
-Python 3.11 full backend suite, frontend typecheck + jest for C; `git merge origin/main` before each code round 1; code audit per stage (cap 3 each); PR per stage, `Refs #413`.
+Python 3.11 full backend suite (also for C, since C1b touches the backend), frontend typecheck + jest for C; `git merge origin/main` before each code round 1; code audit per stage (cap 3 each); PR per stage, `Refs #413`.
 
 ## 6. Acceptance
 
