@@ -1,0 +1,146 @@
+{
+  "phase": "BACKTEST-REVIEW-VISUALISATION",
+  "branch": "codex/backtest-review-implementation-plan",
+  "children": [
+    {
+      "number": 632,
+      "id": 6359673350,
+      "url": "https://github.com/Netke237/trading-assistant/issues/632",
+      "task": 1,
+      "size": "M",
+      "complexity": 4,
+      "blockers": [],
+      "verified_native_blockers": [],
+      "verified_labels": [
+        "ready-for-agent",
+        "size:M",
+        "complexity:4",
+        "backtest-review-visualisation"
+      ]
+    },
+    {
+      "number": 633,
+      "id": 6359676178,
+      "url": "https://github.com/Netke237/trading-assistant/issues/633",
+      "task": 2,
+      "size": "M",
+      "complexity": 3,
+      "blockers": [
+        1
+      ],
+      "verified_native_blockers": [
+        632
+      ],
+      "verified_labels": [
+        "size:M",
+        "complexity:3",
+        "backtest-review-visualisation"
+      ]
+    },
+    {
+      "number": 634,
+      "id": 6359679406,
+      "url": "https://github.com/Netke237/trading-assistant/issues/634",
+      "task": 3,
+      "size": "M",
+      "complexity": 4,
+      "blockers": [
+        2
+      ],
+      "verified_native_blockers": [
+        633
+      ],
+      "verified_labels": [
+        "size:M",
+        "complexity:4",
+        "backtest-review-visualisation"
+      ]
+    },
+    {
+      "number": 635,
+      "id": 6359682285,
+      "url": "https://github.com/Netke237/trading-assistant/issues/635",
+      "task": 4,
+      "size": "S",
+      "complexity": 3,
+      "blockers": [
+        3
+      ],
+      "verified_native_blockers": [
+        634
+      ],
+      "verified_labels": [
+        "size:S",
+        "complexity:3",
+        "backtest-review-visualisation"
+      ]
+    },
+    {
+      "number": 636,
+      "id": 6359687600,
+      "url": "https://github.com/Netke237/trading-assistant/issues/636",
+      "task": 5,
+      "size": "M",
+      "complexity": 4,
+      "blockers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "verified_native_blockers": [
+        632,
+        633,
+        634,
+        635
+      ],
+      "verified_labels": [
+        "size:M",
+        "complexity:4",
+        "backtest-review-visualisation"
+      ]
+    }
+  ],
+  "links": [
+    "sub:632",
+    "sub:633",
+    "dep:633:632",
+    "sub:634",
+    "dep:634:633",
+    "sub:635",
+    "dep:635:634",
+    "sub:636",
+    "dep:636:632",
+    "dep:636:633",
+    "dep:636:634",
+    "dep:636:635"
+  ],
+  "comments": [
+    631,
+    632,
+    633,
+    634,
+    635,
+    636
+  ],
+  "plan_sha256": "caa13e6829f32d7016e78aab1ffae148addc1a1092a32ff11aa100d3fa55f51a",
+  "tracker": {
+    "number": 631,
+    "id": 6359670225,
+    "url": "https://github.com/Netke237/trading-assistant/issues/631",
+    "verified_labels": [
+      "enhancement",
+      "tracking",
+      "size:XL",
+      "complexity:4",
+      "backtest-review-visualisation"
+    ]
+  },
+  "verified_subissues": [
+    632,
+    633,
+    634,
+    635,
+    636
+  ]
+}
