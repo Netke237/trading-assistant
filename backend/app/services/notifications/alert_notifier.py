@@ -161,7 +161,7 @@ def _format_dt(timestamp: str | None) -> tuple[str, str]:
 _ALERT_TYPE_LABELS = {
     'TP_HIT': 'Target reached',
     'STOP_REACHED': 'Stop hit',
-    'STRUCTURAL_STOP_BREACHED': 'Structural stop hit',
+    'STRUCTURAL_STOP_BREACHED': 'Structural level hit',
     'PREMIUM_STOP': 'Premium stop hit',
     'TIME_STOP': 'Time stop hit',
     'EVENT_RISK': 'Event risk warning',

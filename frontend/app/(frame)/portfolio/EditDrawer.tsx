@@ -436,8 +436,8 @@ export function EditDrawer({
           onChange={(n) => onChange({ stop: n > 0 ? n : null })}
         />
         <EditField
-          label="Structural stop"
-          hint="Tighter, chart-based stop (order block / swing level) from Check structure. Optional — 0 means none was captured."
+          label="Structural level"
+          hint="Chart-based level (order block / swing level) from Check structure, with its own alert. It is not widened to the ATR floor, so it can sit much closer than the Stop. Optional — 0 means none was captured."
           value={position.structuralStop ?? 0}
           range={stockLevelRange}
           onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
@@ -573,7 +573,7 @@ export function EditDrawer({
         )}
         {structuralStopBreached && (
           <Text size={11} tone="dim">
-            The structural stop is already on the wrong side of the current price — sync the position&apos;s structural stop before estimating.
+            The structural level is already on the wrong side of the current price — sync the position&apos;s structural level before estimating.
           </Text>
         )}
         {isStock && position.currentPrice > 0 && !stopBreached && stockTargetPrices.length === 0 && allStockTargetPrices.length > 0 && (
@@ -615,7 +615,7 @@ export function EditDrawer({
 
       <div className={styles.editFooter}>
         <Text size={11} tone="secondary">
-          Stop, structural stop, and targets save automatically. A larger quantity is saved only with its fill price.
+          Stop, structural level, and targets save automatically. A larger quantity is saved only with its fill price.
         </Text>
         <button type="button" className={styles.editRemove} onClick={onRemove}>
           Close position
@@ -1842,7 +1842,7 @@ function alertFiresAgainst(
 const ALERT_TYPE_LABELS: Record<PositionAlertType, string> = {
   TP_HIT:                   'Target hit',
   STOP_REACHED:             'Stop reached',
-  STRUCTURAL_STOP_BREACHED: 'Structural stop',
+  STRUCTURAL_STOP_BREACHED: 'Structural level',
   PREMIUM_STOP:             'Premium / stock stop',
   TIME_STOP:                'Time stop',
   EVENT_RISK:               'Event risk',
