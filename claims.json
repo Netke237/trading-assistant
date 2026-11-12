@@ -23,6 +23,14 @@
       "expires_at": "2026-11-13T01:38:34Z",
       "note": "Portfolio: show stock and option price at entry, and each stop distance (issue #630)",
       "task": "PORTFOLIO-ENTRY-PRICES-630"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/history-incremental-c-147f51",
+      "claimed_at": "2026-11-12T22:42:12Z",
+      "expires_at": "2026-11-13T01:42:12Z",
+      "note": "Stage C: Settings -> Data Tiingo budget + persisted last-run summary (#413)",
+      "task": "HISTORY-INCREMENTAL-NIGHTLY-C"
     }
   ]
 }
