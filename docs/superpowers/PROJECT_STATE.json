@@ -10608,10 +10608,10 @@
       "tracking_issue": 622,
       "size": "L",
       "complexity": 3,
-      "completion_pct": 70,
+      "completion_pct": 85,
       "plan": "docs/superpowers/plans/2026-11-11-setup-scanner-reference-alignment-plan.md",
-      "audit_rounds": 1,
-      "audit_clean": false,
+      "audit_rounds": 2,
+      "audit_clean": true,
       "plan_audit_clean": true,
       "audit_history": [
         {
@@ -10626,13 +10626,26 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/plans/setup-scanner-reference-alignment/plan-audit-1.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "scanner_code_audit_1",
+          "reviewed_range": "0a453f1940a077015949e760d02ef5a6d921f62a..1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/setup-scanner-reference-alignment/code-audit-1.md"
         }
       ],
       "build_tickets": [
         {
           "issue": 626,
           "status": "built",
-          "completion_pct": 70,
+          "completion_pct": 85,
           "commit": "47c229a1ab85d9bdf2ffca0f2697506475039d57",
           "evidence": "docs/superpowers/plans/setup-scanner-reference-alignment/acceptance.md"
         }
@@ -10643,7 +10656,7 @@
         "pattern": "SETUP-SCANNER-REFERENCE-ALIGNMENT-LOCAL-VERIFIED",
         "note": "Local acceptance marker establishes built source, not independent audit or merge/shipping."
       },
-      "note": "All three scanner modes implemented at47c229a1; typecheck,346Jest suites/6368tests and28mocked browser cases passed. Full preservation/local acceptance recorded. Build1/1 locally complete; independent phase-wide code audit next. Resume branch board/setup-scanner-reference-alignment-f0055da0; original clean plan round retained.",
+      "note": "All three scanner modes built and independently audited clean: plan 1 / code 1, continuous rounds 2, zero gate findings. Typecheck, 346 suites / 6368 tests and 28 browser cases passed. Exact-head CI and merge pending; not shipped.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -10652,8 +10665,12 @@
         "plan_sha256": "bce5c617c733bedcb34b69094d8dedb08e1c07de630964eb534e36dc7dcc1441"
       },
       "code_stage": {
-        "rounds": 0,
-        "clean": false
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "scanner_code_audit_1",
+        "audited_head": "1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "reviewed_range": "0a453f1940a077015949e760d02ef5a6d921f62a..1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "report": "docs/superpowers/plans/setup-scanner-reference-alignment/code-audit-1.md"
       }
     }
   ],
