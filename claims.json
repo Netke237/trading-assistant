@@ -1,12 +1,3 @@
 {
-  "claims": [
-    {
-      "agent": "claude",
-      "branch": "board/stocks-reference-alignment-080c6ed3",
-      "claimed_at": "2026-11-12T15:20:42Z",
-      "expires_at": "2026-11-12T18:21:50Z",
-      "note": "User approved docs-only PR629; merge verified shipping record",
-      "task": "STOCKS-REFERENCE-ALIGNMENT"
-    }
-  ]
+  "claims": []
 }
