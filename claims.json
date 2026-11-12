@@ -7,14 +7,6 @@
       "expires_at": "2026-11-13T00:51:59Z",
       "note": "Rename visible STRUCTURAL_STOP_BREACHED alert text to Structural level",
       "task": "STRUCTURAL-LEVEL-LABEL"
-    },
-    {
-      "agent": "claude",
-      "branch": "codex/backtest-review-implementation-plan",
-      "claimed_at": "2026-11-12T21:40:22Z",
-      "expires_at": "2026-11-13T00:52:38Z",
-      "note": "Audit implementation plan and publish linked implementation tickets only",
-      "task": "BACKTEST-REVIEW-VISUALISATION"
     }
   ]
 }
