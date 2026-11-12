@@ -7,6 +7,14 @@
       "expires_at": "2026-11-12T08:43:34Z",
       "note": "Resume preserved scanner implementation, validation and independent code review",
       "task": "SETUP-SCANNER-REFERENCE-ALIGNMENT"
+    },
+    {
+      "agent": "claude",
+      "branch": "board/stocks-reference-alignment-6cb5eaf9",
+      "claimed_at": "2026-11-12T05:48:00Z",
+      "expires_at": "2026-11-12T08:48:00Z",
+      "note": "Complete approved Stocks method views and comparison ticket624, preserving first build and plan audit",
+      "task": "STOCKS-REFERENCE-ALIGNMENT"
     }
   ]
 }
