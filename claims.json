@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/setup-scanner-reference-alignment-c4a7f339",
       "claimed_at": "2026-11-12T15:01:07Z",
-      "expires_at": "2026-11-12T18:01:12Z",
+      "expires_at": "2026-11-12T18:01:46Z",
       "note": "User approved merging PR627; verify exact head and record result",
       "task": "SETUP-SCANNER-REFERENCE-ALIGNMENT"
     }
