@@ -1,0 +1,15 @@
+{
+  "checks": 77,
+  "pageErrors": [],
+  "outboundRequests": [],
+  "viewports": [
+    1366,
+    1920,
+    390
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "note": "Synthetic standalone design preview, not application acceptance."
+}
