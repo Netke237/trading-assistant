@@ -37,6 +37,7 @@ import { StatusBadge } from '@/components/atoms/StatusBadge';
 import { ConfidenceBadge } from '@/components/atoms/ConfidenceBadge';
 import { PositionEvidence } from './PositionEvidence';
 import { InitialStrategyTargets } from './InitialStrategyTargets';
+import { StockMethodWorkspace, MethodResults } from './StockMethodWorkspace';
 
 function PositionDisclosure({ active, children }: { active: boolean; children: ReactNode }) {
   return active ? <details className={styles.autoTrade}><summary>Auto-trade execution</summary>{children}</details> : <>{children}</>;
@@ -52,15 +53,11 @@ function PositionGroup({ active, tag = 'div', children, ...props }: { active: bo
   return <Tag {...props}>{children}</Tag>;
 }
 
-/** Position presentation reorders evidence only; embedded cards retain their order. */
+/** Embedded cards retain their existing method order and behavior. */
 function MethodEvidenceStack({ position, original, arithmetic, monteCarlo }: {
   position: boolean; original: ReactNode; arithmetic: ReactNode; monteCarlo: ReactNode;
 }) {
-  return position ? <>
-    <section aria-label="Original ladder evidence" className={styles.workspaceCard}>{original}</section>
-    <section aria-label="Arithmetic evidence">{arithmetic}</section>
-    <section aria-label="Monte Carlo evidence">{monteCarlo}</section>
-  </> : <>{monteCarlo}{arithmetic}</>;
+  return position ? <StockMethodWorkspace ladder={original} arithmetic={arithmetic} monteCarlo={monteCarlo} /> : <>{monteCarlo}{arithmetic}</>;
 }
 
 // Backend stock barrier statistics use trading-day medians; half-days can occur.
@@ -1118,8 +1115,12 @@ export function StockPositionCard({
             {(latest.method === 'arithmetic' ? plan?.targets : estimate?.targets)?.map((t, i) => <Data key={i} size={12}>T{i + 1} {t.price.toFixed(2)} · {(t.probability * 100).toFixed(0)}%{t.expectedDays != null ? ` · ${medianTradingDays(t.expectedDays)}` : ' · unlikely'}</Data>)}</>}
       </section></EvidenceDisclosure>}
       <MethodEvidenceStack position={position} original={<>
-        <h4>Original ladder</h4>
+        <h4>Ladder</h4>
+        <div className={styles.methodControls}><Text size={12}>Current edited targets</Text></div>
+        <div className={styles.methodBasis}><Text size={11}>Current execution stop {executionMoney(executionStop)}</Text><Text size={11}>Risk / share {executionMoney(executionRiskPerShare)} · entered quantity {overlay.shares}</Text></div>
+        <MethodResults shares={overlay.shares} rows={[overlay.t1, overlay.t2, overlay.t3].map((price, i) => ({ label: `T${i + 1}`, price: executionMoney(price), outcome: executionMoney(enteredSharesValid && Number.isFinite(overlay.entry) && overlay.entry > 0 && Number.isFinite(price) && price > 0 ? (card.direction === 'Bullish' ? price - overlay.entry : overlay.entry - price) * overlay.shares : null) }))} />
         <Text size={12} tone="secondary">Source: editable execution targets · entry {executionMoney(overlay.entry)} · execution stop {executionMoney(executionStop)}</Text>
+        <EvidenceDisclosure title="Ladder allocation, R:R & source">
         <div className={styles.initialTableWrap}><table className={styles.initialTable}>
           <thead><tr>{['Target', 'Stock price', `Full exit / ${overlay.shares} entered shares`, 'Allocated shares', 'Allocated outcome', 'Reward / share', 'R:R'].map(label => <th key={label} scope="col"><Text size={11} tone="dim">{label}</Text></th>)}</tr></thead>
           <tbody>{[
@@ -1141,7 +1142,7 @@ export function StockPositionCard({
             </tr>;
           })}</tbody>
         </table></div>
-        <Text size={11} tone="secondary">Each row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.</Text>
+        <Text size={11} tone="secondary">Each row is a separate full-exit scenario before costs; do not add full exits together. Allocated outcomes use the existing entered rung allocations. No probability or time estimate for this method.</Text></EvidenceDisclosure>
         <Text size={11} tone="dim">Original selects the editable ladder; the initial scanned strategy targets in the disclosure below remain separate.</Text>
         <EvidenceDisclosure title="Initial scanned strategy · original targets"><InitialStrategyTargets card={card} shares={overlay.shares} /></EvidenceDisclosure>
       </>} monteCarlo={<>
@@ -1172,12 +1173,17 @@ export function StockPositionCard({
           </button></>}
         </div>
 
-        {position && <Text size={12} tone="secondary">GBM stock simulation · editable execution entry / stop / targets. Execution entry {executionMoney(overlay.entry)} · stop {executionMoney(executionStop)}</Text>}
+        {position && <>
+          <div className={styles.methodBasis}><Text size={11}>Current execution stop {executionMoney(executionStop)}</Text><Text size={11}>Risk / share {executionMoney(executionRiskPerShare)} · entered quantity {overlay.shares}</Text></div>
+          <MethodResults shares={overlay.shares} window={estimate?.horizonDays} rows={(estimate?.targets ?? []).map((t, i) => ({ label: `T${i + 1}`, labelTone: 'dim' as const, price: executionMoney(t.price), probability: t.probability, days: t.expectedDays, outcome: executionMoney(enteredSharesValid && Number.isFinite(overlay.entry) && overlay.entry > 0 ? (card.direction === 'Bullish' ? t.price - overlay.entry : overlay.entry - t.price) * overlay.shares : null) }))} />
+          <Text size={12} tone="secondary">GBM stock simulation · editable execution entry / stop / targets. Execution entry {executionMoney(overlay.entry)} · stop {executionMoney(executionStop)}</Text>
+        </>}
         {position && !estimate && <Text size={11} tone="dim">{estimating ? 'Estimating current inputs…' : 'Not computed or stale — run Estimate for the current inputs.'}</Text>}
         {estimateErr && <Text size={11} tone="reject">{estimateErr}</Text>}
 
+        {position && estimate?.modelCaveat && <Text size={11} tone="caution">{estimate.modelCaveat}</Text>}
         {estimate && (
-          <div className={styles.estimateBlock}>
+          <EvidenceDisclosure active={position} title="Monte Carlo model, stop statistics & assumptions"><div className={styles.estimateBlock}>
             {/* A probability without its window is meaningless, so the window is
                 never optional chrome. Trading days, not calendar days — the
                 window comes from confidence_backtest.n_days, which counts bars. */}
@@ -1185,7 +1191,7 @@ export function StockPositionCard({
               Chance of reaching each target within {estimate.horizonDays} trading days
             </Text>
             {position && <Text size={11} tone="secondary">Independent reach probabilities; the same path can also hit the stop. Conditional median time among paths that reach each barrier, regardless of which barrier is hit first. Full-exit outcomes for {overlay.shares} entered shares, before costs.</Text>}
-            {estimate.targets.map((t, i) => (
+            {!position && estimate.targets.map((t, i) => (
               <div key={`fp-${i}`} className={position ? styles.methodTargetRow : styles.estimateRow}>
                 <Text size={11} tone="dim">T{i + 1}</Text>
                 <Data size={12}>{t.price.toFixed(2)}</Data>
@@ -1210,10 +1216,10 @@ export function StockPositionCard({
                   : 'unlikely'}
               </Data>
             </div>
-            {estimate.modelCaveat && (
+            {!position && estimate.modelCaveat && (
               <Text size={11} tone="caution">{estimate.modelCaveat}</Text>
             )}
-          </div>
+          </div></EvidenceDisclosure>
         )}
 
         {!position && <>        {structuralErr && <Text size={11} tone="caution">{structuralErr}</Text>}
@@ -1273,12 +1279,18 @@ export function StockPositionCard({
           </button>
         </div>
 
+        {position && <>
+          <div className={styles.methodBasis}><Text size={11}>Arithmetic final stop {executionMoney(plan?.stop.price ?? null)}</Text><Text size={11}>Returned risk / share {executionMoney(plan?.stop.riskPerShare ?? null)} · entered quantity {overlay.shares}</Text></div>
+          <MethodResults shares={overlay.shares} window={plan?.horizonDays} rows={(plan?.targets ?? []).map(t => ({ label: `${t.rrRatio}R`, labelTone: 'dim' as const, priceTone: 'pass' as const, price: executionMoney(t.price), probability: t.probability, days: t.expectedDays, outcome: executionMoney(enteredSharesValid ? t.rewardPerShare * overlay.shares : null) }))} />
+        </>}
         {position && !plan && <Text size={11} tone="dim">{planning ? 'Computing current inputs…' : 'Not computed or stale — run Arithmetic plan for the current inputs.'}</Text>}
         {planErr && <Text size={11} tone="reject">{planErr}</Text>}
 
         {plan && (
           <div className={styles.estimateBlock}>
             {position && <Text size={11} tone="secondary">GBM stock simulation · {plan.horizonDays} {plan.daysBasis} days. All target rows share the returned final stop {executionMoney(plan.stop.price)}. Independent reach probabilities; conditional median time among paths that reach each barrier, regardless of which barrier is hit first. Full-exit outcomes for {overlay.shares} entered shares, before costs.</Text>}
+            {position && Math.abs(plan.stop.price - overlay.stop) >= 0.01 && <Text size={10} tone="caution">The card&apos;s stop is ${overlay.stop.toFixed(2)} — this plan is a second opinion and does not change it. Risk and R:R above the fold still measure against the card&apos;s stop.</Text>}
+            <EvidenceDisclosure active={position} title="Stop evidence, target geometry & sizing arithmetic">
             {/* ── The stop row ─────────────────────────────────────────── */}
             <div className={styles.planRow}>
               <Text size={11} tone="dim">STOP</Text>
@@ -1311,7 +1323,7 @@ export function StockPositionCard({
                 not a replacement for it — arming a stop per trade is piece 5,
                 which does not exist yet. Say so wherever the two differ, rather
                 than letting two stop prices sit on one card unexplained. */}
-            {Math.abs(plan.stop.price - overlay.stop) >= 0.01 && (
+            {!position && Math.abs(plan.stop.price - overlay.stop) >= 0.01 && (
               <Text size={10} tone="caution">
                 The card&apos;s stop is ${overlay.stop.toFixed(2)} — this plan is a
                 second opinion and does not change it. Risk and R:R above the fold
@@ -1322,7 +1334,7 @@ export function StockPositionCard({
             {/* ── Target rows ──────────────────────────────────────────── */}
             {plan.targets.map((t, i) => (
               <div key={`plan-t-${i}`} className={styles.planTarget}>
-                <div className={position ? styles.methodTargetRow : styles.planRow}>
+                {!position && <div className={position ? styles.methodTargetRow : styles.planRow}>
                   <Text size={11} tone="dim">{t.rrRatio}R</Text>
                   <Data size={13} tone="pass">{t.price.toFixed(2)}</Data>
                   {position && <div><Text size={10} tone="dim">Full exit / {overlay.shares} shares</Text><Data size={14}>{executionMoney(enteredSharesValid ? t.rewardPerShare * overlay.shares : null)}</Data></div>}
@@ -1334,7 +1346,7 @@ export function StockPositionCard({
                       ? `~${t.expectedDays.toFixed(0)} trading days`
                       : 'unlikely'}
                   </Data>
-                </div>
+                </div>}
                 <div className={styles.planRow}>
                   <Text size={10} tone="dim">reward/share</Text>
                   <Data size={12}>{t.rewardPerShare.toFixed(2)}</Data>
@@ -1365,6 +1377,7 @@ export function StockPositionCard({
               </div>
             ))}
 
+            </EvidenceDisclosure>
             {/* ── Sizing ───────────────────────────────────────────────── */}
             <div className={styles.planRow}>
               <Text size={11} tone="dim">SHARES</Text>

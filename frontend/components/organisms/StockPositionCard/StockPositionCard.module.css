@@ -183,3 +183,24 @@
 details.help { display: block; }
 
 .executionSummary { display: grid; grid-template-columns: minmax(90px, .5fr) minmax(0, 3fr); gap: var(--space-4); align-items: start; }
+
+/* Give comparison the available workspace width, with decision review below it. */
+.workspaceColumns { grid-template-columns: minmax(0, 1fr); }
+.decision { position: static; }
+.methodViews { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.methodViews [aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.methodComparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
+.methodCard { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-4); min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.methodCard[hidden] { display: none; }
+.methodCard > .workspaceCard { border: 0; border-radius: 0; padding: 0; }
+.methodCard h4, .methodCard .targetsHeading { min-height: 24px; padding: 0; border: 0; }
+.methodCard .actionRow, .methodControls { min-height: 36px; display: flex; align-items: center; }
+.methodBasis { min-height: 72px; display: flex; flex-direction: column; gap: var(--space-2); }
+.methodResults { display: flex; flex-direction: column; gap: var(--space-2); }
+.resultTable { width: 100%; table-layout: fixed; text-align: left; border-collapse: collapse; }
+.resultTable th { font-weight: 400; }
+.resultTable th, .resultTable td { padding: var(--space-2) 4px; vertical-align: top; overflow-wrap: anywhere; }
+.resultTable th:first-child { width: 40px; }
+.resultTable thead { height: 48px; }
+.resultTable tbody tr { border-top: 1px solid var(--border-subtle); }
+@media (max-width: 700px) { .methodComparison { grid-template-columns: minmax(0, 1fr); } }

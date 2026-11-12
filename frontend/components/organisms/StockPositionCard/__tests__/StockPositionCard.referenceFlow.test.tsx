@@ -84,7 +84,7 @@ it('keeps scanned strategy, chronology and complete Arithmetic race in closed me
   expect(within(initial).getByText('Original target allocations unavailable')).toBeVisible();
   fireEvent.click(within(initial).getByText('Strategy observations', { selector: 'summary' }));
   expect(within(initial).getByText('observation: Original strategy observation')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Material model caveat');
   expect(disclosure('Which comes first · graphical outcomes & full details')).not.toHaveAttribute('open');
   screen.getAllByRole('meter').forEach(meter => expect(meter).not.toBeVisible());
@@ -131,7 +131,7 @@ it('saves the moved execution editors and allocations while Arithmetic selection
   edit('T1 TARGET', '163'); edit('T1 SHARES', '2');
   const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
   expect(useScanStore.getState().stockExecution[identity].overlay).toMatchObject({ entry: 151, stop: 146, shares: 12, t1: 163, sharesT1: 2, sharesT2: 4, sharesT3: 4 });
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Material model caveat');
   fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' }));
   fireEvent.click(screen.getByRole('radio', { name: '2R' }));
@@ -142,4 +142,88 @@ it('saves the moved execution editors and allocations while Arithmetic selection
   expect(saves[0]).toMatchObject({ qty: 12, entryPrice: 151, stop: 146, pickedMethod: 'arithmetic', pickedRowStockPrice: 162 });
   expect(saves[0].targets).toEqual([163, 165, 170].map((price, i) => ({ id: `T${i + 1}`, stockPrice: price, targetPrice: price, contractsToSell: i === 0 ? 2 : 4, status: 'PENDING' })));
   expect(saves[0].tradeCardSnapshot).toMatchObject({ edited: { entry: 151, stop: 146, targets: [163, 165, 170], shares: 12 }, strategy: card.strategy });
+});
+
+it('starts with Ladder alone and compares two or three methods without requesting or editing execution', async () => {
+  render(<StockPositionCard card={card} strategyKey="pullback_ema" presentation="position" />);
+  await act(async () => {});
+  const controls = screen.getByRole('group', { name: 'View method results' });
+  expect(within(controls).getByRole('button', { name: 'Ladder' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('region', { name: 'Original ladder evidence' })).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Arithmetic evidence' })).not.toBeInTheDocument();
+  const before = useScanStore.getState();
+  fireEvent.click(within(controls).getByRole('button', { name: 'Monte Carlo' }));
+  fireEvent.click(within(controls).getByRole('button', { name: 'Compare' }));
+  expect(screen.getByRole('region', { name: 'Monte Carlo evidence' })).toBeVisible();
+  expect(screen.getByRole('region', { name: 'Arithmetic evidence' })).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Original ladder evidence' })).not.toBeInTheDocument();
+  fireEvent.click(within(controls).getByRole('button', { name: 'Ladder' }));
+  expect(screen.getAllByTestId('visible-method-card')).toHaveLength(3);
+  fireEvent.click(within(controls).getByRole('button', { name: 'Monte Carlo' }));
+  expect(screen.getAllByTestId('visible-method-card')).toHaveLength(2);
+  expect(within(controls).getByRole('button', { name: 'Arithmetic' })).toBeDisabled();
+  expect(api.getStockExitPlan).not.toHaveBeenCalled();
+  expect(api.getStockFirstPassage).not.toHaveBeenCalled();
+  expect(useScanStore.getState().stockExecution).toBe(before.stockExecution);
+  expect(useScanStore.getState().stocksCardEdits).toBe(before.stocksCardEdits);
+});
+
+it('keeps a calculated result, disclosures and explicit pick while changing views', async () => {
+  render(<StockPositionCard card={card} strategyKey="pullback_ema" presentation="position" />);
+  await act(async () => {});
+  const controls = screen.getByRole('group', { name: 'View method results' });
+  fireEvent.click(within(controls).getByRole('button', { name: 'Arithmetic' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  await screen.findByText('Material model caveat');
+  expect(screen.getByRole('region', { name: 'Selected stock plan' })).toHaveTextContent('Choose a method');
+  fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' }));
+  fireEvent.click(screen.getByRole('radio', { name: '2R' }));
+  const race = open('Which comes first · graphical outcomes & full details');
+  const state = useScanStore.getState();
+  fireEvent.click(within(controls).getByRole('button', { name: 'Ladder' }));
+  fireEvent.click(within(controls).getByRole('button', { name: 'Arithmetic' }));
+  expect(race).toHaveAttribute('open');
+  expect(screen.getByRole('region', { name: 'Arithmetic evidence' })).toHaveTextContent('Material model caveat');
+  expect(useScanStore.getState().stockExecution).toBe(state.stockExecution);
+  expect(useScanStore.getState().stocksCardEdits).toBe(state.stocksCardEdits);
+  expect(api.getStockExitPlan).toHaveBeenCalledTimes(1);
+});
+
+function calculationButton(name: string | RegExp) {
+  const compare = screen.getByRole('button', { name: 'Compare' });
+  if (compare.getAttribute('aria-pressed') !== 'true') fireEvent.click(compare);
+  return screen.getByRole('button', { name });
+}
+
+it.each(['Bullish', 'Bearish'] as const)('keeps method-owned %s outcomes, zero probability and null/fractional medians in the compact tables', async direction => {
+  const bearish = direction === 'Bearish';
+  const current = { ...card, direction, strategy: { ...card.strategy, stop_price: bearish ? 155 : 145, targets: bearish ? [140, 135, 130] : [160, 165, 170] } };
+  useScanStore.getState().setStockScanResult({ scan_id: `compact-${direction}`, candidates: [current], rejected: [], timestamp: 't' } as never);
+  (api.getStockExitPlan as jest.Mock).mockResolvedValue({ ...plan, recommendedShares: 625, stop: { ...plan.stop, price: bearish ? 156 : 144 }, targets: [{ ...plan.targets[0], price: bearish ? 138 : 162, rewardPerShare: 11.99, probability: 0, expectedDays: null }] });
+  (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ targets: [{ price: bearish ? 137 : 163, probability: .62, expectedDays: 4.5 }], invalidation: { probability: 0, expectedDays: null }, horizonDays: 10, modelCaveat: 'MC supplied caveat' });
+  render(<StockPositionCard card={current} strategyKey="pullback_ema" presentation="position" />);
+  await act(async () => {});
+  const ladder = screen.getByRole('region', { name: 'Original ladder evidence' });
+  const ladderTable = within(ladder).getAllByRole('table')[0];
+  expect(within(ladderTable).getAllByText('Not supplied')).toHaveLength(6);
+  expect(ladderTable).toHaveTextContent('$300.00');
+  fireEvent.click(calculationButton('Arithmetic plan'));
+  await screen.findByText('Material model caveat');
+  const arithmetic = screen.getByRole('region', { name: 'Arithmetic evidence' });
+  const arithmeticTable = within(arithmetic).getAllByRole('table')[0];
+  expect(arithmeticTable).toHaveTextContent('$359.70');
+  expect(arithmeticTable).toHaveTextContent('0%');
+  expect(arithmeticTable).toHaveTextContent('unlikely');
+  expect(arithmetic).toHaveTextContent(bearish ? 'Arithmetic final stop $156.00' : 'Arithmetic final stop $144.00');
+  expect(arithmetic).toHaveTextContent(`The card's stop is $${bearish ? '155' : '145'}.00`);
+  expect(arithmetic).toHaveTextContent('Concentration:');
+  fireEvent.click(calculationButton('Estimate'));
+  await screen.findByText('MC supplied caveat');
+  const mc = screen.getByRole('region', { name: 'Monte Carlo evidence' });
+  const mcTable = within(mc).getAllByRole('table')[0];
+  expect(mcTable).toHaveTextContent('$390.00');
+  expect(mcTable).toHaveTextContent('~4.5 trading days');
+  expect(mcTable).toHaveTextContent('62%');
+  expect(within(mc).getByText('Probability window: 10 trading days')).toBeVisible();
+  expect(mc.querySelector('#race')).toBeNull();
 });
