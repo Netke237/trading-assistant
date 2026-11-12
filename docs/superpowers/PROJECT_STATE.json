@@ -10656,7 +10656,7 @@
         "pattern": "SETUP-SCANNER-REFERENCE-ALIGNMENT-LOCAL-VERIFIED",
         "note": "Local acceptance marker establishes built source, not independent audit or merge/shipping."
       },
-      "note": "All three scanner modes built and independently audited clean: plan 1 / code 1, continuous rounds 2, zero gate findings. Typecheck, 346 suites / 6368 tests and 28 browser cases passed. Exact-head CI and merge pending; not shipped.",
+      "note": "SELF-MERGE PENDING, PR #627, audited head 1fdecb736e3e37c7a27608f13b2ed6a91271081e. Built at 85%; plan 1 / code 1 clean (continuous rounds 2), zero gate findings. Typecheck, 346 suites / 6368 tests and 28 browser cases passed. Actual main record preserved; no merged or shipped status claimed before verification.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -10671,6 +10671,12 @@
         "audited_head": "1fdecb736e3e37c7a27608f13b2ed6a91271081e",
         "reviewed_range": "0a453f1940a077015949e760d02ef5a6d921f62a..1fdecb736e3e37c7a27608f13b2ed6a91271081e",
         "report": "docs/superpowers/plans/setup-scanner-reference-alignment/code-audit-1.md"
+      },
+      "pull_request": 627,
+      "self_merge_pending": {
+        "pull_request": 627,
+        "audited_head": "1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "state": "pending exact-head CI; merge not performed"
       }
     }
   ],
