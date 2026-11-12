@@ -12,10 +12,16 @@
  *    Tiingo ledger counter says why it is null. Never 0 for a missing value.
  *  - Bytes use decimal units (1 kB = 1e3, 1 MB = 1e6, 1 GB = 1e9) and are
  *    truncated, never rounded up, so a value below a limit never reads as it.
+ *
+ * C1b (#643): the latest run recorded in storage (`last_run`) is shown only when
+ * the live state has no run of this process (idle, started_at null), under its own
+ * heading, never as live, never with the live status tone. A stored null ledger
+ * counter is "unknown", never "counted at run end"; a stored `running` row was
+ * never finalised and has no counters.
  */
 
 import { Data, Text } from '@/components/primitives';
-import type { IngestionStatus, TiingoUsageEntry, TiingoUsageKey } from '@/lib/api';
+import type { IngestionRunSummary, IngestionStatus, TiingoUsageEntry, TiingoUsageKey } from '@/lib/api';
 import styles from './TiingoBudget.module.css';
 
 export type MeterTone = 'neutral' | 'caution' | 'reject';
@@ -169,7 +175,7 @@ function RunRow({ label, children, tone }: {
   return (
     <div className={styles.runRow} data-row>
       <Text size={12} weight={400} tone="secondary">{label}</Text>
-      <span data-value><Data size={12} tone={tone ?? 'primary'}>{children}</Data></span>
+      <span data-value data-tone={tone ?? 'primary'}><Data size={12} tone={tone ?? 'primary'}>{children}</Data></span>
     </div>
   );
 }
@@ -190,13 +196,85 @@ function ledger(v: number | null | undefined, running: boolean, bytes: boolean):
   return { text: bytes ? formatBytes(v) : fmtInt(v) };
 }
 
+/** The per-run counter rows, read from the live state or from a stored summary. */
+function RunCounters({ run, running }: { run: IngestionRunSummary; running: boolean }) {
+  const failures = run.single_provider_failed_symbols;
+  const requests = ledger(run.tiingo_requests, running, false);
+  const size = ledger(run.tiingo_bytes, running, true);
+  return (
+    <>
+      <RunRow label="Symbols">{count(run.done)} / {count(run.total)}</RunRow>
+      <RunRow label="Failed">{count(run.failed)}</RunRow>
+      <RunRow label="Rebuild refused">{count(run.rebuild_refused)}</RunRow>
+      <RunRow label="Single-provider failures">{Array.isArray(failures) ? fmtInt(failures.length) : DASH}</RunRow>
+      <RunRow label="Tiingo requests" tone={requests.tone}>{requests.text}</RunRow>
+      <RunRow label="Tiingo bytes" tone={size.tone}>{size.text}</RunRow>
+      <RunRow label="Rescaled">{count(run.prefix_rescaled)}</RunRow>
+      <RunRow label="Confirmed">{count(run.prefix_confirmed)}</RunRow>
+      <RunRow label="Lag-window full">{count(run.lag_window_full)}</RunRow>
+      <RunRow label="Suffix only">{count(run.suffix_only)}</RunRow>
+      <RunRow label="Prefix refetched">{count(run.prefix_refetched)}</RunRow>
+    </>
+  );
+}
+
+const STORED_HEADING = 'Latest run recorded in storage';
+const STORED_NOTE = 'recorded before the last backend restart; a run whose record could not be written is not shown';
+const NOT_FINALISED = 'Not finalised: no finish was recorded for this run (the backend stopped during it, '
+  + 'or its final record could not be written); no counters were recorded';
+
+/** The latest run recorded in storage — shown only when this process has no run yet. */
+function StoredRun({ status }: { status: IngestionStatus }) {
+  const run = status.last_run;
+  let body: React.ReactNode;
+  if (status.last_run_error) {
+    body = <Text size={12} tone="caution">{status.last_run_error}</Text>;
+  } else if (!run) {
+    body = <Text size={12} tone="dim">No run recorded</Text>;
+  } else if (run.status === 'running') {
+    body = (
+      <>
+        <Text as="p" size={12} tone="secondary">{NOT_FINALISED}</Text>
+        <div className={styles.runGrid}>
+          <RunRow label="Started">{formatTime(run.started_at)}</RunRow>
+        </div>
+      </>
+    );
+  } else {
+    const summary: IngestionRunSummary = run.summary ?? {};
+    const duration = run.finished_at ? formatDuration(run.started_at, run.finished_at) : null;
+    body = (
+      <>
+        {run.status === 'error' && (
+          <Text as="p" size={12} tone="secondary">{summary.error || 'Run failed (no error text reported)'}</Text>
+        )}
+        <div className={styles.runGrid}>
+          <RunRow label="Status">{run.status}</RunRow>
+          <RunRow label="Started">{formatTime(run.started_at)}</RunRow>
+          <RunRow label="Finished">{formatTime(run.finished_at)}</RunRow>
+          {duration !== null && <RunRow label="Duration">{duration}</RunRow>}
+          <RunCounters run={summary} running={false} />
+        </div>
+      </>
+    );
+  }
+  return (
+    <section aria-label={STORED_HEADING} className={styles.section}>
+      <Text as="p" size={12} weight={500}>{STORED_HEADING}</Text>
+      <Text as="p" size={11} tone="dim">{STORED_NOTE}</Text>
+      {body}
+    </section>
+  );
+}
+
 function LastRun({ status }: { status: IngestionStatus }) {
   const noRun = status.status === 'idle' && !status.started_at;
+  // No run of this process: a backend that reports last_run shows the stored run instead.
+  if (noRun && (status.last_run !== undefined || !!status.last_run_error)) {
+    return <StoredRun status={status} />;
+  }
   const running = status.status === 'running';
   const duration = status.finished_at ? formatDuration(status.started_at, status.finished_at) : null;
-  const failures = status.single_provider_failed_symbols;
-  const requests = ledger(status.tiingo_requests, running, false);
-  const size = ledger(status.tiingo_bytes, running, true);
   return (
     <section aria-label="Last ingestion run" className={styles.section}>
       <Text as="p" size={12} weight={500}>Last ingestion run</Text>
@@ -212,17 +290,7 @@ function LastRun({ status }: { status: IngestionStatus }) {
             <RunRow label="Status" tone={STATUS_TONE[status.status] ?? 'primary'}>{status.status ?? DASH}</RunRow>
             <RunRow label="Started">{formatTime(status.started_at)}</RunRow>
             {duration !== null && <RunRow label="Duration">{duration}</RunRow>}
-            <RunRow label="Symbols">{count(status.done)} / {count(status.total)}</RunRow>
-            <RunRow label="Failed">{count(status.failed)}</RunRow>
-            <RunRow label="Rebuild refused">{count(status.rebuild_refused)}</RunRow>
-            <RunRow label="Single-provider failures">{Array.isArray(failures) ? fmtInt(failures.length) : DASH}</RunRow>
-            <RunRow label="Tiingo requests" tone={requests.tone}>{requests.text}</RunRow>
-            <RunRow label="Tiingo bytes" tone={size.tone}>{size.text}</RunRow>
-            <RunRow label="Rescaled">{count(status.prefix_rescaled)}</RunRow>
-            <RunRow label="Confirmed">{count(status.prefix_confirmed)}</RunRow>
-            <RunRow label="Lag-window full">{count(status.lag_window_full)}</RunRow>
-            <RunRow label="Suffix only">{count(status.suffix_only)}</RunRow>
-            <RunRow label="Prefix refetched">{count(status.prefix_refetched)}</RunRow>
+            <RunCounters run={status} running={running} />
           </div>
         </>
       )}

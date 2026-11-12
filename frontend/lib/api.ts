@@ -1177,6 +1177,28 @@ export interface IngestionStatus {
   // absent on an older backend.
   tiingo_usage?: TiingoUsage | null;
   tiingo_usage_error?: string | null;
+  // C1b: the latest run recorded in storage (ingestion_run, highest id) — survives a
+  // backend restart. null when none is recorded, or when the read failed (then
+  // last_run_error is set); absent on an older backend.
+  last_run?: StoredIngestionRun | null;
+  last_run_error?: string | null;
+}
+
+/** The ingestion state a run stored at its finish (get_ingestion_state() as JSON). */
+export type IngestionRunSummary = Partial<Omit<IngestionStatus,
+  'single_provider_symbols' | 'tiingo_usage' | 'tiingo_usage_error' | 'last_run' | 'last_run_error'>>;
+
+/**
+ * C1b: one row of the backend's ingestion_run table. A `running` row is one whose
+ * finish was never recorded (the backend stopped during it, or the final write
+ * failed): finished_at and summary are null.
+ */
+export interface StoredIngestionRun {
+  id: number;
+  status: 'running' | 'completed' | 'error';
+  started_at: string;           // ISO 8601, explicit UTC offset
+  finished_at: string | null;   // ISO 8601, explicit UTC offset; null when not finalised
+  summary: IngestionRunSummary | null;
 }
 
 export async function getIngestionStatus(): Promise<IngestionStatus> {

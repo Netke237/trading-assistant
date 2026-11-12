@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, within } from '@testing-library/react';
 import { TiingoBudget, formatBytes, meterTone, formatDuration } from '..';
-import type { IngestionStatus, TiingoUsage } from '@/lib/api';
+import type { IngestionRunSummary, IngestionStatus, TiingoUsage } from '@/lib/api';
 
 // HISTORY-INCREMENTAL-NIGHTLY C1 (#572): Settings -> Data shows the Tiingo budget
 // and the last ingestion run, read from GET /api/data/ingest/status. The shapes
@@ -279,5 +279,174 @@ describe('TiingoBudget — run states', () => {
     expect(screen.getByText('database is locked')).toBeInTheDocument();
     expect(runValue('Failed')).toHaveTextContent(/^3$/);
     expect(runValue('Symbols')).toHaveTextContent('40 / 1,534');
+  });
+});
+
+// HISTORY-INCREMENTAL-NIGHTLY C1b (#643): the latest run recorded in storage. Shown only
+// when the live state has no run since the backend started (idle, started_at null); never
+// as live, never with the live status tone, never under "Last ingestion run".
+
+const STORED_HEADING = 'Latest run recorded in storage';
+const STORED_NOTE = 'recorded before the last backend restart; a run whose record could not be written is not shown';
+const NOT_FINALISED = 'Not finalised: no finish was recorded for this run (the backend stopped during it, '
+  + 'or its final record could not be written); no counters were recorded';
+
+/** The live state of a freshly restarted backend. */
+function restarted(over: Partial<IngestionStatus> = {}): IngestionStatus {
+  return {
+    status: 'idle', total: 0, done: 0, failed: 0, started_at: null, finished_at: null, error: null,
+    rebuild_refused: 0, single_provider_failed_symbols: [], single_provider_updated: 0,
+    tiingo_usage: usage(), tiingo_usage_error: null,
+    ...over,
+  };
+}
+
+/** What the backend stored at the finish of a completed run: the live state then. */
+function storedSummary(over: Partial<IngestionStatus> = {}): IngestionRunSummary {
+  const s: IngestionRunSummary & { tiingo_usage?: unknown; tiingo_usage_error?: unknown } = completed(over);
+  delete s.tiingo_usage;
+  delete s.tiingo_usage_error;
+  return s;
+}
+
+function storedRegion(): HTMLElement {
+  return screen.getByRole('region', { name: STORED_HEADING });
+}
+
+function storedValue(label: string): HTMLElement {
+  const term = within(storedRegion()).getByText(label, { exact: true });
+  const row = term.closest('[data-row]') as HTMLElement;
+  return row.querySelector('[data-value]') as HTMLElement;
+}
+
+function expectNotLive() {
+  expect(screen.queryByRole('region', { name: 'Last ingestion run' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Last ingestion run/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/whichever ran last/)).not.toBeInTheDocument();
+  expect(screen.queryByText('No run since the backend started')).not.toBeInTheDocument();
+}
+
+describe('TiingoBudget — stored last run (C1b)', () => {
+  test('stored completed run: own heading, note, start/finish times and the summary fields', () => {
+    render(<TiingoBudget status={restarted({
+      last_run: { id: 42, status: 'completed', started_at: STARTED, finished_at: FINISHED, summary: storedSummary() },
+      last_run_error: null,
+    })} />);
+    const region = storedRegion();
+    expect(within(region).getByText(STORED_HEADING)).toBeInTheDocument();
+    expect(within(region).getByText(STORED_NOTE)).toBeInTheDocument();
+    expectNotLive();
+
+    expect(storedValue('Status')).toHaveTextContent('completed');
+    expect(storedValue('Status').getAttribute('data-tone')).toBe('primary');   // not the live 'pass'
+    expect(storedValue('Started')).toHaveTextContent(new Date(STARTED).toLocaleString());
+    expect(storedValue('Finished')).toHaveTextContent(new Date(FINISHED).toLocaleString());
+    expect(storedValue('Duration')).toHaveTextContent('1 h 2 m 5 s');
+    expect(storedValue('Symbols')).toHaveTextContent('1,534 / 1,534');
+    expect(storedValue('Failed')).toHaveTextContent(/^7$/);
+    expect(storedValue('Rebuild refused')).toHaveTextContent(/^2$/);
+    expect(storedValue('Single-provider failures')).toHaveTextContent(/^3$/);
+    expect(storedValue('Tiingo requests')).toHaveTextContent('1,234');
+    expect(storedValue('Tiingo bytes')).toHaveTextContent('45.6 MB');
+    expect(storedValue('Rescaled')).toHaveTextContent(/^8$/);
+    expect(storedValue('Confirmed')).toHaveTextContent(/^11$/);
+    expect(storedValue('Lag-window full')).toHaveTextContent(/^5$/);
+    expect(storedValue('Suffix only')).toHaveTextContent('1,400');
+    expect(storedValue('Prefix refetched')).toHaveTextContent(/^31$/);
+  });
+
+  test('stored ledger counters null read "unknown (ledger missed an attempt)", never "counted at run end"', () => {
+    render(<TiingoBudget status={restarted({
+      last_run: { id: 3, status: 'completed', started_at: STARTED, finished_at: FINISHED,
+        summary: storedSummary({ tiingo_requests: null, tiingo_bytes: null }) },
+      last_run_error: null,
+    })} />);
+    expect(storedValue('Tiingo requests')).toHaveTextContent('unknown (ledger missed an attempt)');
+    expect(storedValue('Tiingo bytes')).toHaveTextContent('unknown (ledger missed an attempt)');
+    expect(screen.queryByText(/counted at run end/)).not.toBeInTheDocument();
+  });
+
+  test('stored error run: its error text and counts, without the live status tone', () => {
+    render(<TiingoBudget status={restarted({
+      last_run: { id: 7, status: 'error', started_at: STARTED, finished_at: FINISHED,
+        summary: storedSummary({ status: 'error', error: 'database is locked', done: 40, failed: 3 }) },
+      last_run_error: null,
+    })} />);
+    expectNotLive();
+    expect(within(storedRegion()).getByText('database is locked')).toBeInTheDocument();
+    expect(storedValue('Status')).toHaveTextContent('error');
+    expect(storedValue('Status').getAttribute('data-tone')).toBe('primary');   // not the live 'reject'
+    expect(storedValue('Symbols')).toHaveTextContent('40 / 1,534');
+    expect(storedValue('Failed')).toHaveTextContent(/^3$/);
+  });
+
+  test('stored not-finalised run: neutral text, its start time, no counters', () => {
+    render(<TiingoBudget status={restarted({
+      last_run: { id: 9, status: 'running', started_at: STARTED, finished_at: null, summary: null },
+      last_run_error: null,
+    })} />);
+    const region = storedRegion();
+    expectNotLive();
+    expect(within(region).getByText(NOT_FINALISED)).toBeInTheDocument();
+    expect(storedValue('Started')).toHaveTextContent(new Date(STARTED).toLocaleString());
+    for (const label of ['Status', 'Finished', 'Duration', 'Symbols', 'Failed', 'Tiingo requests',
+      'Tiingo bytes', 'Rescaled', 'Confirmed', 'Suffix only', 'Prefix refetched']) {
+      expect(within(region).queryByText(label, { exact: true })).not.toBeInTheDocument();
+    }
+    // No single cause is asserted: both are named, neither alone.
+    expect(region).not.toHaveTextContent(/interrupted by a restart|the backend crashed|was killed/i);
+    expect(region).toHaveTextContent('the backend stopped during it, or its final record could not be written');
+    expect(region).not.toHaveTextContent(/running/);
+  });
+
+  test('last_run null reads "No run recorded", no numbers', () => {
+    render(<TiingoBudget status={restarted({ last_run: null, last_run_error: null })} />);
+    const region = storedRegion();
+    expect(within(region).getByText('No run recorded')).toBeInTheDocument();
+    expect(region).not.toHaveTextContent(/\d/);
+    expectNotLive();
+  });
+
+  test('last_run_error shows its text with no numbers', () => {
+    render(<TiingoBudget status={restarted({
+      last_run: null, last_run_error: 'last run unavailable: database unreachable',
+    })} />);
+    const region = storedRegion();
+    expect(within(region).getByText('last run unavailable: database unreachable')).toBeInTheDocument();
+    expect(within(region).queryByText('No run recorded')).not.toBeInTheDocument();
+    expect(within(region).queryByText('Symbols')).not.toBeInTheDocument();
+    expect(region).not.toHaveTextContent(/\d/);
+    expectNotLive();
+  });
+
+  test('a live run of this process overrides the stored run', () => {
+    const lives: IngestionStatus[] = [
+      completed(),
+      completed({ status: 'running', finished_at: null, tiingo_requests: null, tiingo_bytes: null }),
+      completed({ status: 'error', error: 'boom' }),
+    ];
+    const tone: Record<string, string> = { completed: 'pass', running: 'accent', error: 'reject' };
+    for (const live of lives) {
+      const { unmount } = render(<TiingoBudget status={{
+        ...live,
+        last_run: { id: 1, status: 'completed', started_at: '2026-01-01T00:00:00+00:00',
+          finished_at: '2026-01-01T00:01:00+00:00', summary: storedSummary({ done: 999, total: 999 }) },
+        last_run_error: null,
+      }} />);
+      expect(screen.getByRole('region', { name: 'Last ingestion run' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: STORED_HEADING })).not.toBeInTheDocument();
+      expect(screen.queryByText(STORED_HEADING)).not.toBeInTheDocument();
+      expect(runValue('Status')).toHaveTextContent(live.status);
+      expect(runValue('Status').getAttribute('data-tone')).toBe(tone[live.status]);
+      expect(screen.queryByText(/999/)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  test('older backend without last_run keeps "No run since the backend started"', () => {
+    render(<TiingoBudget status={restarted()} />);
+    const run = screen.getByRole('region', { name: 'Last ingestion run' });
+    expect(within(run).getByText('No run since the backend started')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: STORED_HEADING })).not.toBeInTheDocument();
   });
 });
