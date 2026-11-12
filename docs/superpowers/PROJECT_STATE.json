@@ -10663,7 +10663,7 @@
         "pattern": "STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
         "note": "Completion marker reserved for integrated acceptance of all planned build tasks."
       },
-      "note": "Both build tasks complete, local acceptance green, fresh independent whole-phase code round1/continuous2 clean0. Built85%, unmerged; continuation PR and exact-head CI pending. Plan1/code1 clean, no counters reset. Earlier draftPR625 will be superseded.",
+      "note": "SELF-MERGE PENDING, PR #628, audited head 9e59c7503eb8fbe577d19c44b266eb9d63a08c39. Both tasks and local acceptance complete; plan1/code1 clean0; built85%, unmerged. Only audit/pending documentation after reviewed head. Supersedes first-buildPR625. Automatic approval review required explicit user approval for relatedPR627 merge; do not bypass it.",
       "plan_stage": {
         "rounds": 1,
         "clean": true,
@@ -10678,7 +10678,14 @@
         "reviewed_diff": "0a453f1940a077015949e760d02ef5a6d921f62a..9e59c7503eb8fbe577d19c44b266eb9d63a08c39",
         "closed_by": "clean"
       },
-      "pull_request": 625
+      "pull_request": 628,
+      "supersedes_pull_request": 625,
+      "self_merge_pending": {
+        "pull_request": 628,
+        "audited_head": "9e59c7503eb8fbe577d19c44b266eb9d63a08c39",
+        "base_main": "0a453f1940a077015949e760d02ef5a6d921f62a",
+        "note": "SELF-MERGE PENDING, PR #628, audited head 9e59c7503eb8fbe577d19c44b266eb9d63a08c39. Built/audit-clean; final-head CI and explicit merge approval remain outstanding. Existing main record preserved. Supersedes #625 \u2014 do not merge #625."
+      }
     }
   ],
   "already_shipped": [
