@@ -33,13 +33,12 @@ const card = (symbol = 'AAPL', direction: 'Bullish' | 'Bearish' = 'Bullish'): Po
 const scan = (candidates = [card()]): StockScanResult => ({ scan_id: 'same-scan', timestamp: 't', candidates, rejected: [] } as unknown as StockScanResult);
 const estimate = { targets: [{ price: 160, probability: .62, expectedDays: 4 }], invalidation: { probability: .28, expectedDays: 6 }, horizonDays: 10, modelCaveat: null };
 
-it('stacks selectable Original, Arithmetic and Monte Carlo evidence in approved order', () => {
-  const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  expect(Array.from(view.container.querySelectorAll('#calculations > section')).map(el => el.getAttribute('aria-label')))
-    .toEqual(['Original ladder evidence', 'Arithmetic evidence', 'Monte Carlo evidence']);
-  expect(screen.getByRole('region', { name: 'Original ladder evidence' })).toHaveTextContent('editable execution targets');
-  expect(screen.getByRole('region', { name: 'Arithmetic evidence' })).toHaveTextContent('Not computed or stale');
-  expect(screen.getByRole('region', { name: 'Monte Carlo evidence' })).toHaveTextContent('Not computed or stale');
+it('starts with only the edited Ladder, separately from execution selection', () => {
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  expect(screen.getByRole('region', { name: 'Original ladder evidence' })).toBeVisible();
+  expect(screen.queryByRole('region', { name: 'Arithmetic evidence' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: 'Monte Carlo evidence' })).not.toBeInTheDocument();
+  expect(region('Original ladder evidence')).toHaveTextContent('editable execution targets');
 });
 
 it.each(['Bullish', 'Bearish'] as const)('shows editable %s Original full and allocated outcomes distinctly', async direction => {
@@ -48,12 +47,13 @@ it.each(['Bullish', 'Bearish'] as const)('shows editable %s Original full and al
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
   await edit('T1 TARGET', direction === 'Bullish' ? '163' : '137');
   await edit('T1 SHARES', '4');
-  const original = screen.getByRole('region', { name: 'Original ladder evidence' });
-  const row = within(original).getByText('T1').closest('tr')!;
+  const original = region('Original ladder evidence');
+  fireEvent.click(within(original).getByText('Ladder allocation, R:R & source', { selector: 'summary' }));
+  const row = within(original.querySelectorAll('table')[1]).getByText('T1').closest('tr')!;
   expect(row).toHaveTextContent(direction === 'Bullish' ? '$163.00' : '$137.00');
   expect(row).toHaveTextContent('$390.00'); expect(row).toHaveTextContent('$52.00');
   expect(original).toHaveTextContent('separate full-exit scenario');
-  expect(within(screen.getByRole('region', { name: 'Initial strategy targets' })).getByText(direction === 'Bullish' ? '$160.00' : '$140.00')).toBeInTheDocument();
+  expect(within(region('Initial strategy targets')).getByText(direction === 'Bullish' ? '$160.00' : '$140.00')).toBeInTheDocument();
 });
 
 it('preserves fractional medians, returned Arithmetic reward, caveats and distinct probability definitions', async () => {
@@ -64,40 +64,51 @@ it('preserves fractional medians, returned Arithmetic reward, caveats and distin
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(plan);
   (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [{ price: 160, probability: .62, expectedDays: 4.5 }], modelCaveat: 'MC model caveat' });
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
-  const arithmetic = screen.getByRole('region', { name: 'Arithmetic evidence' });
+  fireEvent.click(calculationButton('Arithmetic plan')); await screen.findByText('Latest: Arithmetic');
+  const arithmetic = region('Arithmetic evidence');
+  fireEvent.click(within(arithmetic).getByText('Which comes first · graphical outcomes & full details', { selector: 'summary' }));
   expect(within(arithmetic).getByText('$599.70')).toBeInTheDocument();
   expect(within(arithmetic).getByText('~9.5 trading days')).toBeInTheDocument();
   expect(arithmetic).toHaveTextContent('median time among paths that reach each barrier');
   expect(within(arithmetic).getByText(/Target first 40% \(~7.5 trading days\)/)).toBeInTheDocument();
   expect(arithmetic).toHaveTextContent('median time among paths where that barrier wins');
   expect(within(arithmetic).getByText('Arithmetic model caveat')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
-  const mc = screen.getByRole('region', { name: 'Monte Carlo evidence' });
+  fireEvent.click(calculationButton('Estimate')); await screen.findByText('Latest: Monte Carlo');
+  const mc = region('Monte Carlo evidence');
   expect(mc).toHaveTextContent('GBM stock simulation'); expect(mc).toHaveTextContent('Execution entry $150.00 · stop $145.00');
   expect(within(mc).getByText('$300.00')).toBeInTheDocument(); expect(within(mc).getByText('~4.5 trading days')).toBeInTheDocument();
   expect(mc).toHaveTextContent('same path can also hit the stop'); expect(within(mc).getByText('MC model caveat')).toBeInTheDocument();
   expect(within(mc).queryByRole('meter')).not.toBeInTheDocument();
-  expect(screen.getByRole('region', { name: 'Latest calculation' })).toHaveTextContent('~4.5 trading days');
+  expect(region('Latest calculation')).toHaveTextContent('~4.5 trading days');
 });
 
 it('Apply shares preserves prices and calculations with existing quantity allocation behavior', async () => {
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(makePlan());
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(calculationButton('Arithmetic plan')); await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(calculationButton('Estimate')); await screen.findByText('Latest: Monte Carlo');
   const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
   const before = useScanStore.getState().stockExecution[identity];
   fireEvent.click(screen.getByRole('button', { name: 'Apply 625 shares' }));
   const after = useScanStore.getState().stockExecution[identity];
   expect(after.overlay).toEqual({ ...(before.overlay ?? defaultStockOverlay(card())), shares: 625, sharesT1: 208, sharesT2: 208, sharesT3: 209 });
   expect(after.plan).toBe(before.plan); expect(after.estimate).toBe(before.estimate);
-  expect(within(screen.getByRole('region', { name: 'Arithmetic evidence' })).getByText('$12500.00')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Monte Carlo evidence' })).getByText('$6250.00')).toBeInTheDocument();
+  expect(within(region('Arithmetic evidence')).getByText('$12500.00')).toBeInTheDocument();
+  expect(within(region('Monte Carlo evidence')).getByText('$6250.00')).toBeInTheDocument();
 });
+function region(name: string) {
+  const section = screen.getByRole('region', { name, hidden: true });
+  const ancestors: HTMLDetailsElement[] = [];
+  for (let parent = section.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) ancestors.unshift(parent);
+  ancestors.forEach(details => { if (!details.open) fireEvent.click(details.querySelector('summary')!); });
+  return screen.getByRole('region', { name });
+}
 const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; };
 async function edit(label: string, value: string, scope: HTMLElement = document.body) {
-  const cell = within(scope).getAllByText(label)[0].closest('div')!;
+  const cell = within(scope).getAllByText(label).map(el => el.closest('div')!).find(el => el.querySelector('[role="button"]'))!;
+  for (let parent: HTMLElement | null = cell; parent; parent = parent.parentElement) {
+    if (parent instanceof HTMLDetailsElement && !parent.open) fireEvent.click(parent.querySelector('summary')!);
+  }
   fireEvent.click(within(cell).getByRole('button'));
   const input = within(cell).getByRole('spinbutton');
   fireEvent.change(input, { target: { value } }); fireEvent.blur(input);
@@ -128,7 +139,7 @@ it('shows real backtest scales, capped status, unavailable provenance and pendin
   render(<StockPositionCard card={{ ...card(), stock_status: 'CAUTION' }} strategyKey="pullback_ema" {...{ presentation: 'position' } as object} />);
   expect(screen.getByText('Sharpe')).toBeInTheDocument();
   expect(screen.getByText('1.20')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Backtest evidence' })).getByText('70%')).toBeInTheDocument();
+  expect(within(region('Backtest evidence')).getByText('70%')).toBeInTheDocument();
   expect(screen.getByText('12.0%')).toBeInTheDocument();
   expect(screen.getByText('Final verdict: CAUTION')).toBeInTheDocument();
   expect(screen.getByText('Scan thresholds unavailable')).toBeInTheDocument();
@@ -137,9 +148,9 @@ it('shows real backtest scales, capped status, unavailable provenance and pendin
 });
 it('latest calculation is unavailable on remount and cleared edits never fall back', async () => {
   const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" {...{ presentation: 'position' } as object} />);
-  fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+  fireEvent.click(calculationButton(/^estimate$/i));
   expect(await screen.findByText('Latest: Monte Carlo')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Latest calculation' })).getByText('T1 160.00 · 62% · ~4 trading days')).toBeInTheDocument();
+  expect(within(region('Latest calculation')).getByText('T1 160.00 · 62% · ~4 trading days')).toBeInTheDocument();
   await edit('STOP', '144');
   expect(screen.getByText('Latest result unavailable — recalculate')).toBeInTheDocument();
   view.unmount();
@@ -213,39 +224,40 @@ it('uses recorded thresholds despite changed Settings and preserves zero evidenc
   expect(screen.getByText('Scan thresholds: ≥ 0 trades · ≥ 0% win rate')).toBeInTheDocument();
   expect(screen.getByText('Final verdict: CAUTION')).toBeInTheDocument();
   expect(screen.getByText('Scorer evidence before final caps: PASS')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Stock Scorecard' })).getByText('0')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Stock Scorecard' })).getByText('Unavailable')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Backtest evidence' })).getByText('0.0%')).toBeInTheDocument();
+  expect(within(region('Stock Scorecard')).getByText('0')).toBeInTheDocument();
+  expect(within(region('Stock Scorecard')).getByText('Unavailable')).toBeInTheDocument();
+  expect(within(region('Backtest evidence')).getByText('0.0%')).toBeInTheDocument();
 });
 it.each(['Bullish', 'Bearish'] as const)('draws %s race from allocated probabilities and respects accepted chronology', async direction => {
   const plan = makePlan();
   if (direction === 'Bearish') { plan.targets[0].price = 138; plan.targets[0].arithmeticPrice = 138; plan.race!.outcomes[0].targetPrice = 138; }
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(plan);
   render(<StockPositionCard card={card('AAPL', direction)} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(screen.getByText('Which comes first · graphical outcomes & full details', { selector: 'summary' }));
   const drawing = screen.getByLabelText(`${direction} target ${plan.race!.outcomes[0].targetPrice.toFixed(2)} race`);
   expect(within(drawing).getAllByRole('meter').map(m => m.getAttribute('value'))).toEqual(['0.4', '0.34', '0.26']);
   expect(screen.getByText('Target first 40% (~7 trading days)')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Estimate'));
   await screen.findByText('Latest: Monte Carlo');
   await edit('STOP', '144');
   expect(screen.getByText('Latest result unavailable — recalculate')).toBeInTheDocument();
   expect(screen.queryByText('Latest: Arithmetic')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
 });
 it('ignores an invalidated asynchronous response and repeated runs use the newest accepted result', async () => {
   const pending = deferred<typeof estimate>();
   (api.getStockFirstPassage as jest.Mock).mockReturnValueOnce(pending.promise).mockResolvedValueOnce({ ...estimate, targets: [{ ...estimate.targets[0], probability: 0 }] });
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Estimate'));
   await edit('ENTRY', '152');
   await act(async () => pending.resolve(estimate));
   expect(screen.queryByText('Latest: Monte Carlo')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Estimate'));
   await screen.findByText('Latest: Monte Carlo');
-  expect(within(screen.getByRole('region', { name: 'Latest calculation' })).getByText('T1 160.00 · 0% · ~4 trading days')).toBeInTheDocument();
+  expect(within(region('Latest calculation')).getByText('T1 160.00 · 0% · ~4 trading days')).toBeInTheDocument();
 });
 
 it('latest follows successful completion across concurrently running methods in reverse request order', async () => {
@@ -254,20 +266,20 @@ it('latest follows successful completion across concurrently running methods in 
   (api.getStockFirstPassage as jest.Mock).mockReturnValue(mc.promise);
   (api.getStockExitPlan as jest.Mock).mockReturnValue(arithmetic.promise);
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
+  fireEvent.click(calculationButton('Estimate'));
   await act(async () => mc.resolve(estimate));
   expect(screen.getByText('Latest: Monte Carlo')).toBeInTheDocument();
   await act(async () => arithmetic.resolve(makePlan()));
   expect(screen.getByText('Latest: Arithmetic')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Latest calculation' })).getByText('Stop 144.00 · risk/share 6.00 · 10 trading days')).toBeInTheDocument();
+  expect(within(region('Latest calculation')).getByText('Stop 144.00 · risk/share 6.00 · 10 trading days')).toBeInTheDocument();
 });
 
 it.each(['Bullish', 'Bearish'] as const)('separates the %s initial strategy ladder from execution edits and uses entered shares', async direction => {
   const c = card('AAPL', direction);
   if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, target_price: 140, targets: [140, 135, 130] };
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const initial = region('Initial strategy targets');
   const first = within(initial).getByRole('row', { name: /T1/ });
   expect(within(first).getByText(direction === 'Bullish' ? '$160.00' : '$140.00')).toBeInTheDocument();
   expect(within(first).getByText('$10.00')).toBeInTheDocument();
@@ -287,7 +299,7 @@ it.each(['Bullish', 'Bearish'] as const)('separates the %s initial strategy ladd
 it.each([undefined, []])('restores a legacy initial target without inventing extra rungs (%s)', targets => {
   const c = { ...card(), strategy: { ...card().strategy, targets } };
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const initial = region('Initial strategy targets');
   expect(within(initial).getAllByRole('row')).toHaveLength(2);
   expect(within(initial).getByText('$160.00')).toBeInTheDocument();
   expect(within(initial).queryByText('T2')).not.toBeInTheDocument();
@@ -296,13 +308,13 @@ it.each([undefined, []])('restores a legacy initial target without inventing ext
 it('preserves zero outcomes and distinguishes absent original geometry', () => {
   const c = { ...card(), shares: 0, strategy: { ...card().strategy, target_price: 150, targets: [150] } };
   const view = render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const initial = region('Initial strategy targets');
   expect(within(initial).getAllByText('$0.00')).toHaveLength(2);
   expect(within(initial).getByText('0.00%')).toBeInTheDocument();
   expect(within(initial).getByText('0.00×')).toBeInTheDocument();
   view.unmount();
   render(<InitialStrategyTargets card={{ ...c, strategy: { ...c.strategy, entry_price: undefined as never } }} shares={0} />);
-  const missing = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const missing = region('Initial strategy targets');
   expect(within(missing).getAllByText('Unavailable').length).toBeGreaterThanOrEqual(4);
   expect(missing).not.toHaveTextContent('NaN');
 });
@@ -323,7 +335,7 @@ it('shows source-labelled context with recorded horizon and unavailable legacy h
 it('keeps direction-aware negative outcomes and source observations without inventing risk ratios', () => {
   const c = { ...card(), strategy: { ...card().strategy, stop_price: 150, targets: [145], detail: { source: 'swing low', observations: 0, measured: false } } };
   render(<InitialStrategyTargets card={c} shares={12} />);
-  const initial = screen.getByRole('region', { name: 'Initial strategy targets' });
+  const initial = region('Initial strategy targets');
   expect(within(initial).getByText('$-5.00')).toBeInTheDocument();
   expect(within(initial).getByText('$-60.00')).toBeInTheDocument();
   expect(within(initial).getByText('-3.33%')).toBeInTheDocument();
@@ -339,7 +351,7 @@ it.each(['Bullish', 'Bearish'] as const)('uses current %s execution inputs for r
   if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155, targets: [140, 135, 130] };
   c.dollar_risk = 999; c.dollar_size = 99999;
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$4500.00');
   expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
   expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$150.00');
@@ -362,7 +374,7 @@ it.each([
   if (direction === 'Bearish') c.strategy = { ...c.strategy, stop_price: 155 };
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
   await edit('STOP', stop);
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getAllByText('Unavailable')).toHaveLength(2);
   expect(risk).toHaveTextContent('Execution stop invalid');
   expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$4500.00');
@@ -372,7 +384,7 @@ it.each([
 it('preserves zero entered quantity and missing stop rather than borrowing scan risk', () => {
   const c = { ...card(), shares: 0, strategy: { ...card().strategy, stop_price: 0 } };
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$0.00');
   expect(within(risk).getAllByText('Unavailable')).toHaveLength(2);
   expect(risk).toHaveTextContent('Execution stop invalid');
@@ -396,7 +408,7 @@ it('shows unavailable R:R when cent-rounded stop has no positive risk distance',
   });
   const row = screen.getByText('T1 TARGET').closest('div')!.parentElement!;
   expect(within(row).getByText('Unavailable')).toBeInTheDocument();
-  expect(within(screen.getByRole('region', { name: 'Execution risk' })).getAllByText('Unavailable')).toHaveLength(2);
+  expect(within(region('Execution risk')).getAllByText('Unavailable')).toHaveLength(2);
 });
 
 it.each([NaN, Infinity, -1])('does not display nonfinite or negative entered quantity %s as money', quantity => {
@@ -406,7 +418,7 @@ it.each([NaN, Infinity, -1])('does not display nonfinite or negative entered qua
     const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
     useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, shares: quantity } });
   });
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('Unavailable');
   expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('Unavailable');
   expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
@@ -416,11 +428,11 @@ it('keeps quantity/allocation edits independent and clears only matching calcula
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(makePlan());
   (api.getStructuralStop as jest.Mock).mockResolvedValue({ available: true, price: 146, source: 'swing_low' });
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
   fireEvent.click(screen.getByRole('button', { name: 'Check structure' }));
   await screen.findByText('swing_low');
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Estimate'));
   await screen.findByText('Latest: Monte Carlo');
   fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
   const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
@@ -431,7 +443,7 @@ it('keeps quantity/allocation edits independent and clears only matching calcula
   await edit('T1 SHARES', '10');
   expect(record()).toMatchObject(initial);
   expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeChecked();
-  expect(within(screen.getByRole('region', { name: 'Execution risk' })).getByText('Execution risk / position').parentElement).toHaveTextContent('$300.00');
+  expect(within(region('Execution risk')).getByText('Execution risk / position').parentElement).toHaveTextContent('$300.00');
   await edit('T1 TARGET', '161');
   expect(record().estimate).toBeNull();
   expect(record().plan).toEqual(initial.plan); expect(record().structural).toEqual(initial.structural);
@@ -447,7 +459,7 @@ it.each(['symbol', 'run'] as const)('rejects pending calculation after %s identi
   (api.getStockFirstPassage as jest.Mock).mockReturnValue(pending.promise);
   useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')]));
   const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(calculationButton('Estimate'));
   if (change === 'symbol') view.rerender(<StockPositionCard card={card('MSFT')} strategyKey="pullback_ema" presentation="position" />);
   else act(() => useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')])));
   await act(async () => pending.resolve(estimate));
@@ -467,7 +479,7 @@ it.each([
     const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
     useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, [field]: value } });
   });
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('Unavailable');
   expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('Unavailable');
   expect(risk).toHaveTextContent('Execution stop invalid');
@@ -478,7 +490,7 @@ it.each([
 
 it('shows zero position risk for zero entered shares with a valid stop', () => {
   render(<StockPositionCard card={{ ...card(), shares: 0 }} strategyKey="pullback_ema" presentation="position" />);
-  const risk = screen.getByRole('region', { name: 'Execution risk' });
+  const risk = region('Execution risk');
   expect(within(risk).getByText('Position value').parentElement).toHaveTextContent('$0.00');
   expect(within(risk).getByText('Execution risk / share').parentElement).toHaveTextContent('$5.00');
   expect(within(risk).getByText('Execution risk / position').parentElement).toHaveTextContent('$0.00');
@@ -498,14 +510,14 @@ it.each([
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(plan);
   (api.getStructuralStop as jest.Mock).mockResolvedValue({ available: true, price: bearish ? 152 : 148, source: 'order_block', confidence: 0, distancePct: 1.3 });
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  const stops = screen.getByRole('region', { name: 'Structure & Stops' });
+  const stops = region('Structure & Stops');
   expect(within(stops).getByText(/Not computed or stale/)).toBeInTheDocument();
   const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
   const before = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(c);
   fireEvent.click(screen.getByRole('button', { name: 'Check structure' }));
   await within(stops).findByText('order_block');
   expect(within(stops).getByText(/Not computed or stale/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
   const execution = within(stops).getByRole('region', { name: 'Entered execution stop' });
   const arithmetic = within(stops).getByRole('region', { name: 'Arithmetic final stop' });
@@ -543,9 +555,9 @@ it.each([null, 0])('keeps missing/zero suggested quantities and absent candidate
   plan.stop = { ...plan.stop, structuralPrice: null, structuralSource: null, structuralConfidence: null, distanceDollar: null };
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(plan);
   render(<StockPositionCard card={{ ...card(), shares: 0 }} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
-  const arithmetic = screen.getByRole('region', { name: 'Arithmetic final stop' });
+  const arithmetic = region('Arithmetic final stop');
   expect(within(arithmetic).getByText('Structural candidate').parentElement).toHaveTextContent('Unavailable');
   expect(within(arithmetic).getByText('Loss for entered 0 shares').parentElement).toHaveTextContent('$0.00');
   expect(within(arithmetic).getByText(recommendedShares == null ? 'Loss for suggested shares' : 'Loss for suggested 0 shares').parentElement)
@@ -556,10 +568,10 @@ it('discloses structure and plan errors without substituting a final stop', asyn
   (api.getStructuralStop as jest.Mock).mockResolvedValue({ available: false });
   (api.getStockExitPlan as jest.Mock).mockRejectedValue(new Error('insufficient price history'));
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  const stops = screen.getByRole('region', { name: 'Structure & Stops' });
+  const stops = region('Structure & Stops');
   fireEvent.click(screen.getByRole('button', { name: 'Check structure' }));
   await within(stops).findByText('No structural level found on recent candles.');
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await within(stops).findByText(/insufficient price history/);
   expect(within(stops).queryByRole('region', { name: 'Arithmetic final stop' })).not.toBeInTheDocument();
   expect(within(stops).getByRole('region', { name: 'Entered execution stop' })).toHaveTextContent('$145.00');
@@ -568,19 +580,19 @@ it('discloses structure and plan errors without substituting a final stop', asyn
 it('uses cent-validated execution risk and never borrows Arithmetic risk for an invalid stop', async () => {
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(makePlan());
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   await screen.findByText('Latest: Arithmetic');
   const identity = stockExecutionIdentity(useScanStore.getState(), 'AAPL')!;
   act(() => {
     const overlay = useScanStore.getState().stockExecution[identity].overlay ?? defaultStockOverlay(card());
     useScanStore.getState().patchStockExecution(identity, { overlay: { ...overlay, stop: 145.004 } });
   });
-  const execution = screen.getByRole('region', { name: 'Entered execution stop' });
+  const execution = region('Entered execution stop');
   expect(within(execution).getByText('Stop price').parentElement).toHaveTextContent('$145.00');
   expect(within(execution).getByText('Risk / share').parentElement).toHaveTextContent('$5.00');
   await edit('STOP', '151');
   expect(within(execution).getAllByText('Unavailable')).toHaveLength(3);
-  expect(screen.getByRole('region', { name: 'Arithmetic final stop' })).toHaveTextContent('$6.00');
+  expect(region('Arithmetic final stop')).toHaveTextContent('$6.00');
 });
 
 it.each(['entry', 'symbol', 'run'] as const)('ignores late Arithmetic and structure results after %s changes', async change => {
@@ -590,19 +602,19 @@ it.each(['entry', 'symbol', 'run'] as const)('ignores late Arithmetic and struct
   (api.getStructuralStop as jest.Mock).mockReturnValue(structure.promise);
   useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')]));
   const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' }));
+  fireEvent.click(calculationButton('Arithmetic plan'));
   fireEvent.click(screen.getByRole('button', { name: 'Check structure' }));
   if (change === 'entry') await edit('ENTRY', '152');
   else if (change === 'symbol') view.rerender(<StockPositionCard card={card('MSFT')} strategyKey="pullback_ema" presentation="position" />);
   else act(() => useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')])));
   await act(async () => { plan.resolve(makePlan()); structure.resolve({ available: true, price: 147, source: 'swing_low' }); });
-  const stops = screen.getByRole('region', { name: 'Structure & Stops' });
+  const stops = region('Structure & Stops');
   expect(within(stops).queryByRole('region', { name: 'Arithmetic final stop' })).not.toBeInTheDocument();
   expect(within(stops).getByText(/Not computed or stale/)).toBeInTheDocument();
   expect(stops).not.toHaveTextContent('swing_low');
 });
 
-const selectedSummary = () => screen.getByRole('region', { name: 'Selected stock plan' });
+const selectedSummary = () => region('Selected stock plan');
 const summaryField = (label: string, value: string) => expect(within(selectedSummary()).getByText(label).parentElement).toHaveTextContent(value);
 it('shows method-only intent with a target prompt and limits summary to position presentation', () => {
   const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
@@ -636,7 +648,7 @@ it.each(['Bullish', 'Bearish'] as const)('uses returned %s Arithmetic reward, se
   (api.getStockExitPlan as jest.Mock).mockResolvedValue(p);
   useScanStore.getState().setStockScanResult(scan([c]));
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(calculationButton('Arithmetic plan')); await screen.findByText('Latest: Arithmetic');
   fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' })); fireEvent.click(screen.getByRole('radio', { name: '2R' }));
   summaryField('Calculation stop basis', direction === 'Bullish' ? 'Arithmetic final stop · $144.00' : 'Arithmetic final stop · $156.00');
   summaryField('Execution stop', direction === 'Bullish' ? '$145.00' : '$155.00'); summaryField('Full-position outcome', '$359.70');
@@ -652,7 +664,7 @@ it.each(['Bullish', 'Bearish'] as const)('uses actual returned %s Monte Carlo ta
   (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [{ price: direction === 'Bullish' ? 163 : 137, probability: .62, expectedDays: 4.5 }] });
   useScanStore.getState().setStockScanResult(scan([c]));
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(calculationButton('Estimate')); await screen.findByText('Latest: Monte Carlo');
   fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
   summaryField('Stock target', direction === 'Bullish' ? '$163.00' : '$137.00'); summaryField('Full-position outcome', '$390.00');
   summaryField('Median first-touch time', '4.5 trading days'); await edit('SHARES', '12'); summaryField('Full-position outcome', '$156.00');
@@ -664,7 +676,7 @@ it.each(['ladder', 'arithmetic', 'monte_carlo'] as const)('does not borrow evide
   (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [estimate.targets[0], { ...estimate.targets[0], probability: .1, expectedDays: 9.5 }] });
   useScanStore.getState().setStockScanResult(scan([c]));
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  if (method !== 'ladder') { fireEvent.click(screen.getByRole('button', { name: method === 'arithmetic' ? 'Arithmetic plan' : 'Estimate' })); await screen.findByText(method === 'arithmetic' ? 'Latest: Arithmetic' : 'Latest: Monte Carlo'); }
+  if (method !== 'ladder') { fireEvent.click(calculationButton(method === 'arithmetic' ? 'Arithmetic plan' : 'Estimate')); await screen.findByText(method === 'arithmetic' ? 'Latest: Arithmetic' : 'Latest: Monte Carlo'); }
   fireEvent.click(screen.getByRole('radio', { name: method === 'ladder' ? 'Ladder' : method === 'arithmetic' ? 'Arithmetic' : 'Monte Carlo' }));
   fireEvent.click(screen.getByRole('radio', { name: method === 'arithmetic' ? '2R' : 'T1' }));
   expect(selectedSummary()).toHaveTextContent('Target row ambiguous'); expect(selectedSummary()).toHaveTextContent('Probability and time unavailable');
@@ -673,7 +685,7 @@ it.each(['ladder', 'arithmetic', 'monte_carlo'] as const)('does not borrow evide
 it('distinguishes zero probability from absent time and clears row when method changes', async () => {
   (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [{ price: 160, probability: 0, expectedDays: null }] });
   render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Estimate' })); await screen.findByText('Latest: Monte Carlo');
+  fireEvent.click(calculationButton('Estimate')); await screen.findByText('Latest: Monte Carlo');
   fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' }));
   summaryField('Target hit probability', '0%'); summaryField('Median first-touch time', 'Unavailable');
   fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); expect(selectedSummary()).toHaveTextContent('Choose a target');
@@ -682,7 +694,7 @@ it.each(['symbol', 'run'] as const)('keeps summary scoped to %s and rejects late
   const pending = deferred<typeof estimate>(); (api.getStockFirstPassage as jest.Mock).mockReturnValue(pending.promise);
   useScanStore.getState().setStockScanResult(scan([card(), card('MSFT')]));
   const view = render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' })); fireEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); fireEvent.click(screen.getByRole('radio', { name: 'T1' })); fireEvent.click(calculationButton('Estimate'));
   if (change === 'symbol') view.rerender(<StockPositionCard card={card('MSFT')} strategyKey="pullback_ema" presentation="position" />);
   else act(() => useScanStore.getState().setStockScanResult({ ...scan(), scan_id: 'new-run' }));
   await act(async () => pending.resolve(estimate)); expect(selectedSummary()).toHaveTextContent('Choose a method'); expect(selectedSummary()).not.toHaveTextContent('62%');
@@ -699,7 +711,7 @@ it.each(['Bullish', 'Bearish'] as const)('keeps returned Arithmetic magnitude wi
   const p = makePlan(); p.targets[0] = { ...p.targets[0], price: direction === 'Bullish' ? 147 : 153, rewardPerShare: 2.99 };
   useScanStore.getState().setStockScanResult(scan([c])); (api.getStockExitPlan as jest.Mock).mockResolvedValue(p);
   render(<StockPositionCard card={c} strategyKey="pullback_ema" presentation="position" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Arithmetic plan' })); await screen.findByText('Latest: Arithmetic');
+  fireEvent.click(calculationButton('Arithmetic plan')); await screen.findByText('Latest: Arithmetic');
   fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' })); fireEvent.click(screen.getByRole('radio', { name: '2R' }));
   summaryField('Full-position outcome', '$-89.70');
 });
@@ -750,4 +762,35 @@ it.each(['embedded', 'position'] as const)('shows real %s regime disclosure thro
   view.rerender(<StockPositionCard card={{ ...card('MSFT'), sentiment: { ...measuredSentiment, conviction_pct: 0 } }} strategyKey="pullback_ema" presentation={presentation} />);
   expect(screen.getByText('0%')).toBeVisible();
   expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+});
+
+function calculationButton(name: string | RegExp) {
+  const compare = screen.getByRole('button', { name: 'Compare' });
+  if (compare.getAttribute('aria-pressed') !== 'true') fireEvent.click(compare);
+  return screen.getByRole('button', { name });
+}
+
+it('retains method result probability, Arithmetic price and conditional-time semantic colors', async () => {
+  (api.getStockExitPlan as jest.Mock).mockResolvedValue(makePlan());
+  (api.getStockFirstPassage as jest.Mock).mockResolvedValue({ ...estimate, targets: [
+    { price: 160, probability: .5, expectedDays: 4.5 },
+    { price: 165, probability: .25, expectedDays: null },
+    { price: 170, probability: .24, expectedDays: 8 },
+  ] });
+  render(<StockPositionCard card={card()} strategyKey="pullback_ema" presentation="position" />);
+  fireEvent.click(calculationButton('Estimate'));
+  await screen.findByText('Latest: Monte Carlo');
+  const mc = within(within(region('Monte Carlo evidence')).getAllByRole('table')[0]);
+  expect(mc.getByText('50%')).toHaveAttribute('data-tone', 'pass');
+  expect(mc.getByText('25%')).toHaveAttribute('data-tone', 'caution');
+  expect(mc.getByText('24%')).toHaveAttribute('data-tone', 'reject');
+  expect(mc.getByText('~4.5 trading days')).toHaveAttribute('data-tone', 'dim');
+  expect(mc.getByText('unlikely')).toHaveAttribute('data-tone', 'dim');
+  fireEvent.click(calculationButton('Arithmetic plan'));
+  await screen.findByText('Latest: Arithmetic');
+  const arithmetic = within(within(region('Arithmetic evidence')).getAllByRole('table')[0]);
+  expect(arithmetic.getByText('$162.00')).toHaveAttribute('data-tone', 'pass');
+  expect(arithmetic.getByText('41%')).toHaveAttribute('data-tone', 'caution');
+  expect(arithmetic.getByText('19%')).toHaveAttribute('data-tone', 'reject');
+  expect(arithmetic.getByText('~7 trading days')).toHaveAttribute('data-tone', 'dim');
 });

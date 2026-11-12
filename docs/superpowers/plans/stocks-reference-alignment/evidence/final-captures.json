@@ -1,0 +1,33 @@
+{
+  "source": "3d5eb929bf70c95139d13254f16e06fb02770e1d",
+  "browser": "system Chromium / Playwright, fixture APIs; no real mutations",
+  "result": "12 passed (1.1m), source-unchanged evidence regeneration",
+  "screenshotsRetained": [
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bullish-dark-1200-initial.png",
+      "sha256": "b7f36d7666a6409ba9656aaaaefed57c00236ac4e44be93985fb03dbe89d91fc"
+    },
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bullish-dark-1200-compare-three.png",
+      "sha256": "6c08ccfb43fa05edd58de823c80d00fc104bd8eba270f68632755d021227f15b"
+    },
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bullish-dark-1366-compare-two.png",
+      "sha256": "b12447eef024654da04e730189044920c4c9f5cfd22a8f231750638124aa7b14"
+    },
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bearish-light-1920-compare-two.png",
+      "sha256": "ca45f166a9ef862cdc6942dcf21fe7ad856445267ccdedb01a460c5ebda306d3"
+    },
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bearish-light-1920-decision.png",
+      "sha256": "09d21f1732046d5629e3bce94fe8dc12caa85415b518fda116bfb078cd5f67c4"
+    },
+    {
+      "file": "docs/superpowers/plans/stocks-reference-alignment/evidence/final-position-Bearish-light-1920-qualification.png",
+      "sha256": "a7b8187d837cd351bb95f6e3ef857713500ea3e51f7366501243a56f93838ad8"
+    }
+  ],
+  "generatedScreenshots": 96,
+  "note": "Representative six archived; not every generated image. Earlier 12/12 browser and full346/6376 Jest were observed before temporary-file loss; see addendum."
+}

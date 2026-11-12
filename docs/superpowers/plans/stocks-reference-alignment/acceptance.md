@@ -1,0 +1,17 @@
+# Integrated local acceptance
+
+STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED
+
+This marker records full-phase local acceptance, not independent audit or shipping. Tracking #621, build tasks #623 and #624. Source commits `414c5621` and `3d5eb929bf70c95139d13254f16e06fb02770e1d`; baseline/current main `0a453f1940a077015949e760d02ef5a6d921f62a`. Original exact-SHA plan and clean plan round 1 remain unchanged. Read task-2-validation-addendum.md for test access scope and failed-run history.
+
+Both tasks are implemented. Terminal flow follows sentiment, fundamentals, identity/closed qualification, compact execution stop/risk, independent method viewing and comparison, entry/allocation editors, existing decision/actions. Embedded presentation is preserved. Compare defaults MC/Arithmetic, offers all three with equal card widths, and keeps children mounted. Viewing never calculates, picks or edits. Ladder lacks probability/time; Arithmetic uses returned reward/stop and owns the first-hit race. Original strategy remains distinct from edited Ladder. Full explanations, equations, caveats, risk sizing and concentration/Apply warnings remain reachable.
+
+`verify-preservation.py` reproduces final-source-check.json: 1,681 baseline source records mapped in preservation.md; 152 unique JSX text units (151 exact and one directional sentence adapted); eight protected calculation/pick/save/send functions byte-identical. All other source attributes/expressions require independent semantic review: substring accounting alone does not establish their correctness. No backend, API, store, shared shell, basket, execution or persistence module changed. Semantic tones retained in shared result tables.
+
+Typecheck passed before source and evidence commits. Full frontend Jest on final source passed **346 suites / 6,376 tests**; coordinator and implementer observed the result before temporary log loss. Earlier full/test failures remain documented separately in the addendum. Browser regression passed **12/12 (2.2m)**, then a source-unchanged evidence regeneration passed **12/12 (1.1m)**. Retained final-browser.log and final-captures.json bind the six representative images to source; 96 generated images are not all archived.
+
+Browser matrix: Bullish/Bearish × dark/light × 1200/1366/1920px. Assertions cover initial Ladder and closed disclosures; no requests/edits/picks from view changes; pair/triple equal geometry and aligned headers; fractional medians; independent stop bases; bearish returned rewards; edited/save quantities and execution targets; candidate navigation and identity; unchanged refusal of broker execution. Requests are fixture-backed, and portfolio writes are intercepted. Existing unavailable/missing/stale/ownership/embedded and action tests remain in full Jest. Coordinator inspected representative current comparison imagery against the frozen reference hierarchy while retaining the application shell.
+
+Local milestone: 70%, size L / complexity 3. Code audit not yet run; audit_clean remains false. Main fetched and merged immediately before the code audit; it was already current. No merge or deployment claimed.
+
+Subsequent independent code round1 (continuous2) reviewed the exact whole-phase range through9e59c750 and returned zero gate findings after scope verification; see code-audit-1.md. Current milestone85%, built/audit-clean and unmerged. No application changes follow the reviewed head; only review/pending-merge documentation may follow without another code round under board step7.
