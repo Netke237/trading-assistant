@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/setup-scanner-reference-alignment-f0055da0",
       "claimed_at": "2026-11-12T05:20:44Z",
-      "expires_at": "2026-11-12T08:40:58Z",
+      "expires_at": "2026-11-12T08:41:15Z",
       "note": "Resume preserved scanner implementation, validation and independent code review",
       "task": "SETUP-SCANNER-REFERENCE-ALIGNMENT"
     }
