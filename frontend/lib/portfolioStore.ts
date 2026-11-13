@@ -22,6 +22,7 @@ type BackendPosition = {
   contract: string;
   direction: string;
   entryPrice: number;
+  entryStockPrice?: number | null;
   qty: number;
   entryDate: string;
   stop: number | null;
@@ -65,12 +66,14 @@ type BackendPosition = {
 function fromBackend(p: BackendPosition): PortfolioPosition {
   const parts = p.contract.split('|');
   const expiry = parts[2] ?? '';
+  const isStock = p.contract.endsWith('|STOCK');
 
   return {
     symbol:       p.symbol,
     contract:     p.contract,
     direction:    p.direction as Direction,
     entryPrice:   p.entryPrice,
+    entryStockPrice: isStock ? p.entryPrice : (p.entryStockPrice ?? null),
     contracts:    p.qty,
     entryDate:    p.entryDate,
     expiry,
@@ -432,7 +435,7 @@ type SaveOutcome =
   // `entryPrice` rides WITH it and is not optional cosmetics: both engines
   // compare `price <= entry * (1 - pct)`, so a fraction adopted without the
   // entry it was derived against puts them on different thresholds.
-  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }
+  | { kind: 'ok'; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null; entryStockPrice?: number | null }
   | { kind: 'rejected'; detail: string }   // backend 4xx (except 409) — do not keep the row
   | { kind: 'duplicate' }                  // 409 — backend already has this contract
   | { kind: 'network' };                   // unreachable — keep the row pending
@@ -459,11 +462,13 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
       // The entry the router actually persisted -- it replaces the submitted
       // one with its save-time quote. See SaveOutcome.entryPrice.
       const serverEntry = (body as { entryPrice?: number | null }).entryPrice;
+      const serverEntryStock = (body as { entryStockPrice?: number | null }).entryStockPrice;
       return {
         kind: 'ok',
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
         entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
+        entryStockPrice: typeof serverEntryStock === 'number' && serverEntryStock > 0 ? serverEntryStock : null,
       };
     }
     if (res.status === 409) return { kind: 'duplicate' };
@@ -498,7 +503,7 @@ export async function persistPosition(
    *  MKT), not at the stored mid. Create-only transport, never a field of the
    *  position. Omitted means no order follows (judged at the mid). */
   order?: { orderType: 'LMT' | 'MKT'; limitPrice: number | null },
-): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null }> {
+): Promise<{ ok: boolean; offline?: boolean; detail?: string; adjustedQty?: number; premiumStopPct?: number | null; entryPrice?: number | null; entryStockPrice?: number | null }> {
   try {
     const payload = {
       ...toBackendPayload(p, portfolioValue),
@@ -524,11 +529,13 @@ export async function persistPosition(
       // stores pct 0.78, which against the local 5.20 is a $4.06 stop, not the
       // $3.12 typed. Both halves of the pair or neither.
       const serverEntry = (body as { entryPrice?: number | null }).entryPrice;
+      const serverEntryStock = (body as { entryStockPrice?: number | null }).entryStockPrice;
       return {
         ok: true,
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
         entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
+        entryStockPrice: typeof serverEntryStock === 'number' && serverEntryStock > 0 ? serverEntryStock : null,
       };
     }
     const body = await res.json().catch(() => ({}));
@@ -614,9 +621,13 @@ export function applyPersistedPosition(
   // cover this case. That argument -- entry x (1 - dollar/entry) = entry -
   // dollar, so the dollar loss survives any entry -- holds only when ONE entry
   // is used for both the derivation and the threshold. Here they differed.
+  const entryStockPrice = saved.entryStockPrice !== undefined
+    ? saved.entryStockPrice
+    : pos.entryStockPrice;
   void addPosition(withServerEntry({
     ...pos,
     premiumStopPct: saved.premiumStopPct ?? null,
+    ...(entryStockPrice !== undefined ? { entryStockPrice } : {}),
   }, saved.entryPrice), { skipPost: true });
   return { rejected: false };
 }
@@ -1099,6 +1110,11 @@ export function migratePortfolioPersist(state: unknown, version: number): unknow
       // shape; a stored row predates the hold, so it has none (null = never a
       // stock time stop) until the next sync reads the backend's value.
       if (version < 7 && ivClean.holdMaxDays === undefined) ivClean.holdMaxDays = null;
+      // v7 -> v8, #630: entryStockPrice joins the persisted shape.
+      if (version < 8 && ivClean.entryStockPrice === undefined) {
+        const isStock = typeof ivClean.contract === 'string' && ivClean.contract.endsWith('|STOCK');
+        ivClean.entryStockPrice = isStock && typeof ivClean.entryPrice === 'number' ? ivClean.entryPrice : null;
+      }
       return ivClean;
     }),
   };
@@ -1634,7 +1650,7 @@ export const usePortfolioStore = create<PortfolioStoreState>()(
     }),
     {
       name: 'bamendjou-portfolio-v1',
-      version: 7,
+      version: 8,
       skipHydration: true,
       migrate: migratePortfolioPersist,
       partialize: (state) => ({ positions: state.positions }),

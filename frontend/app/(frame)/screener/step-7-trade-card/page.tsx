@@ -207,6 +207,8 @@ function positionFromOrder(
     source:        'manual',
     orderedAt:     nowISOLocal(),
     recId:         generateRecId(),
+    scanStockPrice: c.price,
+    entryStockPrice: c.price,
     tradeCardSnapshot: tradeCardSnapshotOf(c),
     ...pickedFieldsFrom(pick),
   };
@@ -1123,6 +1125,7 @@ export default function Step7Page() {
       orderedAt:     nowISOLocal(),
       recId:         generateRecId(),
       scanStockPrice: card.price,
+      entryStockPrice: card.price,
       tradeCardSnapshot: tradeCardSnapshotOf(card),
       // Phase G (piece 5) — see positionFromOrder's own comment on `pick`;
       // this closure has direct access to methodPickFor, unlike that

@@ -2025,7 +2025,7 @@ describe('broker-path stop direction boundaries', () => {
   function levelInput(label: 'Stop' | 'Structural stop'): HTMLInputElement {
     const captions = screen.getAllByText(label, { exact: true, selector: 'span' });
     for (const caption of captions) {
-      const input = caption.parentElement?.querySelector('input');
+      const input = caption.closest('label')?.querySelector('input') || caption.parentElement?.querySelector('input');
       if (input instanceof HTMLInputElement) return input;
     }
     throw new Error(`no input for ${label}`);

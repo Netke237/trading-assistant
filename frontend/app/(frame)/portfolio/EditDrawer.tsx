@@ -28,6 +28,7 @@ import { POSITION_ALERT_TYPES } from '@/types/domain';
 import type { PortfolioPosition, AlertOverrides, PositionAlertType, TpMethod, PickedMethod, PickedStopBasis } from '@/types/domain';
 import styles from './page.module.css';
 import { resolvePremiumStopPct, hasOwnPremiumStopPct, percentStopFiringPrice, premiumStopIsSubCent, isShortStockPosition, formatPremiumStopPct, premiumStopPctLabel, PREMIUM_STOP_MIN_PCT, PREMIUM_STOP_MAX_PCT } from '@/lib/premiumStop';
+import { formatStockStopDistance, formatPremiumStopDistance } from '@/lib/stopDistance';
 import { TIME_STOP_DTE } from '@/lib/alertEngine';
 
 /** `position.contract` for an option position is a backend-generated,
@@ -85,6 +86,9 @@ export function EditDrawer({
   const isWatched = useWatchlistStore((s) => s.isWatched(position.symbol));
 
   const isStock = position.contract.endsWith('|STOCK');
+  const effectiveStockEntry = isStock
+    ? position.entryPrice
+    : (position.entryStockPrice != null && position.entryStockPrice > 0 ? position.entryStockPrice : null);
   const snapshot = position.tradeCardSnapshot ?? {};
   // Carries each target's real id (T1/T2/…) alongside its price through both
   // filters below, so a partially-cleared position's remaining targets keep
@@ -420,6 +424,32 @@ export function EditDrawer({
         <button type="button" className={styles.editClose} onClick={onClose} aria-label="Close editor">×</button>
       </div>
 
+      <div className={styles.entryRefCard}>
+        <div className={styles.entryRefItem}>
+          <Text size={11} tone="secondary">Stock at entry</Text>
+          {effectiveStockEntry != null ? (
+            <Data size={13} weight={500}>${effectiveStockEntry.toFixed(2)}</Data>
+          ) : (
+            <div className={styles.notRecordedWrap}>
+              <Data size={13} tone="dim">—</Data>
+              <Text size={10} tone="dim">not recorded</Text>
+            </div>
+          )}
+        </div>
+        {!isStock && (
+          <div className={styles.entryRefItem}>
+            <Text size={11} tone="secondary">Option at entry</Text>
+            <div className={styles.entryRefValue}>
+              <Data size={13} weight={500}>${position.entryPrice.toFixed(2)}</Data>
+              <Text size={11} tone="dim">per share</Text>
+              <Text size={10} tone="dim">
+                {`(contract cost = $${(position.entryPrice * 100 * (position.contracts ?? 1)).toFixed(2)})`}
+              </Text>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className={styles.editGrid}>
         <EditField
           label="Stop"
@@ -432,6 +462,7 @@ export function EditDrawer({
               : 'Exit if the underlying stock drops below this price (invalidates the trade thesis).'
           }
           value={position.stop ?? 0}
+          distance={formatStockStopDistance(position.stop, effectiveStockEntry, position.direction)}
           range={stockLevelRange}
           onChange={(n) => onChange({ stop: n > 0 ? n : null })}
         />
@@ -439,6 +470,7 @@ export function EditDrawer({
           label="Structural stop"
           hint="Tighter, chart-based stop (order block / swing level) from Check structure. Optional — 0 means none was captured."
           value={position.structuralStop ?? 0}
+          distance={formatStockStopDistance(position.structuralStop, effectiveStockEntry, position.direction)}
           range={stockLevelRange}
           onChange={(n) => onChange({ structuralStop: n > 0 ? n : null })}
         />
@@ -1023,6 +1055,8 @@ function EditField({
   onCommit,
   /** Bump to drop a held draft and show `value` again (a rejected fill). */
   draftEpoch = 0,
+  /** Stop distance from entry (e.g. "$46.60 · −$3.40 / −6.8% from entry"). */
+  distance,
 }: {
   label: string;
   hint?: string;
@@ -1035,6 +1069,7 @@ function EditField({
   placeholder?: string;
   onCommit?: (n: number) => boolean;
   draftEpoch?: number;
+  distance?: string | null;
 }) {
   // DRAFT-THEN-COMMIT, and TEXT rather than number. Round 11 findings 1 and 2.
   //
@@ -1191,7 +1226,14 @@ function EditField({
 
   return (
     <label className={styles.editField}>
-      <Text size={11} tone="secondary">{label}</Text>
+      <div className={styles.editLabelRow}>
+        <Text size={11} tone="secondary">{label}</Text>
+        {distance && (
+          <Text size={10} tone="dim" className={styles.distanceText}>
+            {distance}
+          </Text>
+        )}
+      </div>
       <input
         type="text"
         inputMode="decimal"
@@ -1456,16 +1498,31 @@ function PremiumStopEditor({
     dirtyRef.current = false;
   };
 
+  const distance = formatPremiumStopDistance(
+    position.entryPrice,
+    own,
+    globalPremiumStopPct,
+    position.contract,
+    position.direction,
+  );
+
   return (
     <label className={styles.editField}>
-      <Text size={11} tone="secondary">
-        {/* P2-13 -- a stock position's percent stop is a STOCK price level,
-            not a premium. STOP-SEMANTICS-2026-10-02: a short's fires on a
-            RISE (entry x (1 + pct)), a long's on a fall (entry x (1 - pct)). */}
-        {isStock
-          ? `Stock stop — fires ${formatPremiumStopPct(own, globalPremiumStopPct)} ${shortStock ? 'above' : 'below'} entry`
-          : `Premium stop — ${formatPremiumStopPct(own, globalPremiumStopPct)}`}
-      </Text>
+      <div className={styles.editLabelRow}>
+        <Text size={11} tone="secondary">
+          {/* P2-13 -- a stock position's percent stop is a STOCK price level,
+              not a premium. STOP-SEMANTICS-2026-10-02: a short's fires on a
+              RISE (entry x (1 + pct)), a long's on a fall (entry x (1 - pct)). */}
+          {isStock
+            ? `Stock stop — fires ${formatPremiumStopPct(own, globalPremiumStopPct)} ${shortStock ? 'above' : 'below'} entry`
+            : `Premium stop — ${formatPremiumStopPct(own, globalPremiumStopPct)}`}
+        </Text>
+        {distance && (
+          <Text size={10} tone="dim" className={styles.distanceText}>
+            {distance}
+          </Text>
+        )}
+      </div>
       <input
         // TEXT, not number. `<input type="number">` sanitizes its value, so
         // `e.target.value` is "" for any half-typed literal -- "48." and ".5"
