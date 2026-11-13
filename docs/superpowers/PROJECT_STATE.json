@@ -10846,13 +10846,14 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "Resumed after usage interruption on fresh branch from prior pushed plan. No production edits by previous implementer. Published639-642 links verified; baseline103passed; Python3.11.9 and baseline typecheck passed. Plan1 clean0 retained; code0 unstarted.",
+      "note": "Resumed after usage interruption on fresh branch from prior pushed plan. Plan1 clean0 retained; code0 unstarted. 2026-11-13 T1 #639 closed: 76ed0c72 (perf(tuner): restrict ordinary recheck signals to entry windows), fresh implementer; coordinator re-ran tuner suites 241 passed/1 skipped, typecheck clean, full backend 10294 passed with 10 failed + 1 error, all Windows-environment (atomic_yaml modes, payload_persistence modes, heston probe network guard, time.tzset), none importing tuner code. Jest not re-run by coordinator (no frontend files changed; implementer saw 3 locale-dependent pre-existing suite failures). Phase stays 20% until T2/T3 reach implementation. Not audited.",
       "build_tickets": [
         {
           "issue": 639,
           "task": 1,
-          "status": "in_progress",
-          "completion_pct": 20
+          "status": "done",
+          "completion_pct": 70,
+          "commit": "76ed0c72"
         },
         {
           "issue": 640,
