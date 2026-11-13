@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tuner-recheck-window-7621dde5",
       "claimed_at": "2026-11-13T04:55:02Z",
-      "expires_at": "2026-11-13T07:55:25Z",
+      "expires_at": "2026-11-13T07:55:38Z",
       "note": "Resume Board638 after usage interruption; plan clean, baseline103passed, T1 unbuilt",
       "task": "TUNER-RECHECK-WINDOW"
     }
