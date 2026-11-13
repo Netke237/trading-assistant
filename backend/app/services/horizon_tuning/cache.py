@@ -4,6 +4,12 @@ Under ``backend/data/tuning_cache/`` (gitignored): ``signals/<key>.json`` and
 ``gates/<key>.json``, one file per key, written atomically (tmp + replace) so
 parallel workers never read a half-written file.
 
+**Window-scoped signals** (re-check fold winners, ``window_signal_series``):
+``signal_windows/<key>.json``, key = sha256 of the full signal key above plus
+the exact normalized absolute ``lo``/``hi``. A separate namespace: a scoped
+payload is never read from or written to a full-series path, and a cached
+scoped payload with a signal outside its window is recomputed.
+
 **Signal key** = sha256 of: symbol, strategy, direction, the EFFECTIVE params
 (after the ``exit:`` merge, or the merged multi shape; canonical JSON),
 ``SIGNAL_WINDOW_BARS``, ``BARS_BASIS_VERSION``, the OHLCV hash and
@@ -89,6 +95,13 @@ def signal_key(symbol: str, bars: list[dict], strategy: str, direction: str, par
     }))
 
 
+def window_signal_key(symbol: str, bars: list[dict], strategy: str, direction: str,
+                      params: dict | None, lo: int, hi: int) -> str:
+    """The full signal identity plus the exact normalized window bounds."""
+    return _sha(_canonical({"signal": signal_key(symbol, bars, strategy, direction, params),
+                            "lo": lo, "hi": hi}))
+
+
 def _gate_sources() -> dict[str, str]:
     from app.routers import stock_scan
     from app.scoring import stock_scorer
@@ -144,6 +157,22 @@ class TuningCache:
     def signal_series(self, symbol: str, bars: list[dict], strategy: str, direction: str,
                       params: dict | None) -> list[SignalPoint | None]:
         path = self.root / "signals" / f"{signal_key(symbol, bars, strategy, direction, params)}.json"
+        return self._signal_series(path, bars, strategy, direction, params)
+
+    def window_signal_series(self, symbol: str, bars: list[dict], strategy: str, direction: str,
+                             params: dict | None, *, window: tuple[int, int]) -> list[SignalPoint | None]:
+        """``signals.signal_series(..., window=window)`` through the scoped
+        namespace. Stateful setup strategies are never scoped: their full
+        series comes from (and goes to) the full-series namespace."""
+        lo, hi = _signals.signal_window(len(bars), window)
+        if strategy in _signals.STATEFUL_STRATEGIES:
+            return self.signal_series(symbol, bars, strategy, direction, params)
+        key = window_signal_key(symbol, bars, strategy, direction, params, lo, hi)
+        return self._signal_series(self.root / "signal_windows" / f"{key}.json",
+                                   bars, strategy, direction, params, window=(lo, hi))
+
+    def _signal_series(self, path: Path, bars: list[dict], strategy: str, direction: str,
+                       params: dict | None, *, window: tuple[int, int] | None = None) -> list[SignalPoint | None]:
         cached = _read(path)
         if isinstance(cached, list) and len(cached) == len(bars):
             try:
@@ -151,6 +180,9 @@ class TuningCache:
                 if any(p is not None and (not isinstance(p, dict) or set(p) != expected) for p in cached):
                     raise ValueError("incomplete cached signal")
                 series = [None if p is None else SignalPoint(**p) for p in cached]
+                if window is not None and any(p is not None and not window[0] <= i < window[1]
+                                              for i, p in enumerate(series)):
+                    raise ValueError("cached signal outside window")
                 if any(p is not None and (type(p.market) is not bool or
                        type(p.setup_age) is not int or p.setup_age < 0 or
                        type(p.entry) not in (int, float) or type(p.stop) not in (int, float) or
@@ -165,7 +197,8 @@ class TuningCache:
                 self.hits += 1
                 return series
         self.misses += 1
-        series = _signals.signal_series(bars, strategy, direction, params)
+        series = (_signals.signal_series(bars, strategy, direction, params) if window is None else
+                  _signals.signal_series(bars, strategy, direction, params, window=window))
         _write_atomic(path, [None if p is None else asdict(p) for p in series])
         return series
 

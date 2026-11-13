@@ -10,6 +10,9 @@
   heldout_start)`` and the held-out year ``[heldout_start, data_end]``; its
   evidence-scope symbols add fires, never trades. The cell's own calendar,
   folds and entry cut-offs are reused, so the windows are the sample's.
+  An ordinary fold winner's series is computed only on the bars of its own
+  test entries (the only signals the simulator reads, so the trades equal the
+  full-series run's); final parameters and setup strategies stay full.
 * **Adoption bar** (ADR decision 5), at ``cost_per_leg`` on the full-universe
   numbers. Criteria 1-4 come from the trade universe, criterion 5 from the
   fire-rate universe:
@@ -135,6 +138,44 @@ def _empty_recheck(n_trade: int, n_fire: int) -> Recheck:
                    None, None, {}, n_trade, n_fire, {"oos": 0, "heldout": 0}, {"oos": 0, "heldout": 0})
 
 
+def _recheck_series(cache: TuningCache | None, symbol: str, bars: list[dict], strategy: str,
+                    direction: str, final_params: dict, requests: list, scoring_horizon: str,
+                    min_price: float | None, max_price: float | None, benchmark: list[dict] | None):
+    """One symbol's re-check inputs: the FULL final-parameter series (fires and
+    the held-out year), the gate mask, and one series per exact winner request
+    ``(params, window)``. ``window`` is the absolute half-open signal index
+    range of that winner's fold entries (scoped: ``None`` outside it), or
+    ``None`` = the full series (stateful setup strategies). Requests are never
+    merged into a union window."""
+    kw = dict(min_price=min_price, max_price=max_price, benchmark=benchmark)
+    if cache is not None:
+        final = cache.signal_series(symbol, bars, strategy, direction, final_params)
+        mask = cache.gate_mask(symbol, bars, direction, scoring_horizon, **kw)
+        winners = [cache.signal_series(symbol, bars, strategy, direction, params) if window is None else
+                   cache.window_signal_series(symbol, bars, strategy, direction, params, window=window)
+                   for params, window in requests]
+        return final, mask, winners
+    final = _signals.signal_series(bars, strategy, direction, final_params)
+    mask = _gates.gate_mask(bars, direction, scoring_horizon, **kw)
+    winners = []
+    for params, window in requests:
+        if window is None:
+            winners.append(final if params == final_params else
+                           _signals.signal_series(bars, strategy, direction, params))
+        else:
+            winners.append(_signals.signal_series(bars, strategy, direction, params, window=window))
+    return final, mask, winners
+
+
+def _prewarm_recheck(args) -> str:
+    """Pool worker (top level, pickleable): ``_recheck_series`` into the disk
+    cache at ``args[0]``. The parent then runs the same plan from the cache in
+    sorted symbol order; the return value is only the symbol."""
+    root, *rest = args
+    _recheck_series(TuningCache(root), *rest)
+    return rest[0]
+
+
 def full_universe_recheck(result: CellResult, universe: UniverseData, config: dict) -> Recheck:
     """Fold winners and final parameters re-evaluated on the full universe
     (see the module docstring)."""
@@ -154,30 +195,38 @@ def full_universe_recheck(result: CellResult, universe: UniverseData, config: di
     min_price, max_price = config["gates"]["min_price"], config["gates"]["max_price"]
     final_params = wfc.combo_params(strategy, direction, result.final_params)
     winner_params = {id(f): wfc.combo_params(strategy, direction, f.winner) for f in winners}
-    distinct: list[dict] = []
-    for p in [*winner_params.values(), final_params]:
-        if p not in distinct:
-            distinct.append(p)
     symbols = sorted(set(trade_syms) | set(fire_syms))
+    trade_set = set(trade_syms)
+    stateful = strategy in _signals.STATEFUL_STRATEGIES
 
+    # Each trade-universe symbol's exact winner requests: (params, window).
+    # simulate_trades reads a winner's signal only on bars dated inside its
+    # fold's test entry, so an ordinary winner needs the absolute index range
+    # [bisect_left(dates, entry[0]), bisect_left(dates, entry[1])) of this
+    # symbol's own dates (end exclusive). Setup winners stay full (None).
+    # Equal requests share one series; windows are never unioned.
+    requests: dict[str, list[tuple[dict, tuple[int, int] | None]]] = {}
+    fold_request: dict[str, dict[int, int]] = {}
+    for s in symbols:
+        requests[s], fold_request[s] = [], {}
+        if s not in trade_set:
+            continue                      # evidence scope: final params only
+        dates = wfc.bar_dates(universe.bars[s])
+        for f in winners:
+            window = None if stateful else (bisect.bisect_left(dates, f.fold.test_entry[0]),
+                                            bisect.bisect_left(dates, f.fold.test_entry[1]))
+            request = (winner_params[id(f)], window)
+            if request not in requests[s]:
+                requests[s].append(request)
+            fold_request[s][id(f)] = requests[s].index(request)
+    plan = {s: (s, universe.bars[s], strategy, direction, final_params, requests[s],
+                scoring_horizon, min_price, max_price, universe.benchmark) for s in symbols}
+
+    # Pool -> disk cache (the same plan as below), then read in-process.
     if universe.workers > 1:
-        units = [(str(universe.cache.root), s, universe.bars[s], strategy, direction, distinct,
-                  scoring_horizon, min_price, max_price, universe.benchmark) for s in symbols]
+        root = str(universe.cache.root)
         with ProcessPoolExecutor(max_workers=universe.workers) as pool:
-            list(pool.map(wfc._compute_unit, units))
-
-    def _signal(sym: str, params: dict):
-        if universe.cache is not None:
-            return universe.cache.signal_series(sym, universe.bars[sym], strategy, direction, params)
-        return _signals.signal_series(universe.bars[sym], strategy, direction, params)
-
-    def _state(sym: str) -> SymbolState:
-        kw = dict(min_price=min_price, max_price=max_price, benchmark=universe.benchmark)
-        if universe.cache is not None:
-            mask = universe.cache.gate_mask(sym, universe.bars[sym], direction, scoring_horizon, **kw)
-        else:
-            mask = _gates.gate_mask(universe.bars[sym], direction, scoring_horizon, **kw)
-        return SymbolState.build(sym, universe.bars[sym], mask, direction)
+            list(pool.map(_prewarm_recheck, [(root, *plan[s]) for s in symbols]))
 
     boundary = {"oos": 0, "heldout": 0}
     end = {"oos": 0, "heldout": 0}
@@ -186,20 +235,19 @@ def full_universe_recheck(result: CellResult, universe: UniverseData, config: di
     fires_wf: dict[str, int] = {}
     fires_ho: dict[str, int] = {}
     span = result.heldout_entry
-    trade_set = set(trade_syms)
 
     fires = wfc.count_fires
 
     for s in symbols:
-        st = _state(s)
-        final_sig = _signal(s, final_params)
+        final_sig, mask, winner_sigs = _recheck_series(universe.cache, *plan[s])
+        st = SymbolState.build(s, universe.bars[s], mask, direction)
         if s in fire_syms:
             fires_wf[s] = fires(st, final_sig, cal.warm_start, cal.heldout_start)
             fires_ho[s] = fires(st, final_sig, cal.heldout_start, cal.data_end, inclusive=True)
         if s not in trade_set:
             continue                      # evidence scope: fires only, never a trade
         for f in winners:
-            sig = _signal(s, winner_params[id(f)])
+            sig = winner_sigs[fold_request[s][id(f)]]
             for label in (COST, STRESS):
                 win = wfc.simulate_window(st, sig, entry=f.fold.test_entry, restriction=cal.heldout_start,
                                           inclusive=False, commission=result.costs[label],
