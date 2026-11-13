@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tuner-recheck-window-73081ea3",
       "claimed_at": "2026-11-13T15:03:12Z",
-      "expires_at": "2026-11-13T18:04:28Z",
+      "expires_at": "2026-11-13T18:04:43Z",
       "note": "Resume638 at T2; T1 committed76ed0c72, code audit pending",
       "task": "TUNER-RECHECK-WINDOW"
     }
