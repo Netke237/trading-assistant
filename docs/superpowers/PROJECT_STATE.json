@@ -10804,9 +10804,9 @@
     {
       "id": "TUNER-RECHECK-WINDOW",
       "name": "Exact-parity recheck window optimization and frozen tuning export",
-      "status": "not_started",
+      "status": "in_progress",
       "tracking_issue": 638,
-      "branch": "board/tuner-recheck-window-11f71bdb",
+      "branch": "board/tuner-recheck-window-7621dde5",
       "size": "XL",
       "complexity": 4,
       "completion_pct": 20,
@@ -10846,7 +10846,28 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "Board638 taken on fresh pushed branch. Exact independent plan review clean; application build next. No real J1 tuning or database/provider writes authorized by this machinery task."
+      "note": "Resumed after usage interruption on fresh branch from prior pushed plan. No production edits by previous implementer. Published639-642 links verified; baseline103passed; Python3.11.9 and baseline typecheck passed. Plan1 clean0 retained; code0 unstarted.",
+      "build_tickets": [
+        {
+          "issue": 639,
+          "task": 1,
+          "status": "in_progress",
+          "completion_pct": 20
+        },
+        {
+          "issue": 640,
+          "task": 2,
+          "status": "not_started",
+          "completion_pct": 20
+        },
+        {
+          "issue": 641,
+          "task": 3,
+          "status": "not_started",
+          "completion_pct": 20
+        }
+      ],
+      "coordinator_ticket": 642
     }
   ],
   "already_shipped": [
