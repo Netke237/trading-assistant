@@ -7,6 +7,7 @@ in test_horizon_tuning_walk_forward.py); nothing reads the database.
 from __future__ import annotations
 
 import copy
+import asyncio
 import importlib.util
 import json
 from datetime import date
@@ -326,3 +327,82 @@ def test_resume_skips_a_finished_cell(cli_env, monkeypatch):
     assert len(summary["cells"]) == 2
     assert cli.main(cli_env.argv) == 0                   # without --resume: recomputed
     assert len(calls) == 2
+
+
+def test_frozen_export_resume_across_days_and_tampered_bars(cli_env, tmp_path, monkeypatch):
+    """Finished cells retain exact numbers across days; changed bars invalidate them."""
+    from sqlalchemy import insert
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from app.models.ohlcv_daily import OhlcvBase, OhlcvDailyModel
+    from app.scoring import stock_scorer
+    monkeypatch.setattr(stock_scorer, "resolve_rs_benchmark", lambda *a: "SPX")
+
+    spec = importlib.util.spec_from_file_location("frozen_export_cli", _SCRIPT.with_name("export_tuning_bars.py"))
+    export = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(export)
+    frozen = tmp_path / "frozen"
+
+    async def prepare():
+        engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'frozen.db').as_posix()}")
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(OhlcvBase.metadata.create_all)
+                rows = [dict(symbol=s, date=date.fromisoformat(b["time"]),
+                             **{k: b[k] for k in ("open", "high", "low", "close", "volume")})
+                        for s in ("AAA", "BBB", "BIIB", "SPY", "QQQ") for b in _sawtooth(CAL)]
+                await conn.execute(insert(OhlcvDailyModel), rows)
+            return await export.export_bars(out=frozen, start=CAL[0], end=CAL[-1],
+                symbols=["AAA", "BBB", "BIIB"], cells=export.select_cells("pullback_ema:Swing", None), engine=engine)
+        finally:
+            await engine.dispose()
+
+    manifest = asyncio.run(prepare())
+    assert set(manifest["available"]) >= {"AAA", "BBB", "BIIB", "SPY"}
+    argv = cli_env.argv.copy()
+    argv[argv.index("--bars-dir") + 1] = str(frozen)
+    cli = _cli()
+    identities = []
+    identity = cli.run_identity
+    def record_identity(cell, config, grid, data_hash):
+        key = identity(cell, config, grid, data_hash)
+        identities.append((cell, data_hash, key))
+        return key
+    monkeypatch.setattr(cli, "run_identity", record_identity)
+    class FirstDay(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 12)
+    class NextDay(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 15)
+    monkeypatch.setattr(cli, "date", FirstDay)
+    assert cli.main(argv) == 0
+    first_ids = identities.copy()
+    cell_bytes = {p.name: p.read_bytes() for p in (cli_env.data / "cells").glob("*.json")}
+    first_rows = json.loads((cli_env.out / "tuning_summary.json").read_bytes())["cells"]
+    calls = {"cell": 0, "recheck": 0}
+    real_cell, real_recheck = wfc.tune_cell, report.full_universe_recheck
+    def counted_cell(*a, **k):
+        calls["cell"] += 1
+        return real_cell(*a, **k)
+    def counted_recheck(*a, **k):
+        calls["recheck"] += 1
+        return real_recheck(*a, **k)
+    monkeypatch.setattr(wfc, "tune_cell", counted_cell)
+    monkeypatch.setattr(report, "full_universe_recheck", counted_recheck)
+    monkeypatch.setattr(cli, "date", NextDay)
+    identities.clear()
+    assert cli.main(argv + ["--resume"]) == 0
+    assert identities == first_ids  # exact data hashes and run keys, independent of today
+    assert calls == {"cell": 0, "recheck": 0}
+    assert {p.name: p.read_bytes() for p in (cli_env.data / "cells").glob("*.json")} == cell_bytes
+    assert json.loads((cli_env.out / "tuning_summary.json").read_bytes())["cells"] == first_rows
+    path = frozen / "AAA_candles.json"
+    tampered = json.loads(path.read_bytes())
+    tampered[-1]["volume"] += 1
+    path.write_text(json.dumps(tampered), encoding="utf-8")
+    identities.clear()
+    assert cli.main(argv + ["--resume"]) == 0
+    assert all(new[1] != old[1] and new[2] != old[2] for new, old in zip(identities, first_ids))
+    assert calls == {"cell": 2, "recheck": 2}
