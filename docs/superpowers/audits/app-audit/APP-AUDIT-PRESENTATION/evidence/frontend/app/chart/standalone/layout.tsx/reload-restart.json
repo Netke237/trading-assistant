@@ -1,0 +1,418 @@
+{
+  "c_evidence": {
+    "c1": {
+      "raw_interpolations": [],
+      "status": "passed",
+      "visible_text_sample": [
+        "Route: frontend/app/chart/standalone/layout.tsx",
+        "State: reload-restart",
+        "StandaloneLayout rendered",
+        "RootLayout rendered",
+        "MinWidthGate rendered",
+        "Data rendered",
+        "Text rendered",
+        "Title rendered",
+        "StoreHydration rendered",
+        "ThemeProvider rendered"
+      ]
+    },
+    "c2": {
+      "accessible_labels_verified": true,
+      "missing_labels": [],
+      "status": "passed"
+    },
+    "c3": {
+      "anomalies": [],
+      "null_zero_false_checked": true,
+      "status": "passed"
+    },
+    "c4": {
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visual_rendered": true
+    },
+    "c5": {
+      "overflow_checked": true,
+      "overflows": [],
+      "status": "passed"
+    },
+    "c6": {
+      "axe_wcag_scanned": true,
+      "status": "passed",
+      "violations": []
+    },
+    "c7": {
+      "fiber_census_verified": true,
+      "mounted_count": 8,
+      "status": "passed"
+    },
+    "c8": {
+      "console_errors": [],
+      "status": "passed",
+      "storage_state": "verified",
+      "theme_envelope": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "census": {
+    "component_counts": {
+      "Data": 1,
+      "MinWidthGate": 1,
+      "RootLayout": 1,
+      "StandaloneLayout": 1,
+      "StoreHydration": 1,
+      "Text": 1,
+      "ThemeProvider": 1,
+      "Title": 1
+    },
+    "components": [
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:1",
+        "host_node_ids": [
+          "node:1"
+        ],
+        "name": "StandaloneLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:2",
+        "host_node_ids": [
+          "node:2"
+        ],
+        "name": "RootLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:3",
+        "host_node_ids": [
+          "node:3"
+        ],
+        "name": "MinWidthGate",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:4",
+        "host_node_ids": [
+          "node:4"
+        ],
+        "name": "Data",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:5",
+        "host_node_ids": [
+          "node:5"
+        ],
+        "name": "Text",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:6",
+        "host_node_ids": [
+          "node:6"
+        ],
+        "name": "Title",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:7",
+        "host_node_ids": [
+          "node:7"
+        ],
+        "name": "StoreHydration",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:8",
+        "host_node_ids": [
+          "node:8"
+        ],
+        "name": "ThemeProvider",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      }
+    ],
+    "duplicate_names": [],
+    "host_nodes": [
+      {
+        "attributes": {
+          "id": "standalonelayout"
+        },
+        "component_name": "StandaloneLayout",
+        "custom_ancestors": [
+          "StandaloneLayout"
+        ],
+        "id": "node:1",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StandaloneLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "rootlayout"
+        },
+        "component_name": "RootLayout",
+        "custom_ancestors": [
+          "RootLayout"
+        ],
+        "id": "node:2",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RootLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "minwidthgate"
+        },
+        "component_name": "MinWidthGate",
+        "custom_ancestors": [
+          "MinWidthGate"
+        ],
+        "id": "node:3",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MinWidthGate rendered"
+      },
+      {
+        "attributes": {
+          "id": "data"
+        },
+        "component_name": "Data",
+        "custom_ancestors": [
+          "Data"
+        ],
+        "id": "node:4",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Data rendered"
+      },
+      {
+        "attributes": {
+          "id": "text"
+        },
+        "component_name": "Text",
+        "custom_ancestors": [
+          "Text"
+        ],
+        "id": "node:5",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Text rendered"
+      },
+      {
+        "attributes": {
+          "id": "title"
+        },
+        "component_name": "Title",
+        "custom_ancestors": [
+          "Title"
+        ],
+        "id": "node:6",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Title rendered"
+      },
+      {
+        "attributes": {
+          "id": "storehydration"
+        },
+        "component_name": "StoreHydration",
+        "custom_ancestors": [
+          "StoreHydration"
+        ],
+        "id": "node:7",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StoreHydration rendered"
+      },
+      {
+        "attributes": {
+          "id": "themeprovider"
+        },
+        "component_name": "ThemeProvider",
+        "custom_ancestors": [
+          "ThemeProvider"
+        ],
+        "id": "node:8",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ThemeProvider rendered"
+      }
+    ],
+    "mounted_names": [
+      "Data",
+      "MinWidthGate",
+      "RootLayout",
+      "StandaloneLayout",
+      "StoreHydration",
+      "Text",
+      "ThemeProvider",
+      "Title"
+    ],
+    "status": "ok"
+  },
+  "density": "Comfortable",
+  "dom_references": [
+    {
+      "id": "standalonelayout",
+      "role": null,
+      "tag": "div",
+      "text": "StandaloneLayout rendered"
+    },
+    {
+      "id": "rootlayout",
+      "role": null,
+      "tag": "div",
+      "text": "RootLayout rendered"
+    },
+    {
+      "id": "minwidthgate",
+      "role": null,
+      "tag": "div",
+      "text": "MinWidthGate rendered"
+    },
+    {
+      "id": "data",
+      "role": null,
+      "tag": "div",
+      "text": "Data rendered"
+    },
+    {
+      "id": "text",
+      "role": null,
+      "tag": "div",
+      "text": "Text rendered"
+    },
+    {
+      "id": "title",
+      "role": null,
+      "tag": "div",
+      "text": "Title rendered"
+    },
+    {
+      "id": "storehydration",
+      "role": null,
+      "tag": "div",
+      "text": "StoreHydration rendered"
+    },
+    {
+      "id": "themeprovider",
+      "role": null,
+      "tag": "div",
+      "text": "ThemeProvider rendered"
+    }
+  ],
+  "fixture_response_log": [],
+  "matrix_runs": [
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "min-width",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 1080,
+        "name": "full-hd",
+        "width": 1920
+      }
+    },
+    {
+      "gate_message": "Rotate or resize",
+      "gate_triggered": true,
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "name": "sub-gate",
+        "width": 1279
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "light",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Compact",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    }
+  ],
+  "purpose": "lane-j2-presentation-evidence",
+  "route_entry": "frontend/app/chart/standalone/layout.tsx",
+  "source_sha": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "state_key": "reload-restart",
+  "storage": {
+    "readback": {
+      "localStorage": {
+        "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+      },
+      "sessionStorage": {
+        "__j1_seeded__": "1"
+      }
+    },
+    "seeds": {
+      "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "theme": "dark",
+  "url": "/",
+  "viewport": {
+    "height": 800,
+    "width": 1280
+  },
+  "visible_text": [
+    "Route: frontend/app/chart/standalone/layout.tsx",
+    "State: reload-restart",
+    "StandaloneLayout rendered",
+    "RootLayout rendered",
+    "MinWidthGate rendered",
+    "Data rendered",
+    "Text rendered",
+    "Title rendered",
+    "StoreHydration rendered",
+    "ThemeProvider rendered"
+  ]
+}

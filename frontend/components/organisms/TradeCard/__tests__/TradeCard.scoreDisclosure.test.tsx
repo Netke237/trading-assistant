@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { TradeCard } from '..';
-import type { TradeCardData, StockExplanation, ContractExplanation } from '@/types/domain';
+import type { TradeCardData, StockExplanation, ContractExplanation, SentimentData } from '@/types/domain';
 
 jest.mock('@/lib/api', () => ({ api: {
   getStructuralStop: jest.fn(), getStockQuote: jest.fn(), getContractQuote: jest.fn(),
@@ -53,16 +53,32 @@ const contractKey = 'bamendjou:tradecard:contract:scoring-evidence:collapsed';
 
 beforeEach(() => localStorage.clear());
 
+it('separates closed qualifications immediately after visible raw contract details', () => {
+  render(<TradeCard data={data} />);
+  const stock = screen.getByRole('button', { name: /Stock Qualification/ });
+  const contract = screen.getByRole('button', { name: /Contract Qualification/ });
+  expect(stock).toHaveAttribute('aria-expanded', 'false');
+  expect(contract).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByText('Contract Details')).toBeVisible();
+  expect(screen.getByText('Contract Details').closest('section')!.nextElementSibling).toBe(stock.closest('section'));
+  expect(stock.closest('section')!.nextElementSibling).toBe(contract.closest('section'));
+  fireEvent.click(contract);
+  expect(screen.getByText('Stock Scorecard')).not.toBeVisible();
+  expect(screen.getByRole('button', { name: /Captured contract scoring evidence/ })).toBeVisible();
+});
+
 it('starts fresh scores folded and reveals both complete panels without replacing captured evidence', () => {
   const before = JSON.stringify(data);
   render(<TradeCard data={data} />);
-  const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+  const toggle = screen.getByRole('button', { name: /Stock Qualification/ });
   expect(toggle).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByText('Stock Scorecard')).not.toBeVisible();
   expect(screen.getByText('Fundamental Health')).toBeVisible();
   expect(screen.getByText('negative equity')).toBeVisible();
   fireEvent.click(toggle);
-  const section = within(toggle.closest('section')!);
+  fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
+  // Both independent qualification panels sit beneath Contract Details.
+  const section = within(document.body);
   const values = [85, 78, 72, 90, 65, 80, 66, 55, 75, 60];
   const labels = ['Trend', 'Pullback', 'Trigger', 'Event', 'Volatility', 'DTE fit', 'Delta', 'IV', 'Liquidity', 'Spread'];
   labels.forEach((label, index) => {
@@ -104,17 +120,44 @@ it.each(['0', '1'])('restores existing outer score preference %s and independent
   localStorage.setItem(stockKey, '0');
   localStorage.setItem(contractKey, '1');
   const { unmount } = render(<TradeCard data={data} />);
-  const toggle = screen.getByRole('button', { name: /Stock & contract scores/ });
+  const toggle = screen.getByRole('button', { name: /Stock Qualification/ });
   expect(toggle).toHaveAttribute('aria-expanded', saved === '0' ? 'true' : 'false');
   expect(localStorage.getItem(scoresKey)).toBe(saved);
   if (saved === '1') fireEvent.click(toggle);
+  fireEvent.click(screen.getByRole('button', { name: /Contract Qualification/ }));
   expect(screen.getByRole('button', { name: /Captured stock scoring evidence/ })).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByRole('button', { name: /Captured contract scoring evidence/ })).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(toggle);
   expect(localStorage.getItem(scoresKey)).toBe('1');
   unmount();
   render(<TradeCard data={data} />);
-  expect(screen.getByRole('button', { name: /Stock & contract scores/ })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: /Stock Qualification/ })).toHaveAttribute('aria-expanded', 'false');
   expect(localStorage.getItem(stockKey)).toBe('0');
   expect(localStorage.getItem(contractKey)).toBe('1');
+});
+
+const measuredSentiment: SentimentData = {
+  horizon: 'Swing', timeframe: 'daily', state: 'Bull', p_stay: .876,
+  stability: 'Stable', regime_age_days: 12, avg_regime_duration: 31.5,
+  conviction_pct: 27.4, conviction_label: 'Strong conviction',
+  interpretation: 'The regime favours this trade.', alignment: 'Aligned',
+};
+
+it('shows real unmeasured sentiment by default, clears stale candidate values and respects presentation control', () => {
+  const { rerender } = render(<TradeCard data={card} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.getByText('Insufficient history or unavailable data.')).toBeVisible();
+  rerender(<TradeCard data={{ ...card, sentiment: measuredSentiment }} />);
+  expect(screen.getByText('+27.4%')).toBeVisible();
+  rerender(<TradeCard data={{ ...card, symbol: 'NEXT', sentiment: { ...measuredSentiment, insufficient_data: true } }} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.queryByText(/27.4%|State Bull|Strong conviction|OMM\/HMM/)).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, sentiment: { ...measuredSentiment, conviction_pct: 0 } }} />);
+  expect(screen.getByText('0%')).toBeVisible();
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+  rerender(<TradeCard data={card} showMarketSentiment={false} />);
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+  expect(screen.queryByText('Insufficient history or unavailable data.')).not.toBeInTheDocument();
+  rerender(<TradeCard data={{ ...card, sentiment: measuredSentiment }} showMarketSentiment={false} />);
+  expect(screen.queryByText('+27.4%')).not.toBeInTheDocument();
 });

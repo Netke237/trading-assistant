@@ -59,7 +59,10 @@ test.each([null, undefined, { ...sentiment, insufficient_data: true }])(
     const baseline = container.innerHTML;
     rerender(<MarketSentiment s={s} compact />);
     expect(container.innerHTML).toBe(baseline);
-    expect(screen.getByText('Market sentiment — insufficient history')).toBeVisible();
+    expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+    expect(screen.getByText('Regime: Unmeasured')).toHaveClass('toneCaution');
+    expect(screen.getByText('Insufficient history or unavailable data.')).toBeVisible();
+    expect(screen.queryByText(/State Bull|sticky|OMM\/HMM|Strong conviction/)).not.toBeInTheDocument();
     expect(screen.queryByText('+27.4%')).not.toBeInTheDocument();
   },
 );
@@ -85,4 +88,16 @@ test('compact context names conviction, state and alignment independently withou
   expect(screen.getByText('Alignment')).toBeVisible();
   expect(screen.getByText('OMM/HMM Diverging')).toHaveClass('diverging');
   expect(screen.queryByText('PASS')).not.toBeInTheDocument();
+});
+
+test.each([false, true])('candidate changes clear stale values and restore measured zero (compact=%s)', compact => {
+  const { rerender } = render(<MarketSentiment s={sentiment} compact={compact} />);
+  expect(screen.getByText('+27.4%')).toBeVisible();
+  rerender(<MarketSentiment s={{ ...sentiment, insufficient_data: true }} compact={compact} />);
+  expect(screen.getByText('Regime: Unmeasured')).toBeVisible();
+  expect(screen.queryByText(/State Bull|27.4%|Strong conviction|OMM\/HMM/)).not.toBeInTheDocument();
+  rerender(<MarketSentiment s={{ ...sentiment, conviction_pct: 0 }} compact={compact} />);
+  expect(screen.queryByText('Regime: Unmeasured')).not.toBeInTheDocument();
+  expect(screen.getByText('0%')).toHaveClass('toneCaution');
+  expect(screen.getByText('State Bull · sticky 88% · ≈31.5 strides')).toBeVisible();
 });

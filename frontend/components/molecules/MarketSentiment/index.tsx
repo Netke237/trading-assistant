@@ -14,7 +14,8 @@ export function MarketSentiment({ s, compact = false }: {
   if (!s || s.insufficient_data) {
     return (
       <div className={styles.empty}>
-        <Text size={12} tone="dim">Market sentiment — insufficient history</Text>
+        <Text size={12} tone="caution">Regime: Unmeasured</Text>{' '}
+        <Text size={12} tone="caution">Insufficient history or unavailable data.</Text>
       </div>
     );
   }

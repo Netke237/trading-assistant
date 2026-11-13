@@ -1,0 +1,18 @@
+{
+  "bamendjou:theme": "dark",
+  "bamendjou-settings": {
+    "state": {
+      "screenerMode": "options",
+      "premiumStopPct": 50,
+      "confidenceGate": 60,
+      "fundamentalsGate": { "enabled": true, "caution": 50, "reject": 30, "deReject": 2.5 }
+    },
+    "version": 1
+  },
+  "bamendjou:search-profiles": {
+    "state": {
+      "profiles": []
+    },
+    "version": 1
+  }
+}

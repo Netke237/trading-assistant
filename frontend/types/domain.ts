@@ -603,6 +603,13 @@ export interface PortfolioPosition {
   syncStatus?: 'pending' | 'synced';
   /** Epoch ms when this row entered 'pending' (for an "unsynced since" hint). */
   syncPendingSince?: number;
+  /** #582 — local-only. The server-review fingerprint this row's create was
+   *  CONFIRMED against (Track basket). Sent as `X-Review-Fingerprint` on every
+   *  retry of a pending create, so a retry can only save the reviewed values —
+   *  a changed resolution answers review-required and the row is dropped with
+   *  a notice, never silently saved. Never in the request body; cleared on
+   *  'synced'. Absent on every other create path (unchanged behaviour). */
+  reviewFingerprint?: string;
   /** Epoch ms when the backend last confirmed this row. Used by the reconcile
    *  to avoid dropping a row confirmed after the current GET's snapshot. */
   syncedAt?: number;

@@ -157,23 +157,30 @@ def test_r8_g2_options_scan_refuses_a_broken_regime_block(scan_client):
     process.assert_not_called()
 
 
-def test_r8b_options_scan_checks_only_the_requested_horizon(scan_client):
-    """A broken Position block does not refuse a Swing options scan: that scan
-    never reads it. It proceeds past S2 (it fails later on the mocked-out
-    universe, which is not this test's concern)."""
-    fetch = MagicMock(side_effect=RuntimeError("past S2"))
+@pytest.mark.parametrize("horizon,refuses", [("Swing", True), ("Intraday", False)])
+def test_r8b_daily_scan_validates_all_count_contributors(scan_client, horizon, refuses):
+    """Uniform daily counts require Position even for Swing; Intraday is independent."""
+    after_s2 = MagicMock(side_effect=RuntimeError("past S2"))
     doc = _doc(lambda d: d["regime"].pop("position"))
     with ExitStack() as stack:
         stack.enter_context(patch("app.routers.scan._load_scoring_cfg", return_value=doc))
-        stack.enter_context(patch("app.routers.scan.fetch_quotes", fetch))
-        try:
-            r = scan_client.post("/api/scan", json={
-                "universe": ["AAA"], "direction": "Bullish", "horizon": "Swing",
+        stack.enter_context(patch("app.routers.scan._resolve_gate", after_s2))
+        if refuses:
+            result = scan_client.post("/api/scan", json={
+                "universe": ["AAA"], "direction": "Bullish", "horizon": horizon,
             })
-            detail = r.json().get("detail", "") if r.status_code >= 400 else ""
-        except RuntimeError:
-            detail = ""
-    assert "regime." not in str(detail)
+            assert result.status_code == 500
+            assert "regime.position" in result.json()["detail"]
+            after_s2.assert_not_called()
+        else:
+            try:
+                result = scan_client.post("/api/scan", json={
+                    "universe": ["AAA"], "direction": "Bullish", "horizon": horizon,
+                })
+                assert "regime.position" not in str(result.json())
+            except RuntimeError as exc:
+                assert str(exc) == "past S2"
+            after_s2.assert_called_once()
 
 
 @pytest.mark.asyncio

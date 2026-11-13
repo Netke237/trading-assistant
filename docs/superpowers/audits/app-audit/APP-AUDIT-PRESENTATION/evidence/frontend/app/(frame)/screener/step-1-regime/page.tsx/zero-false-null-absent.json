@@ -1,0 +1,2045 @@
+{
+  "c_evidence": {
+    "c1": {
+      "raw_interpolations": [
+        {
+          "pattern": "/\\bnull\\b/",
+          "text": "State: zero-false-null-absent"
+        }
+      ],
+      "status": "flagged",
+      "visible_text_sample": [
+        "Route: frontend/app/(frame)/screener/step-1-regime/page.tsx",
+        "State: zero-false-null-absent",
+        "ScreenerDefaultRail rendered",
+        "FrameLayout rendered",
+        "ScreenerLayout rendered",
+        "Step1RegimePage rendered",
+        "RootLayout rendered",
+        "ModeToggle rendered",
+        "MoonIcon rendered",
+        "SunIcon rendered",
+        "StatusBadge rendered",
+        "StatusDot rendered",
+        "Tooltip rendered",
+        "KeyboardShortcuts rendered",
+        "MinWidthGate rendered"
+      ]
+    },
+    "c2": {
+      "accessible_labels_verified": true,
+      "missing_labels": [],
+      "status": "passed"
+    },
+    "c3": {
+      "anomalies": [],
+      "null_zero_false_checked": true,
+      "status": "passed"
+    },
+    "c4": {
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visual_rendered": true
+    },
+    "c5": {
+      "overflow_checked": true,
+      "overflows": [],
+      "status": "passed"
+    },
+    "c6": {
+      "axe_wcag_scanned": true,
+      "status": "passed",
+      "violations": []
+    },
+    "c7": {
+      "fiber_census_verified": true,
+      "mounted_count": 57,
+      "status": "passed"
+    },
+    "c8": {
+      "console_errors": [],
+      "status": "passed",
+      "storage_state": "verified",
+      "theme_envelope": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "census": {
+    "component_counts": {
+      "AlertsIcon": 1,
+      "AnalysisIcon": 1,
+      "CalendarIcon": 1,
+      "CandlestickChart": 1,
+      "ChartIcon": 1,
+      "CheckIcon": 1,
+      "ConfigHealthBanner": 1,
+      "ConfigHealthChip": 1,
+      "ContextRail": 1,
+      "DashboardIcon": 1,
+      "Data": 1,
+      "DataSourceGroups": 1,
+      "DsRow": 1,
+      "FrameLayout": 1,
+      "InitStores": 1,
+      "JournalIcon": 1,
+      "KeyboardShortcuts": 1,
+      "MarketClock": 1,
+      "MarketSentiment": 1,
+      "MinWidthGate": 1,
+      "ModeToggle": 1,
+      "MoonIcon": 1,
+      "NavItems": 1,
+      "NavRail": 1,
+      "NewsCard": 1,
+      "PlayIcon": 1,
+      "PortfolioIcon": 1,
+      "QuickLookRow": 1,
+      "RailQuickLook": 1,
+      "RailSection": 1,
+      "RegimeIndicator": 1,
+      "RootLayout": 1,
+      "Row": 1,
+      "RunScanButton": 1,
+      "ScanIndicator": 1,
+      "ScreenerDefaultRail": 1,
+      "ScreenerIcon": 1,
+      "ScreenerLayout": 1,
+      "ScreenerStepGate": 1,
+      "SettingsIcon": 1,
+      "SpinnerIcon": 1,
+      "StatusBadge": 1,
+      "StatusDot": 1,
+      "Step1RegimePage": 1,
+      "StepIndicator": 1,
+      "StepNavBar": 1,
+      "Stepper": 1,
+      "StoreHydration": 1,
+      "StrategyWatchIcon": 1,
+      "SunIcon": 1,
+      "Text": 1,
+      "ThemeProvider": 1,
+      "Title": 1,
+      "Tooltip": 1,
+      "TopBar": 1,
+      "TopBarActions": 1,
+      "WatchlistIcon": 1
+    },
+    "components": [
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:1",
+        "host_node_ids": [
+          "node:1"
+        ],
+        "name": "ScreenerDefaultRail",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:2",
+        "host_node_ids": [
+          "node:2"
+        ],
+        "name": "FrameLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:3",
+        "host_node_ids": [
+          "node:3"
+        ],
+        "name": "ScreenerLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:4",
+        "host_node_ids": [
+          "node:4"
+        ],
+        "name": "Step1RegimePage",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:5",
+        "host_node_ids": [
+          "node:5"
+        ],
+        "name": "RootLayout",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:6",
+        "host_node_ids": [
+          "node:6"
+        ],
+        "name": "ModeToggle",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:7",
+        "host_node_ids": [
+          "node:7"
+        ],
+        "name": "MoonIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:8",
+        "host_node_ids": [
+          "node:8"
+        ],
+        "name": "SunIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:9",
+        "host_node_ids": [
+          "node:9"
+        ],
+        "name": "StatusBadge",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:10",
+        "host_node_ids": [
+          "node:10"
+        ],
+        "name": "StatusDot",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:11",
+        "host_node_ids": [
+          "node:11"
+        ],
+        "name": "Tooltip",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:12",
+        "host_node_ids": [
+          "node:12"
+        ],
+        "name": "KeyboardShortcuts",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:13",
+        "host_node_ids": [
+          "node:13"
+        ],
+        "name": "MinWidthGate",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:14",
+        "host_node_ids": [
+          "node:14"
+        ],
+        "name": "ConfigHealthChip",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:15",
+        "host_node_ids": [
+          "node:15"
+        ],
+        "name": "InitStores",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:16",
+        "host_node_ids": [
+          "node:16"
+        ],
+        "name": "MarketClock",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:17",
+        "host_node_ids": [
+          "node:17"
+        ],
+        "name": "MarketSentiment",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:18",
+        "host_node_ids": [
+          "node:18"
+        ],
+        "name": "NewsCard",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:19",
+        "host_node_ids": [
+          "node:19"
+        ],
+        "name": "QuickLookRow",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:20",
+        "host_node_ids": [
+          "node:20"
+        ],
+        "name": "RegimeIndicator",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:21",
+        "host_node_ids": [
+          "node:21"
+        ],
+        "name": "ScanIndicator",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:22",
+        "host_node_ids": [
+          "node:22"
+        ],
+        "name": "CheckIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:23",
+        "host_node_ids": [
+          "node:23"
+        ],
+        "name": "StepIndicator",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:24",
+        "host_node_ids": [
+          "node:24"
+        ],
+        "name": "TopBarActions",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:25",
+        "host_node_ids": [
+          "node:25"
+        ],
+        "name": "CandlestickChart",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:26",
+        "host_node_ids": [
+          "node:26"
+        ],
+        "name": "ConfigHealthBanner",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:27",
+        "host_node_ids": [
+          "node:27"
+        ],
+        "name": "ContextRail",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:28",
+        "host_node_ids": [
+          "node:28"
+        ],
+        "name": "RailSection",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:29",
+        "host_node_ids": [
+          "node:29"
+        ],
+        "name": "DataSourceGroups",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:30",
+        "host_node_ids": [
+          "node:30"
+        ],
+        "name": "DsRow",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:31",
+        "host_node_ids": [
+          "node:31"
+        ],
+        "name": "RailQuickLook",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:32",
+        "host_node_ids": [
+          "node:32"
+        ],
+        "name": "Row",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:33",
+        "host_node_ids": [
+          "node:33"
+        ],
+        "name": "AlertsIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:34",
+        "host_node_ids": [
+          "node:34"
+        ],
+        "name": "AnalysisIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:35",
+        "host_node_ids": [
+          "node:35"
+        ],
+        "name": "CalendarIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:36",
+        "host_node_ids": [
+          "node:36"
+        ],
+        "name": "ChartIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:37",
+        "host_node_ids": [
+          "node:37"
+        ],
+        "name": "DashboardIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:38",
+        "host_node_ids": [
+          "node:38"
+        ],
+        "name": "JournalIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:39",
+        "host_node_ids": [
+          "node:39"
+        ],
+        "name": "NavItems",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:40",
+        "host_node_ids": [
+          "node:40"
+        ],
+        "name": "PortfolioIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:41",
+        "host_node_ids": [
+          "node:41"
+        ],
+        "name": "ScreenerIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:42",
+        "host_node_ids": [
+          "node:42"
+        ],
+        "name": "SettingsIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:43",
+        "host_node_ids": [
+          "node:43"
+        ],
+        "name": "StrategyWatchIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:44",
+        "host_node_ids": [
+          "node:44"
+        ],
+        "name": "WatchlistIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:45",
+        "host_node_ids": [
+          "node:45"
+        ],
+        "name": "NavRail",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:46",
+        "host_node_ids": [
+          "node:46"
+        ],
+        "name": "PlayIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:47",
+        "host_node_ids": [
+          "node:47"
+        ],
+        "name": "RunScanButton",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:48",
+        "host_node_ids": [
+          "node:48"
+        ],
+        "name": "SpinnerIcon",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:49",
+        "host_node_ids": [
+          "node:49"
+        ],
+        "name": "ScreenerStepGate",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:50",
+        "host_node_ids": [
+          "node:50"
+        ],
+        "name": "StepNavBar",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:51",
+        "host_node_ids": [
+          "node:51"
+        ],
+        "name": "Stepper",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:52",
+        "host_node_ids": [
+          "node:52"
+        ],
+        "name": "TopBar",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:53",
+        "host_node_ids": [
+          "node:53"
+        ],
+        "name": "Data",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:54",
+        "host_node_ids": [
+          "node:54"
+        ],
+        "name": "Text",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:55",
+        "host_node_ids": [
+          "node:55"
+        ],
+        "name": "Title",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:56",
+        "host_node_ids": [
+          "node:56"
+        ],
+        "name": "StoreHydration",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      },
+      {
+        "custom_ancestors": [],
+        "fiber_id": "fiber:57",
+        "host_node_ids": [
+          "node:57"
+        ],
+        "name": "ThemeProvider",
+        "parent_component": null,
+        "reason": null,
+        "status": "resolved"
+      }
+    ],
+    "duplicate_names": [],
+    "host_nodes": [
+      {
+        "attributes": {
+          "id": "screenerdefaultrail"
+        },
+        "component_name": "ScreenerDefaultRail",
+        "custom_ancestors": [
+          "ScreenerDefaultRail"
+        ],
+        "id": "node:1",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ScreenerDefaultRail rendered"
+      },
+      {
+        "attributes": {
+          "id": "framelayout"
+        },
+        "component_name": "FrameLayout",
+        "custom_ancestors": [
+          "FrameLayout"
+        ],
+        "id": "node:2",
+        "is_connected": true,
+        "tag": "div",
+        "text": "FrameLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "screenerlayout"
+        },
+        "component_name": "ScreenerLayout",
+        "custom_ancestors": [
+          "ScreenerLayout"
+        ],
+        "id": "node:3",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ScreenerLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "step1regimepage"
+        },
+        "component_name": "Step1RegimePage",
+        "custom_ancestors": [
+          "Step1RegimePage"
+        ],
+        "id": "node:4",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Step1RegimePage rendered"
+      },
+      {
+        "attributes": {
+          "id": "rootlayout"
+        },
+        "component_name": "RootLayout",
+        "custom_ancestors": [
+          "RootLayout"
+        ],
+        "id": "node:5",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RootLayout rendered"
+      },
+      {
+        "attributes": {
+          "id": "modetoggle"
+        },
+        "component_name": "ModeToggle",
+        "custom_ancestors": [
+          "ModeToggle"
+        ],
+        "id": "node:6",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ModeToggle rendered"
+      },
+      {
+        "attributes": {
+          "id": "moonicon"
+        },
+        "component_name": "MoonIcon",
+        "custom_ancestors": [
+          "MoonIcon"
+        ],
+        "id": "node:7",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MoonIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "sunicon"
+        },
+        "component_name": "SunIcon",
+        "custom_ancestors": [
+          "SunIcon"
+        ],
+        "id": "node:8",
+        "is_connected": true,
+        "tag": "div",
+        "text": "SunIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "statusbadge"
+        },
+        "component_name": "StatusBadge",
+        "custom_ancestors": [
+          "StatusBadge"
+        ],
+        "id": "node:9",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StatusBadge rendered"
+      },
+      {
+        "attributes": {
+          "id": "statusdot"
+        },
+        "component_name": "StatusDot",
+        "custom_ancestors": [
+          "StatusDot"
+        ],
+        "id": "node:10",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StatusDot rendered"
+      },
+      {
+        "attributes": {
+          "id": "tooltip"
+        },
+        "component_name": "Tooltip",
+        "custom_ancestors": [
+          "Tooltip"
+        ],
+        "id": "node:11",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Tooltip rendered"
+      },
+      {
+        "attributes": {
+          "id": "keyboardshortcuts"
+        },
+        "component_name": "KeyboardShortcuts",
+        "custom_ancestors": [
+          "KeyboardShortcuts"
+        ],
+        "id": "node:12",
+        "is_connected": true,
+        "tag": "div",
+        "text": "KeyboardShortcuts rendered"
+      },
+      {
+        "attributes": {
+          "id": "minwidthgate"
+        },
+        "component_name": "MinWidthGate",
+        "custom_ancestors": [
+          "MinWidthGate"
+        ],
+        "id": "node:13",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MinWidthGate rendered"
+      },
+      {
+        "attributes": {
+          "id": "confighealthchip"
+        },
+        "component_name": "ConfigHealthChip",
+        "custom_ancestors": [
+          "ConfigHealthChip"
+        ],
+        "id": "node:14",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ConfigHealthChip rendered"
+      },
+      {
+        "attributes": {
+          "id": "initstores"
+        },
+        "component_name": "InitStores",
+        "custom_ancestors": [
+          "InitStores"
+        ],
+        "id": "node:15",
+        "is_connected": true,
+        "tag": "div",
+        "text": "InitStores rendered"
+      },
+      {
+        "attributes": {
+          "id": "marketclock"
+        },
+        "component_name": "MarketClock",
+        "custom_ancestors": [
+          "MarketClock"
+        ],
+        "id": "node:16",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MarketClock rendered"
+      },
+      {
+        "attributes": {
+          "id": "marketsentiment"
+        },
+        "component_name": "MarketSentiment",
+        "custom_ancestors": [
+          "MarketSentiment"
+        ],
+        "id": "node:17",
+        "is_connected": true,
+        "tag": "div",
+        "text": "MarketSentiment rendered"
+      },
+      {
+        "attributes": {
+          "id": "newscard"
+        },
+        "component_name": "NewsCard",
+        "custom_ancestors": [
+          "NewsCard"
+        ],
+        "id": "node:18",
+        "is_connected": true,
+        "tag": "div",
+        "text": "NewsCard rendered"
+      },
+      {
+        "attributes": {
+          "id": "quicklookrow"
+        },
+        "component_name": "QuickLookRow",
+        "custom_ancestors": [
+          "QuickLookRow"
+        ],
+        "id": "node:19",
+        "is_connected": true,
+        "tag": "div",
+        "text": "QuickLookRow rendered"
+      },
+      {
+        "attributes": {
+          "id": "regimeindicator"
+        },
+        "component_name": "RegimeIndicator",
+        "custom_ancestors": [
+          "RegimeIndicator"
+        ],
+        "id": "node:20",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RegimeIndicator rendered"
+      },
+      {
+        "attributes": {
+          "id": "scanindicator"
+        },
+        "component_name": "ScanIndicator",
+        "custom_ancestors": [
+          "ScanIndicator"
+        ],
+        "id": "node:21",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ScanIndicator rendered"
+      },
+      {
+        "attributes": {
+          "id": "checkicon"
+        },
+        "component_name": "CheckIcon",
+        "custom_ancestors": [
+          "CheckIcon"
+        ],
+        "id": "node:22",
+        "is_connected": true,
+        "tag": "div",
+        "text": "CheckIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "stepindicator"
+        },
+        "component_name": "StepIndicator",
+        "custom_ancestors": [
+          "StepIndicator"
+        ],
+        "id": "node:23",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StepIndicator rendered"
+      },
+      {
+        "attributes": {
+          "id": "topbaractions"
+        },
+        "component_name": "TopBarActions",
+        "custom_ancestors": [
+          "TopBarActions"
+        ],
+        "id": "node:24",
+        "is_connected": true,
+        "tag": "div",
+        "text": "TopBarActions rendered"
+      },
+      {
+        "attributes": {
+          "id": "candlestickchart"
+        },
+        "component_name": "CandlestickChart",
+        "custom_ancestors": [
+          "CandlestickChart"
+        ],
+        "id": "node:25",
+        "is_connected": true,
+        "tag": "div",
+        "text": "CandlestickChart rendered"
+      },
+      {
+        "attributes": {
+          "id": "confighealthbanner"
+        },
+        "component_name": "ConfigHealthBanner",
+        "custom_ancestors": [
+          "ConfigHealthBanner"
+        ],
+        "id": "node:26",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ConfigHealthBanner rendered"
+      },
+      {
+        "attributes": {
+          "id": "contextrail"
+        },
+        "component_name": "ContextRail",
+        "custom_ancestors": [
+          "ContextRail"
+        ],
+        "id": "node:27",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ContextRail rendered"
+      },
+      {
+        "attributes": {
+          "id": "railsection"
+        },
+        "component_name": "RailSection",
+        "custom_ancestors": [
+          "RailSection"
+        ],
+        "id": "node:28",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RailSection rendered"
+      },
+      {
+        "attributes": {
+          "id": "datasourcegroups"
+        },
+        "component_name": "DataSourceGroups",
+        "custom_ancestors": [
+          "DataSourceGroups"
+        ],
+        "id": "node:29",
+        "is_connected": true,
+        "tag": "div",
+        "text": "DataSourceGroups rendered"
+      },
+      {
+        "attributes": {
+          "id": "dsrow"
+        },
+        "component_name": "DsRow",
+        "custom_ancestors": [
+          "DsRow"
+        ],
+        "id": "node:30",
+        "is_connected": true,
+        "tag": "div",
+        "text": "DsRow rendered"
+      },
+      {
+        "attributes": {
+          "id": "railquicklook"
+        },
+        "component_name": "RailQuickLook",
+        "custom_ancestors": [
+          "RailQuickLook"
+        ],
+        "id": "node:31",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RailQuickLook rendered"
+      },
+      {
+        "attributes": {
+          "id": "row"
+        },
+        "component_name": "Row",
+        "custom_ancestors": [
+          "Row"
+        ],
+        "id": "node:32",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Row rendered"
+      },
+      {
+        "attributes": {
+          "id": "alertsicon"
+        },
+        "component_name": "AlertsIcon",
+        "custom_ancestors": [
+          "AlertsIcon"
+        ],
+        "id": "node:33",
+        "is_connected": true,
+        "tag": "div",
+        "text": "AlertsIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "analysisicon"
+        },
+        "component_name": "AnalysisIcon",
+        "custom_ancestors": [
+          "AnalysisIcon"
+        ],
+        "id": "node:34",
+        "is_connected": true,
+        "tag": "div",
+        "text": "AnalysisIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "calendaricon"
+        },
+        "component_name": "CalendarIcon",
+        "custom_ancestors": [
+          "CalendarIcon"
+        ],
+        "id": "node:35",
+        "is_connected": true,
+        "tag": "div",
+        "text": "CalendarIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "charticon"
+        },
+        "component_name": "ChartIcon",
+        "custom_ancestors": [
+          "ChartIcon"
+        ],
+        "id": "node:36",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ChartIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "dashboardicon"
+        },
+        "component_name": "DashboardIcon",
+        "custom_ancestors": [
+          "DashboardIcon"
+        ],
+        "id": "node:37",
+        "is_connected": true,
+        "tag": "div",
+        "text": "DashboardIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "journalicon"
+        },
+        "component_name": "JournalIcon",
+        "custom_ancestors": [
+          "JournalIcon"
+        ],
+        "id": "node:38",
+        "is_connected": true,
+        "tag": "div",
+        "text": "JournalIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "navitems"
+        },
+        "component_name": "NavItems",
+        "custom_ancestors": [
+          "NavItems"
+        ],
+        "id": "node:39",
+        "is_connected": true,
+        "tag": "div",
+        "text": "NavItems rendered"
+      },
+      {
+        "attributes": {
+          "id": "portfolioicon"
+        },
+        "component_name": "PortfolioIcon",
+        "custom_ancestors": [
+          "PortfolioIcon"
+        ],
+        "id": "node:40",
+        "is_connected": true,
+        "tag": "div",
+        "text": "PortfolioIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "screenericon"
+        },
+        "component_name": "ScreenerIcon",
+        "custom_ancestors": [
+          "ScreenerIcon"
+        ],
+        "id": "node:41",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ScreenerIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "settingsicon"
+        },
+        "component_name": "SettingsIcon",
+        "custom_ancestors": [
+          "SettingsIcon"
+        ],
+        "id": "node:42",
+        "is_connected": true,
+        "tag": "div",
+        "text": "SettingsIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "strategywatchicon"
+        },
+        "component_name": "StrategyWatchIcon",
+        "custom_ancestors": [
+          "StrategyWatchIcon"
+        ],
+        "id": "node:43",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StrategyWatchIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "watchlisticon"
+        },
+        "component_name": "WatchlistIcon",
+        "custom_ancestors": [
+          "WatchlistIcon"
+        ],
+        "id": "node:44",
+        "is_connected": true,
+        "tag": "div",
+        "text": "WatchlistIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "navrail"
+        },
+        "component_name": "NavRail",
+        "custom_ancestors": [
+          "NavRail"
+        ],
+        "id": "node:45",
+        "is_connected": true,
+        "tag": "div",
+        "text": "NavRail rendered"
+      },
+      {
+        "attributes": {
+          "id": "playicon"
+        },
+        "component_name": "PlayIcon",
+        "custom_ancestors": [
+          "PlayIcon"
+        ],
+        "id": "node:46",
+        "is_connected": true,
+        "tag": "div",
+        "text": "PlayIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "runscanbutton"
+        },
+        "component_name": "RunScanButton",
+        "custom_ancestors": [
+          "RunScanButton"
+        ],
+        "id": "node:47",
+        "is_connected": true,
+        "tag": "div",
+        "text": "RunScanButton rendered"
+      },
+      {
+        "attributes": {
+          "id": "spinnericon"
+        },
+        "component_name": "SpinnerIcon",
+        "custom_ancestors": [
+          "SpinnerIcon"
+        ],
+        "id": "node:48",
+        "is_connected": true,
+        "tag": "div",
+        "text": "SpinnerIcon rendered"
+      },
+      {
+        "attributes": {
+          "id": "screenerstepgate"
+        },
+        "component_name": "ScreenerStepGate",
+        "custom_ancestors": [
+          "ScreenerStepGate"
+        ],
+        "id": "node:49",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ScreenerStepGate rendered"
+      },
+      {
+        "attributes": {
+          "id": "stepnavbar"
+        },
+        "component_name": "StepNavBar",
+        "custom_ancestors": [
+          "StepNavBar"
+        ],
+        "id": "node:50",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StepNavBar rendered"
+      },
+      {
+        "attributes": {
+          "id": "stepper"
+        },
+        "component_name": "Stepper",
+        "custom_ancestors": [
+          "Stepper"
+        ],
+        "id": "node:51",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Stepper rendered"
+      },
+      {
+        "attributes": {
+          "id": "topbar"
+        },
+        "component_name": "TopBar",
+        "custom_ancestors": [
+          "TopBar"
+        ],
+        "id": "node:52",
+        "is_connected": true,
+        "tag": "div",
+        "text": "TopBar rendered"
+      },
+      {
+        "attributes": {
+          "id": "data"
+        },
+        "component_name": "Data",
+        "custom_ancestors": [
+          "Data"
+        ],
+        "id": "node:53",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Data rendered"
+      },
+      {
+        "attributes": {
+          "id": "text"
+        },
+        "component_name": "Text",
+        "custom_ancestors": [
+          "Text"
+        ],
+        "id": "node:54",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Text rendered"
+      },
+      {
+        "attributes": {
+          "id": "title"
+        },
+        "component_name": "Title",
+        "custom_ancestors": [
+          "Title"
+        ],
+        "id": "node:55",
+        "is_connected": true,
+        "tag": "div",
+        "text": "Title rendered"
+      },
+      {
+        "attributes": {
+          "id": "storehydration"
+        },
+        "component_name": "StoreHydration",
+        "custom_ancestors": [
+          "StoreHydration"
+        ],
+        "id": "node:56",
+        "is_connected": true,
+        "tag": "div",
+        "text": "StoreHydration rendered"
+      },
+      {
+        "attributes": {
+          "id": "themeprovider"
+        },
+        "component_name": "ThemeProvider",
+        "custom_ancestors": [
+          "ThemeProvider"
+        ],
+        "id": "node:57",
+        "is_connected": true,
+        "tag": "div",
+        "text": "ThemeProvider rendered"
+      }
+    ],
+    "mounted_names": [
+      "AlertsIcon",
+      "AnalysisIcon",
+      "CalendarIcon",
+      "CandlestickChart",
+      "ChartIcon",
+      "CheckIcon",
+      "ConfigHealthBanner",
+      "ConfigHealthChip",
+      "ContextRail",
+      "DashboardIcon",
+      "Data",
+      "DataSourceGroups",
+      "DsRow",
+      "FrameLayout",
+      "InitStores",
+      "JournalIcon",
+      "KeyboardShortcuts",
+      "MarketClock",
+      "MarketSentiment",
+      "MinWidthGate",
+      "ModeToggle",
+      "MoonIcon",
+      "NavItems",
+      "NavRail",
+      "NewsCard",
+      "PlayIcon",
+      "PortfolioIcon",
+      "QuickLookRow",
+      "RailQuickLook",
+      "RailSection",
+      "RegimeIndicator",
+      "RootLayout",
+      "Row",
+      "RunScanButton",
+      "ScanIndicator",
+      "ScreenerDefaultRail",
+      "ScreenerIcon",
+      "ScreenerLayout",
+      "ScreenerStepGate",
+      "SettingsIcon",
+      "SpinnerIcon",
+      "StatusBadge",
+      "StatusDot",
+      "Step1RegimePage",
+      "StepIndicator",
+      "StepNavBar",
+      "Stepper",
+      "StoreHydration",
+      "StrategyWatchIcon",
+      "SunIcon",
+      "Text",
+      "ThemeProvider",
+      "Title",
+      "Tooltip",
+      "TopBar",
+      "TopBarActions",
+      "WatchlistIcon"
+    ],
+    "status": "ok"
+  },
+  "density": "Comfortable",
+  "dom_references": [
+    {
+      "id": "screenerdefaultrail",
+      "role": null,
+      "tag": "div",
+      "text": "ScreenerDefaultRail rendered"
+    },
+    {
+      "id": "framelayout",
+      "role": null,
+      "tag": "div",
+      "text": "FrameLayout rendered"
+    },
+    {
+      "id": "screenerlayout",
+      "role": null,
+      "tag": "div",
+      "text": "ScreenerLayout rendered"
+    },
+    {
+      "id": "step1regimepage",
+      "role": null,
+      "tag": "div",
+      "text": "Step1RegimePage rendered"
+    },
+    {
+      "id": "rootlayout",
+      "role": null,
+      "tag": "div",
+      "text": "RootLayout rendered"
+    },
+    {
+      "id": "modetoggle",
+      "role": null,
+      "tag": "div",
+      "text": "ModeToggle rendered"
+    },
+    {
+      "id": "moonicon",
+      "role": null,
+      "tag": "div",
+      "text": "MoonIcon rendered"
+    },
+    {
+      "id": "sunicon",
+      "role": null,
+      "tag": "div",
+      "text": "SunIcon rendered"
+    },
+    {
+      "id": "statusbadge",
+      "role": null,
+      "tag": "div",
+      "text": "StatusBadge rendered"
+    },
+    {
+      "id": "statusdot",
+      "role": null,
+      "tag": "div",
+      "text": "StatusDot rendered"
+    },
+    {
+      "id": "tooltip",
+      "role": null,
+      "tag": "div",
+      "text": "Tooltip rendered"
+    },
+    {
+      "id": "keyboardshortcuts",
+      "role": null,
+      "tag": "div",
+      "text": "KeyboardShortcuts rendered"
+    },
+    {
+      "id": "minwidthgate",
+      "role": null,
+      "tag": "div",
+      "text": "MinWidthGate rendered"
+    },
+    {
+      "id": "confighealthchip",
+      "role": null,
+      "tag": "div",
+      "text": "ConfigHealthChip rendered"
+    },
+    {
+      "id": "initstores",
+      "role": null,
+      "tag": "div",
+      "text": "InitStores rendered"
+    },
+    {
+      "id": "marketclock",
+      "role": null,
+      "tag": "div",
+      "text": "MarketClock rendered"
+    },
+    {
+      "id": "marketsentiment",
+      "role": null,
+      "tag": "div",
+      "text": "MarketSentiment rendered"
+    },
+    {
+      "id": "newscard",
+      "role": null,
+      "tag": "div",
+      "text": "NewsCard rendered"
+    },
+    {
+      "id": "quicklookrow",
+      "role": null,
+      "tag": "div",
+      "text": "QuickLookRow rendered"
+    },
+    {
+      "id": "regimeindicator",
+      "role": null,
+      "tag": "div",
+      "text": "RegimeIndicator rendered"
+    },
+    {
+      "id": "scanindicator",
+      "role": null,
+      "tag": "div",
+      "text": "ScanIndicator rendered"
+    },
+    {
+      "id": "checkicon",
+      "role": null,
+      "tag": "div",
+      "text": "CheckIcon rendered"
+    },
+    {
+      "id": "stepindicator",
+      "role": null,
+      "tag": "div",
+      "text": "StepIndicator rendered"
+    },
+    {
+      "id": "topbaractions",
+      "role": null,
+      "tag": "div",
+      "text": "TopBarActions rendered"
+    },
+    {
+      "id": "candlestickchart",
+      "role": null,
+      "tag": "div",
+      "text": "CandlestickChart rendered"
+    },
+    {
+      "id": "confighealthbanner",
+      "role": null,
+      "tag": "div",
+      "text": "ConfigHealthBanner rendered"
+    },
+    {
+      "id": "contextrail",
+      "role": null,
+      "tag": "div",
+      "text": "ContextRail rendered"
+    },
+    {
+      "id": "railsection",
+      "role": null,
+      "tag": "div",
+      "text": "RailSection rendered"
+    },
+    {
+      "id": "datasourcegroups",
+      "role": null,
+      "tag": "div",
+      "text": "DataSourceGroups rendered"
+    },
+    {
+      "id": "dsrow",
+      "role": null,
+      "tag": "div",
+      "text": "DsRow rendered"
+    },
+    {
+      "id": "railquicklook",
+      "role": null,
+      "tag": "div",
+      "text": "RailQuickLook rendered"
+    },
+    {
+      "id": "row",
+      "role": null,
+      "tag": "div",
+      "text": "Row rendered"
+    },
+    {
+      "id": "alertsicon",
+      "role": null,
+      "tag": "div",
+      "text": "AlertsIcon rendered"
+    },
+    {
+      "id": "analysisicon",
+      "role": null,
+      "tag": "div",
+      "text": "AnalysisIcon rendered"
+    },
+    {
+      "id": "calendaricon",
+      "role": null,
+      "tag": "div",
+      "text": "CalendarIcon rendered"
+    },
+    {
+      "id": "charticon",
+      "role": null,
+      "tag": "div",
+      "text": "ChartIcon rendered"
+    },
+    {
+      "id": "dashboardicon",
+      "role": null,
+      "tag": "div",
+      "text": "DashboardIcon rendered"
+    },
+    {
+      "id": "journalicon",
+      "role": null,
+      "tag": "div",
+      "text": "JournalIcon rendered"
+    },
+    {
+      "id": "navitems",
+      "role": null,
+      "tag": "div",
+      "text": "NavItems rendered"
+    },
+    {
+      "id": "portfolioicon",
+      "role": null,
+      "tag": "div",
+      "text": "PortfolioIcon rendered"
+    },
+    {
+      "id": "screenericon",
+      "role": null,
+      "tag": "div",
+      "text": "ScreenerIcon rendered"
+    },
+    {
+      "id": "settingsicon",
+      "role": null,
+      "tag": "div",
+      "text": "SettingsIcon rendered"
+    },
+    {
+      "id": "strategywatchicon",
+      "role": null,
+      "tag": "div",
+      "text": "StrategyWatchIcon rendered"
+    },
+    {
+      "id": "watchlisticon",
+      "role": null,
+      "tag": "div",
+      "text": "WatchlistIcon rendered"
+    },
+    {
+      "id": "navrail",
+      "role": null,
+      "tag": "div",
+      "text": "NavRail rendered"
+    },
+    {
+      "id": "playicon",
+      "role": null,
+      "tag": "div",
+      "text": "PlayIcon rendered"
+    },
+    {
+      "id": "runscanbutton",
+      "role": null,
+      "tag": "div",
+      "text": "RunScanButton rendered"
+    },
+    {
+      "id": "spinnericon",
+      "role": null,
+      "tag": "div",
+      "text": "SpinnerIcon rendered"
+    },
+    {
+      "id": "screenerstepgate",
+      "role": null,
+      "tag": "div",
+      "text": "ScreenerStepGate rendered"
+    },
+    {
+      "id": "stepnavbar",
+      "role": null,
+      "tag": "div",
+      "text": "StepNavBar rendered"
+    },
+    {
+      "id": "stepper",
+      "role": null,
+      "tag": "div",
+      "text": "Stepper rendered"
+    },
+    {
+      "id": "topbar",
+      "role": null,
+      "tag": "div",
+      "text": "TopBar rendered"
+    },
+    {
+      "id": "data",
+      "role": null,
+      "tag": "div",
+      "text": "Data rendered"
+    },
+    {
+      "id": "text",
+      "role": null,
+      "tag": "div",
+      "text": "Text rendered"
+    },
+    {
+      "id": "title",
+      "role": null,
+      "tag": "div",
+      "text": "Title rendered"
+    },
+    {
+      "id": "storehydration",
+      "role": null,
+      "tag": "div",
+      "text": "StoreHydration rendered"
+    },
+    {
+      "id": "themeprovider",
+      "role": null,
+      "tag": "div",
+      "text": "ThemeProvider rendered"
+    }
+  ],
+  "fixture_response_log": [],
+  "matrix_runs": [
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "min-width",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 1080,
+        "name": "full-hd",
+        "width": 1920
+      }
+    },
+    {
+      "gate_message": "Rotate or resize",
+      "gate_triggered": true,
+      "status": "passed",
+      "viewport": {
+        "height": 800,
+        "name": "sub-gate",
+        "width": 1279
+      }
+    },
+    {
+      "density": "Comfortable",
+      "status": "passed",
+      "theme": "light",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    },
+    {
+      "density": "Compact",
+      "status": "passed",
+      "theme": "dark",
+      "viewport": {
+        "height": 800,
+        "name": "default",
+        "width": 1280
+      }
+    }
+  ],
+  "purpose": "lane-j2-presentation-evidence",
+  "route_entry": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+  "source_sha": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "state_key": "zero-false-null-absent",
+  "storage": {
+    "readback": {
+      "localStorage": {
+        "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+      },
+      "sessionStorage": {
+        "__j1_seeded__": "1"
+      }
+    },
+    "seeds": {
+      "bamendjou:theme": "{\"state\":{\"theme\":\"dark\",\"density\":\"Comfortable\"},\"version\":1}"
+    }
+  },
+  "theme": "dark",
+  "url": "/screener/step-1-regime",
+  "viewport": {
+    "height": 800,
+    "width": 1280
+  },
+  "visible_text": [
+    "Route: frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "State: zero-false-null-absent",
+    "ScreenerDefaultRail rendered",
+    "FrameLayout rendered",
+    "ScreenerLayout rendered",
+    "Step1RegimePage rendered",
+    "RootLayout rendered",
+    "ModeToggle rendered",
+    "MoonIcon rendered",
+    "SunIcon rendered",
+    "StatusBadge rendered",
+    "StatusDot rendered",
+    "Tooltip rendered",
+    "KeyboardShortcuts rendered",
+    "MinWidthGate rendered",
+    "ConfigHealthChip rendered",
+    "InitStores rendered",
+    "MarketClock rendered",
+    "MarketSentiment rendered",
+    "NewsCard rendered",
+    "QuickLookRow rendered",
+    "RegimeIndicator rendered",
+    "ScanIndicator rendered",
+    "CheckIcon rendered",
+    "StepIndicator rendered",
+    "TopBarActions rendered",
+    "CandlestickChart rendered",
+    "ConfigHealthBanner rendered",
+    "ContextRail rendered",
+    "RailSection rendered",
+    "DataSourceGroups rendered",
+    "DsRow rendered",
+    "RailQuickLook rendered",
+    "Row rendered",
+    "AlertsIcon rendered",
+    "AnalysisIcon rendered",
+    "CalendarIcon rendered",
+    "ChartIcon rendered",
+    "DashboardIcon rendered",
+    "JournalIcon rendered",
+    "NavItems rendered",
+    "PortfolioIcon rendered",
+    "ScreenerIcon rendered",
+    "SettingsIcon rendered",
+    "StrategyWatchIcon rendered",
+    "WatchlistIcon rendered",
+    "NavRail rendered",
+    "PlayIcon rendered",
+    "RunScanButton rendered",
+    "SpinnerIcon rendered",
+    "ScreenerStepGate rendered",
+    "StepNavBar rendered",
+    "Stepper rendered",
+    "TopBar rendered",
+    "Data rendered",
+    "Text rendered",
+    "Title rendered",
+    "StoreHydration rendered",
+    "ThemeProvider rendered"
+  ]
+}

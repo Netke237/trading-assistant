@@ -2,10 +2,10 @@ import asyncio
 import math
 import uuid
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
@@ -17,6 +17,7 @@ from app.models.portfolio import PortfolioPositionModel
 from app.models.closed_position import ClosedPositionModel, EquitySnapshotModel
 from app.schemas import (
     PortfolioPositionCreate, PortfolioPositionSchema, PortfolioPositionUpdate,
+    PositionPreviewSchema,
     ClosePositionRequest, ClosedPositionSchema,
     PerformanceResponse, PerformancePoint,
 )
@@ -32,7 +33,9 @@ from app.data.market import fetch_contract_quote_async
 from app.services.audit import log_approval
 from app.services.config_loader import load_exit_plan_cfg
 from app.services.picked_method import seed_tp_from_pick
-from app.services.position_writer import create_position, _rescale_rung_shares
+from app.services.position_writer import (
+    PositionPreview, ReviewRequired, create_position, preview_position, _rescale_rung_shares,
+)
 from app.services.premium_stop import is_short_stock_position, premium_stop_is_sub_cent
 from app.models.audit_event import AuditEventModel
 
@@ -175,21 +178,78 @@ async def get_portfolio(db: AsyncSession = Depends(get_db)) -> list[PortfolioPos
     return schemas
 
 
-@router.post('/portfolio', response_model=PortfolioPositionSchema, status_code=status.HTTP_201_CREATED)
-async def add_position(
+def _preview_response(preview: PositionPreview) -> PositionPreviewSchema:
+    """#582 -- the preview as the client sees it. The row is transient, so it
+    has no id and no created-at."""
+    position = PortfolioPositionSchema.from_orm_model(preview.position)
+    position.id = ""
+    return PositionPreviewSchema(
+        fingerprint=preview.fingerprint,
+        position=position,
+        adjustedQty=preview.adjusted_size,
+        premiumStopUnapplied=preview.premium_stop_unapplied,
+        entryFromLiveQuote=preview.entry_from_live_quote,
+        entryStockPrice=preview.entry_stock_price,
+        inheritedPremiumStopPct=preview.inherited_premium_stop_pct,
+        differences=preview.differences,
+    )
+
+
+@router.post('/portfolio/preview', response_model=PositionPreviewSchema)
+async def preview_add_position(
     body: PortfolioPositionCreate,
     db: AsyncSession = Depends(get_db),
-) -> PortfolioPositionSchema:
-    # O4 step 1: the body moved VERBATIM to services/position_writer.py so the
-    # auto-trade fire path can book through the same writer. The three names
-    # below are this module's, looked up at call time, so patches on
-    # `app.routers.portfolio.*` still reach the writer -- see its docstring.
-    outcome = await create_position(
+) -> PositionPreviewSchema:
+    """#582 (TC-REVIEW-07) -- what POST /api/portfolio would store for this
+    exact body, resolved NOW by the writer's own code, with nothing written:
+    no position, no hold transfer, no approval, no commit. `db` is this
+    request's own session, so the preview's rollback (which releases its
+    exposure-guard write) touches no one else's work. Raises the create's
+    409/422s unchanged."""
+    preview = await preview_position(
         body, db,
         quote_fetcher=fetch_contract_quote_async,
         price_fetcher=fetch_price_async,
         exit_plan_cfg_loader=load_exit_plan_cfg,
     )
+    return _preview_response(preview)
+
+
+@router.post('/portfolio', response_model=PortfolioPositionSchema, status_code=status.HTTP_201_CREATED)
+async def add_position(
+    body: PortfolioPositionCreate,
+    db: AsyncSession = Depends(get_db),
+    # #582 -- the fingerprint of the preview the user confirmed. Absent: the
+    # create exactly as before. Present: a current resolution that differs
+    # answers 412 review_required with the new preview, and writes nothing.
+    # Annotated, so a DIRECT call (the approval-race suite calls this function)
+    # gets a real None default rather than the Header marker object.
+    review_fingerprint: Annotated[Optional[str], Header(alias="X-Review-Fingerprint")] = None,
+) -> PortfolioPositionSchema:
+    # O4 step 1: the body moved VERBATIM to services/position_writer.py so the
+    # auto-trade fire path can book through the same writer. The three names
+    # below are this module's, looked up at call time, so patches on
+    # `app.routers.portfolio.*` still reach the writer -- see its docstring.
+    try:
+        outcome = await create_position(
+            body, db,
+            quote_fetcher=fetch_contract_quote_async,
+            price_fetcher=fetch_price_async,
+            exit_plan_cfg_loader=load_exit_plan_cfg,
+            review_fingerprint=review_fingerprint,
+        )
+    except ReviewRequired as exc:
+        raise HTTPException(
+            status_code=status.HTTP_412_PRECONDITION_FAILED,
+            detail={
+                "code": "review_required",
+                "message": (
+                    "The server-resolved values changed since they were reviewed. "
+                    "Nothing was saved; review the new values and confirm again."
+                ),
+                "preview": _preview_response(exc.preview).model_dump(mode="json"),
+            },
+        ) from exc
     position = outcome.position
 
     if body.tradeCardSnapshot:

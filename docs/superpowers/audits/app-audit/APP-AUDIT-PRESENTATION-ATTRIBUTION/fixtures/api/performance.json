@@ -1,0 +1,18 @@
+{
+  "realizedToday": 150.0,
+  "realizedWeek": 620.0,
+  "realizedMonth": 2400.0,
+  "realizedYear": 12500.0,
+  "realizedCurve": [
+    { "date": "2026-10-01", "value": 10000.0 },
+    { "date": "2026-10-24", "value": 12500.0 }
+  ],
+  "equityCurve": [
+    { "date": "2026-10-01", "value": 25000.0 },
+    { "date": "2026-10-24", "value": 27760.0 }
+  ],
+  "openPnlCurve": [
+    { "date": "2026-10-01", "value": 0.0 },
+    { "date": "2026-10-24", "value": 260.0 }
+  ]
+}

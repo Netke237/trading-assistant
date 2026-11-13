@@ -1,0 +1,42 @@
+[
+  {
+    "symbol": "AAPL",
+    "company": "Apple Inc",
+    "price": 185.2,
+    "direction": "BULLISH",
+    "horizon": "SWING",
+    "score": 92,
+    "rankDelta": 1,
+    "scoreDelta": 2,
+    "target": 195.0,
+    "stop": 180.0,
+    "spread": 0.02,
+    "volume": 52000000,
+    "ivRank": 28,
+    "ivPercentile": 30,
+    "ivBasis": "real",
+    "earningsDate": "2026-11-15",
+    "earningsDays": 22,
+    "status": "PASS"
+  },
+  {
+    "symbol": "MSFT",
+    "company": "Microsoft Corp",
+    "price": 420.5,
+    "direction": "BULLISH",
+    "horizon": "SWING",
+    "score": 88,
+    "rankDelta": -1,
+    "scoreDelta": -1,
+    "target": 440.0,
+    "stop": 410.0,
+    "spread": 0.05,
+    "volume": 21000000,
+    "ivRank": 22,
+    "ivPercentile": 25,
+    "ivBasis": "real",
+    "earningsDate": "2026-11-20",
+    "earningsDays": 27,
+    "status": "PASS"
+  }
+]

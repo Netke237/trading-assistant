@@ -9,6 +9,16 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
 
+
+/** #583 — a direct send opens the server review first; its final action saves
+ *  and sends. A send refused before the review (a gate, a quote warning)
+ *  opens none, and nothing is clicked. */
+async function confirmReview() {
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
+  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  if (confirm) fireEvent.click(confirm);
+}
+
 // Phase G piece 5, build step 4 — this suite is about the shared Contracts
 // map, not the method-pick gate, so every fixture stamps a satisfied pick
 // for both basket symbols or the new `pickMissing` check leaves every send
@@ -54,6 +64,11 @@ jest.mock('@/lib/api', () => ({
  * and `recId` the page sent; every other request keeps the old `{}` reply. */
 function echoFetch(): typeof fetch {
   return jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/portfolio/preview') && init?.method === 'POST') {
+      // #583 — the server review of a direct send: the request echoed as the would-be row.
+      const body = JSON.parse(String(init.body));
+      return { ok: true, status: 200, json: async () => ({ fingerprint: `v1:${body.recId}`, position: { ...body, id: '', createdAt: '' }, differences: [] }) };
+    }
     if (String(url).endsWith('/api/portfolio') && init?.method === 'POST') {
       const body = JSON.parse(String(init.body));
       return { ok: true, status: 201, json: async () => body };
@@ -91,13 +106,27 @@ function makeCard(symbol: string): TradeCardData {
 const originalFetch = global.fetch;
 
 describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', () => {
-  it('keeps one exit selector inline in Final Recommendation, outside broker execution', async () => {
+  it('#608 groups one exit selector, the selected-target review, the submission review and every destination action in one decision section', async () => {
     render(<Step7TradeCardPage />);
-    const summary = await screen.findByRole('region', { name: 'Final Recommendation' });
-    expect(within(summary).getByRole('radio', { name: 'Ladder' })).toBeVisible();
+    const decision = await screen.findByRole('region', { name: 'Decision and execution' });
+    const group = within(decision);
+    expect(group.getByRole('radio', { name: 'Ladder' })).toBeVisible();
     expect(screen.getAllByRole('radio', { name: 'Ladder' })).toHaveLength(1);
-    const execution = screen.getByText('Decision and execution').parentElement!;
+    expect(group.getByRole('radiogroup', { name: 'Judged on' })).toBeVisible();
+    expect(group.getByRole('region', { name: 'Selected target review' })).toBeVisible();
+    fireEvent.click(await screen.findByText('What Track basket and direct sends will submit'));
+    await waitFor(() => expect(group.getByRole('region', { name: 'Submission review' })).toBeInTheDocument());
+    expect(group.getByRole('button', { name: /track basket/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export json/i })).toBeInTheDocument();
+    // The page's broker execution is a sub-group of the same section; the
+    // method selector stays outside it.
+    const execution = group.getByRole('group', { name: 'Broker execution and auto-trade' });
     expect(within(execution).queryByRole('radio', { name: 'Ladder' })).not.toBeInTheDocument();
+    fireEvent.click(group.getByRole('button', { name: /ibkr paper/i }));
+    expect(await group.findByRole('button', { name: /place limit/i })).toBeInTheDocument();
+    expect(group.getByRole('button', { name: /right now — market/i })).toBeInTheDocument();
+    fireEvent.click(await within(execution).findByText('Execution requirements, tracking & auto-trade'));
+    expect(await within(execution).findByRole('button', { name: /armed — fire on next qualifying condition/i })).toBeInTheDocument();
   });
 
   beforeEach(() => {
@@ -202,6 +231,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ quantity: 4, order_type: 'LMT' }),
     ));
@@ -221,6 +251,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     act(() => { usePortfolioStore.setState({ positions: [] }); });
     fireEvent.click(marketBtn);
 
+    await confirmReview();
     await waitFor(() => expect(api.postOptionOrder).toHaveBeenCalledWith(
       expect.objectContaining({ quantity: 4, order_type: 'MKT' }),
     ));

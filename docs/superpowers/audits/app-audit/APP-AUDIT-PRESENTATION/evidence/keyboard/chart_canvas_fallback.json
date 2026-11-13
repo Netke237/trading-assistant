@@ -1,0 +1,38 @@
+{
+  "components": [
+    "CandlestickChart",
+    "ChartPane",
+    "EarningsChart",
+    "PnlChart",
+    "ChartWorkspace"
+  ],
+  "expected_attributes": {
+    "has_accessible_name": true,
+    "has_interactive_price_tooltips": true,
+    "has_tabular_or_text_summary": true
+  },
+  "family": "chart_canvas_fallback",
+  "findings": [],
+  "k_procedures_evaluated": [
+    "K6"
+  ],
+  "name": "Chart Canvas Accessible Alternatives",
+  "procedure_results": {
+    "K6": {
+      "accessible_alternative_present": true,
+      "accessible_name": "Interactive Financial Chart",
+      "has_canvas": true,
+      "has_summary_table": true,
+      "has_tooltip": true,
+      "status": "passed"
+    }
+  },
+  "routes": [
+    "frontend/app/(frame)/chart/page.tsx",
+    "frontend/app/chart/standalone/page.tsx",
+    "frontend/app/(frame)/analysis/page.tsx",
+    "frontend/app/(frame)/portfolio/page.tsx"
+  ],
+  "status": "passed",
+  "timestamp": "2026-10-24T19:00:00.000Z"
+}

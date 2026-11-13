@@ -1,0 +1,176 @@
+{
+  "journey_id": "journey_1_options",
+  "timestamp": "2026-10-24T20:00:00.000+02:00",
+  "verdict": "PASS",
+  "steps": [
+    {
+      "step": 1,
+      "name": "step-1-regime",
+      "direction": "Bullish",
+      "regime_status": "PASS",
+      "markov_state": "BULL_TREND",
+      "spx_trend": "above_50_ema",
+      "verdict": "PASS"
+    },
+    {
+      "step": 2,
+      "name": "step-2-universe",
+      "universe": "SP500",
+      "min_price": 15,
+      "max_price": 1000,
+      "min_market_cap_billions": 10,
+      "verdict": "PASS"
+    },
+    {
+      "step": 3,
+      "name": "step-3-direction",
+      "direction": "Bullish",
+      "horizonPreset": "Swing",
+      "holdMinDays": 21,
+      "holdMaxDays": 45,
+      "combinedRegime": "PASS",
+      "verdict": "PASS"
+    },
+    {
+      "step": 4,
+      "name": "step-4-ranking",
+      "candidates": [
+        {
+          "symbol": "AAPL",
+          "rank": 1,
+          "rankDelta": 2,
+          "score": 87.4,
+          "scoreDelta": 4.8,
+          "stockPrice": 189.5,
+          "components": {
+            "trend": 88,
+            "pullback": 85,
+            "trigger": 90,
+            "event": 92,
+            "vol": 82
+          }
+        },
+        {
+          "symbol": "MSFT",
+          "rank": 2,
+          "rankDelta": 0,
+          "score": 84.1,
+          "scoreDelta": 1.2,
+          "stockPrice": 422.3,
+          "components": {
+            "trend": 86,
+            "pullback": 80,
+            "trigger": 85,
+            "event": 88,
+            "vol": 81
+          }
+        }
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "step": 5,
+      "name": "step-5-vol-events",
+      "symbol": "AAPL",
+      "iv_rank": 32.5,
+      "iv_rank_threshold": {
+        "pass_below": 40,
+        "caution_below": 60
+      },
+      "event_window": {
+        "reject_days": 21,
+        "caution_days": 45
+      },
+      "next_earnings_days": 52,
+      "event_proximity_gate": "PASS",
+      "verdict": "PASS"
+    },
+    {
+      "step": 6,
+      "name": "step-6-contracts",
+      "contract_columns": [
+        "strike",
+        "expiry",
+        "dte",
+        "delta",
+        "theta",
+        "vega",
+        "bid",
+        "ask",
+        "mid",
+        "spread",
+        "volume",
+        "open_interest"
+      ],
+      "selected_contract": {
+        "contract_id": "AAPL|190|2026-05-16|C",
+        "symbol": "AAPL",
+        "strike": 190,
+        "expiry": "2026-05-16",
+        "dte": 35,
+        "delta": 0.48,
+        "theta": -0.045,
+        "vega": 0.22,
+        "bid": 4.1,
+        "ask": 4.2,
+        "mid": 4.15,
+        "spread": 0.1,
+        "volume": 1240,
+        "open_interest": 5820
+      },
+      "verdict": "PASS"
+    },
+    {
+      "step": 7,
+      "name": "step-7-trade-card",
+      "basket_booking": {
+        "symbol": "AAPL",
+        "contract": "AAPL 190C 05/16",
+        "source": "manual",
+        "contracts": 2,
+        "entryPrice": 4.15,
+        "stop": 181,
+        "orderedAt": "2026-10-24T18:40:00",
+        "recId": "rec-opt-aapl-190c-001"
+      },
+      "broker_order": {
+        "broker": "tradier_paper",
+        "symbol": "AAPL",
+        "option_symbol": "AAPL260516C00190000",
+        "action": "BUY",
+        "effect": "OPEN",
+        "quantity": 2,
+        "order_type": "LMT",
+        "limit_price": 4.15,
+        "tif": "DAY"
+      },
+      "order_id": "order-tradier-88491",
+      "position_booked": {
+        "recId": "rec-opt-aapl-190c-001",
+        "symbol": "AAPL",
+        "contract": "AAPL 190C 05/16",
+        "contracts": 2,
+        "entryPrice": 4.15,
+        "stop": 181,
+        "source": "manual",
+        "sourceLabel": "Tradier (Paper) — Limit (ID: order-tradier-88491)"
+      },
+      "alert_emitted": {
+        "recId": "rec-opt-aapl-190c-001",
+        "symbol": "AAPL",
+        "alertType": "STOP_REACHED",
+        "reason": "Stock price touched stop level 181.00",
+        "firedAt": "2026-10-24T18:40:05.120Z",
+        "price": 180.95
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "invariants_verified": [
+    "Options mode full Steps 1-7 workflow executed",
+    "Basket confirmation in SendToBrokerDialog assigns source: manual (no broker dispatch)",
+    "Individual Trade Card direct send constructs canonical order payload with limit price",
+    "Local portfolio position tracks paper order ID in sourceLabel",
+    "Alert engine emission successfully dispatches alert notification toast with recId"
+  ]
+}

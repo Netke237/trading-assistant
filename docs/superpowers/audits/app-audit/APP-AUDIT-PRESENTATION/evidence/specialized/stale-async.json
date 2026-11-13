@@ -1,0 +1,47 @@
+{
+  "audit": "stale-async-mock-responses",
+  "newest_response_retained": true,
+  "out_of_order_discarded": true,
+  "scenarios": [
+    {
+      "active_symbol_at_1100": "MSFT",
+      "description": "Rapid symbol switch from AAPL (latency 300ms) to MSFT (latency 50ms).",
+      "final_active_symbol": "MSFT",
+      "race_condition_prevented": true,
+      "request_1": {
+        "arrives_at": 1300,
+        "latency_ms": 300,
+        "symbol": "AAPL",
+        "timestamp": 1000
+      },
+      "request_2": {
+        "arrives_at": 1100,
+        "latency_ms": 50,
+        "symbol": "MSFT",
+        "timestamp": 1050
+      },
+      "response_at_1300_action": "discarded-stale",
+      "scenario_id": "out-of-order-symbol-switch",
+      "status": "passed"
+    },
+    {
+      "description": "Component unmounts before async fetch completes; resolution safely ignored without leak.",
+      "request": {
+        "endpoint": "/api/portfolio/performance",
+        "initiated": true
+      },
+      "resolution_event": {
+        "state_update_suppressed": true,
+        "timestamp": 120
+      },
+      "scenario_id": "unmounted-component-async-discard",
+      "status": "passed",
+      "unmount_event": {
+        "cleanup_ran": true,
+        "timestamp": 50
+      }
+    }
+  ],
+  "status": "passed",
+  "unmounted_discarded": true
+}

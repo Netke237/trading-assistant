@@ -43,6 +43,19 @@ USAGE
 """
 from __future__ import annotations
 
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import argparse
 import asyncio
 import json
@@ -104,23 +117,49 @@ def _die(msg: str, code: int = 2) -> None:
 
 # ── DB URL ────────────────────────────────────────────────────────────────────
 
-def resolve_url() -> str:
-    """DATABASE_URL as the app would see it: environment first, then backend/.env.
+def resolve_url() -> tuple[str, str]:
+    """DATABASE_URL as the app would see it: environment first, then backend/.env, then repo-root .env.
 
+    Returns (url, source_description).
     A fresh Settings (not the lru_cached get_settings) with an explicit
     _env_file, because Settings' own env_file=".env" is cwd-relative.
     app.config imports only pydantic_settings and builds no engine.
     """
+    if "DATABASE_URL" in os.environ and os.environ["DATABASE_URL"].strip():
+        return os.environ["DATABASE_URL"].strip(), "environment"
+
+    backend_env = BACKEND / ".env"
+    if backend_env.is_file():
+        try:
+            from dotenv import dotenv_values
+            vals = dotenv_values(backend_env)
+            if vals.get("DATABASE_URL"):
+                return str(vals["DATABASE_URL"]).strip(), "backend/.env"
+        except Exception:
+            pass
+
+    root_env = BACKEND.parent / ".env"
+    if root_env.is_file():
+        try:
+            from dotenv import dotenv_values
+            vals = dotenv_values(root_env)
+            if vals.get("DATABASE_URL"):
+                return str(vals["DATABASE_URL"]).strip(), "repo-root .env"
+        except Exception:
+            pass
+
     from app.config import Settings
-    return Settings(_env_file=BACKEND / ".env").DATABASE_URL
+    return Settings(_env_file=BACKEND / ".env").DATABASE_URL, "default"
 
 
-def route_url(url: str, allow_sqlite: bool) -> tuple[str, object]:
+def route_url(url: str | tuple[str, ...], allow_sqlite: bool) -> tuple[str, object]:
     """Return ("sqlite", Path) or ("postgres", URL), or exit naming the problem.
 
     Runs BEFORE any app.* import other than app.config: app/database.py builds
     its engine at import, so an unrouted postgres:// URL would crash there.
     """
+    if isinstance(url, (tuple, list)):
+        url = url[0]
     try:
         u = make_url(url)
     except Exception:
@@ -510,7 +549,7 @@ def report_symbol(sym: str, rows: list[dict], start: date, end: date, params: di
     print(f"max high / (raw_close x adj_factor): {rows[hi]['high'] / mixed[hi]['close']:.3f} "
           f"on {rows[hi]['date']}")
     mv = max(range(1, n), key=lambda i: abs(mixed[i]["close"] / mixed[i - 1]["close"] - 1))
-    print(f"largest one-day |Δclose| (adjusted): "
+    print(f"largest one-day |delta_close| (adjusted): "
           f"{abs(mixed[mv]['close'] / mixed[mv - 1]['close'] - 1) * 100:.1f}% "
           f"on {rows[mv - 1]['date']} -> {rows[mv]['date']}")
 
@@ -654,13 +693,19 @@ def main(argv: list[str] | None = None) -> int:
 
     # URL first, before any other app.* import (app/database.py builds its
     # engine at import time).
-    kind, target = route_url(resolve_url(), args.allow_sqlite)
+    resolved = resolve_url()
+    if isinstance(resolved, tuple):
+        raw_url, source = resolved
+    else:
+        raw_url, source = resolved, "environment"
+    kind, target = route_url(raw_url, args.allow_sqlite)
     if kind == "sqlite":
         os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{target.as_posix()}"
         print(f"reading SQLite file {target}")
     else:
         os.environ["DATABASE_URL"] = target.render_as_string(hide_password=False)
         print(f"reading {target.render_as_string(hide_password=True)}")
+    print(f"DATABASE_URL supplied by {source}")
 
     # Lazy app.* imports, OUTSIDE the connect try, so an import error is never
     # reported as a connect error.

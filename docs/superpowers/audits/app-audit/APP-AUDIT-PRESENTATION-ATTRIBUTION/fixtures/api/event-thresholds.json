@@ -1,0 +1,4 @@
+{
+  "SWING": { "reject_days": 21, "caution_days": 45 },
+  "POSITION": { "reject_days": 30, "caution_days": 60 }
+}

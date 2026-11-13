@@ -1,0 +1,6709 @@
+{
+  "high_level_summary": {
+    "total_routes": 45,
+    "total_definitions": 283,
+    "total_requirements": 52308,
+    "presentation_dispositions": {
+      "observed-verified": 4577,
+      "observed-asserted": 33330,
+      "observed-ambiguous": 14261,
+      "not-run": 140
+    },
+    "route_ownership_by_numeric_lane": {
+      "G": 5,
+      "H": 23,
+      "F": 2,
+      "C": 6,
+      "B": 4,
+      "E": 1,
+      "D": 4
+    },
+    "route_ownership_by_persistence_lane": {
+      "I": 45
+    }
+  },
+  "domain_lanes": {
+    "Lane A": {
+      "phase": "APP-AUDIT-INVENTORY",
+      "title": "Whole-Application Inventory & Navigation Baseline",
+      "role": "Central structural inventory baseline across 45 routes and 283 definitions",
+      "routes_scoped": 45,
+      "definitions_scoped": 283,
+      "requirements_total": 52308,
+      "defects_cataloged": 2,
+      "owner_key": "A"
+    },
+    "Lane B": {
+      "phase": "APP-AUDIT-SETTINGS-PROFILES",
+      "title": "Scan Parameter Controls, Search Profiles & Settings",
+      "role": "Scan parameters, profile lifecycle, and configuration save validation",
+      "defects_cataloged": 18,
+      "owner_key": "B"
+    },
+    "Lane C": {
+      "phase": "APP-AUDIT-OPTIONS",
+      "title": "Options Screener & Contract Selection",
+      "role": "Options scoring rules, contract liquidity/DTE filters, and trade card arithmetic",
+      "defects_cataloged": 5,
+      "owner_key": "C"
+    },
+    "Lane D": {
+      "phase": "APP-AUDIT-STOCKS",
+      "title": "Stocks Screener & Strategy Engine",
+      "role": "7 stock strategies, backtest expectancy, confidence gate, and Step 4/5 merge",
+      "defects_cataloged": 2,
+      "owner_key": "D"
+    },
+    "Lane E": {
+      "phase": "APP-AUDIT-PREBREAKOUT",
+      "title": "Pre-Breakout, Pullback & Fibonacci Scanner",
+      "role": "Setup scanner sub-modes, swing levels, and setup backtests",
+      "defects_cataloged": 3,
+      "owner_key": "E"
+    },
+    "Lane F": {
+      "phase": "APP-AUDIT-BROKER-PORTFOLIO",
+      "title": "Paper Broker Routing & Portfolio Management",
+      "role": "Broker order payload construction, position sizing, exposure holds, and portfolio booking",
+      "defects_cataloged": 3,
+      "owner_key": "F"
+    },
+    "Lane G": {
+      "phase": "APP-AUDIT-MONITORING",
+      "title": "Watchlist, Alerts & Strategy Watch Evaluator",
+      "role": "Watchlist, condition alerts, strategy watch state-machine, and scheduled automation",
+      "defects_cataloged": 3,
+      "owner_key": "G"
+    },
+    "Lane H": {
+      "phase": "APP-AUDIT-ANALYTICS-DATA",
+      "title": "Analysis Deep-Dive, Standalone Charts, Calendar & Validation Export",
+      "role": "Single-symbol analysis, standalone charts, calendar, and validation exports",
+      "defects_cataloged": 2,
+      "owner_key": "H"
+    },
+    "Lane I": {
+      "phase": "APP-AUDIT-PERSISTENCE",
+      "title": "Cross-Store Persistence, Storage Keys & Migrations",
+      "role": "Cross-store migration, versioned storage envelopes, and reload/restart recovery",
+      "defects_cataloged": 4,
+      "owner_key": "I"
+    },
+    "Lane J": {
+      "phase": "APP-AUDIT-PRESENTATION",
+      "title": "Whole-Application Presentation & Accessibility",
+      "role": "52,308-row empirical browser presentation reconciliation, keyboard traversal K1-K6",
+      "defects_cataloged": 6,
+      "owner_key": "J"
+    }
+  },
+  "routes": [
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/alerts/default.tsx",
+      "route": "/alerts",
+      "source": "frontend/app/(frame)/@contextRail/alerts/default.tsx",
+      "kind": "default",
+      "classification": "parallel-slot-fallback",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 124,
+        "observed-asserted": 525,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 839
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/analysis/page.tsx",
+      "route": "/analysis",
+      "source": "frontend/app/(frame)/@contextRail/analysis/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 93,
+        "observed-asserted": 550,
+        "observed-ambiguous": 200,
+        "not-run": 0,
+        "total": 843
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/chart/page.tsx",
+      "route": "/chart",
+      "source": "frontend/app/(frame)/@contextRail/chart/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 92,
+        "observed-asserted": 550,
+        "observed-ambiguous": 200,
+        "not-run": 0,
+        "total": 842
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+      "route": "/dashboard",
+      "source": "frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 93,
+        "observed-asserted": 600,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 883
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/default.tsx",
+      "route": "/",
+      "source": "frontend/app/(frame)/@contextRail/default.tsx",
+      "kind": "default",
+      "classification": "parallel-slot-fallback",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 87,
+        "observed-asserted": 525,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 802
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "route": "/portfolio",
+      "source": "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 90,
+        "observed-asserted": 578,
+        "observed-ambiguous": 205,
+        "not-run": 0,
+        "total": 873
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/screener/default.tsx",
+      "route": "/screener",
+      "source": "frontend/app/(frame)/@contextRail/screener/default.tsx",
+      "kind": "default",
+      "classification": "parallel-slot-fallback",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 87,
+        "observed-asserted": 525,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 802
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+      "route": "/screener/step-7-trade-card",
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/default.tsx",
+      "kind": "default",
+      "classification": "parallel-slot-fallback",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 92,
+        "observed-asserted": 560,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 842
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "route": "/screener/step-7-trade-card",
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 92,
+        "observed-asserted": 560,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 842
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "route": "/watchlist",
+      "source": "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "kind": "page",
+      "classification": "parallel-slot-page",
+      "parallel_slot": "contextRail",
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 92,
+        "observed-asserted": 586,
+        "observed-ambiguous": 205,
+        "not-run": 0,
+        "total": 883
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/alerts/page.tsx",
+      "route": "/alerts",
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 102,
+        "observed-asserted": 844,
+        "observed-ambiguous": 470,
+        "not-run": 0,
+        "total": 1416
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/analysis/page.tsx",
+      "route": "/analysis",
+      "source": "frontend/app/(frame)/analysis/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 114,
+        "observed-asserted": 794,
+        "observed-ambiguous": 230,
+        "not-run": 0,
+        "total": 1138
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/calendar/page.tsx",
+      "route": "/calendar",
+      "source": "frontend/app/(frame)/calendar/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 94,
+        "observed-asserted": 626,
+        "observed-ambiguous": 205,
+        "not-run": 0,
+        "total": 925
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/chart/page.tsx",
+      "route": "/chart",
+      "source": "frontend/app/(frame)/chart/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 152,
+        "observed-asserted": 1429,
+        "observed-ambiguous": 500,
+        "not-run": 0,
+        "total": 2081
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/dashboard/page.tsx",
+      "route": "/dashboard",
+      "source": "frontend/app/(frame)/dashboard/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 139,
+        "observed-asserted": 990,
+        "observed-ambiguous": 290,
+        "not-run": 0,
+        "total": 1419
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/error.tsx",
+      "route": "/",
+      "source": "frontend/app/(frame)/error.tsx",
+      "kind": "error",
+      "classification": "error-boundary",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 90,
+        "observed-asserted": 552,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 832
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/journal/page.tsx",
+      "route": "/journal",
+      "source": "frontend/app/(frame)/journal/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 108,
+        "observed-asserted": 960,
+        "observed-ambiguous": 260,
+        "not-run": 0,
+        "total": 1328
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/layout.tsx",
+      "route": "/",
+      "source": "frontend/app/(frame)/layout.tsx",
+      "kind": "layout",
+      "classification": "layout",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 87,
+        "observed-asserted": 525,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 802
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/loading.tsx",
+      "route": "/",
+      "source": "frontend/app/(frame)/loading.tsx",
+      "kind": "loading",
+      "classification": "loading-boundary",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 87,
+        "observed-asserted": 535,
+        "observed-ambiguous": 190,
+        "not-run": 0,
+        "total": 812
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/portfolio/page.tsx",
+      "route": "/portfolio",
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 152,
+        "observed-asserted": 1224,
+        "observed-ambiguous": 434,
+        "not-run": 0,
+        "total": 1810
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/layout.tsx",
+      "route": "/screener",
+      "source": "frontend/app/(frame)/screener/layout.tsx",
+      "kind": "layout",
+      "classification": "layout",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 95,
+        "observed-asserted": 608,
+        "observed-ambiguous": 210,
+        "not-run": 0,
+        "total": 913
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/page.tsx",
+      "route": "/screener",
+      "source": "frontend/app/(frame)/screener/page.tsx",
+      "kind": "page",
+      "classification": "redirect",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 93,
+        "observed-asserted": 608,
+        "observed-ambiguous": 210,
+        "not-run": 0,
+        "total": 911
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "route": "/screener/step-1-regime",
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 111,
+        "observed-asserted": 742,
+        "observed-ambiguous": 280,
+        "not-run": 0,
+        "total": 1133
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "route": "/screener/step-2-universe",
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 96,
+        "observed-asserted": 766,
+        "observed-ambiguous": 220,
+        "not-run": 0,
+        "total": 1082
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "route": "/screener/step-3-direction",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 148,
+        "observed-asserted": 1138,
+        "observed-ambiguous": 670,
+        "not-run": 0,
+        "total": 1956
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "route": "/screener/step-4-prebreakout",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 159,
+        "observed-asserted": 1396,
+        "observed-ambiguous": 990,
+        "not-run": 0,
+        "total": 2545
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "route": "/screener/step-4-ranking",
+      "source": "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 213,
+        "observed-asserted": 1632,
+        "observed-ambiguous": 854,
+        "not-run": 0,
+        "total": 2699
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "route": "/screener/step-4-stocks",
+      "source": "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 137,
+        "observed-asserted": 1102,
+        "observed-ambiguous": 580,
+        "not-run": 0,
+        "total": 1819
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+      "route": "/screener/step-5-strategy",
+      "source": "frontend/app/(frame)/screener/step-5-strategy/page.tsx",
+      "kind": "page",
+      "classification": "redirect",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 93,
+        "observed-asserted": 608,
+        "observed-ambiguous": 210,
+        "not-run": 0,
+        "total": 911
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "route": "/screener/step-5-vol-events",
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 102,
+        "observed-asserted": 736,
+        "observed-ambiguous": 435,
+        "not-run": 0,
+        "total": 1273
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "route": "/screener/step-6-backtest",
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 156,
+        "observed-asserted": 1376,
+        "observed-ambiguous": 840,
+        "not-run": 0,
+        "total": 2372
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "route": "/screener/step-6-contracts",
+      "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 120,
+        "observed-asserted": 888,
+        "observed-ambiguous": 280,
+        "not-run": 0,
+        "total": 1288
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "route": "/screener/step-7-position-card",
+      "source": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 126,
+        "observed-asserted": 1006,
+        "observed-ambiguous": 570,
+        "not-run": 0,
+        "total": 1702
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "route": "/screener/step-7-trade-card",
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 181,
+        "observed-asserted": 1336,
+        "observed-ambiguous": 790,
+        "not-run": 0,
+        "total": 2307
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/settings/page.tsx",
+      "route": "/settings",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 169,
+        "observed-asserted": 1376,
+        "observed-ambiguous": 875,
+        "not-run": 0,
+        "total": 2420
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/strategy-watch/page.tsx",
+      "route": "/strategy-watch",
+      "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 95,
+        "observed-asserted": 678,
+        "observed-ambiguous": 260,
+        "not-run": 0,
+        "total": 1033
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/validation/page.tsx",
+      "route": "/validation",
+      "source": "frontend/app/(frame)/validation/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 101,
+        "observed-asserted": 622,
+        "observed-ambiguous": 240,
+        "not-run": 0,
+        "total": 963
+      }
+    },
+    {
+      "route_id": "route:frontend/app/(frame)/watchlist/page.tsx",
+      "route": "/watchlist",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 129,
+        "observed-asserted": 990,
+        "observed-ambiguous": 398,
+        "not-run": 0,
+        "total": 1517
+      }
+    },
+    {
+      "route_id": "route:frontend/app/__test-crash/page.tsx",
+      "route": "/__test-crash",
+      "source": "frontend/app/__test-crash/page.tsx",
+      "kind": "page",
+      "classification": "private-folder-source",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 19,
+        "observed-asserted": 78,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 97
+      }
+    },
+    {
+      "route_id": "route:frontend/app/chart/standalone/layout.tsx",
+      "route": "/chart/standalone",
+      "source": "frontend/app/chart/standalone/layout.tsx",
+      "kind": "layout",
+      "classification": "layout",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 89,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 102
+      }
+    },
+    {
+      "route_id": "route:frontend/app/chart/standalone/page.tsx",
+      "route": "/chart/standalone",
+      "source": "frontend/app/chart/standalone/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 41,
+        "observed-asserted": 671,
+        "observed-ambiguous": 300,
+        "not-run": 0,
+        "total": 1012
+      }
+    },
+    {
+      "route_id": "route:frontend/app/dev/components/page.tsx",
+      "route": "/dev/components",
+      "source": "frontend/app/dev/components/page.tsx",
+      "kind": "page",
+      "classification": "url-page",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 74,
+        "observed-asserted": 490,
+        "observed-ambiguous": 140,
+        "not-run": 0,
+        "total": 704
+      }
+    },
+    {
+      "route_id": "route:frontend/app/layout.tsx",
+      "route": "/",
+      "source": "frontend/app/layout.tsx",
+      "kind": "layout",
+      "classification": "layout",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 79,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 92
+      }
+    },
+    {
+      "route_id": "route:frontend/app/not-found.tsx",
+      "route": "/",
+      "source": "frontend/app/not-found.tsx",
+      "kind": "not-found",
+      "classification": "not-found-boundary",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 89,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 102
+      }
+    },
+    {
+      "route_id": "route:frontend/app/page.tsx",
+      "route": "/",
+      "source": "frontend/app/page.tsx",
+      "kind": "page",
+      "classification": "redirect",
+      "parallel_slot": null,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 78,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 91
+      }
+    }
+  ],
+  "definitions": [
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/alerts/default.tsx#AlertsContextRail",
+      "component": "AlertsContextRail",
+      "source": "frontend/app/(frame)/@contextRail/alerts/default.tsx",
+      "line": 3,
+      "end_line": 5,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 21,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/analysis/page.tsx#AnalysisContextRail",
+      "component": "AnalysisContextRail",
+      "source": "frontend/app/(frame)/@contextRail/analysis/page.tsx",
+      "line": 24,
+      "end_line": 39,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/chart/page.tsx#ChartContextRail",
+      "component": "ChartContextRail",
+      "source": "frontend/app/(frame)/@contextRail/chart/page.tsx",
+      "line": 27,
+      "end_line": 42,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/dashboard/page.tsx#DashboardContextRail",
+      "component": "DashboardContextRail",
+      "source": "frontend/app/(frame)/@contextRail/dashboard/page.tsx",
+      "line": 33,
+      "end_line": 150,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 156,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/default.tsx#DefaultContextRail",
+      "component": "DefaultContextRail",
+      "source": "frontend/app/(frame)/@contextRail/default.tsx",
+      "line": 10,
+      "end_line": 12,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 91,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/portfolio/page.tsx#PortfolioContextRail",
+      "component": "PortfolioContextRail",
+      "source": "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "line": 17,
+      "end_line": 75,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 76,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/portfolio/page.tsx#Row",
+      "component": "Row",
+      "source": "frontend/app/(frame)/@contextRail/portfolio/page.tsx",
+      "line": 77,
+      "end_line": 79,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 16,
+        "observed-ambiguous": 5,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/screener/default.tsx#ScreenerDefaultRail",
+      "component": "ScreenerDefaultRail",
+      "source": "frontend/app/(frame)/@contextRail/screener/default.tsx",
+      "line": 9,
+      "end_line": 11,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 141,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx#TradeCardContextRail",
+      "component": "TradeCardContextRail",
+      "source": "frontend/app/(frame)/@contextRail/screener/step-7-trade-card/page.tsx",
+      "line": 234,
+      "end_line": 319,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 114,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/watchlist/page.tsx#Row",
+      "component": "Row",
+      "source": "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "line": 66,
+      "end_line": 68,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 16,
+        "observed-ambiguous": 5,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/@contextRail/watchlist/page.tsx#WatchlistContextRail",
+      "component": "WatchlistContextRail",
+      "source": "frontend/app/(frame)/@contextRail/watchlist/page.tsx",
+      "line": 21,
+      "end_line": 64,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 76,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/alerts/page.tsx#AlertRow",
+      "component": "AlertRow",
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "line": 121,
+      "end_line": 165,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/alerts/page.tsx#AlertsPage",
+      "component": "AlertsPage",
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "line": 207,
+      "end_line": 709,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 108,
+        "observed-ambiguous": 130,
+        "not-run": 0,
+        "total": 241
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/alerts/page.tsx#SettingsRow",
+      "component": "SettingsRow",
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "line": 711,
+      "end_line": 731,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/alerts/page.tsx#Toggle",
+      "component": "Toggle",
+      "source": "frontend/app/(frame)/alerts/page.tsx",
+      "line": 169,
+      "end_line": 179,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/analysis/page.tsx#AnalysisPage",
+      "component": "AnalysisPage",
+      "source": "frontend/app/(frame)/analysis/page.tsx",
+      "line": 51,
+      "end_line": 382,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 108,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/calendar/page.tsx#CalendarPage",
+      "component": "CalendarPage",
+      "source": "frontend/app/(frame)/calendar/page.tsx",
+      "line": 95,
+      "end_line": 219,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 58,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/calendar/page.tsx#MonthCard",
+      "component": "MonthCard",
+      "source": "frontend/app/(frame)/calendar/page.tsx",
+      "line": 221,
+      "end_line": 284,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/chart/page.tsx#ChartPage",
+      "component": "ChartPage",
+      "source": "frontend/app/(frame)/chart/page.tsx",
+      "line": 5,
+      "end_line": 13,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 11,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/dashboard/page.tsx#DashboardPage",
+      "component": "DashboardPage",
+      "source": "frontend/app/(frame)/dashboard/page.tsx",
+      "line": 50,
+      "end_line": 405,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 138,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/dashboard/page.tsx#Stat",
+      "component": "Stat",
+      "source": "frontend/app/(frame)/dashboard/page.tsx",
+      "line": 407,
+      "end_line": 422,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 8,
+        "observed-ambiguous": 3,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/error.tsx#FrameError",
+      "component": "FrameError",
+      "source": "frontend/app/(frame)/error.tsx",
+      "line": 12,
+      "end_line": 37,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/journal/page.tsx#JournalPage",
+      "component": "JournalPage",
+      "source": "frontend/app/(frame)/journal/page.tsx",
+      "line": 29,
+      "end_line": 209,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 98,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/layout.tsx#FrameLayout",
+      "component": "FrameLayout",
+      "source": "frontend/app/(frame)/layout.tsx",
+      "line": 19,
+      "end_line": 38,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 761,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/loading.tsx#Loading",
+      "component": "Loading",
+      "source": "frontend/app/(frame)/loading.tsx",
+      "line": 9,
+      "end_line": 16,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 11,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#AlertOverridesEditor",
+      "component": "AlertOverridesEditor",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 1855,
+      "end_line": 1918,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#EditDrawer",
+      "component": "EditDrawer",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 59,
+      "end_line": 624,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 48,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#EditField",
+      "component": "EditField",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 970,
+      "end_line": 1209,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#ExitPlanEditor",
+      "component": "ExitPlanEditor",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 689,
+      "end_line": 832,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#MaxLossBanner",
+      "component": "MaxLossBanner",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 840,
+      "end_line": 956,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 58,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#PickedMethodRecord",
+      "component": "PickedMethodRecord",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 1681,
+      "end_line": 1727,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#PremiumStopEditor",
+      "component": "PremiumStopEditor",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 1224,
+      "end_line": 1530,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#TargetEditor",
+      "component": "TargetEditor",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 626,
+      "end_line": 680,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/EditDrawer.tsx#TpMethodSelector",
+      "component": "TpMethodSelector",
+      "source": "frontend/app/(frame)/portfolio/EditDrawer.tsx",
+      "line": 1729,
+      "end_line": 1769,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/page.tsx#IvPositionCell",
+      "component": "IvPositionCell",
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "line": 58,
+      "end_line": 67,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/page.tsx#PencilIcon",
+      "component": "PencilIcon",
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "line": 523,
+      "end_line": 535,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/page.tsx#PerfStat",
+      "component": "PerfStat",
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "line": 512,
+      "end_line": 521,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/portfolio/page.tsx#PortfolioPage",
+      "component": "PortfolioPage",
+      "source": "frontend/app/(frame)/portfolio/page.tsx",
+      "line": 85,
+      "end_line": 510,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 148,
+        "observed-ambiguous": 80,
+        "not-run": 0,
+        "total": 231
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/layout.tsx#ScreenerLayout",
+      "component": "ScreenerLayout",
+      "source": "frontend/app/(frame)/screener/layout.tsx",
+      "line": 24,
+      "end_line": 58,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 29,
+        "observed-asserted": 522,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 561
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-1-regime/page.tsx#Step1RegimePage",
+      "component": "Step1RegimePage",
+      "source": "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+      "line": 96,
+      "end_line": 467,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-2-universe/page.tsx#Step2Page",
+      "component": "Step2Page",
+      "source": "frontend/app/(frame)/screener/step-2-universe/page.tsx",
+      "line": 67,
+      "end_line": 673,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 158,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 171
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#ParamRow",
+      "component": "ParamRow",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "line": 255,
+      "end_line": 454,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 70,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SectionBlock",
+      "component": "SectionBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "line": 513,
+      "end_line": 549,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#Step3Page",
+      "component": "Step3Page",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "line": 553,
+      "end_line": 974,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 48,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-3-direction/page.tsx#SubGroupBlock",
+      "component": "SubGroupBlock",
+      "source": "frontend/app/(frame)/screener/step-3-direction/page.tsx",
+      "line": 458,
+      "end_line": 509,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/page.tsx#Step4PreBreakoutPage",
+      "component": "Step4PreBreakoutPage",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "line": 70,
+      "end_line": 643,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 248,
+        "observed-ambiguous": 160,
+        "not-run": 0,
+        "total": 411
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Fields",
+      "component": "Fields",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "line": 19,
+      "end_line": 28,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#SelectedRowEvidence",
+      "component": "SelectedRowEvidence",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "line": 33,
+      "end_line": 58,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx#Swing",
+      "component": "Swing",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "line": 29,
+      "end_line": 32,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx#RawEvidence",
+      "component": "RawEvidence",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "line": 5,
+      "end_line": 12,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx#SelectedSetupChart",
+      "component": "SelectedSetupChart",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
+      "line": 19,
+      "end_line": 51,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#LiveScope",
+      "component": "LiveScope",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "line": 62,
+      "end_line": 62,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#Raw",
+      "component": "Raw",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "line": 23,
+      "end_line": 23,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#SelectedSentimentFundamentals",
+      "component": "SelectedSentimentFundamentals",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "line": 63,
+      "end_line": 90,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx#SelectedStockScores",
+      "component": "SelectedStockScores",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "line": 91,
+      "end_line": 114,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx#SelectedStockNews",
+      "component": "SelectedStockNews",
+      "source": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
+      "line": 34,
+      "end_line": 74,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-ranking/page.tsx#SortHeader",
+      "component": "SortHeader",
+      "source": "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "line": 137,
+      "end_line": 148,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-ranking/page.tsx#Step4Page",
+      "component": "Step4Page",
+      "source": "frontend/app/(frame)/screener/step-4-ranking/page.tsx",
+      "line": 150,
+      "end_line": 496,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 108,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-stocks/HistoryPrefetchRow.tsx#HistoryPrefetchRow",
+      "component": "HistoryPrefetchRow",
+      "source": "frontend/app/(frame)/screener/step-4-stocks/HistoryPrefetchRow.tsx",
+      "line": 10,
+      "end_line": 83,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-4-stocks/page.tsx#Step4StocksPage",
+      "component": "Step4StocksPage",
+      "source": "frontend/app/(frame)/screener/step-4-stocks/page.tsx",
+      "line": 102,
+      "end_line": 419,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 58,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-5-vol-events/page.tsx#CalendarIcon",
+      "component": "CalendarIcon",
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "line": 814,
+      "end_line": 830,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 18,
+        "observed-ambiguous": 3,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-5-vol-events/page.tsx#Step5Page",
+      "component": "Step5Page",
+      "source": "frontend/app/(frame)/screener/step-5-vol-events/page.tsx",
+      "line": 84,
+      "end_line": 812,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 48,
+        "observed-ambiguous": 210,
+        "not-run": 0,
+        "total": 261
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-6-backtest/page.tsx#QuickSummary",
+      "component": "QuickSummary",
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "line": 42,
+      "end_line": 109,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-6-backtest/page.tsx#Step6BacktestPage",
+      "component": "Step6BacktestPage",
+      "source": "frontend/app/(frame)/screener/step-6-backtest/page.tsx",
+      "line": 111,
+      "end_line": 337,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 118,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-6-contracts/page.tsx#IvCell",
+      "component": "IvCell",
+      "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "line": 75,
+      "end_line": 83,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-6-contracts/page.tsx#SortBtn",
+      "component": "SortBtn",
+      "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "line": 554,
+      "end_line": 579,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-6-contracts/page.tsx#Step6Page",
+      "component": "Step6Page",
+      "source": "frontend/app/(frame)/screener/step-6-contracts/page.tsx",
+      "line": 125,
+      "end_line": 552,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 138,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 171
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-7-position-card/page.tsx#Step7PositionCardPage",
+      "component": "Step7PositionCardPage",
+      "source": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "line": 13,
+      "end_line": 82,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/screener/step-7-trade-card/page.tsx#Step7Page",
+      "component": "Step7Page",
+      "source": "frontend/app/(frame)/screener/step-7-trade-card/page.tsx",
+      "line": 223,
+      "end_line": 1865,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/IvThresholdsSection.tsx#IvThresholdsSection",
+      "component": "IvThresholdsSection",
+      "source": "frontend/app/(frame)/settings/IvThresholdsSection.tsx",
+      "line": 67,
+      "end_line": 190,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#AtrPairRow",
+      "component": "AtrPairRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 137,
+      "end_line": 188,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#BrokersForm",
+      "component": "BrokersForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 1796,
+      "end_line": 2073,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 128,
+        "observed-ambiguous": 150,
+        "not-run": 0,
+        "total": 281
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#DataForm",
+      "component": "DataForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2077,
+      "end_line": 2199,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#DaysOfWeekPicker",
+      "component": "DaysOfWeekPicker",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 833,
+      "end_line": 853,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#EdgarScheduleSection",
+      "component": "EdgarScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2317,
+      "end_line": 2330,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#FundamentalsGateSection",
+      "component": "FundamentalsGateSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 855,
+      "end_line": 953,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#NotificationForm",
+      "component": "NotificationForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 1576,
+      "end_line": 1792,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 80,
+        "not-run": 0,
+        "total": 111
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#OperatorTimezoneSection",
+      "component": "OperatorTimezoneSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 466,
+      "end_line": 510,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#OverrideInput",
+      "component": "OverrideInput",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2352,
+      "end_line": 2380,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#PremiumStopSettingNotes",
+      "component": "PremiumStopSettingNotes",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 108,
+      "end_line": 134,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ProposalCard",
+      "component": "ProposalCard",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2686,
+      "end_line": 2831,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#RegimeForm",
+      "component": "RegimeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 1481,
+      "end_line": 1574,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#RiskForm",
+      "component": "RiskForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 1142,
+      "end_line": 1477,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#SaveButton",
+      "component": "SaveButton",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 192,
+      "end_line": 211,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ScanForm",
+      "component": "ScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 242,
+      "end_line": 462,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 50,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduledScanRetentionSection",
+      "component": "ScheduledScanRetentionSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 519,
+      "end_line": 571,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduledScansSection",
+      "component": "ScheduledScansSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 587,
+      "end_line": 714,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleEntryRow",
+      "component": "ScheduleEntryRow",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 716,
+      "end_line": 831,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 98,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ScheduleSection",
+      "component": "ScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2203,
+      "end_line": 2315,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#SettingsPage",
+      "component": "SettingsPage",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 45,
+      "end_line": 91,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#Sp500ScheduleSection",
+      "component": "Sp500ScheduleSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2332,
+      "end_line": 2345,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#SpreadsSection",
+      "component": "SpreadsSection",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 957,
+      "end_line": 1105,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyScanForm",
+      "component": "StrategyScanForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2382,
+      "end_line": 2467,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#StrategyTuningForm",
+      "component": "StrategyTuningForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 2475,
+      "end_line": 2677,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#ThemeForm",
+      "component": "ThemeForm",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 215,
+      "end_line": 238,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/page.tsx#Toggle",
+      "component": "Toggle",
+      "source": "frontend/app/(frame)/settings/page.tsx",
+      "line": 1107,
+      "end_line": 1126,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#Row",
+      "component": "Row",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "line": 17,
+      "end_line": 42,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 18,
+        "observed-ambiguous": 3,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/settings/SettingsRow.tsx#SectionIntro",
+      "component": "SectionIntro",
+      "source": "frontend/app/(frame)/settings/SettingsRow.tsx",
+      "line": 8,
+      "end_line": 15,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#HorizonOptions",
+      "component": "HorizonOptions",
+      "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+      "line": 24,
+      "end_line": 31,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/strategy-watch/page.tsx#StrategyWatchPage",
+      "component": "StrategyWatchPage",
+      "source": "frontend/app/(frame)/strategy-watch/page.tsx",
+      "line": 38,
+      "end_line": 205,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 128,
+        "observed-ambiguous": 70,
+        "not-run": 0,
+        "total": 201
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/validation/page.tsx#ValidationPage",
+      "component": "ValidationPage",
+      "source": "frontend/app/(frame)/validation/page.tsx",
+      "line": 10,
+      "end_line": 51,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#ContractsTab",
+      "component": "ContractsTab",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 464,
+      "end_line": 509,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#IvContractCell",
+      "component": "IvContractCell",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 55,
+      "end_line": 63,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#LiveContractRow",
+      "component": "LiveContractRow",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 511,
+      "end_line": 533,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#MissingContractRow",
+      "component": "MissingContractRow",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 536,
+      "end_line": 559,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#SortBtn",
+      "component": "SortBtn",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 561,
+      "end_line": 583,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/(frame)/watchlist/page.tsx#WatchlistPage",
+      "component": "WatchlistPage",
+      "source": "frontend/app/(frame)/watchlist/page.tsx",
+      "line": 65,
+      "end_line": 462,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 138,
+        "observed-ambiguous": 50,
+        "not-run": 0,
+        "total": 191
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/chart/standalone/layout.tsx#StandaloneLayout",
+      "component": "StandaloneLayout",
+      "source": "frontend/app/chart/standalone/layout.tsx",
+      "line": 3,
+      "end_line": 5,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 21,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/chart/standalone/page.tsx#StandalonePage",
+      "component": "StandalonePage",
+      "source": "frontend/app/chart/standalone/page.tsx",
+      "line": 4,
+      "end_line": 12,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 11,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/dev/components/page.tsx#ComponentsGallery",
+      "component": "ComponentsGallery",
+      "source": "frontend/app/dev/components/page.tsx",
+      "line": 33,
+      "end_line": 290,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 88,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/dev/components/page.tsx#FilterIcon",
+      "component": "FilterIcon",
+      "source": "frontend/app/dev/components/page.tsx",
+      "line": 300,
+      "end_line": 306,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/dev/components/page.tsx#XIcon",
+      "component": "XIcon",
+      "source": "frontend/app/dev/components/page.tsx",
+      "line": 292,
+      "end_line": 298,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/layout.tsx#RootLayout",
+      "component": "RootLayout",
+      "source": "frontend/app/layout.tsx",
+      "line": 63,
+      "end_line": 84,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 451,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 451
+      }
+    },
+    {
+      "definition_id": "surface:frontend/app/not-found.tsx#NotFound",
+      "component": "NotFound",
+      "source": "frontend/app/not-found.tsx",
+      "line": 10,
+      "end_line": 26,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 11,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ConfidenceBadge/index.tsx#ConfidenceBadge",
+      "component": "ConfidenceBadge",
+      "source": "frontend/components/atoms/ConfidenceBadge/index.tsx",
+      "line": 14,
+      "end_line": 34,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 48,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ContractExplanationToggle/index.tsx#ContractExplanationToggle",
+      "component": "ContractExplanationToggle",
+      "source": "frontend/components/atoms/ContractExplanationToggle/index.tsx",
+      "line": 12,
+      "end_line": 43,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ContractStar/index.tsx#ContractStar",
+      "component": "ContractStar",
+      "source": "frontend/components/atoms/ContractStar/index.tsx",
+      "line": 25,
+      "end_line": 85,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 26,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/EventFlag/index.tsx#CalendarIcon",
+      "component": "CalendarIcon",
+      "source": "frontend/components/atoms/EventFlag/index.tsx",
+      "line": 36,
+      "end_line": 52,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 2,
+        "observed-asserted": 70,
+        "observed-ambiguous": 29,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/EventFlag/index.tsx#EventFlag",
+      "component": "EventFlag",
+      "source": "frontend/components/atoms/EventFlag/index.tsx",
+      "line": 22,
+      "end_line": 34,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 90,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/IconButton/index.tsx#IconButton",
+      "component": "IconButton",
+      "source": "frontend/components/atoms/IconButton/index.tsx",
+      "line": 16,
+      "end_line": 39,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 32,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ModeToggle/index.tsx#ModeToggle",
+      "component": "ModeToggle",
+      "source": "frontend/components/atoms/ModeToggle/index.tsx",
+      "line": 12,
+      "end_line": 28,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 312,
+        "observed-ambiguous": 390,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ModeToggle/index.tsx#MoonIcon",
+      "component": "MoonIcon",
+      "source": "frontend/components/atoms/ModeToggle/index.tsx",
+      "line": 48,
+      "end_line": 63,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 312,
+        "observed-ambiguous": 390,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ModeToggle/index.tsx#SunIcon",
+      "component": "SunIcon",
+      "source": "frontend/components/atoms/ModeToggle/index.tsx",
+      "line": 30,
+      "end_line": 46,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 312,
+        "observed-ambiguous": 390,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/NoLiveQuoteTag/index.tsx#NoLiveQuoteTag",
+      "component": "NoLiveQuoteTag",
+      "source": "frontend/components/atoms/NoLiveQuoteTag/index.tsx",
+      "line": 3,
+      "end_line": 5,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/OpenChartButton/index.tsx#OpenChartButton",
+      "component": "OpenChartButton",
+      "source": "frontend/components/atoms/OpenChartButton/index.tsx",
+      "line": 12,
+      "end_line": 26,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 15,
+        "observed-asserted": 126,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/RankDelta/index.tsx#RankDelta",
+      "component": "RankDelta",
+      "source": "frontend/components/atoms/RankDelta/index.tsx",
+      "line": 14,
+      "end_line": 31,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 72,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/RiskBadge/index.tsx#RiskBadge",
+      "component": "RiskBadge",
+      "source": "frontend/components/atoms/RiskBadge/index.tsx",
+      "line": 23,
+      "end_line": 37,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/RMultipleBadge/index.tsx#RMultipleBadge",
+      "component": "RMultipleBadge",
+      "source": "frontend/components/atoms/RMultipleBadge/index.tsx",
+      "line": 31,
+      "end_line": 48,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/ScoreBar/index.tsx#ScoreBar",
+      "component": "ScoreBar",
+      "source": "frontend/components/atoms/ScoreBar/index.tsx",
+      "line": 30,
+      "end_line": 55,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/StatusBadge/index.tsx#StatusBadge",
+      "component": "StatusBadge",
+      "source": "frontend/components/atoms/StatusBadge/index.tsx",
+      "line": 30,
+      "end_line": 44,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 37,
+        "observed-asserted": 144,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 181
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/StatusDot/index.tsx#StatusDot",
+      "component": "StatusDot",
+      "source": "frontend/components/atoms/StatusDot/index.tsx",
+      "line": 30,
+      "end_line": 41,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 312,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 391
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/Tooltip/index.tsx#Tooltip",
+      "component": "Tooltip",
+      "source": "frontend/components/atoms/Tooltip/index.tsx",
+      "line": 13,
+      "end_line": 20,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 702,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/atoms/WatchStar/index.tsx#WatchStar",
+      "component": "WatchStar",
+      "source": "frontend/components/atoms/WatchStar/index.tsx",
+      "line": 24,
+      "end_line": 68,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 19,
+        "observed-asserted": 152,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 271
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/KeyboardShortcuts/index.tsx#KeyboardShortcuts",
+      "component": "KeyboardShortcuts",
+      "source": "frontend/components/KeyboardShortcuts/index.tsx",
+      "line": 31,
+      "end_line": 80,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/MinWidthGate/index.tsx#MinWidthGate",
+      "component": "MinWidthGate",
+      "source": "frontend/components/MinWidthGate/index.tsx",
+      "line": 18,
+      "end_line": 51,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 810,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 901
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/AlertRow/index.tsx#AlertIcon",
+      "component": "AlertIcon",
+      "source": "frontend/components/molecules/AlertRow/index.tsx",
+      "line": 40,
+      "end_line": 62,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/AlertRow/index.tsx#AlertRow",
+      "component": "AlertRow",
+      "source": "frontend/components/molecules/AlertRow/index.tsx",
+      "line": 23,
+      "end_line": 38,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/AlternativeContractRow/index.tsx#AlternativeContractRow",
+      "component": "AlternativeContractRow",
+      "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+      "line": 14,
+      "end_line": 53,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/AlternativeContractRow/index.tsx#Metric",
+      "component": "Metric",
+      "source": "frontend/components/molecules/AlternativeContractRow/index.tsx",
+      "line": 55,
+      "end_line": 70,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/CandidateNav/index.tsx#CandidateNav",
+      "component": "CandidateNav",
+      "source": "frontend/components/molecules/CandidateNav/index.tsx",
+      "line": 30,
+      "end_line": 120,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ChartClickPopover/index.tsx#ChartClickPopover",
+      "component": "ChartClickPopover",
+      "source": "frontend/components/molecules/ChartClickPopover/index.tsx",
+      "line": 13,
+      "end_line": 29,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ChartPanelHeader/index.tsx#ChartPanelHeader",
+      "component": "ChartPanelHeader",
+      "source": "frontend/components/molecules/ChartPanelHeader/index.tsx",
+      "line": 15,
+      "end_line": 31,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 84,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/CollapsibleSection/index.tsx#CollapsibleSection",
+      "component": "CollapsibleSection",
+      "source": "frontend/components/molecules/CollapsibleSection/index.tsx",
+      "line": 32,
+      "end_line": 86,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ConfigHealthChip/index.tsx#ConfigHealthChip",
+      "component": "ConfigHealthChip",
+      "source": "frontend/components/molecules/ConfigHealthChip/index.tsx",
+      "line": 16,
+      "end_line": 92,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 1141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ConfirmDialog/index.tsx#ConfirmDialog",
+      "component": "ConfirmDialog",
+      "source": "frontend/components/molecules/ConfirmDialog/index.tsx",
+      "line": 15,
+      "end_line": 39,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 54,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ContractScoreExplanation/index.tsx#ContractScoreExplanationContent",
+      "component": "ContractScoreExplanationContent",
+      "source": "frontend/components/molecules/ContractScoreExplanation/index.tsx",
+      "line": 19,
+      "end_line": 302,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/DTEProgressBar/index.tsx#DTEProgressBar",
+      "component": "DTEProgressBar",
+      "source": "frontend/components/molecules/DTEProgressBar/index.tsx",
+      "line": 22,
+      "end_line": 43,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 32,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/FundamentalHealthCard/index.tsx#FundamentalHealthCard",
+      "component": "FundamentalHealthCard",
+      "source": "frontend/components/molecules/FundamentalHealthCard/index.tsx",
+      "line": 16,
+      "end_line": 83,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 118,
+        "observed-ambiguous": 50,
+        "not-run": 0,
+        "total": 181
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/InitStores/index.tsx#InitStores",
+      "component": "InitStores",
+      "source": "frontend/components/molecules/InitStores/index.tsx",
+      "line": 7,
+      "end_line": 21,
+      "owners": {
+        "numeric": "I",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/LabeledStatusBadge/index.tsx#LabeledStatusBadge",
+      "component": "LabeledStatusBadge",
+      "source": "frontend/components/molecules/LabeledStatusBadge/index.tsx",
+      "line": 12,
+      "end_line": 19,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/MarketClock/index.tsx#MarketClock",
+      "component": "MarketClock",
+      "source": "frontend/components/molecules/MarketClock/index.tsx",
+      "line": 21,
+      "end_line": 48,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/MarketSentiment/index.tsx#MarketSentiment",
+      "component": "MarketSentiment",
+      "source": "frontend/components/molecules/MarketSentiment/index.tsx",
+      "line": 10,
+      "end_line": 51,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 48,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/MeanReversionConfirmPanel/index.tsx#MeanReversionConfirmPanel",
+      "component": "MeanReversionConfirmPanel",
+      "source": "frontend/components/molecules/MeanReversionConfirmPanel/index.tsx",
+      "line": 25,
+      "end_line": 124,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/MethodPickSelector/index.tsx#MethodPickSelector",
+      "component": "MethodPickSelector",
+      "source": "frontend/components/molecules/MethodPickSelector/index.tsx",
+      "line": 143,
+      "end_line": 279,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 32,
+        "observed-ambiguous": 160,
+        "not-run": 0,
+        "total": 201
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/NewsCard/index.tsx#NewsCard",
+      "component": "NewsCard",
+      "source": "frontend/components/molecules/NewsCard/index.tsx",
+      "line": 25,
+      "end_line": 52,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/Pagination/index.tsx#Pagination",
+      "component": "Pagination",
+      "source": "frontend/components/molecules/Pagination/index.tsx",
+      "line": 14,
+      "end_line": 60,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 56,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/QuickLookRow/index.tsx#QuickLookRow",
+      "component": "QuickLookRow",
+      "source": "frontend/components/molecules/QuickLookRow/index.tsx",
+      "line": 21,
+      "end_line": 38,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 1141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/RegimeIndicator/index.tsx#RegimeIndicator",
+      "component": "RegimeIndicator",
+      "source": "frontend/components/molecules/RegimeIndicator/index.tsx",
+      "line": 10,
+      "end_line": 19,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/RenameProfileDialog/index.tsx#RenameProfileDialog",
+      "component": "RenameProfileDialog",
+      "source": "frontend/components/molecules/RenameProfileDialog/index.tsx",
+      "line": 13,
+      "end_line": 57,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/RiskPanel/index.tsx#RiskPanel",
+      "component": "RiskPanel",
+      "source": "frontend/components/molecules/RiskPanel/index.tsx",
+      "line": 17,
+      "end_line": 73,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/RiskPanel/index.tsx#Stat",
+      "component": "Stat",
+      "source": "frontend/components/molecules/RiskPanel/index.tsx",
+      "line": 75,
+      "end_line": 93,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 0,
+        "observed-asserted": 8,
+        "observed-ambiguous": 3,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SavedScanResultsTable/index.tsx#SavedScanResultsTable",
+      "component": "SavedScanResultsTable",
+      "source": "frontend/components/molecules/SavedScanResultsTable/index.tsx",
+      "line": 23,
+      "end_line": 53,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 40,
+        "observed-ambiguous": 150,
+        "not-run": 0,
+        "total": 201
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SaveProfileDialog/index.tsx#SaveProfileDialog",
+      "component": "SaveProfileDialog",
+      "source": "frontend/components/molecules/SaveProfileDialog/index.tsx",
+      "line": 13,
+      "end_line": 66,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ScanIndicator/index.tsx#ScanIndicator",
+      "component": "ScanIndicator",
+      "source": "frontend/components/molecules/ScanIndicator/index.tsx",
+      "line": 53,
+      "end_line": 71,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/ScoreCardPanel/index.tsx#ScoreCardPanel",
+      "component": "ScoreCardPanel",
+      "source": "frontend/components/molecules/ScoreCardPanel/index.tsx",
+      "line": 41,
+      "end_line": 118,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 84,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 91
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SectionCard/index.tsx#SectionCard",
+      "component": "SectionCard",
+      "source": "frontend/components/molecules/SectionCard/index.tsx",
+      "line": 17,
+      "end_line": 38,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/StepIndicator/index.tsx#CheckIcon",
+      "component": "CheckIcon",
+      "source": "frontend/components/molecules/StepIndicator/index.tsx",
+      "line": 44,
+      "end_line": 59,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 702,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/StepIndicator/index.tsx#StepIndicator",
+      "component": "StepIndicator",
+      "source": "frontend/components/molecules/StepIndicator/index.tsx",
+      "line": 27,
+      "end_line": 42,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 79,
+        "observed-asserted": 312,
+        "observed-ambiguous": 390,
+        "not-run": 0,
+        "total": 781
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SymbolHeader/index.tsx#DirectionPill",
+      "component": "DirectionPill",
+      "source": "frontend/components/molecules/SymbolHeader/index.tsx",
+      "line": 34,
+      "end_line": 41,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 32,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SymbolHeader/index.tsx#SymbolHeader",
+      "component": "SymbolHeader",
+      "source": "frontend/components/molecules/SymbolHeader/index.tsx",
+      "line": 43,
+      "end_line": 71,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 9,
+        "observed-asserted": 32,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/SymbolNotes/index.tsx#SymbolNotes",
+      "component": "SymbolNotes",
+      "source": "frontend/components/molecules/SymbolNotes/index.tsx",
+      "line": 20,
+      "end_line": 79,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 17,
+        "observed-asserted": 144,
+        "observed-ambiguous": 80,
+        "not-run": 0,
+        "total": 241
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/TableRow/index.tsx#TableRow",
+      "component": "TableRow",
+      "source": "frontend/components/molecules/TableRow/index.tsx",
+      "line": 29,
+      "end_line": 73,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 17,
+        "observed-asserted": 144,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/TextInputPopover/index.tsx#TextInputPopover",
+      "component": "TextInputPopover",
+      "source": "frontend/components/molecules/TextInputPopover/index.tsx",
+      "line": 13,
+      "end_line": 62,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 76,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/Toast/index.tsx#Toast",
+      "component": "Toast",
+      "source": "frontend/components/molecules/Toast/index.tsx",
+      "line": 13,
+      "end_line": 58,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/Toast/index.tsx#ToastIcon",
+      "component": "ToastIcon",
+      "source": "frontend/components/molecules/Toast/index.tsx",
+      "line": 60,
+      "end_line": 83,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/TopBarActions/index.tsx#TopBarActions",
+      "component": "TopBarActions",
+      "source": "frontend/components/molecules/TopBarActions/index.tsx",
+      "line": 4,
+      "end_line": 10,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/TradeCardQualification/index.tsx#Fields",
+      "component": "Fields",
+      "source": "frontend/components/molecules/TradeCardQualification/index.tsx",
+      "line": 13,
+      "end_line": 21,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/molecules/TradeCardQualification/index.tsx#TradeCardQualification",
+      "component": "TradeCardQualification",
+      "source": "frontend/components/molecules/TradeCardQualification/index.tsx",
+      "line": 23,
+      "end_line": 67,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 84,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 151
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/AlertRuleBuilder/index.tsx#AlertRuleBuilder",
+      "component": "AlertRuleBuilder",
+      "source": "frontend/components/organisms/AlertRuleBuilder/index.tsx",
+      "line": 56,
+      "end_line": 477,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 454,
+        "observed-ambiguous": 440,
+        "not-run": 0,
+        "total": 901
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/AlertToast/index.tsx#AlertToast",
+      "component": "AlertToast",
+      "source": "frontend/components/organisms/AlertToast/index.tsx",
+      "line": 7,
+      "end_line": 24,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/AlertToast/index.tsx#ToastItem",
+      "component": "ToastItem",
+      "source": "frontend/components/organisms/AlertToast/index.tsx",
+      "line": 26,
+      "end_line": 51,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/AutoTradeArm/index.tsx#AutoTradeArm",
+      "component": "AutoTradeArm",
+      "source": "frontend/components/organisms/AutoTradeArm/index.tsx",
+      "line": 188,
+      "end_line": 684,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BarrierRaceCard/index.tsx#BarrierRaceCard",
+      "component": "BarrierRaceCard",
+      "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "line": 96,
+      "end_line": 493,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 120,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BarrierRaceCard/index.tsx#Header",
+      "component": "Header",
+      "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "line": 533,
+      "end_line": 543,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BarrierRaceCard/index.tsx#LegendKey",
+      "component": "LegendKey",
+      "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "line": 545,
+      "end_line": 552,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BarrierRaceCard/index.tsx#StackedBar",
+      "component": "StackedBar",
+      "source": "frontend/components/organisms/BarrierRaceCard/index.tsx",
+      "line": 556,
+      "end_line": 593,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BrokerAttemptPanel/index.tsx#BrokerAttemptPanel",
+      "component": "BrokerAttemptPanel",
+      "source": "frontend/components/organisms/BrokerAttemptPanel/index.tsx",
+      "line": 28,
+      "end_line": 156,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/BrokerPicker/index.tsx#BrokerPicker",
+      "component": "BrokerPicker",
+      "source": "frontend/components/organisms/BrokerPicker/index.tsx",
+      "line": 13,
+      "end_line": 43,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandidateBacktestWorkspace/index.tsx#CandidateBacktestWorkspace",
+      "component": "CandidateBacktestWorkspace",
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+      "line": 100,
+      "end_line": 102,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandidateBacktestWorkspace/index.tsx#Evidence",
+      "component": "Evidence",
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+      "line": 10,
+      "end_line": 97,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandidateBacktestWorkspace/index.tsx#EvidenceScope",
+      "component": "EvidenceScope",
+      "source": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+      "line": 103,
+      "end_line": 117,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandidateChartWorkspace/index.tsx#CandidateChartWorkspace",
+      "component": "CandidateChartWorkspace",
+      "source": "frontend/components/organisms/CandidateChartWorkspace/index.tsx",
+      "line": 16,
+      "end_line": 23,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandidateChartWorkspace/index.tsx#CandidateEvidence",
+      "component": "CandidateEvidence",
+      "source": "frontend/components/organisms/CandidateChartWorkspace/index.tsx",
+      "line": 25,
+      "end_line": 37,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CandlestickChart/index.tsx#CandlestickChart",
+      "component": "CandlestickChart",
+      "source": "frontend/components/organisms/CandlestickChart/index.tsx",
+      "line": 51,
+      "end_line": 248,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 13,
+        "observed-asserted": 218,
+        "observed-ambiguous": 70,
+        "not-run": 0,
+        "total": 301
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ChartPane/index.tsx#ChartPane",
+      "component": "ChartPane",
+      "source": "frontend/components/organisms/ChartPane/index.tsx",
+      "line": 68,
+      "end_line": 316,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ChartRightPanel/index.tsx#ChartRightPanel",
+      "component": "ChartRightPanel",
+      "source": "frontend/components/organisms/ChartRightPanel/index.tsx",
+      "line": 44,
+      "end_line": 221,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 156,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 181
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ChartTopBar/index.tsx#ChartTopBar",
+      "component": "ChartTopBar",
+      "source": "frontend/components/organisms/ChartTopBar/index.tsx",
+      "line": 30,
+      "end_line": 139,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 196,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 241
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ChartWorkspace/index.tsx#ChartWorkspace",
+      "component": "ChartWorkspace",
+      "source": "frontend/components/organisms/ChartWorkspace/index.tsx",
+      "line": 143,
+      "end_line": 873,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 56,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ClosePositionDrawer/index.tsx#ClosePositionDrawer",
+      "component": "ClosePositionDrawer",
+      "source": "frontend/components/organisms/ClosePositionDrawer/index.tsx",
+      "line": 29,
+      "end_line": 121,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 68,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/CompositeAlertDialog/index.tsx#CompositeAlertDialog",
+      "component": "CompositeAlertDialog",
+      "source": "frontend/components/organisms/CompositeAlertDialog/index.tsx",
+      "line": 70,
+      "end_line": 443,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 78,
+        "observed-ambiguous": 120,
+        "not-run": 0,
+        "total": 201
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ConfigHealthBanner/index.tsx#ConfigHealthBanner",
+      "component": "ConfigHealthBanner",
+      "source": "frontend/components/organisms/ConfigHealthBanner/index.tsx",
+      "line": 58,
+      "end_line": 190,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/index.tsx#ContextRail",
+      "component": "ContextRail",
+      "source": "frontend/components/organisms/ContextRail/index.tsx",
+      "line": 12,
+      "end_line": 14,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/index.tsx#RailSection",
+      "component": "RailSection",
+      "source": "frontend/components/organisms/ContextRail/index.tsx",
+      "line": 21,
+      "end_line": 32,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/QuickLook.tsx#DataSourceGroups",
+      "component": "DataSourceGroups",
+      "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "line": 128,
+      "end_line": 160,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/QuickLook.tsx#DsRow",
+      "component": "DsRow",
+      "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "line": 116,
+      "end_line": 126,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/QuickLook.tsx#RailQuickLook",
+      "component": "RailQuickLook",
+      "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "line": 23,
+      "end_line": 102,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 1824,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 1901
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ContextRail/QuickLook.tsx#Row",
+      "component": "Row",
+      "source": "frontend/components/organisms/ContextRail/QuickLook.tsx",
+      "line": 104,
+      "end_line": 106,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 67,
+        "observed-asserted": 304,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/DirectSendNotesPanel/index.tsx#DirectSendNotesPanel",
+      "component": "DirectSendNotesPanel",
+      "source": "frontend/components/organisms/DirectSendNotesPanel/index.tsx",
+      "line": 16,
+      "end_line": 37,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/DrawingToolbar/index.tsx#DrawingToolbar",
+      "component": "DrawingToolbar",
+      "source": "frontend/components/organisms/DrawingToolbar/index.tsx",
+      "line": 36,
+      "end_line": 63,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 76,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/EarningsChart/index.tsx#EarningsChart",
+      "component": "EarningsChart",
+      "source": "frontend/components/organisms/EarningsChart/index.tsx",
+      "line": 32,
+      "end_line": 73,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/FibPullbackParamsPanel/index.tsx#FibPullbackParamsPanel",
+      "component": "FibPullbackParamsPanel",
+      "source": "frontend/components/organisms/FibPullbackParamsPanel/index.tsx",
+      "line": 28,
+      "end_line": 127,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 70,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/FreshBacktestControls/index.tsx#FreshBacktestControls",
+      "component": "FreshBacktestControls",
+      "source": "frontend/components/organisms/FreshBacktestControls/index.tsx",
+      "line": 28,
+      "end_line": 30,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/FreshBacktestControls/index.tsx#FreshForm",
+      "component": "FreshForm",
+      "source": "frontend/components/organisms/FreshBacktestControls/index.tsx",
+      "line": 31,
+      "end_line": 105,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 148,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 151
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/IndicatorPanel/index.tsx#IndicatorPanel",
+      "component": "IndicatorPanel",
+      "source": "frontend/components/organisms/IndicatorPanel/index.tsx",
+      "line": 40,
+      "end_line": 142,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/InlineChartPanel/index.tsx#InlineChartPanel",
+      "component": "InlineChartPanel",
+      "source": "frontend/components/organisms/InlineChartPanel/index.tsx",
+      "line": 29,
+      "end_line": 69,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/JournalEntryForm/index.tsx#JournalEntryForm",
+      "component": "JournalEntryForm",
+      "source": "frontend/components/organisms/JournalEntryForm/index.tsx",
+      "line": 233,
+      "end_line": 488,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 198,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 211
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/JournalEntryForm/index.tsx#NumField",
+      "component": "NumField",
+      "source": "frontend/components/organisms/JournalEntryForm/index.tsx",
+      "line": 490,
+      "end_line": 504,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/JournalEntryTable/index.tsx#JournalEntryTable",
+      "component": "JournalEntryTable",
+      "source": "frontend/components/organisms/JournalEntryTable/index.tsx",
+      "line": 51,
+      "end_line": 145,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 88,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 121
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/JournalEntryTable/index.tsx#SortBtn",
+      "component": "SortBtn",
+      "source": "frontend/components/organisms/JournalEntryTable/index.tsx",
+      "line": 153,
+      "end_line": 175,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/MtfDashboard/index.tsx#MtfDashboard",
+      "component": "MtfDashboard",
+      "source": "frontend/components/organisms/MtfDashboard/index.tsx",
+      "line": 6,
+      "end_line": 26,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#AlertsIcon",
+      "component": "AlertsIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 136,
+      "end_line": 143,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#AnalysisIcon",
+      "component": "AnalysisIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 97,
+      "end_line": 104,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#CalendarIcon",
+      "component": "CalendarIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 121,
+      "end_line": 128,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 67,
+        "observed-asserted": 304,
+        "observed-ambiguous": 390,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#ChartIcon",
+      "component": "ChartIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 129,
+      "end_line": 135,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#DashboardIcon",
+      "component": "DashboardIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 79,
+      "end_line": 88,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#JournalIcon",
+      "component": "JournalIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 151,
+      "end_line": 159,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#NavItems",
+      "component": "NavItems",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 30,
+      "end_line": 62,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#PortfolioIcon",
+      "component": "PortfolioIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 113,
+      "end_line": 120,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#ScreenerIcon",
+      "component": "ScreenerIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 89,
+      "end_line": 96,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#SettingsIcon",
+      "component": "SettingsIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 160,
+      "end_line": 167,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#StrategyWatchIcon",
+      "component": "StrategyWatchIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 144,
+      "end_line": 150,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavItems/index.tsx#WatchlistIcon",
+      "component": "WatchlistIcon",
+      "source": "frontend/components/organisms/NavItems/index.tsx",
+      "line": 105,
+      "end_line": 112,
+      "owners": {
+        "numeric": "G",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 380,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/NavRail/index.tsx#NavRail",
+      "component": "NavRail",
+      "source": "frontend/components/organisms/NavRail/index.tsx",
+      "line": 18,
+      "end_line": 30,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/PipelineInspector/index.tsx#PipelineInspector",
+      "component": "PipelineInspector",
+      "source": "frontend/components/organisms/PipelineInspector/index.tsx",
+      "line": 41,
+      "end_line": 474,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 390,
+        "observed-ambiguous": 300,
+        "not-run": 0,
+        "total": 701
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/PnlChart/index.tsx#PnlChart",
+      "component": "PnlChart",
+      "source": "frontend/components/organisms/PnlChart/index.tsx",
+      "line": 66,
+      "end_line": 199,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/PnlHeatmap/index.tsx#PnlHeatmap",
+      "component": "PnlHeatmap",
+      "source": "frontend/components/organisms/PnlHeatmap/index.tsx",
+      "line": 106,
+      "end_line": 168,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 28,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 31
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/PnlHeatmap/index.tsx#WeekColumn",
+      "component": "WeekColumn",
+      "source": "frontend/components/organisms/PnlHeatmap/index.tsx",
+      "line": 42,
+      "end_line": 102,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 48,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/PreBreakoutParamsPanel/index.tsx#PreBreakoutParamsPanel",
+      "component": "PreBreakoutParamsPanel",
+      "source": "frontend/components/organisms/PreBreakoutParamsPanel/index.tsx",
+      "line": 32,
+      "end_line": 194,
+      "owners": {
+        "numeric": "E",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 111
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/RunScanButton/index.tsx#PlayIcon",
+      "component": "PlayIcon",
+      "source": "frontend/components/organisms/RunScanButton/index.tsx",
+      "line": 270,
+      "end_line": 276,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/RunScanButton/index.tsx#RunScanButton",
+      "component": "RunScanButton",
+      "source": "frontend/components/organisms/RunScanButton/index.tsx",
+      "line": 48,
+      "end_line": 268,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 124,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 151
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/RunScanButton/index.tsx#SpinnerIcon",
+      "component": "SpinnerIcon",
+      "source": "frontend/components/organisms/RunScanButton/index.tsx",
+      "line": 278,
+      "end_line": 285,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 7,
+        "observed-asserted": 24,
+        "observed-ambiguous": 30,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/index.tsx#SavedScanReportInspector",
+      "component": "SavedScanReportInspector",
+      "source": "frontend/components/organisms/SavedScanReportInspector/index.tsx",
+      "line": 30,
+      "end_line": 157,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 440,
+        "observed-ambiguous": 150,
+        "not-run": 0,
+        "total": 601
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/LegacyReport.tsx#LegacyReport",
+      "component": "LegacyReport",
+      "source": "frontend/components/organisms/SavedScanReportInspector/LegacyReport.tsx",
+      "line": 16,
+      "end_line": 40,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 140,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 251
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx#SavedExclusions",
+      "component": "SavedExclusions",
+      "source": "frontend/components/organisms/SavedScanReportInspector/SavedExclusions.tsx",
+      "line": 4,
+      "end_line": 17,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 90,
+        "observed-ambiguous": 250,
+        "not-run": 0,
+        "total": 351
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx#TerminalOutcomes",
+      "component": "TerminalOutcomes",
+      "source": "frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx",
+      "line": 87,
+      "end_line": 125,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 90,
+        "observed-ambiguous": 50,
+        "not-run": 0,
+        "total": 151
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx#Values",
+      "component": "Values",
+      "source": "frontend/components/organisms/SavedScanReportInspector/TerminalOutcomes.tsx",
+      "line": 75,
+      "end_line": 80,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 40,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 51
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SavedScanReportInspector/UnsavedReport.tsx#UnsavedReport",
+      "component": "UnsavedReport",
+      "source": "frontend/components/organisms/SavedScanReportInspector/UnsavedReport.tsx",
+      "line": 5,
+      "end_line": 18,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 11,
+        "observed-asserted": 140,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 251
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ScreenerStepGate/index.tsx#ScreenerStepGate",
+      "component": "ScreenerStepGate",
+      "source": "frontend/components/organisms/ScreenerStepGate/index.tsx",
+      "line": 73,
+      "end_line": 121,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 33,
+        "observed-asserted": 128,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 161
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SearchProfileBar/index.tsx#SearchProfileBar",
+      "component": "SearchProfileBar",
+      "source": "frontend/components/organisms/SearchProfileBar/index.tsx",
+      "line": 13,
+      "end_line": 137,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 68,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 71
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SendToBrokerDialog/index.tsx#RiskSummary",
+      "component": "RiskSummary",
+      "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "line": 299,
+      "end_line": 385,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/SendToBrokerDialog/index.tsx#SendToBrokerDialog",
+      "component": "SendToBrokerDialog",
+      "source": "frontend/components/organisms/SendToBrokerDialog/index.tsx",
+      "line": 75,
+      "end_line": 297,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 38,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StepNavBar/index.tsx#StepNavBar",
+      "component": "StepNavBar",
+      "source": "frontend/components/organisms/StepNavBar/index.tsx",
+      "line": 21,
+      "end_line": 136,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 29,
+        "observed-asserted": 492,
+        "observed-ambiguous": 320,
+        "not-run": 0,
+        "total": 841
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/Stepper/index.tsx#Stepper",
+      "component": "Stepper",
+      "source": "frontend/components/organisms/Stepper/index.tsx",
+      "line": 72,
+      "end_line": 104,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 684,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 761
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockAutoTradeArm/index.tsx#StockAutoTradeArm",
+      "component": "StockAutoTradeArm",
+      "source": "frontend/components/organisms/StockAutoTradeArm/index.tsx",
+      "line": 25,
+      "end_line": 132,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/index.tsx#EditableField",
+      "component": "EditableField",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "line": 133,
+      "end_line": 191,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 56,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/index.tsx#MethodEvidenceStack",
+      "component": "MethodEvidenceStack",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "line": 52,
+      "end_line": 60,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/index.tsx#PositionDisclosure",
+      "component": "PositionDisclosure",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "line": 41,
+      "end_line": 43,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/index.tsx#PositionGroup",
+      "component": "PositionGroup",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "line": 45,
+      "end_line": 49,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/index.tsx#StockPositionCard",
+      "component": "StockPositionCard",
+      "source": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "line": 210,
+      "end_line": 1628,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 266,
+        "observed-ambiguous": 330,
+        "not-run": 0,
+        "total": 601
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx#InitialStrategyTargets",
+      "component": "InitialStrategyTargets",
+      "source": "frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx",
+      "line": 13,
+      "end_line": 47,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 60,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockPositionCard/PositionEvidence.tsx#PositionEvidence",
+      "component": "PositionEvidence",
+      "source": "frontend/components/organisms/StockPositionCard/PositionEvidence.tsx",
+      "line": 9,
+      "end_line": 60,
+      "owners": {
+        "numeric": "D",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StockSendDialog/index.tsx#StockSendDialog",
+      "component": "StockSendDialog",
+      "source": "frontend/components/organisms/StockSendDialog/index.tsx",
+      "line": 42,
+      "end_line": 395,
+      "owners": {
+        "numeric": "F",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 116,
+        "observed-ambiguous": 100,
+        "not-run": 0,
+        "total": 221
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#NumField",
+      "component": "NumField",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "line": 50,
+      "end_line": 78,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 10,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#ResetToProfile",
+      "component": "ResetToProfile",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "line": 32,
+      "end_line": 46,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#SectionHeader",
+      "component": "SectionHeader",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "line": 80,
+      "end_line": 98,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StrategyParamsPanel/index.tsx#StrategyParamsPanel",
+      "component": "StrategyParamsPanel",
+      "source": "frontend/components/organisms/StrategyParamsPanel/index.tsx",
+      "line": 100,
+      "end_line": 310,
+      "owners": {
+        "numeric": "B",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 68,
+        "observed-ambiguous": 70,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/StructurePanel/index.tsx#StructurePanel",
+      "component": "StructurePanel",
+      "source": "frontend/components/organisms/StructurePanel/index.tsx",
+      "line": 25,
+      "end_line": 74,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 76,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 101
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ToastContainer/index.tsx#ToastContainer",
+      "component": "ToastContainer",
+      "source": "frontend/components/organisms/ToastContainer/index.tsx",
+      "line": 8,
+      "end_line": 25,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 8,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 11
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TopBar/index.tsx#TopBar",
+      "component": "TopBar",
+      "source": "frontend/components/organisms/TopBar/index.tsx",
+      "line": 75,
+      "end_line": 129,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 77,
+        "observed-asserted": 304,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 381
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#DetailCell",
+      "component": "DetailCell",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3981,
+      "end_line": 3990,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#EditableKV",
+      "component": "EditableKV",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3523,
+      "end_line": 3811,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 40,
+        "not-run": 0,
+        "total": 81
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#EditableTargetRow",
+      "component": "EditableTargetRow",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3379,
+      "end_line": 3520,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 36,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 61
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#KV",
+      "component": "KV",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3863,
+      "end_line": 3882,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#MaxLossOverrideEditor",
+      "component": "MaxLossOverrideEditor",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 4000,
+      "end_line": 4086,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 56,
+        "observed-ambiguous": 80,
+        "not-run": 0,
+        "total": 141
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#ProfitTargetRow",
+      "component": "ProfitTargetRow",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3884,
+      "end_line": 3979,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#TargetRow",
+      "component": "TargetRow",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 3813,
+      "end_line": 3861,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 16,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 21
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/TradeCard/index.tsx#TradeCard",
+      "component": "TradeCard",
+      "source": "frontend/components/organisms/TradeCard/index.tsx",
+      "line": 399,
+      "end_line": 3377,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 5,
+        "observed-asserted": 226,
+        "observed-ambiguous": 250,
+        "not-run": 0,
+        "total": 481
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/organisms/ValidationTable/index.tsx#ValidationTable",
+      "component": "ValidationTable",
+      "source": "frontend/components/organisms/ValidationTable/index.tsx",
+      "line": 24,
+      "end_line": 116,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 3,
+        "observed-asserted": 18,
+        "observed-ambiguous": 20,
+        "not-run": 0,
+        "total": 41
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/primitives/Data.tsx#Data",
+      "component": "Data",
+      "source": "frontend/components/primitives/Data.tsx",
+      "line": 53,
+      "end_line": 74,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 810,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 901
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/primitives/Text.tsx#Text",
+      "component": "Text",
+      "source": "frontend/components/primitives/Text.tsx",
+      "line": 51,
+      "end_line": 71,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 360,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 451
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/primitives/Title.tsx#Title",
+      "component": "Title",
+      "source": "frontend/components/primitives/Title.tsx",
+      "line": 26,
+      "end_line": 33,
+      "owners": {
+        "numeric": "C",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 360,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 451
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/StoreHydration/index.tsx#StoreHydration",
+      "component": "StoreHydration",
+      "source": "frontend/components/StoreHydration/index.tsx",
+      "line": 31,
+      "end_line": 150,
+      "owners": {
+        "numeric": "I",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 360,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 451
+      }
+    },
+    {
+      "definition_id": "surface:frontend/components/ThemeProvider/index.tsx#ThemeProvider",
+      "component": "ThemeProvider",
+      "source": "frontend/components/ThemeProvider/index.tsx",
+      "line": 15,
+      "end_line": 23,
+      "owners": {
+        "numeric": "H",
+        "persistence": "I",
+        "presentation": "J",
+        "navigation": "A"
+      },
+      "disposition_counts": {
+        "observed-verified": 91,
+        "observed-asserted": 360,
+        "observed-ambiguous": 0,
+        "not-run": 0,
+        "total": 451
+      }
+    }
+  ]
+}

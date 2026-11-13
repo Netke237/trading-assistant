@@ -1,0 +1,15 @@
+{
+  "overall": "PASS",
+  "headline": "Bullish trend confirmed across major indices with low volatility",
+  "metrics": [
+    { "label": "SPX Trend", "value": "Bullish", "status": "PASS" },
+    { "label": "VIX Level", "value": "14.2", "status": "PASS" },
+    { "label": "Breadth", "value": "78%", "status": "PASS" }
+  ],
+  "omm": {
+    "state": "bullish",
+    "probability": 0.85
+  },
+  "intraday_hmm": null,
+  "intraday_hmm_status": "ok"
+}

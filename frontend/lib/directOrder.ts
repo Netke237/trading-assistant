@@ -82,6 +82,10 @@ export type DirectOutcome =
   | { verdict: 'delete'; why: string }
   | { verdict: 'keep'; why: string; orderId: string | null };
 
+/** Order-id text (trimmed, lowercase) that identifies no order. Mirrors
+ *  `_UNUSABLE_ORDER_IDS` in backend/app/routers/broker.py. */
+export const UNUSABLE_ORDER_IDS: ReadonlySet<string> = new Set(['', 'unknown', 'none', 'null']);
+
 /** Classify a direct send's broker outcome: a thrown error, or a 2xx body. */
 export function classifyDirectFailure(
   input: { thrown: unknown } | { response: unknown },
@@ -102,7 +106,7 @@ export function classifyDirectFailure(
   const rawStatus = String(res.status ?? '');
   const status = normaliseStatus(res.status);
   const id = typeof res.order_id === 'string' ? res.order_id.trim() : '';
-  const usableId = id !== '' && id.toLowerCase() !== 'unknown' ? id : null;
+  const usableId = UNUSABLE_ORDER_IDS.has(id.toLowerCase()) ? null : id;
   if (status === 'rejected') return { verdict: 'delete', why: `broker status ${rawStatus}` };
   if (TERMINAL_KEEP.has(status)) return { verdict: 'keep', why: `broker status ${rawStatus}`, orderId: usableId };
   if (usableId == null) {

@@ -1,0 +1,52 @@
+{
+  "components": [
+    "KeyboardShortcuts",
+    "StepNavBar"
+  ],
+  "expected_attributes": {
+    "cheat_sheet_question_mark": true,
+    "leader_key_navigation_g": true,
+    "screener_step_jump_1_to_7": true,
+    "step_nav_arrows_left_right": true,
+    "suppressed_in_editable": true
+  },
+  "family": "global_shortcuts",
+  "findings": [],
+  "k_procedures_evaluated": [
+    "K5"
+  ],
+  "name": "Global Application Shortcuts",
+  "procedure_results": {
+    "K5": {
+      "dispatched_count": 3,
+      "executed_shortcuts": [
+        {
+          "action": "jump-to-screener-step-1",
+          "key": "1"
+        },
+        {
+          "action": "navigate-/dashboard",
+          "key": "g+d"
+        },
+        {
+          "action": "open-cheat-sheet",
+          "key": "?"
+        }
+      ],
+      "is_editable_active": false,
+      "status": "passed",
+      "suppressed_count": 0,
+      "suppression_reason": null
+    }
+  },
+  "routes": [
+    "frontend/app/(frame)/screener/step-1-regime/page.tsx",
+    "frontend/app/(frame)/dashboard/page.tsx",
+    "frontend/app/(frame)/watchlist/page.tsx",
+    "frontend/app/(frame)/portfolio/page.tsx",
+    "frontend/app/(frame)/calendar/page.tsx",
+    "frontend/app/(frame)/settings/page.tsx"
+  ],
+  "status": "passed",
+  "timestamp": "2026-10-24T19:00:00.000Z"
+}

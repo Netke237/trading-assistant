@@ -74,6 +74,7 @@ def _scan_with_calendar(client, earnings, dividend=None, symbol="MSFT", *,
         stack.enter_context(patch("app.data.confidence_cache.set_cached", AsyncMock()))
         stack.enter_context(patch("app.routers.scan.fetch_price_async", AsyncMock(return_value=price)))
         stack.enter_context(patch("app.routers.scan.fetch_candles_async", AsyncMock(return_value=candles)))
+        stack.enter_context(patch("app.routers.scan.get_daily_regime_bars", AsyncMock(return_value=candles)))
         stack.enter_context(patch("app.routers.scan.fetch_option_chain_async", AsyncMock(return_value=chain)))
         stack.enter_context(patch("app.routers.scan.fetch_company_name_async", AsyncMock(return_value="Test Co")))
         stack.enter_context(patch("app.routers.scan.fetch_fundamentals_calendar", AsyncMock(return_value=None)))

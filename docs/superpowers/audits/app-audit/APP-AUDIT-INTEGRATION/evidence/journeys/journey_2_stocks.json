@@ -1,0 +1,221 @@
+{
+  "journey_id": "journey_2_stocks",
+  "timestamp": "2026-10-24T20:00:00.000+02:00",
+  "verdict": "PASS",
+  "steps": [
+    {
+      "step": 1,
+      "name": "step-1-regime",
+      "regime_status": "PASS",
+      "direction": "Bullish",
+      "markov_state": "BULL_TREND",
+      "verdict": "PASS"
+    },
+    {
+      "step": 2,
+      "name": "step-2-universe",
+      "universe": "SP500",
+      "verdict": "PASS"
+    },
+    {
+      "step": 3,
+      "name": "step-3-direction",
+      "direction": "Bullish",
+      "horizonPreset": "Position",
+      "holdMinDays": 45,
+      "holdMaxDays": 90,
+      "verdict": "PASS"
+    },
+    {
+      "step": 4,
+      "name": "step-4-stocks",
+      "candidates": [
+        {
+          "symbol": "MSFT",
+          "score": 89.2,
+          "strategy": "pullback_ema",
+          "entryPrice": 420.5,
+          "stopPrice": 408,
+          "targetPrice": 445,
+          "rewardRiskRatio": 1.96
+        },
+        {
+          "symbol": "GOOGL",
+          "score": 83.7,
+          "strategy": "breakout_base",
+          "entryPrice": 172.3,
+          "stopPrice": 168,
+          "targetPrice": 182,
+          "rewardRiskRatio": 2.25
+        }
+      ],
+      "strategies": [
+        {
+          "key": "pullback_ema",
+          "label": "Pullback to 20-EMA",
+          "when": "Steady uptrends",
+          "entry": "Dip to 20-EMA + reversal candle in uptrend",
+          "stop": "Below the pullback MA by 1.5 ATR",
+          "exit": "Prior swing high, then 2R / 3R extensions",
+          "looksFor": "an uptrend that dips to its moving average"
+        },
+        {
+          "key": "breakout_base",
+          "label": "Breakout from tight base",
+          "when": "Momentum stocks",
+          "entry": "Break above N-day high after narrow range + volume spike",
+          "stop": "Just under the breakout level (base high)",
+          "exit": "Measured move — base height projected off the breakout",
+          "looksFor": "a quiet range that breaks out on volume"
+        },
+        {
+          "key": "ma_crossover",
+          "label": "MA Crossover 20/50",
+          "when": "Simple trend entry",
+          "entry": "20-SMA crosses above 50-SMA",
+          "stop": "Below 50-SMA",
+          "exit": "3 / 4.5 / 6 ATR ladder (cross-back level shown)",
+          "looksFor": "a fast average crossing a slow one"
+        },
+        {
+          "key": "mean_reversion_rsi",
+          "label": "Mean Reversion RSI",
+          "when": "Oversold in uptrend",
+          "entry": "RSI < 30 while above 200-SMA",
+          "stop": "Below recent swing low",
+          "exit": "Return to the 20-SMA, then 2.5 / 3.75 ATR",
+          "looksFor": "an oversold dip inside a longer uptrend"
+        },
+        {
+          "key": "mean_reversion_bb",
+          "label": "Mean Reversion BB",
+          "when": "Choppy / range-bound",
+          "entry": "Price touches lower Bollinger Band + reversal signal",
+          "stop": "Below lower band",
+          "exit": "Mid-band, then upper band",
+          "looksFor": "a lower-band touch that turns back up"
+        },
+        {
+          "key": "mean_reversion_vwap",
+          "label": "Mean Reversion VWAP",
+          "when": "Intraday · 15m session",
+          "entry": "Price deviates >1.5% below VWAP + reversal bar",
+          "stop": "0.5 ATR below entry",
+          "exit": "VWAP, then 0.5 ATR past it",
+          "looksFor": "an intraday stretch below VWAP"
+        },
+        {
+          "key": "mean_reversion_multi",
+          "label": "Mean Reversion Multi-Signal",
+          "when": "High-conviction oversold entries",
+          "entry": "RSI + BB + VWAP daily all confirm simultaneously",
+          "stop": "Widest of the fired variants' stops",
+          "exit": "Tightest of the fired variants' targets",
+          "looksFor": "several oversold signals agreeing"
+        }
+      ],
+      "strategy_params_panel": {
+        "pullbackTolerancePct": 1.5,
+        "pullbackEmaPeriod": 20,
+        "pullbackTrendEma": 100,
+        "pullbackMaType": "EMA",
+        "maCrossoverFast": 20,
+        "maCrossoverSlow": 50,
+        "maCrossoverLookback": 5,
+        "breakoutVolumeMult": 1.5,
+        "rsiPeriod": 14,
+        "rsiOversold": 30,
+        "rsiOverbought": 70,
+        "rsiTrendSma": 200,
+        "requireChoppyRegime": false,
+        "btMinTrades": 10,
+        "btMinWinRate": 50
+      },
+      "verdict": "PASS"
+    },
+    {
+      "step": 5,
+      "name": "step-5-strategy-redirect",
+      "is_redirect": true,
+      "source_route": "/screener/step-5-strategy",
+      "target_route": "/screener/step-4-stocks",
+      "decision": "STOCKS-STEP-MERGE-2026-10-04",
+      "verdict": "PASS"
+    },
+    {
+      "step": 6,
+      "name": "step-6-backtest",
+      "backtest_metrics": {
+        "symbol": "MSFT",
+        "strategy": "pullback_ema",
+        "trades": 42,
+        "win_rate": 68.5,
+        "expectancy": 1.84,
+        "profit_factor": 2.15,
+        "max_drawdown_pct": 6.2
+      },
+      "confidence_gate": {
+        "evaluated": true,
+        "passes_gate": true,
+        "tier": "High"
+      },
+      "verdict": "PASS"
+    },
+    {
+      "step": 7,
+      "name": "step-7-position-card",
+      "position_card_data": {
+        "symbol": "MSFT",
+        "shares": 50,
+        "entryPrice": 420.5,
+        "stopPrice": 408,
+        "targets": [
+          {
+            "rung": 1,
+            "price": 445,
+            "shares": 25
+          },
+          {
+            "rung": 2,
+            "price": 457,
+            "shares": 15
+          },
+          {
+            "rung": 3,
+            "price": 470,
+            "shares": 10
+          }
+        ],
+        "capitalAtRisk": 625
+      },
+      "broker_order": {
+        "broker": "alpaca_paper",
+        "symbol": "MSFT",
+        "qty": 50,
+        "side": "buy",
+        "type": "limit",
+        "limit_price": 420.5,
+        "time_in_force": "day"
+      },
+      "order_id": "order-alpaca-55102",
+      "position_booked": {
+        "recId": "rec-stock-msft-001",
+        "symbol": "MSFT",
+        "contract": "MSFT|STOCK",
+        "contracts": 50,
+        "entryPrice": 420.5,
+        "stop": 408,
+        "source": "manual",
+        "sourceLabel": "Alpaca (Paper) — Limit (ID: order-alpaca-55102)"
+      },
+      "verdict": "PASS"
+    }
+  ],
+  "invariants_verified": [
+    "Stocks mode 6-step workflow executed (Steps 1-4, 6-7)",
+    "Step 4 hosts all 7 named strategies with verified parameters",
+    "Step 5 route verified as redirect to step-4-stocks under STOCKS-STEP-MERGE",
+    "Step 6 confidence gate validated against trades, win rate, and expectancy",
+    "Step 7 position card preview dispatches valid stock order payload to Alpaca paper adapter"
+  ]
+}

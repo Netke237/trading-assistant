@@ -49,6 +49,7 @@ from app.schemas import (
 from app.services.fundamentals_store import get_fundamentals, prefetch_universe as _prefetch_fundamentals
 from app.services.fundamentals_gate import resolve_fundamentals_gate as _resolve_fundamentals_gate
 from app.scoring.fundamentals_scorer import score_fundamentals, FundamentalHealth
+from app.services.daily_regime_history import daily_regime_bar_count, get_daily_regime_bars
 from app.services.regime_omm import compute_omm as _compute_omm
 from app.services.regime_gate import resolve_regime_gate as _resolve_regime_gate
 from app.services.money_config import (
@@ -703,6 +704,8 @@ async def _process_symbol(
     _rcfg_doc = _load_scoring_cfg()
     observe_configuration("options.worker.scoring", _rcfg_doc, symbol=symbol)
     _rcfg = _rcfg_doc["regime"][horizon.lower()]
+    _daily_count = (daily_regime_bar_count(_rcfg_doc)
+                    if _rcfg["timeframe"] == "daily" else None)
     try:
         # A4: the regime is measured on the bars its `timeframe` names. Intraday
         # is `15min`; this block used to measure it on the DAILY `candles` and
@@ -725,7 +728,8 @@ async def _process_symbol(
                 _regime_bars = []
                 _regime_fetch_exc = exc
         else:
-            _regime_bars = candles
+            async with sem:
+                _regime_bars = await get_daily_regime_bars(symbol, _daily_count)
         if _regime_bars and len(_regime_bars) >= _rcfg.get("min_obs", 10):
             _omm = _compute_omm(
                 [b["close"] for b in _regime_bars],
@@ -756,7 +760,9 @@ async def _process_symbol(
                     "insufficient_data": False,
                 }
     except Exception as exc:
-        _log.warning("Regime signal failed for %s: %s", symbol, exc)
+        _log.warning("Regime signal failed for %s/%s: %s", symbol, horizon, type(exc).__name__)
+    if _rcfg["timeframe"] == "daily" and _regime_signal is None:
+        _log.warning("Daily regime unmeasured for %s/%s: unavailable/insufficient history or no OMM result", symbol, horizon)
 
     # The gate thresholds for THIS scan: the YAML block, then the Step-3
     # per-scan overrides. A COPY, because `_load_scoring_cfg()` is cached and
@@ -1798,6 +1804,8 @@ async def _execute_scan_core(
     # REJECT came back PASS (round-5 finding G2).
     try:
         validate_regime_block(_cfg_doc, (req.horizon,))
+        if _cfg_doc["regime"][req.horizon.lower()]["timeframe"] == "daily":
+            daily_regime_bar_count(_cfg_doc)
     except RegimeConfigError as e:
         _log.error("SCAN %s aborted on scoring_rules.yaml regime block: %s", scan_id, e)
         raise HTTPException(status_code=500, detail=str(e))

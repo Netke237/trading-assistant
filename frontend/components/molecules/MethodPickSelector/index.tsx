@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { Text, Data } from '@/components/primitives';
+import { days } from '@/lib/barrierRace';
 import type { MethodPick, PickedMethod, PickedStopBasis } from '@/types/domain';
 import styles from './MethodPickSelector.module.css';
 
@@ -53,6 +54,9 @@ export interface MethodPickRow {
   rowStockPrice: number | null;
   /** Premium space. Record only — never seeds, never alerts. */
   rowOptionPrice: number | null;
+  /** Display only, supplied from this same result row. Never persisted. */
+  displayOptionPrice?: number | null;
+  displayDays?: number | null;
 }
 
 export interface MethodPickOption {
@@ -202,15 +206,11 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
   return (
     <div className={styles.wrap}>
       <div className={styles.head}>
-        <Text size={11} tone="secondary" weight={400}>Exit method for this trade</Text>
-        {pick && (
-          <button type="button" className={styles.clear} onClick={() => onChange(null)}>
-            <Text size={10} tone="dim">Clear</Text>
-          </button>
-        )}
+        <Text size={12} tone="secondary" weight={400}>Exit method for this trade</Text>
+
       </div>
 
-      <div className={styles.row} role="radiogroup" aria-label="Exit method for this trade">
+      <div className={`${styles.row} ${styles.methodRow}`} role="radiogroup" aria-label="Exit method for this trade">
         {options.map((o) => (
           <button
             key={o.method}
@@ -219,23 +219,31 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
             aria-checked={pick?.method === o.method}
             aria-label={o.label}
             disabled={o.unavailable != null}
-            title={o.unavailable ?? undefined}
+            title={o.unavailable ?? `${o.rows.length} target${o.rows.length === 1 ? '' : 's'}`}
             className={pick?.method === o.method ? styles.btnActive : styles.btn}
             onClick={() => pickMethod(o.method)}
           >
-            <Text size={11} weight={500}>{o.label}</Text>
-            <Text size={10} tone="dim">
-              {o.unavailable ?? `${o.rows.length} target${o.rows.length === 1 ? '' : 's'}`}
-            </Text>
+            <Text size={12} weight={500}>{o.label}</Text>
           </button>
         ))}
+        {pick && (
+          <button type="button" className={styles.btn} onClick={() => onChange(null)}>
+            <Text size={12} tone="secondary">Clear</Text>
+          </button>
+        )}
       </div>
+
+      {options.some((o) => o.unavailable != null) && <Text size={12} tone="secondary">
+        {options.filter((o) => o.unavailable != null).map((o) => `${o.label}: ${o.unavailable}`).join(' · ')}
+      </Text>}
 
       {active && active.rows.length > 0 && (
         <>
-          <Text size={10} tone="dim">Target row</Text>
-          <div className={styles.row} role="radiogroup" aria-label="Target row">
-            {active.rows.map((r) => (
+          <Text size={12} tone="secondary">Target row</Text>
+          <div className={styles.targetRows} role="radiogroup" aria-label="Target row">
+            {active.rows.map((r) => {
+              const optionPrice = r.displayOptionPrice === undefined ? r.rowOptionPrice : r.displayOptionPrice;
+              return (
               <button
                 key={r.key}
                 type="button"
@@ -245,15 +253,21 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
                 className={activeRowKey === r.key ? styles.btnActive : styles.btn}
                 onClick={() => pickRow(r)}
               >
-                <Text size={11} weight={500}>{r.label}</Text>
-                <Data size={11} weight={400} tone="dim">{priceText(r.displayPrice)}</Data>
+                <Text size={12} weight={500}>{r.label}</Text>
+                <Data size={16} weight={500}>{r.rowStockPrice != null ? `${priceText(r.rowStockPrice)} stock` : r.rowOptionPrice != null ? `${priceText(r.rowOptionPrice)} option` : priceText(r.displayPrice)}</Data>
+                <Text size={12} tone="secondary">
+                  {r.rowStockPrice == null ? 'Stock target not supplied · ' : ''}
+                  {optionPrice != null && Number.isFinite(optionPrice) ? `${priceText(optionPrice)} option` : 'Option estimate not supplied'}
+                  {r.displayDays != null && Number.isFinite(r.displayDays) && r.displayDays >= 0 ? ` · ~${active.method === 'barrier_race' ? days(r.displayDays) : `${Math.round(r.displayDays)}d`} (calendar days)` : ' · Time not supplied'}
+                </Text>
               </button>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
 
-      <Text size={10} tone="dim">Judged on</Text>
+      <Text size={12} tone="secondary">Judged on</Text>
       <div className={styles.row} role="radiogroup" aria-label="Judged on">
         {STOP_BASES.map((b) => (
           <button
@@ -266,11 +280,11 @@ export function MethodPickSelector({ options, pick, onChange, now }: MethodPickS
             className={pick?.stopBasis === b.value ? styles.btnActive : styles.btn}
             onClick={() => pickBasis(b.value)}
           >
-            <Text size={11} weight={500}>{b.label}</Text>
+            <Text size={12} weight={500}>{b.label}</Text>
           </button>
         ))}
       </div>
-      <Text size={10} tone="dim">
+      <Text size={12} tone="secondary">
         A record of which stop this trade was judged on. It does not change which alerts fire —
         the stock stop and the premium stop both keep firing exactly as they do today.
       </Text>

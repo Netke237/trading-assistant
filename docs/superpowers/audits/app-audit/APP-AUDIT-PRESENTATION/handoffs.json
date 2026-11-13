@@ -1,0 +1,128 @@
+[
+  {
+    "id": "HANDOFF-B-01",
+    "title": "Late Settings timezone response overwrites operator edit",
+    "domain_lane": "Lane B",
+    "anomaly_type": "persistence-race-condition",
+    "description": "In Settings, when changing timezone while a prior fetch is in flight, the late arriving async response overwrites the user's unsaved selection.",
+    "related_issue": "#372",
+    "owning_remediation_lane": "Lane B"
+  },
+  {
+    "id": "HANDOFF-B-02",
+    "title": "Strategy scan stores zero override that backend rejects",
+    "domain_lane": "Lane B",
+    "anomaly_type": "validation-persistence-mismatch",
+    "description": "Settings UI allows saving strategy scan parameter overrides with 0 values for parameters where backend validation requires strictly positive floats, causing HTTP 422 upon subsequent scans.",
+    "related_issue": "#373",
+    "owning_remediation_lane": "Lane B"
+  },
+  {
+    "id": "HANDOFF-B-03",
+    "title": "Options millions market-cap filter unit scale sent as raw dollars",
+    "domain_lane": "Lane B",
+    "anomaly_type": "numeric-scaling-mismatch",
+    "description": "Step 2 Universe inputs market cap in millions, but frontend request dispatcher sends value directly without multiplying by 1,000,000, causing backend filter to reject all symbols.",
+    "related_issue": "#368",
+    "owning_remediation_lane": "Lane B"
+  },
+  {
+    "id": "HANDOFF-C-01",
+    "title": "252-day VIX percentile calculation window slices 259 prior bars",
+    "domain_lane": "Lane C",
+    "anomaly_type": "numeric-window-boundary",
+    "description": "In regime calculation, 252-day VIX percentile slice indexing bounds to 259 bars due to weekend/holiday bar inclusion, shifting percentile readings by up to 2.8 percentile points.",
+    "related_issue": "#369",
+    "owning_remediation_lane": "Lane C"
+  },
+  {
+    "id": "HANDOFF-C-02",
+    "title": "Market regime series length window calibration differences",
+    "domain_lane": "Lane C",
+    "anomaly_type": "analytics-series-parity",
+    "description": "Window A (2-year) has 43.7% unmeasured rate and silent gate bypasses compared to 5-year Window C, affecting Markov transition matrix stability.",
+    "related_issue": "#534",
+    "owning_remediation_lane": "Lane C"
+  },
+  {
+    "id": "HANDOFF-D-01",
+    "title": "Backtest confidence score cache boundary conditions",
+    "domain_lane": "Lane D",
+    "anomaly_type": "backtest-caching-parity",
+    "description": "Signal confidence cache in StrategyEngine lacks invalidation when strategy parameters are tweaked in Step 5 without changing symbol or horizon.",
+    "related_issue": "#62",
+    "owning_remediation_lane": "Lane D"
+  },
+  {
+    "id": "HANDOFF-E-01",
+    "title": "Fractional strike integer truncation in option scan router",
+    "domain_lane": "Lane E",
+    "anomaly_type": "numeric-truncation",
+    "description": "Casting option strike prices to int(strike) in scan router truncates half-dollar strikes (e.g. 182.5 -> 182), sending invalid contract identifiers to broker routing.",
+    "related_issue": "#162",
+    "owning_remediation_lane": "Lane E"
+  },
+  {
+    "id": "HANDOFF-E-02",
+    "title": "Non-monotonic +19 point discontinuity in option contract IV scoring",
+    "domain_lane": "Lane E",
+    "anomaly_type": "scoring-formula-discontinuity",
+    "description": "In contract validator, preferred_iv_max threshold branch causes an abrupt 19-point jump between IV 55 and IV 56, distorting contract ranking order.",
+    "related_issue": "#179",
+    "owning_remediation_lane": "Lane E"
+  },
+  {
+    "id": "HANDOFF-E-03",
+    "title": "Heston parameter grid search boundary pinning and Feller condition violation",
+    "domain_lane": "Lane E",
+    "anomaly_type": "pricing-model-overestimation",
+    "description": "Heston calibration grid pins parameters to extreme boundaries violating the Feller condition by 4.5x, inflating out-of-the-money contract valuations.",
+    "related_issue": "#335",
+    "owning_remediation_lane": "Lane E"
+  },
+  {
+    "id": "HANDOFF-E-04",
+    "title": "IEEE-754 precision noise in capitalAtRisk calculation",
+    "domain_lane": "Lane E",
+    "anomaly_type": "floating-point-representation",
+    "description": "Floating point multiplication (mid * contracts * 100) produces IEEE precision artifacts (e.g. 2070.0000000000005) instead of clean decimal cents.",
+    "related_issue": "#188",
+    "owning_remediation_lane": "Lane E"
+  },
+  {
+    "id": "HANDOFF-F-01",
+    "title": "Position edit drawer quantity increase retains original fill price",
+    "domain_lane": "Lane F",
+    "anomaly_type": "portfolio-cost-basis-calculation",
+    "description": "Increasing position size in drawer keeps previous average fill price rather than requiring weighted average cost entry, skewing open P&L.",
+    "related_issue": "#323",
+    "owning_remediation_lane": "Lane F"
+  },
+  {
+    "id": "HANDOFF-G-01",
+    "title": "Alert condition rule builder permits empty indicator string",
+    "domain_lane": "Lane G",
+    "anomaly_type": "alert-validation-persistence",
+    "description": "Saving an alert with indicator '' passes client validation but causes evaluator runtime exception during evaluation loop.",
+    "related_issue": "#107",
+    "owning_remediation_lane": "Lane G"
+  },
+  {
+    "id": "HANDOFF-H-01",
+    "title": "Tradier market-data governor HTTP timing and Windows TLS client connection",
+    "domain_lane": "Lane H",
+    "anomaly_type": "provider-governor-timing",
+    "description": "0.5s HTTP governor test timings vary under Windows TLS client handshake latency, causing occasional test threshold misses.",
+    "related_issue": "#169",
+    "owning_remediation_lane": "Lane H"
+  },
+  {
+    "id": "HANDOFF-I-01",
+    "title": "Production-gated /dev/components route in App Router",
+    "domain_lane": "Lane I",
+    "anomaly_type": "route-accessibility-production-gate",
+    "description": "The /dev/components gallery is gated behind process.env.NODE_ENV !== 'production' and returns 404 in production builds.",
+    "related_issue": "#348",
+    "owning_remediation_lane": "Lane I"
+  }
+]

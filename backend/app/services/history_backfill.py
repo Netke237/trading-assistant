@@ -33,6 +33,7 @@ from app.services import historical_store as hs
 from app.services import history_incremental as hi
 from app.services.bars_changed import notify_bars_changed
 from app.services.history_basis import history_lock, seam_signature
+from app.services.history_gap_detector import detect_history_gaps
 
 logger = logging.getLogger(__name__)
 K = hi.NightlyKind
@@ -83,23 +84,58 @@ _IDENTITY_DATES = 5
 _IDENTITY_TOLERANCE = Decimal("0.005")
 
 
+_PRICE_FIELDS = ("open", "high", "low", "close")
+
+
+def _unfinalized_latest_day(now) -> date:
+    """The one date whose bar may still be unfinished at ``now``: the latest settled weekday
+    (the ET date of ``last_settle_boundary``). The nightly runs at 20:00 ET, two hours after
+    that day settles, and Yahoo has not finished its daily bar by then (#574)."""
+    return hs.last_settle_boundary(now).astimezone(hs.MARKET_TZ).date()
+
+
 def _validated(bars, start, end):
+    """The reply's settled in-window bars by date; any invalid bar rejects the whole reply.
+
+    One exception (#574): the reply's latest bar, dated ``_unfinalized_latest_day``, with
+    only invalid price fields (``adj_factor`` and source valid), is not final yet. It is
+    left out and logged, still counts for the duplicate and mixed-source checks, and is
+    fetched again by a later run, where it is no longer the latest and so is strict again.
+    """
+    now = hs._utcnow()
+    latest = _unfinalized_latest_day(now)
     out = {}
+    unfinished = None          # (date, first invalid price field, bar)
     for bar in bars or []:
         d = hs._bar_date(bar)
-        if not start <= d <= end or not hs.is_settled(d, hs._utcnow()):
+        if not start <= d <= end or not hs.is_settled(d, now):
             continue
-        if d in out:
+        if d in out or (unfinished is not None and unfinished[0] == d):
             raise HistorySeamMismatch("duplicate provider date")
+        bad = None
         for field in ("open", "high", "low", "close", "adj_factor"):
             value = float(bar.get(field) or 0)
             if not math.isfinite(value) or value <= 0:
-                raise HistorySeamMismatch(f"invalid {field} on {d}")
+                if d != latest or field not in _PRICE_FIELDS:
+                    raise HistorySeamMismatch(f"invalid {field} on {d}")
+                bad = bad or field
         if bar.get("source") not in {"alpaca", "tiingo", "yfinance"}:
             raise HistorySeamMismatch("unknown adjustment basis")
+        if bad is not None:
+            unfinished = (d, bad, bar)
+            continue
         out[d] = bar
-    if len({b["source"] for b in out.values()}) > 1:
+    sources = {b["source"] for b in out.values()}
+    if unfinished is not None:
+        sources.add(unfinished[2]["source"])
+    if len(sources) > 1:
         raise HistorySeamMismatch("provider reply mixes sources")
+    if unfinished is not None:
+        d, field, bar = unfinished
+        if any(other > d for other in out):
+            raise HistorySeamMismatch(f"invalid {field} on {d}")
+        logger.warning("history: %s bar for %s is not final yet (invalid %s); "
+                       "left out until a later run", bar["source"], d, field)
     return dict(sorted(out.items()))
 
 
@@ -157,6 +193,15 @@ async def _single_provider_locked(db, symbol, start, end, providers) -> RebuildR
             for a, b in zip(dates, dates[1:]):
                 if b - a > _MAX_GAP:
                     raise ValueError(f"internal gap {a} to {b}")
+            cal_gaps = detect_history_gaps(symbol, set(dates), start=dates[0], end=dates[-1])
+            if cal_gaps:
+                logger.warning(
+                    "history: %s candidate from %s has %d missing NYSE trading day(s) (sample: %s)",
+                    symbol,
+                    provider,
+                    len(cal_gaps),
+                    [d.isoformat() for d in cal_gaps[:5]],
+                )
             shared = [row for row in existing if row[3] != provider and row[0] in candidate]
             for d, close, factor, source in shared[-_IDENTITY_DATES:]:
                 bar = candidate[d]

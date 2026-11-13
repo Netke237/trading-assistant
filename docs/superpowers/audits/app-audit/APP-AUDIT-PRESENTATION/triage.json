@@ -1,0 +1,148 @@
+{
+  "phase": "APP-AUDIT-PRESENTATION-EXECUTION",
+  "lane": "J2",
+  "purpose": "presentation-evidence-triage-catalog",
+  "source_sha": "4a74d186468afe0a7fc4c53e785b24b5c1f72b42",
+  "summary": {
+    "total_candidates": 13,
+    "findings": 6,
+    "not_a_finding": 7
+  },
+  "candidates": [
+    {
+      "candidate_id": "TRIAGE-C1-NULL-TOKEN",
+      "detector": "C1-raw-interpolations",
+      "affected_targets": [
+        "all 45 route entries under state: zero-false-null-absent"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "The token 'null' was matched by pattern /\\bnull\\b/ inside the diagnostic header string 'State: zero-false-null-absent' rendered in synthetic test cards. Inspection confirms zero raw unhandled null/undefined/NaN tokens leaked from production application code.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-C2-ACCESSIBLE-LABELS",
+      "detector": "C2-missing-labels",
+      "affected_targets": [
+        "all interactive controls across 45 route entries"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "All buttons, anchor tags, and input elements across captured routes possess accessible names via text content, aria-label, or title attributes.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-C3-NULL-ZERO-FALSE",
+      "detector": "C3-null-zero-false",
+      "affected_targets": [
+        "numeric metrics, badges, and position cards"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "Zeroes render as '0', falses render with proper negative indicators, and null values render as em-dash ('—') without raw boolean/null leak.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-C4-VISUAL-RENDERING",
+      "detector": "C4-visual-rendering",
+      "affected_targets": [
+        "all 45 route entries at min-width and 1920x1080"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "All routes render within viewport constraints. Sub-gate viewports correctly trigger MinWidthGate overlay at 1199px/1279px.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-C5-LAYOUT-OVERFLOW",
+      "detector": "C5-layout-overflow",
+      "affected_targets": [
+        "all routes and data tables"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "No unhandled horizontal layout overflow detected (scrollWidth equals clientWidth on root containers at supported desktop resolutions).",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-C6-WCAG-CONTRAST",
+      "detector": "C6-wcag-axe",
+      "affected_targets": [
+        "app/globals.css token palette in dark and light themes"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "Global design system token palette passes WCAG 2.1 AA text contrast thresholds across light and dark theme envelopes.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-K1-K5-KEYBOARD-NAV",
+      "detector": "K1-K5-keyboard-procedures",
+      "affected_targets": [
+        "dialogs, drawers, disclosures, tabs, switches, shortcuts"
+      ],
+      "verdict": "not-a-finding",
+      "justification": "Interactive elements are keyboard reachable via Tab, focus rings are visible within viewport, Enter/Space/Arrow operate controls, Escape closes overlays and returns focus, and global shortcuts fire when idle and are suppressed in form inputs.",
+      "defect_ref": null
+    },
+    {
+      "candidate_id": "TRIAGE-K6-CANVAS-FALLBACK",
+      "detector": "K6-canvas-fallback",
+      "affected_targets": [
+        "frontend/app/(frame)/chart/page.tsx",
+        "frontend/app/chart/standalone/page.tsx",
+        "frontend/app/(frame)/analysis/page.tsx",
+        "frontend/app/(frame)/screener/step-4-ranking/page.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Lightweight-charts HTML5 canvas renders price bars graphically without an off-screen accessible DOM data table or ARIA text description for screen reader inspection.",
+      "defect_ref": "J-005"
+    },
+    {
+      "candidate_id": "TRIAGE-NAV-SLOT-CALENDAR",
+      "detector": "A-UI-RAIL-CALENDAR-detector",
+      "affected_targets": [
+        "frontend/app/(frame)/calendar/page.tsx",
+        "frontend/app/(frame)/@contextRail/default.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Soft client-side navigation from /portfolio to /calendar retains the Portfolio @contextRail instead of mounting the root fallback rail, causing visual state discrepancy until page reload.",
+      "defect_ref": "J-001"
+    },
+    {
+      "candidate_id": "TRIAGE-NAV-SLOT-SETTINGS",
+      "detector": "A-UI-RAIL-SETTINGS-detector",
+      "affected_targets": [
+        "frontend/app/(frame)/settings/page.tsx",
+        "frontend/app/(frame)/@contextRail/default.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Soft client-side navigation from /watchlist to /settings retains the Watchlist @contextRail instead of mounting the root fallback rail, causing visual state discrepancy until page reload.",
+      "defect_ref": "J-002"
+    },
+    {
+      "candidate_id": "TRIAGE-SETTINGS-DENSITY-RESET",
+      "detector": "B-DENSITY-detector",
+      "affected_targets": [
+        "frontend/app/(frame)/settings/page.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Switching sub-navigation sections within Settings resets the displayed density radio button selection because local component state initializes from default rather than persisted theme store.",
+      "defect_ref": "J-003"
+    },
+    {
+      "candidate_id": "TRIAGE-SETTINGS-SAVE-FEEDBACK",
+      "detector": "B-SAVE-FEEDBACK-detector",
+      "affected_targets": [
+        "frontend/app/(frame)/settings/page.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Settings footer briefly displays 'Saved' confirmation even when backend API save fails or request is aborted, misleading operator on persistence outcome.",
+      "defect_ref": "J-004"
+    },
+    {
+      "candidate_id": "TRIAGE-STEP2-CAP-UNITS",
+      "detector": "B-CAP-UNITS-detector",
+      "affected_targets": [
+        "frontend/app/(frame)/screener/step-2-universe/page.tsx"
+      ],
+      "verdict": "finding",
+      "justification": "Step 2 Universe market-cap filter input label displays generic '$' without '(in $M)' indicator, while downstream option scanner expects values in millions.",
+      "defect_ref": "J-006"
+    }
+  ]
+}

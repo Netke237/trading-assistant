@@ -1,0 +1,23 @@
+{
+  "implementation": "651f89d2c863d6d84333063fc6674a6b3313709e",
+  "typecheck": "passed",
+  "expected_red": {
+    "suites_failed": 2,
+    "tests_failed": 2,
+    "tests_passed": 18
+  },
+  "full_run": {
+    "suites_passed": 333,
+    "suites_failed": 3,
+    "tests_passed": 6220,
+    "tests_failed": 5,
+    "tests_total": 6225
+  },
+  "affected_rerun": {
+    "suites_passed": 3,
+    "tests_passed": 28
+  },
+  "unchanged_passing_suites": 333,
+  "remaining_failures": 0,
+  "production_changed_after_full_run": false
+}

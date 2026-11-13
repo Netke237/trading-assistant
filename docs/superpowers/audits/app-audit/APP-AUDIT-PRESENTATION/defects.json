@@ -1,0 +1,114 @@
+[
+  {
+    "id": "J-001",
+    "title": "Soft navigation to Calendar retains prior active @contextRail slot instead of mounting root fallback",
+    "affected_routes": [
+      "/calendar",
+      "frontend/app/(frame)/calendar/page.tsx",
+      "frontend/app/(frame)/@contextRail/default.tsx"
+    ],
+    "state_theme_viewport": {
+      "state": "normal",
+      "theme": "both",
+      "viewport": ">=1280x800"
+    },
+    "reproduction_command": "Navigate from /portfolio to /calendar via client NavRail link; observe retained Portfolio rail; refresh page to observe default rail.",
+    "expected": "Navigating to /calendar mounts the root @contextRail fallback (default.tsx) consistently across both client soft navigation and hard page reload.",
+    "actual": "Client soft navigation retains the preceding route's active rail (e.g. Portfolio Greek totals) until hard browser reload occurs.",
+    "severity_class": "degraded",
+    "proposed_owning_remediation_lane": "Lane J / Lane A (#395)"
+  },
+  {
+    "id": "J-002",
+    "title": "Soft navigation to Settings retains prior active @contextRail slot instead of mounting root fallback",
+    "affected_routes": [
+      "/settings",
+      "frontend/app/(frame)/settings/page.tsx",
+      "frontend/app/(frame)/@contextRail/default.tsx"
+    ],
+    "state_theme_viewport": {
+      "state": "normal",
+      "theme": "both",
+      "viewport": ">=1280x800"
+    },
+    "reproduction_command": "Navigate from /watchlist to /settings via client NavRail link; observe retained Watchlist rail; refresh page to observe default rail.",
+    "expected": "Navigating to /settings mounts the root @contextRail fallback (default.tsx) consistently across both client soft navigation and hard page reload.",
+    "actual": "Client soft navigation retains the preceding route's active rail (e.g. Watchlist status counts) until hard browser reload occurs.",
+    "severity_class": "degraded",
+    "proposed_owning_remediation_lane": "Lane J / Lane A (#395)"
+  },
+  {
+    "id": "J-003",
+    "title": "Appearance row density selection resets visually when switching Settings sub-sections",
+    "affected_routes": [
+      "/settings",
+      "frontend/app/(frame)/settings/page.tsx"
+    ],
+    "state_theme_viewport": {
+      "state": "normal",
+      "theme": "both",
+      "viewport": ">=1280x800"
+    },
+    "reproduction_command": "Open /settings, select 'Compact' density, click 'Brokers' in sub-navigation, then click back to 'Appearance'.",
+    "expected": "The 'Compact' density radio selection remains selected reflecting active theme store state.",
+    "actual": "The Appearance form remounts and resets local density radio button state to default 'Comfortable' while root HTML data-density remains compact.",
+    "severity_class": "cosmetic",
+    "proposed_owning_remediation_lane": "Lane J / Lane B (#370)"
+  },
+  {
+    "id": "J-004",
+    "title": "Settings footer confirms 'Saved' after a failed or unsubmitted backend save",
+    "affected_routes": [
+      "/settings",
+      "frontend/app/(frame)/settings/page.tsx"
+    ],
+    "state_theme_viewport": {
+      "state": "failed-cancelled",
+      "theme": "both",
+      "viewport": ">=1280x800"
+    },
+    "reproduction_command": "Simulate network error (HTTP 500 or offline) and click 'Save Settings' in Risk or Strategy scan section.",
+    "expected": "Error message displayed and 'Saved' confirmation suppressed.",
+    "actual": "Footer briefly displays green 'Saved' indicator before or regardless of network failure, misleading operator on persistence outcome.",
+    "severity_class": "misleading",
+    "proposed_owning_remediation_lane": "Lane J / Lane B (#371)"
+  },
+  {
+    "id": "J-005",
+    "title": "Chart canvas lacks an accessible DOM table or ARIA text alternative for assistive inspection",
+    "affected_routes": [
+      "/chart",
+      "/chart/standalone",
+      "/analysis",
+      "/screener/step-4-ranking"
+    ],
+    "state_theme_viewport": {
+      "state": "all",
+      "theme": "both",
+      "viewport": "all"
+    },
+    "reproduction_command": "Navigate to /chart and tab through CandlestickChart using a screen reader.",
+    "expected": "Chart area exposes an off-screen semantic data table or detailed ARIA description detailing high/low/close candlestick metrics.",
+    "actual": "Lightweight-charts renders purely into an HTML5 <canvas> element without fallback subtree; assistive tech only reads generic header text.",
+    "severity_class": "degraded",
+    "proposed_owning_remediation_lane": "Lane J"
+  },
+  {
+    "id": "J-006",
+    "title": "Step 2 Universe market-cap filter inputs show generic '$' label without millions unit indicator",
+    "affected_routes": [
+      "/screener/step-2-universe",
+      "frontend/app/(frame)/screener/step-2-universe/page.tsx"
+    ],
+    "state_theme_viewport": {
+      "state": "normal",
+      "theme": "both",
+      "viewport": ">=1280x800"
+    },
+    "reproduction_command": "Open /screener/step-2-universe and inspect market-cap filter labels vs payload dispatched to backend.",
+    "expected": "Market cap input label explicitly indicates '(in $M)' or '$ Millions' to match options backend unit expectations.",
+    "actual": "Label displays generic '$' which leads operators to enter raw dollar amounts instead of millions, causing unexpected empty scan results.",
+    "severity_class": "misleading",
+    "proposed_owning_remediation_lane": "Lane J / Lane B (#368)"
+  }
+]

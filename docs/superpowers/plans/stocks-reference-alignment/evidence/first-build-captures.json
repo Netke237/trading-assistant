@@ -1,0 +1,19 @@
+{
+  "scope": "Task 1 initial capture; no calculation/save/order actions",
+  "captures": [
+    {
+      "file": "first-build-initial-1366-dark.png",
+      "theme": "dark",
+      "pageErrors": [],
+      "openDetails": 0,
+      "horizontalOverflow": false
+    },
+    {
+      "file": "first-build-initial-1366-light.png",
+      "theme": "light",
+      "pageErrors": [],
+      "openDetails": 0,
+      "horizontalOverflow": false
+    }
+  ]
+}

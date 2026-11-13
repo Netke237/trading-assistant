@@ -1,0 +1,69 @@
+{
+  "journey_id": "journey_4_cross_store_isolation",
+  "timestamp": "2026-10-24T20:00:00.000+02:00",
+  "verdict": "PASS",
+  "mode_switching": {
+    "modes_tested": [
+      "options",
+      "stocks",
+      "prebreakout"
+    ],
+    "parameters_cross_contaminated": false,
+    "filter_constraints_leaked": false,
+    "scan_params_intact": true,
+    "scan_store_filters_intact": true
+  },
+  "stale_async_isolation": {
+    "simulated_scenario": "late_options_response_arriving_in_stocks_mode",
+    "current_mode": "stocks",
+    "scan_result_updated": true,
+    "stock_scan_result_corrupted": false,
+    "stock_scan_result_preserved": true
+  },
+  "persistence_reload": {
+    "rehydrated_stores": {
+      "bamendjou:theme": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou-settings": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou-watchlist-v1": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou-portfolio-v1": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou-risk-v1": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou-alerts-v2": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      },
+      "bamendjou:drawings": {
+        "parse_error": null,
+        "has_state_or_payload": true,
+        "integrity_verified": true
+      }
+    },
+    "total_keys": 7,
+    "all_clean": true
+  },
+  "invariants_verified": [
+    "Rapid mode switches between Options, Stocks, and Pre-Breakout preserve store isolation",
+    "Late asynchronous Options scan responses do not mutate or corrupt active stockScanResult",
+    "All 7 primary localStorage persistence keys rehydrate cleanly without parse errors or key drop"
+  ]
+}

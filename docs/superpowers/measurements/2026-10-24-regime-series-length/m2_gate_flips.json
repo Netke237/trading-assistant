@@ -1,0 +1,142 @@
+{
+  "metadata": {
+    "title": "M2 Gate Threshold Impacts & Status Flips",
+    "as_of_date": "2026-10-24",
+    "generated_at": "2026-10-24T10:52:10.197189+00:00",
+    "gate_thresholds": {
+      "caution_pct": -15,
+      "reject_pct": -40,
+      "require_stable_for_reject": true
+    }
+  },
+  "silent_bypasses": {
+    "A_to_B": {
+      "total": 288,
+      "caution": 287,
+      "reject": 1,
+      "raw_headwind_15": 288,
+      "raw_headwind_40": 177
+    },
+    "A_to_C": {
+      "total": 288,
+      "caution": 287,
+      "reject": 1,
+      "raw_headwind_15": 288,
+      "raw_headwind_40": 177
+    },
+    "A304_to_B": {
+      "total": 272,
+      "caution": 272,
+      "reject": 0,
+      "raw_headwind_15": 272,
+      "raw_headwind_40": 170
+    },
+    "A304_to_C": {
+      "total": 272,
+      "caution": 272,
+      "reject": 0,
+      "raw_headwind_15": 272,
+      "raw_headwind_40": 170
+    }
+  },
+  "gate_transitions": {
+    "A_to_B": {
+      "UNMEASURED -> UNMEASURED": 148,
+      "PASS -> PASS": 599,
+      "CAUTION -> PASS": 207,
+      "CAUTION -> CAUTION": 147,
+      "UNMEASURED -> PASS": 508,
+      "UNMEASURED -> CAUTION": 287,
+      "REJECT -> PASS": 37,
+      "PASS -> CAUTION": 170,
+      "REJECT -> CAUTION": 43,
+      "CAUTION -> REJECT": 4,
+      "PASS -> REJECT": 2,
+      "UNMEASURED -> REJECT": 1,
+      "REJECT -> REJECT": 7
+    },
+    "A_to_C": {
+      "UNMEASURED -> UNMEASURED": 148,
+      "PASS -> PASS": 599,
+      "CAUTION -> PASS": 207,
+      "CAUTION -> CAUTION": 147,
+      "UNMEASURED -> PASS": 508,
+      "UNMEASURED -> CAUTION": 287,
+      "REJECT -> PASS": 37,
+      "PASS -> CAUTION": 170,
+      "REJECT -> CAUTION": 43,
+      "CAUTION -> REJECT": 4,
+      "PASS -> REJECT": 2,
+      "UNMEASURED -> REJECT": 1,
+      "REJECT -> REJECT": 7
+    },
+    "B_to_C": {
+      "UNMEASURED -> UNMEASURED": 148,
+      "PASS -> PASS": 1351,
+      "CAUTION -> CAUTION": 647,
+      "REJECT -> REJECT": 14
+    },
+    "A304_to_B": {
+      "UNMEASURED -> UNMEASURED": 148,
+      "PASS -> PASS": 620,
+      "CAUTION -> PASS": 217,
+      "CAUTION -> CAUTION": 153,
+      "UNMEASURED -> PASS": 474,
+      "UNMEASURED -> CAUTION": 272,
+      "REJECT -> PASS": 40,
+      "PASS -> CAUTION": 176,
+      "REJECT -> CAUTION": 46,
+      "CAUTION -> REJECT": 5,
+      "PASS -> REJECT": 2,
+      "REJECT -> REJECT": 7
+    },
+    "A304_to_C": {
+      "UNMEASURED -> UNMEASURED": 148,
+      "PASS -> PASS": 620,
+      "CAUTION -> PASS": 217,
+      "CAUTION -> CAUTION": 153,
+      "UNMEASURED -> PASS": 474,
+      "UNMEASURED -> CAUTION": 272,
+      "REJECT -> PASS": 40,
+      "PASS -> CAUTION": 176,
+      "REJECT -> CAUTION": 46,
+      "CAUTION -> REJECT": 5,
+      "PASS -> REJECT": 2,
+      "REJECT -> REJECT": 7
+    }
+  },
+  "conviction_deltas": {
+    "C_minus_A": {
+      "count": 1216,
+      "min": -150,
+      "max": 150,
+      "median": 0.0,
+      "mean": 0.0,
+      "std_dev": 47.2453
+    },
+    "B_minus_A": {
+      "count": 1216,
+      "min": -150,
+      "max": 150,
+      "median": 0.0,
+      "mean": 0.0,
+      "std_dev": 47.2453
+    },
+    "C_minus_B": {
+      "count": 2012,
+      "min": 0,
+      "max": 0,
+      "median": 0.0,
+      "mean": 0.0,
+      "std_dev": 0.0
+    },
+    "C_minus_A304": {
+      "count": 1266,
+      "min": -140,
+      "max": 140,
+      "median": 0.0,
+      "mean": 0.0,
+      "std_dev": 47.1458
+    }
+  }
+}

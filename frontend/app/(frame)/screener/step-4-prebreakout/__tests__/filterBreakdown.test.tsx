@@ -36,6 +36,7 @@ test('candidates heading carries the filter breakdown; opening it keeps controls
   expect(screen.getByRole('button', { name: 'Select AAA' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Select BBB' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Run Scan' })).toBeInTheDocument();
+  fireEvent.click(screen.getByText('Scan parameters'));
   expect(screen.getAllByRole('spinbutton').length).toBeGreaterThan(0);
   // Rows restored from the store carry no run id: the saved report is not relabelled as the table's run.
   expect(within(panel).getByText(/belongs to saved run prebreakout-saved, not to the rows shown/)).toBeInTheDocument();

@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.schemas.payload_depth import validate_payload_depth
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, Union
 from pydantic import (
     AfterValidator, AliasChoices, BaseModel, ConfigDict, Field, StringConstraints,
     field_validator, model_validator,
@@ -1515,6 +1515,35 @@ class PortfolioPositionSchema(BaseModel):
             pickedAt=obj.picked_at,
             holdMaxDays=getattr(obj, "hold_max_days", None),
         )
+
+
+class PositionPreviewDifference(BaseModel):
+    """One field the server resolved differently from the request (#582)."""
+    field: str
+    requested: Any = None
+    effective: Any = None
+    # The writer's reason: live_quote, exposure_resize, reanchored, unset,
+    # rung_rescaled, derived_from_dollar, premium_stop_unapplied,
+    # inherits_global, ladder_fallback.
+    reason: str
+
+
+class PositionPreviewSchema(BaseModel):
+    """POST /api/portfolio/preview, and the `preview` of a 412 review_required
+    (#582). `position` is what the create WOULD store, resolved by the
+    create's own code; nothing was written. `position.id`/`createdAt` are
+    empty because no row exists. `fingerprint` is what a confirmation sends
+    back in `X-Review-Fingerprint`."""
+    fingerprint: str
+    position: PortfolioPositionSchema
+    adjustedQty: Optional[int] = None
+    premiumStopUnapplied: Optional[str] = None
+    entryFromLiveQuote: bool = False
+    entryStockPrice: Optional[float] = None
+    # The global premium stop a NULL `position.premiumStopPct` inherits; None
+    # when the row carries its own fraction.
+    inheritedPremiumStopPct: Optional[float] = None
+    differences: list[PositionPreviewDifference] = []
 
 
 class ClosePositionRequest(BaseModel):

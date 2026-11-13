@@ -102,13 +102,13 @@ it('falls back from an absent symbol and renders full Position information and b
   expect(screen.getByText('60%')).toHaveAttribute('title');
   for (const broker of ['Recommendation', 'IBKR Paper', 'Tradier Paper', 'Alpaca Paper', 'Tastytrade Paper']) expect(screen.getByRole('button', { name: broker })).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Ladder' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /^estimate$/i })).toBeInTheDocument();
+  expect(estimateButton()).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /check structure/i })).toBeInTheDocument();
   expect(screen.getByText('Auto-trade mode')).toBeInTheDocument(); await screen.findByText('Now: $151.00');
 });
 it('preserves edits, allocations, completed evidence and explicit pick across navigation and remount', async () => {
   const view = render(<Step7PositionCardPage />); await edit('ENTRY', '152'); await edit('SHARES', '50');
-  fireEvent.click(screen.getByRole('button', { name: /^estimate$/i })); await screen.findByText('62%');
+  fireEvent.click(estimateButton()); await screen.findByText('62%');
   fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(screen.queryByText('62%')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '150.00' })).toBeInTheDocument();
@@ -127,7 +127,7 @@ it('retires equal-id replacement evidence and ignores stale quote and analytics 
   (api.getStockFirstPassage as jest.Mock).mockReturnValueOnce(oldEstimate.promise);
   render(<Step7PositionCardPage />); await waitFor(() => expect(api.getStockQuote).toHaveBeenCalled());
   await edit('ENTRY', '152'); fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
-  fireEvent.click(screen.getByRole('button', { name: /^estimate$/i }));
+  fireEvent.click(estimateButton());
   act(() => useScanStore.getState().setStockScanResult(scan()));
   expect(screen.getByRole('button', { name: '150.00' })).toBeInTheDocument(); expect(screen.getByRole('radio', { name: 'Ladder' })).not.toBeChecked();
   await screen.findByText('Now: $200.00');
@@ -255,3 +255,11 @@ it('B7 inherits the earnings veto through the shared stock card and basket', asy
   expect(saveCalls()).toHaveLength(0);
   expect(api.postStockOrder).not.toHaveBeenCalled();
 });
+
+// Method viewing is independent of the saved execution pick. Reveal the
+// calculation action explicitly without changing any navigation assertions.
+function estimateButton() {
+  const compare = screen.getByRole('button', { name: 'Compare' });
+  if (compare.getAttribute('aria-pressed') !== 'true') fireEvent.click(compare);
+  return screen.getByRole('button', { name: /^estimate$/i });
+}

@@ -231,7 +231,9 @@ def _run(req, omm_result, sizing=_ON):
         return omm_result
 
     async def run():
-        with patch("app.routers.stock_scan.get_historical_bars",
+        with patch("app.routers.stock_scan.get_daily_regime_bars",
+                   new=AsyncMock(return_value=_make_fake_bars())), \
+             patch("app.routers.stock_scan.get_historical_bars",
                    new=AsyncMock(return_value=_make_fake_bars())), \
              patch("app.routers.stock_scan.fetch_company_name_async", new=AsyncMock(return_value="A")), \
              patch("app.routers.stock_scan.fetch_price_async", new=AsyncMock(return_value=152.0)), \
