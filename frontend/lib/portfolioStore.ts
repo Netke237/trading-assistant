@@ -642,7 +642,11 @@ async function postPosition(p: PortfolioPosition, portfolioValue = accountValue(
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
         entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
-        entryStockPrice: typeof serverEntryStock === 'number' && serverEntryStock > 0 ? serverEntryStock : null,
+        ...(typeof serverEntryStock === 'number' && serverEntryStock > 0
+          ? { entryStockPrice: serverEntryStock }
+          : serverEntryStock === null
+            ? { entryStockPrice: null }
+            : {}),
         ...(reviewFingerprint != null && isBackendRow(body) ? { saved: body } : {}),
       };
     }
@@ -719,7 +723,11 @@ export async function persistPosition(
         ...(typeof adjustedQty === 'number' ? { adjustedQty } : {}),
         premiumStopPct,
         entryPrice: typeof serverEntry === 'number' && serverEntry > 0 ? serverEntry : null,
-        entryStockPrice: typeof serverEntryStock === 'number' && serverEntryStock > 0 ? serverEntryStock : null,
+        ...(typeof serverEntryStock === 'number' && serverEntryStock > 0
+          ? { entryStockPrice: serverEntryStock }
+          : serverEntryStock === null
+            ? { entryStockPrice: null }
+            : {}),
       };
     }
     const body = await res.json().catch(() => ({}));
