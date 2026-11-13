@@ -20,7 +20,7 @@
       "agent": "gemini",
       "branch": "gemini/portfolio-entry-prices-630",
       "claimed_at": "2026-11-12T22:38:34Z",
-      "expires_at": "2026-11-13T01:38:34Z",
+      "expires_at": "2026-11-13T03:13:55Z",
       "note": "Portfolio: show stock and option price at entry, and each stop distance (issue #630)",
       "task": "PORTFOLIO-ENTRY-PRICES-630"
     },
