@@ -10879,6 +10879,61 @@
         "jest_tests": 45,
         "source": "merged frontend/backend byte-identical to approved PR627 head8ca50959"
       }
+    },
+    {
+      "id": "STRUCTURAL-LEVEL-LABEL",
+      "name": "Rename visible STRUCTURAL_STOP_BREACHED alert text to 'Structural level'",
+      "owner": "agent",
+      "status": "built",
+      "branch": "claude/structural-level-label",
+      "size": "XS",
+      "complexity": 1,
+      "completion_pct": 85,
+      "summary": "User-visible text only: Telegram/email headline 'Structural level hit', backend+frontend reason 'Structural level breached', Alerts page, Portfolio EditDrawer toggle/field/hint/MC warning/footer, StockPositionCard note. Internal ids (STRUCTURAL_STOP_BREACHED, structural_stop, structuralStop, dedup keys, alertOverrides) unchanged. Pre-trade TradeCard/SubmissionReview/trackingReview/BrokerOrderReview labels deliberately out of scope.",
+      "plan": null,
+      "plan_audit_clean": null,
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "236bec67e+uncommitted diff (8 files) later committed in e2337050",
+          "gate_findings": 1,
+          "findings": [
+            "Non-blocking: docs/superpowers/plans/stocks-reference-alignment/verify-preservation.py asserted the old StockPositionCard sentence 'position so STRUCTURAL STOP BREACHED can fire.' verbatim and failed."
+          ],
+          "fixes": [
+            "Added an adapted mapping for that sentence, matched on its ASCII tail so the verifier passes under cp1252 and UTF-8 default decoding."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "verify-preservation.py fix and its interactions, committed in e2337050",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Mutation checks (sentence removed, em-dash prefix changed, unrelated text removed) all still fail the verifier under both encodings; acceptance.md counts (151 exact / 1 adapted) are now historical: script reports 150 exact / 2 adapted."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/notifications/alert_notifier.py",
+        "pattern": "'STRUCTURAL_STOP_BREACHED': 'Structural level hit'",
+        "note": "PRESENCE ONLY: label exists; not proof of behaviour."
+      },
+      "validation": "Backend 580 alert/notifier tests PASS (py3.11.9); tsc clean; Jest affected suites 538/540 - the 2 failures are pre-existing/env: referenceFlow '2,000' vs de-DE '2.000' (fails identically on origin/main), presentation 5s timeout under load (passes in isolation).",
+      "implementation_commit": "e2337050c57886cbcf66bf01e1b6db26b78d76cc",
+      "note": "Not merged. Related follow-up ticket #630 (show stock/option price at entry) is separate and not started."
     }
   ],
   "already_shipped": [

@@ -2022,7 +2022,7 @@ describe('broker-path stop direction boundaries', () => {
     });
   }
 
-  function levelInput(label: 'Stop' | 'Structural stop'): HTMLInputElement {
+  function levelInput(label: 'Stop' | 'Structural level'): HTMLInputElement {
     const captions = screen.getAllByText(label, { exact: true, selector: 'span' });
     for (const caption of captions) {
       const input = caption.parentElement?.querySelector('input');
@@ -2035,7 +2035,7 @@ describe('broker-path stop direction boundaries', () => {
     render(<EditDrawer position={position} onClose={noop} onChange={noop} onRemove={noop} />);
     return {
       mainWarned: screen.queryByText(/The stop is already on the wrong side/) !== null,
-      structuralWarned: screen.queryByText(/The structural stop is already on the wrong side/) !== null,
+      structuralWarned: screen.queryByText(/The structural level is already on the wrong side/) !== null,
       estimateEnabled: !screen.getByRole('button', { name: 'Estimate' }).hasAttribute('disabled'),
       alerts: levelAlerts(position),
     };
@@ -2115,7 +2115,7 @@ describe('broker-path stop direction boundaries', () => {
       expect(screen.queryByText('No stop set')).not.toBeInTheDocument();
     });
 
-    it.each(['Stop', 'Structural stop'] as const)('keeps %s editable across the quote and clearable to null', (label) => {
+    it.each(['Stop', 'Structural level'] as const)('keeps %s editable across the quote and clearable to null', (label) => {
       const onChange = jest.fn();
       render(<EditDrawer position={make({ stop: safe, structuralStop: safe })} onClose={noop} onChange={onChange} onRemove={noop} />);
       const input = levelInput(label);
@@ -2151,7 +2151,7 @@ describe('broker-path stop direction boundaries', () => {
   it('the structural field commits a level above the quote', () => {
     const onChange = jest.fn();
     render(<EditDrawer position={stock({ stop: 110, structuralStop: 100 })} onClose={noop} onChange={onChange} onRemove={noop} />);
-    const input = levelInput('Structural stop');
+    const input = levelInput('Structural level');
     fireEvent.change(input, { target: { value: '130' } });
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledWith({ structuralStop: 130 });

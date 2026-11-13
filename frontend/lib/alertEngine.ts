@@ -261,7 +261,7 @@ export function scanPortfolio(
         kind: 'Critical',
         symbol: p.symbol,
         alertType: 'STRUCTURAL_STOP_BREACHED',
-        reason: `Structural stop breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${structuralStop.toFixed(2)} (price $${referencePrice.toFixed(2)})`,
+        reason: `Structural level breached — ${p.symbol} ${isBearish ? 'above' : 'below'} $${structuralStop.toFixed(2)} (price $${referencePrice.toFixed(2)})`,
         price: referencePrice,
         referenceValue: structuralStop,
         direction: p.direction,
