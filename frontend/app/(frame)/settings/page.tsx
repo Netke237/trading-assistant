@@ -18,13 +18,14 @@ import { useSettingsStore, MARKOV_PRESETS, clampGateThresholds, type MarkovPrese
 import { Row, SectionIntro } from './SettingsRow';
 import { useSettingsSaveStatus, trackSave, settleAll, outstanding, retryLocalWrites, isSaving, setDraft as reportDraft, discardDraft, clearDiscarded } from '@/lib/settingsSaveStatus';
 import { IvThresholdsSection } from './IvThresholdsSection';
+import { TiingoBudget } from '@/components/molecules/TiingoBudget';
 import { useRiskStore } from '@/lib/riskStore';
 import { useThemeStore, type Density } from '@/lib/theme';
 import { useScanStore } from '@/lib/scanStore';
 import { useScanParamsStore } from '@/lib/scanParamsStore';
 import { useSearchProfilesStore } from '@/lib/searchProfilesStore';
 import { resolveProfileToScanRequest, scheduleRiskIgnored } from '@/lib/scanScheduleResolve';
-import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
+import { api, getRiskSettings, saveRiskSettings, getHistoryRetention, saveHistoryRetention, getIngestionSchedule, saveIngestionSchedule, triggerIngestionNow, getIngestionStatus, getEdgarSchedule, saveEdgarSchedule, triggerEdgarPrefetch, getSp500Schedule, saveSp500Schedule, triggerSp500Update, getTuningSchedule, saveTuningSchedule, startTuningJob, getTuningJob, getTuningJobCount, clearTuningJobs, adoptStrategyParams, type IngestionSchedule, type IngestionStatus, type TuningJob, type TuningJobCount, type WfoProposal, type ScanScheduleEntry, type ScanScheduleRun } from '@/lib/api';
 import type { RiskLimits } from '@/types/domain';
 import { PREMIUM_STOP_MAX_PCT, premiumStopMinWholeCentEntry, premiumStopPctLabel } from '@/lib/premiumStop';
 import type { SearchProfile } from '@/types/searchProfile';
@@ -2340,6 +2341,41 @@ function DataForm() {
   const [triggering, setTriggering] = useState(false);
   const [triggerResult, setTriggerResult] = useState('');
 
+  // GET /api/data/ingest/status (#572). On a fetch error the earlier payload is
+  // dropped, so stale numbers are never shown as current; `statusAsOf` is the
+  // time the shown payload was received.
+  const [ingestStatus, setIngestStatus] = useState<IngestionStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusAsOf, setStatusAsOf] = useState<Date | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const statusSeq = useRef(0);
+  const statusMounted = useRef(true);
+
+  const loadStatus = useCallback(async () => {
+    const seq = ++statusSeq.current;
+    setStatusLoading(true);
+    try {
+      const s = await getIngestionStatus();
+      if (!statusMounted.current || seq !== statusSeq.current) return;
+      setIngestStatus(s);
+      setStatusError(null);
+      setStatusAsOf(new Date());
+    } catch (e) {
+      if (!statusMounted.current || seq !== statusSeq.current) return;
+      setIngestStatus(null);
+      setStatusAsOf(null);
+      setStatusError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (statusMounted.current && seq === statusSeq.current) setStatusLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    statusMounted.current = true;
+    void loadStatus();
+    return () => { statusMounted.current = false; };
+  }, [loadStatus]);
+
   const [baseline, setBaseline] = useState<string | null>(null);
   const mounted = useSaveDraft('schedule:ingestion', 'Nightly OHLCV ingestion', JSON.stringify([enabled, time]), baseline);
   useEffect(() => {
@@ -2391,6 +2427,7 @@ function DataForm() {
     try {
       const r = await triggerIngestionNow(['SP500', 'NDX100', 'DOW30'], 6);
       setTriggerResult(`Started — ${r.total} symbols`);
+      void loadStatus();
     } catch {
       setTriggerResult('Trigger failed');
     } finally {
@@ -2437,6 +2474,32 @@ function DataForm() {
           {saveResult && <Text size={12} tone="secondary">{saveResult}</Text>}
         </div>
       </div>
+
+      <SectionIntro
+        title="Tiingo budget and last run"
+        blurb="Tiingo usage against each limit, with the nightly stop (the limit minus the reserve held back from the nightly run), and a summary of the last ingestion run, nightly or manual. Read from the backend; refresh to update."
+      />
+      <div className={styles.row}>
+        <div className={styles.rowLabel} />
+        <div className={styles.rowControl} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={() => { void loadStatus(); }}
+            disabled={statusLoading}
+          >
+            Refresh
+          </button>
+          {statusLoading && <Text size={12} tone="dim">Loading…</Text>}
+          {statusAsOf && ingestStatus && (
+            <Text size={12} tone="secondary">as of {statusAsOf.toLocaleString()}</Text>
+          )}
+        </div>
+      </div>
+      {statusError !== null && (
+        <Text as="p" size={12} tone="reject">Ingestion status unavailable: {statusError}</Text>
+      )}
+      {statusError === null && ingestStatus && <TiingoBudget status={ingestStatus} />}
 
       <SectionIntro
         title="Manual trigger"
