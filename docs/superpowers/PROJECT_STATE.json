@@ -6776,7 +6776,7 @@
         "pattern": "TiingoBudget",
         "note": "PRESENCE ONLY of the Stage C Settings -> Data molecule (the phase's last stage). Stage-level probes: HISTORY-INCREMENTAL-NIGHTLY-A / -B / -C. Correctness requires tests and the per-stage audits."
       },
-      "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C. 2026-11-06: Stage C (HISTORY-INCREMENTAL-NIGHTLY-C) built on claude/history-incremental-c-147f51; all three stages now exist in code (A, B merged; C unmerged).",
+      "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C. 2026-11-06: Stage C (HISTORY-INCREMENTAL-NIGHTLY-C) built on claude/history-incremental-c-147f51; all three stages now exist in code (A, B merged; C unmerged). 2026-11-13: Stage C code audit clean (HISTORY-INCREMENTAL-NIGHTLY-C round 3); every stage (A, B, C) now has a clean code audit. Stage C unmerged.",
       "audit_history": [
         {
           "round": 1,
@@ -6995,8 +6995,8 @@
       "name": "Incremental nightly, Stage C: Settings -> Data Tiingo budget + last-run line",
       "summary": "Frontend only (decision D5): getIngestionStatus type in lib/api.ts, TiingoBudget molecule (four Tiingo limit meters used/limit with nightly stop, last ingestion run summary from the existing run counters), rendered in Settings -> Data. Plan section 5 Stage C (C1).",
       "status": "built",
-      "audit_rounds": 2,
-      "audit_clean": false,
+      "audit_rounds": 3,
+      "audit_clean": true,
       "depends_on": [
         "HISTORY-INCREMENTAL-NIGHTLY",
         "HISTORY-INCREMENTAL-NIGHTLY-A",
@@ -7011,7 +7011,7 @@
         "pattern": "export function TiingoBudget",
         "note": "PRESENCE ONLY of the Stage C molecule. Correctness requires tests and the independent stage audit."
       },
-      "notes": "Stage C of the approved plan; own code-audit target, cap 3 code rounds. Started 2026-11-06 from origin/main c8f3b8a2 (Stage A PR #484 and Stage B PR #499 merged). Tickets #572 C1, #573 C2 (coordinator). C1 #572 c801994e committed and coordinator-verified (typecheck clean; full Jest 6055 passed, the 4 failures are the de-DE locale baseline BarrierRaceCard/StockSendDialog.session and a TradeCard.methodPick load flake that passes in isolation). Built, NOT audited: code audit pending (#573). 2026-11-12: branch merged with origin/main 236bec67 (742b768e); claim retaken. Scope added by HISTORY-INCREMENTAL-C-LAST-RUN-2026-11-12: C1b, a persisted last-run summary (plan amended at a4717194). Plan round 1 (C1b amendment only) is running. The earlier code round-1 auditor was cut off by an app exit and never reported, so it does not count. The code stage restarts at round 1 over the whole Stage C diff. C1b plan stage CLEAN at round 2 (plan text bfa97d07). Code stage starts at round 3 (code round 1) over the whole Stage C diff after #643 is built. C1b #643 c2181e3e committed and coordinator-verified (new table ingestion_run, migration d6a2f9c4e017 on b7d4e2a9c816, single head; backend full suite 10207 passed, failures Windows baseline only incl. heston probe network-guard x4; Jest 6426 passed, de-DE locale baseline only; typecheck clean). Built, code audit pending (#573).",
+      "notes": "Stage C of the approved plan; own code-audit target, cap 3 code rounds. Started 2026-11-06 from origin/main c8f3b8a2 (Stage A PR #484 and Stage B PR #499 merged). Tickets #572 C1, #573 C2 (coordinator). C1 #572 c801994e committed and coordinator-verified (typecheck clean; full Jest 6055 passed, the 4 failures are the de-DE locale baseline BarrierRaceCard/StockSendDialog.session and a TradeCard.methodPick load flake that passes in isolation). Built, NOT audited: code audit pending (#573). 2026-11-12: branch merged with origin/main 236bec67 (742b768e); claim retaken. Scope added by HISTORY-INCREMENTAL-C-LAST-RUN-2026-11-12: C1b, a persisted last-run summary (plan amended at a4717194). Plan round 1 (C1b amendment only) is running. The earlier code round-1 auditor was cut off by an app exit and never reported, so it does not count. The code stage restarts at round 1 over the whole Stage C diff. C1b plan stage CLEAN at round 2 (plan text bfa97d07). Code stage starts at round 3 (code round 1) over the whole Stage C diff after #643 is built. C1b #643 c2181e3e committed and coordinator-verified (new table ingestion_run, migration d6a2f9c4e017 on b7d4e2a9c816, single head; backend full suite 10207 passed, failures Windows baseline only incl. heston probe network-guard x4; Jest 6426 passed, de-DE locale baseline only; typecheck clean). Built, code audit pending (#573). Code stage: round 3 (code round 1) CLEAN over 236bec67..df892f2b. The previous code round-1 auditor (2026-11-06) was cut off by an app exit and never reported, so it is not counted.",
       "audit_history": [
         {
           "round": 1,
@@ -7046,6 +7046,24 @@
             "cancelled aiosqlite write may still land later (same values)",
             "10 s timeout should be injectable for tests",
             "json.dumps allow_nan=True (ratio finite by construction)"
+          ]
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent a1d16f2d676a07b64 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 236bec67 df892f2b -- backend frontend (whole Stage C: C1 #572 TiingoBudget/api/DataForm + C1b #643 ingestion_run model, ingestion_run_log, migration d6a2f9c4e017, env.py, ingestion_job/router wiring, tests, stored-run display) against plan section 5 Stage C C1 + C1b (bfa97d07) and tickets #572/#643",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "every displayed value traced to its endpoint/row field; meterTone matches tiingo_budget._first_exhausted/stop_at; formatBytes boundaries and 2^53 headroom; live-vs-stored switch (live state set before record_start awaits); fail-open on every write path incl. retry, fallback INSERT and timeouts; _prune compiled for PostgreSQL and SQLite; UTC handling naive/aware; migration single head; 106 backend + 50 Jest focused tests run",
+          "below_gate_logged": [
+            "symbols_per_month caution text 'the nightly run stops here' overstates: at the stop already-seen symbols are still admitted",
+            "hung DB can delay a run up to 10 s at start and 2x10 s at finish (bounded, no data change)",
+            "duration rounded to the second while bytes truncate (presentation)",
+            "start insert committed-but-timed-out leaves an orphan running row below the finished row",
+            "refresh right after Run now may show the previous run (labelled with its as-of time)"
           ]
         }
       ]
