@@ -612,13 +612,24 @@ async def refresh_adjustments(
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def get_bars(symbol: str, start: date, end: date) -> list[dict]:
+async def get_bars(
+    symbol: str, start: date, end: date, *, require_through: date | None = None,
+) -> list[dict]:
+    """``require_through`` (BG-SCHEDULE-MAINT): also treat the symbol as stale
+    when its last stored bar is older than this date (capped at ``end``). The
+    default staleness reference, ``_prev_trading_day()``, follows the HOST date;
+    a caller running in the ET evening on a host already past midnight (Friday
+    21:30 ET = Saturday in Berlin) would otherwise never fetch that evening's
+    settled bar. Pass the ET date of ``last_settle_boundary()``. None keeps the
+    old behaviour for every other caller."""
     from app.services.history_basis import history_lock
     async with history_lock(symbol):
-        return await _get_bars_locked(symbol, start, end)
+        return await _get_bars_locked(symbol, start, end, require_through)
 
 
-async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
+async def _get_bars_locked(
+    symbol: str, start: date, end: date, require_through: date | None = None,
+) -> list[dict]:
     """Return OHLCV bars for `symbol` from `start` to `end`.
 
     Algorithm:
@@ -640,6 +651,8 @@ async def _get_bars_locked(symbol: str, start: date, end: date) -> list[dict]:
         now = _utcnow()
 
         stale = (last is None) or (last < min(end, _prev_trading_day()))
+        if not stale and require_through is not None:
+            stale = last < min(end, require_through)
         heal = await _heal_date(symbol, start, end, now, db)
         if heal is not None and not _claim_heal_attempt(symbol, heal, now):
             heal = None

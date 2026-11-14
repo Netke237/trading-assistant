@@ -497,3 +497,21 @@ async def test_regular_watch_corrupted_pending_since_does_not_raise_or_fire():
     assert events == []
     store.update_state.assert_called_once()
     assert "pending_entry_since" in store.update_state.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_collect_asks_get_bars_for_the_market_clock_settled_session():
+    """BG-SCHEDULE-MAINT: Friday 21:30 ET must require Friday's bar even when the
+    host date is already Saturday."""
+    from datetime import date as _date, datetime as _dt
+    from zoneinfo import ZoneInfo
+    from unittest.mock import AsyncMock, patch
+    from app.services import strategy_watch_evaluator as ev
+    now_ts = _dt(2026, 6, 12, 21, 30, tzinfo=ZoneInfo("America/New_York")).timestamp()
+    watch = {"id": "w1", "symbol": "AAPL", "enabled": True, "strategy_key": "pullback_ema",
+             "direction": "Bullish"}
+    get_bars = AsyncMock(return_value=[])
+    with patch.object(ev.strategy_watch_store, "list_watches", return_value=[watch]), \
+         patch.object(ev, "get_bars", get_bars):
+        await ev._collect(now_ts=now_ts)
+    assert get_bars.await_args.kwargs["require_through"] == _date(2026, 6, 12)

@@ -22,7 +22,7 @@ import time
 from dataclasses import dataclass, field, fields
 from datetime import date, datetime, timedelta, timezone
 
-from app.services.historical_store import get_bars
+from app.services.historical_store import get_bars, last_settle_boundary
 from app.services.scheduling_tz import MARKET_TZ
 from app.services.strategy_engine import (
     pullback_ema_signal, breakout_base_signal,
@@ -381,6 +381,7 @@ def _queue(t: "_Transition") -> None:
 
 async def _eval_strategy_watch(
     w: dict, start: date, end: date, sustain_minutes: int,
+    settled_through: date | None = None,
 ) -> _Transition | None:
     """One strategy watch. Non-event state writes (the sustain clock) happen here;
     the event's own state change is returned, not written."""
@@ -390,7 +391,7 @@ async def _eval_strategy_watch(
     if fn is None:
         return None
     try:
-        bars = await get_bars(symbol, start, end)
+        bars = await get_bars(symbol, start, end, require_through=settled_through)
     except Exception as exc:
         logger.warning("strategy-watch: get_bars failed for %s — %s", symbol, exc)
         return None
@@ -580,6 +581,7 @@ async def _composite_watch_momentum(w: dict, trigger_def: dict, symbol: str, fet
 
 async def _eval_composite_watch(
     w: dict, start: date, end: date, now_ts: float, now_dt: datetime,
+    settled_through: date | None = None,
 ) -> _Transition | None:
     """One composite watch. Non-event state writes (sustain clock, armed -> idle
     re-arm) happen here; the entry's armed state is returned, not written."""
@@ -588,7 +590,7 @@ async def _eval_composite_watch(
     wdir = w.get("direction", "Bullish")
     model = (trigger_def.get("primary") or {}).get("model", "OMM")
     try:
-        bars = await get_bars(symbol, start, end)
+        bars = await get_bars(symbol, start, end, require_through=settled_through)
     except Exception as exc:
         logger.warning("composite-watch: get_bars failed for %s — %s", symbol, exc)
         return None
@@ -737,6 +739,11 @@ async def _collect(sustain_minutes: int = 0, now_ts: float | None = None) -> lis
     now_dt = datetime.fromtimestamp(now_ts, MARKET_TZ)
     end = date.today()
     start = end - timedelta(days=_HISTORY_DAYS)
+    # The newest session whose bar is final, by the MARKET clock. get_bars'
+    # default staleness follows the host date, which on a Friday-evening ET
+    # run is already Saturday and would skip Friday's bar (BG-SCHEDULE-MAINT).
+    settled_through = last_settle_boundary(
+        datetime.fromtimestamp(now_ts, timezone.utc)).astimezone(MARKET_TZ).date()
 
     for w in strategy_watch_store.list_watches():
         if not w.get("enabled"):
@@ -749,7 +756,7 @@ async def _collect(sustain_minutes: int = 0, now_ts: float | None = None) -> lis
             continue
         try:
             w_eff = _effective_view(w)
-            t = await _eval_strategy_watch(w_eff, start, end, sustain_minutes)
+            t = await _eval_strategy_watch(w_eff, start, end, sustain_minutes, settled_through)
             if t is not None:
                 t.committed, t.pending = w_eff["_committed"], w_eff["_pending"]
         except Exception:
@@ -766,7 +773,7 @@ async def _collect(sustain_minutes: int = 0, now_ts: float | None = None) -> lis
             continue
         try:
             w_eff = _effective_view(w)
-            t = await _eval_composite_watch(w_eff, start, end, now_ts, now_dt)
+            t = await _eval_composite_watch(w_eff, start, end, now_ts, now_dt, settled_through)
             if t is not None:
                 t.committed, t.pending = w_eff["_committed"], w_eff["_pending"]
         except Exception:
