@@ -100,3 +100,55 @@ export function tradePage(trades: readonly BacktestTrade[], key: TradeSortKey, d
  const page = Math.max(0, Math.min(Math.max(0, pageCount - 1), Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 0));
  return {rows: rows.slice(page * pageSize, (page + 1) * pageSize), page, pageCount, total: rows.length};
 }
+
+/** Display-only sign: positive values carry '+', zero and negatives keep toFixed's own text. */
+export function formatSigned(value: number | null | undefined): string {
+ const text = formatValue(value);
+ return text !== 'Unavailable' && (value as number) > 0 ? `+${text}` : text;
+}
+
+/** Return % is index - 100 (signed, with %); Index 100 is the raw recorded index. */
+export function formatPerformance(value: number | null | undefined, unit: PerformanceUnit): string {
+ if (unit === 'index') return formatValue(value);
+ const text = formatSigned(value);
+ return text === 'Unavailable' ? text : `${text}%`;
+}
+
+export type ComparisonOutcome = 'strategy_ahead' | 'holding_ahead' | 'equal' | 'missing';
+/** Deterministic wording from the unrounded final indices of one shared recorded sample. */
+export function performanceComparison(detail: DetailedBacktestResult) {
+ const summary = performanceSummary(detail);
+ const engineReturn = summary.engineReturn;
+ const indexedReturn = summary.strategyReturn;
+ const engineDiffers = indexedReturn !== null && Number.isFinite(engineReturn) && engineReturn !== indexedReturn;
+ const strategy = formatPerformance(summary.strategyReturn, 'percent');
+ const benchmark = formatPerformance(summary.benchmarkReturn, 'percent');
+ const base = {engineReturn, indexedReturn, engineDiffers, difference: summary.difference};
+ if (summary.strategyReturn === null || summary.benchmarkReturn === null || summary.difference === null) {
+  return {...base, outcome: 'missing' as ComparisonOutcome, headline: 'Comparison unavailable.',
+   sentence: `Recorded strategy equity return: ${strategy}; long buy-and-hold return: ${benchmark}. Both final recorded indices are required to compare them.`};
+ }
+ const outcome: ComparisonOutcome = summary.difference > 0 ? 'strategy_ahead' : summary.difference < 0 ? 'holding_ahead' : 'equal';
+ const headline = outcome === 'strategy_ahead' ? 'Recorded strategy equity finished ahead of long buy-and-hold.'
+  : outcome === 'holding_ahead' ? 'Long buy-and-hold finished ahead of recorded strategy equity.'
+  : 'Recorded strategy equity and long buy-and-hold finished level.';
+ return {...base, outcome, headline,
+  sentence: `Recorded strategy equity returned ${strategy}; long buy-and-hold returned ${benchmark}; difference ${formatSigned(summary.difference)} percentage points over the full recorded period.`};
+}
+
+/** Final recorded values by default; a hovered timestamp reads exact samples only (never the nearest). */
+export function legendReadout(detail: DetailedBacktestResult, unit: PerformanceUnit, time: number | null) {
+ const curves = performanceSeries(detail, unit);
+ if (time === null) {
+  const strategy = curves.strategy?.at(-1) ?? null, benchmark = curves.benchmark?.at(-1) ?? null;
+  return {time: strategy?.time ?? benchmark?.time ?? null, hovered: false, strategy: strategy?.value ?? null, benchmark: benchmark?.value ?? null};
+ }
+ const at = (rows: ValueSample[] | null) => rows ? exactSample(rows, time)?.value ?? null : null;
+ return {time, hovered: true, strategy: at(curves.strategy), benchmark: at(curves.benchmark)};
+}
+
+/** Latest and deepest sampled-equity drawdown; unavailable when the derived series is. */
+export function drawdownReadout(samples: ValueSample[] | null) {
+ if (!samples?.length) return {latest: null, deepest: null};
+ return {latest: samples[samples.length - 1].value, deepest: Math.min(...samples.map(row => row.value))};
+}

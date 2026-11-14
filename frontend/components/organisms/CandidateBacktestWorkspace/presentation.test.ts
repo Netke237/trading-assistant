@@ -1,5 +1,5 @@
 import type { DetailedBacktestResult, BacktestTrade } from '@/types/backtest';
-import { performanceSeries, performanceSummary, sampledDrawdown, displayBounds, clampBounds, exactSample, tradePage, formatValue } from './presentation';
+import { performanceSeries, performanceSummary, sampledDrawdown, displayBounds, clampBounds, exactSample, tradePage, formatValue, formatSigned, formatPerformance, performanceComparison, legendReadout, drawdownReadout } from './presentation';
 
 const time = (iso: string) => Date.parse(iso) / 1000;
 function freeze<T>(value: T): T {
@@ -76,4 +76,42 @@ test('sorting/pagination retain exact immutable trades and stable ids through ti
  expect(tradePage(trades,'entry_time','asc',99,2).page).toBe(1);
  expect(tradePage([],'entry_time','asc',0,10)).toEqual({rows:[],page:0,pageCount:0,total:0});
  expect(trades.map(row=>row.id)).toEqual(['b','a','c','d']);
+});
+
+test('signed display keeps sign, zero and unavailable without changing stored values',()=>{
+ expect(formatSigned(8)).toBe('+8.00');expect(formatSigned(-2.25)).toBe('-2.25');expect(formatSigned(0)).toBe('0.00');
+ expect(formatSigned(NaN)).toBe('Unavailable');expect(formatSigned(null)).toBe('Unavailable');
+ expect(formatPerformance(20,'percent')).toBe('+20.00%');expect(formatPerformance(-10,'percent')).toBe('-10.00%');
+ expect(formatPerformance(120,'index')).toBe('120.00');expect(formatPerformance(null,'index')).toBe('Unavailable');
+ expect(formatPerformance(undefined,'percent')).toBe('Unavailable');
+});
+test('comparison compares unrounded final indices and keeps the engine return separately disclosed',()=>{
+ const holding=performanceComparison(detail);
+ expect(holding).toMatchObject({outcome:'holding_ahead',engineReturn:7.123,indexedReturn:8,engineDiffers:true});
+ expect(holding.headline).toBe('Long buy-and-hold finished ahead of recorded strategy equity.');
+ expect(holding.sentence).toBe('Recorded strategy equity returned +8.00%; long buy-and-hold returned +10.25%; difference -2.25 percentage points over the full recorded period.');
+ const ahead=performanceComparison({...detail,equity:[{time:1,equity:1,strategy_index:100.004,benchmark_index:100.001}]});
+ expect(ahead.outcome).toBe('strategy_ahead');expect(ahead.headline).toBe('Recorded strategy equity finished ahead of long buy-and-hold.');
+ expect(ahead.sentence).toContain('difference +0.00 percentage points');
+ const level=performanceComparison({...detail,summary:{...detail.summary,total_return_pct:0},equity:[{time:1,equity:1,strategy_index:100,benchmark_index:100}]});
+ expect(level).toMatchObject({outcome:'equal',engineDiffers:false});expect(level.headline).toBe('Recorded strategy equity and long buy-and-hold finished level.');
+ const missing=performanceComparison({...detail,equity:[]});
+ expect(missing).toMatchObject({outcome:'missing',indexedReturn:null,engineReturn:7.123,engineDiffers:false});
+ expect(missing.headline).toBe('Comparison unavailable.');
+ expect(missing.sentence).toBe('Recorded strategy equity return: Unavailable; long buy-and-hold return: Unavailable. Both final recorded indices are required to compare them.');
+ const half=performanceComparison({...detail,equity:[{...detail.equity[0],benchmark_index:NaN}]});
+ expect(half.outcome).toBe('missing');expect(half.sentence).toContain('Recorded strategy equity return: -10.00%; long buy-and-hold return: Unavailable.');
+});
+test('legend defaults to final recorded values and hover reads exact samples only',()=>{
+ expect(legendReadout(detail,'percent',null)).toEqual({time:40,hovered:false,strategy:8,benchmark:10.25});
+ expect(legendReadout(detail,'index',null)).toEqual({time:40,hovered:false,strategy:108,benchmark:110.25});
+ expect(legendReadout(detail,'percent',20)).toEqual({time:20,hovered:true,strategy:20,benchmark:5});
+ expect(legendReadout(detail,'percent',30)).toEqual({time:30,hovered:true,strategy:null,benchmark:null});
+ expect(legendReadout({...detail,equity:[]},'percent',null)).toEqual({time:null,hovered:false,strategy:null,benchmark:null});
+});
+test('drawdown readout reports latest and deepest sampled values, unavailable when the series is',()=>{
+ const readout=drawdownReadout(sampledDrawdown(detail));
+ expect(readout.latest).toBeCloseTo(-10,12);expect(readout.deepest).toBeCloseTo(-10,12);
+ expect(drawdownReadout(sampledDrawdown({...detail,equity:[{...detail.equity[0],equity:850},detail.equity[1],detail.equity[2]]})).deepest).toBeCloseTo(-15,12);
+ expect(drawdownReadout(null)).toEqual({latest:null,deepest:null});
 });
