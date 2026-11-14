@@ -7,6 +7,14 @@
       "expires_at": "2026-11-14T03:30:46Z",
       "note": "Resume638 preserve T2 checkpoint; canonical backend green, frontend validation and T3 pending",
       "task": "TUNER-RECHECK-WINDOW"
+    },
+    {
+      "agent": "claude",
+      "branch": "feat/background-schedule-maintenance",
+      "claimed_at": "2026-11-14T00:33:18Z",
+      "expires_at": "2026-11-14T03:33:18Z",
+      "note": "Wire backtest-artifact expiry into nightly maintenance, add weekly read-only history health check, move strategy-watch EOD default to 21:30 ET",
+      "task": "BG-SCHEDULE-MAINT"
     }
   ]
 }
