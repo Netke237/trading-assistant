@@ -268,7 +268,8 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
  // Escape clears a selection from anywhere in the report, matching the Clear selection button.
  const onKeyDown=(event:React.KeyboardEvent)=>{if(event.key==='Escape'&&selected!==null){event.stopPropagation();clearSelection();}};
  return <section className={styles.workspace} aria-label={artifact.provenance==='fresh'?'Fresh backtest evidence':'Original backtest evidence'} onKeyDown={onKeyDown}>
-  <h1>{identity.symbol} — {runLabel}</h1>
+  {/* The page header owns the h1; this keeps the displayed run's own identity. */}
+  <h2 className={styles.runTitle}>{identity.symbol} — {runLabel}</h2>
   <p>{identity.strategy} · {identity.direction} · {identity.horizon} · {artifact.provenance==='fresh'?'Fresh':'Original'} interval: {identity.interval}</p>
   <p>Frozen historical evidence. Live overlays are separate. Time basis: {detail.time_basis}.</p>
   <section className={styles.metrics} aria-label="Full-period performance summary">
@@ -376,7 +377,13 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
   <h2>Open positions</h2>
   <p>Equity includes mark-to-market of open positions; closed-trade counts exclude them. No exit is assumed.</p>
   {detail.open_positions.length===0?<p>No recorded open positions.</p>:<ul>{detail.open_positions.map(p=><li key={p.id}>{p.id} · {p.direction} · Entry {utc(p.entry_time)} @ {p.entry_price} · Size {p.size} · Unrealized P&amp;L {p.unrealized_pnl}</li>)}</ul>}
-  <details><summary>Recorded configuration and provenance</summary><p>Provenance: {artifact.provenance} · Artifact {artifact.artifact_id} · Run {identity.scan_id} · Created {utc(artifact.created_at)}</p>
+  <details className={styles.supporting}><summary>Calculation basis &amp; comparison limits</summary>
+   <p><strong>Equity:</strong> Strategy equity is the recorded engine equity, including the recorded unrealized value of open positions and the recorded strategy commission of {detail.configuration.commission}{detail.configuration.commission_basis?` (${detail.configuration.commission_basis})`:''}. It is not a cumulative sum of closed-trade returns.</p>
+   <p><strong>Benchmark:</strong> Buy-and-hold is the recorded long benchmark of the same underlying, gross and excluding fees, for either strategy direction. No dividend, reinvestment, cash-interest or allocation assumption is added by this view, and no currency was recorded.</p>
+   <p><strong>Drawdown:</strong> Sampled drawdown is 100 × (equity ÷ running peak − 1) over every recorded equity sample, with the peak starting at the recorded initial equity of {Number.isFinite(detail.initial_equity)?detail.initial_equity:'Unavailable'}.{drawdown?'':' It is unavailable for this run.'} The engine max drawdown of {Number.isFinite(detail.summary.max_drawdown_pct)?`${detail.summary.max_drawdown_pct}%`:'Unavailable'} is the engine&apos;s own metric and is shown unchanged.</p>
+   <p><strong>Display ranges:</strong> Last year, All history and trade selection change only the visible dates, never the test period, baseline or starting capital.</p>
+  </details>
+  <details className={styles.supporting}><summary>Recorded configuration and provenance</summary><p>Provenance: {artifact.provenance} · Artifact {artifact.artifact_id} · Run {identity.scan_id} · Created {utc(artifact.created_at)}</p>
    <p>Evaluation: {detail.candles.length?`${utc(detail.candles[0].time)} — ${utc(detail.candles[detail.candles.length-1].time)}`:'Unavailable'}.</p>
    <p>Strategy commission: {detail.configuration.commission} ({detail.configuration.commission_basis}). Benchmark is gross and excludes fees. Currency was not recorded.</p>
    <h3>Full recorded engine configuration</h3><pre>{JSON.stringify(detail.configuration,null,2)}</pre>

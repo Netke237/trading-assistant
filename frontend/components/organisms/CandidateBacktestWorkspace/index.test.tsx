@@ -115,6 +115,22 @@ it('labels the distinct fresh result and keeps fresh provenance after interval c
  expect(screen.getByText(/Fresh evidence hidden/)).toBeInTheDocument();
 });
 
+it('keeps the run identity below the page title and states the calculation basis from recorded values', () => {
+ render(<CandidateBacktestWorkspace artifact={timed}/>);
+ // The page header owns the single h1; the report keeps its own labelled run identity.
+ expect(screen.queryByRole('heading', {level: 1})).not.toBeInTheDocument();
+ expect(screen.getByRole('heading', {level: 2, name: 'AAPL — Original backtest'})).toBeInTheDocument();
+ const basis = screen.getByText('Calculation basis & comparison limits').closest('details') as HTMLElement;
+ expect(basis).toHaveTextContent('Strategy equity is the recorded engine equity, including the recorded unrealized value of open positions and the recorded strategy commission of 0.001. It is not a cumulative sum of closed-trade returns.');
+ expect(basis).toHaveTextContent('Buy-and-hold is the recorded long benchmark of the same underlying, gross and excluding fees, for either strategy direction.');
+ expect(basis).toHaveTextContent('No dividend, reinvestment, cash-interest or allocation assumption is added by this view, and no currency was recorded.');
+ expect(basis).toHaveTextContent('Sampled drawdown is 100 × (equity ÷ running peak − 1) over every recorded equity sample, with the peak starting at the recorded initial equity of 1000.');
+ expect(basis).toHaveTextContent('The engine max drawdown of -16.5% is the engine\'s own metric and is shown unchanged.');
+ expect(basis).toHaveTextContent('Last year, All history and trade selection change only the visible dates, never the test period, baseline or starting capital.');
+ // The complete provenance stays in its own disclosure.
+ expect(screen.getByText('Recorded configuration and provenance')).toBeInTheDocument();
+});
+
 describe('performance comparison', () => {
  it('states the comparison from final recorded indices and keeps the engine return separately disclosed', () => {
   render(<CandidateBacktestWorkspace artifact={timed}/>);

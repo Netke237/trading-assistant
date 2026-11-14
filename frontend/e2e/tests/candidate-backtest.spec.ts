@@ -70,7 +70,7 @@ test('explicit fresh run stays separate and preserves original evidence and scan
   await page.goto(`/chart?symbol=AAA&source=stocks&backtest_artifact_status=available&backtest_artifact_id=${original.artifact_id}`);
   await expect(page.getByLabel('Historical candles',{exact:true})).toBeVisible();
   const savedScan=await page.evaluate(()=>localStorage.getItem('bamendjou-scan-store'));
-  await page.getByRole('button',{name:'Configure a fresh run',exact:true}).click();
+  await page.getByRole('button',{name:'Separate fresh run',exact:true}).click();
   await page.getByLabel('Evaluation start',{exact:true}).fill('2024-04-20');
   await page.getByLabel('Evaluation end (exclusive)',{exact:true}).fill('2024-05-30');
   await page.getByLabel('Commission per leg (fraction)',{exact:true}).fill('0.002');

@@ -1,5 +1,6 @@
 .workspace { overflow: auto; padding: 16px; color: var(--text-primary); background: var(--bg-surface); height: 100%; }
 .workspace h1 { font-size: 20px; }
+.workspace .runTitle { font-size: 18px; margin: 0 0 4px; }
 .workspace h2 { font-size: 16px; margin-top: 20px; }
 .workspace h3 { font-size: 14px; }
 .workspace p { font-size: 13px; color: var(--text-secondary); }
@@ -74,3 +75,9 @@
 .navigation { display: flex; align-items: center; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
 .navigation a { color: var(--accent); }
 .navigation input, .navigation select { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 6px; }
+
+/* Supporting disclosures: calculation basis, then complete provenance */
+.supporting { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin: 12px 0; padding: 12px 20px; background: var(--bg-surface); }
+.supporting summary { cursor: pointer; font-size: 13px; color: var(--text-primary); }
+.supporting summary:focus-visible { outline: 2px solid var(--accent); }
+.supporting strong { color: var(--text-primary); font-weight: 500; }
