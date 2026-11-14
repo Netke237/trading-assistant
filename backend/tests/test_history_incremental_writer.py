@@ -987,7 +987,7 @@ async def test_10_concurrent_get_bars_waits_for_the_incremental_write(monkeypatc
     monkeypatch.setattr(hs, "_store_bars", blocking_store)
     reads = []
 
-    async def locked_read(symbol, start, end):
+    async def locked_read(symbol, start, end, *_):
         async with env.factory() as db:
             reads.append(await hs._read_bars(symbol, start, end, db))
         return reads[-1]
