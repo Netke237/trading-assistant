@@ -2,19 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/tuner-recheck-window-e819e012",
-      "claimed_at": "2026-11-14T00:28:44Z",
-      "expires_at": "2026-11-14T04:27:31Z",
-      "note": "Resume638 preserve T2 checkpoint; canonical backend green, frontend validation and T3 pending",
+      "branch": "board/tuner-recheck-window-f3774d77",
+      "claimed_at": "2026-11-14T10:07:23Z",
+      "expires_at": "2026-11-14T13:07:23Z",
+      "note": "Resume per user: fix all local tests then finish/audit/merge638",
       "task": "TUNER-RECHECK-WINDOW"
-    },
-    {
-      "agent": "claude",
-      "branch": "feat/background-schedule-maintenance",
-      "claimed_at": "2026-11-14T00:33:18Z",
-      "expires_at": "2026-11-14T03:33:18Z",
-      "note": "Wire backtest-artifact expiry into nightly maintenance, add weekly read-only history health check, move strategy-watch EOD default to 21:30 ET",
-      "task": "BG-SCHEDULE-MAINT"
     }
   ]
 }
