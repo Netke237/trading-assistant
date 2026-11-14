@@ -25,3 +25,13 @@ Tracking issue #638. The live issue and PROJECT_STATE retain authoritative progr
 - [ ] Exact-head CI/mergeability/ownership/hold checks; pending merge record before guarded self-merge; actual verified merge and separate shipped reconciliation.
 
 No completed application feature, independent code audit, green integrated suite or shipping result is claimed by baseline evidence.
+
+## Verification checkpoint — 2026-11-14 (unfinished)
+
+- T1 source `76ed0c72`, corrected writable Linux Python 3.11.17 full backend: **10,307 passed, 9 skipped** in 2273.41s. This was a T1 snapshot, not the final integrated target.
+- T2 source `0e1c2f14c5f073f9851f6aad37709132fc295077`: exporter/report focused checks **41 passed** in 43.51s on Linux Python 3.11; native Python 3.11.9 focused checks also **41 passed**. No independent code audit is claimed.
+- Coordinator frontend `npm run typecheck`: passed on 2026-11-14.
+- Full frontend Jest remains running in isolated writable source with native Linux Node 20.20.2 dependencies. Several existing Step 7 suites have failed; this run is not green. No assertions, expected values or test timeouts were changed.
+- Baseline reproduction: exact `236bec67f01fe5e0a2d38ded047378ff84b4a7aa`, same Node 20 image and default Jest options, `edited-fields-sync.test.tsx`: **21 failed, 10 passed**, 210.646s. This establishes that suite's failure on the unchanged baseline; it does not classify every other failure. `git diff --exit-code 236bec67 HEAD -- frontend` confirmed no frontend source changes.
+- Task 2 stays open pending verification; Task 3 and the integrated audit/PR/merge remain outstanding. Phase completion stays 20%, plan one clean round, code zero rounds, audit_clean false.
+- Unrelated schedule changes from the separately claimed BG-SCHEDULE-MAINT task are excluded from this phase and its commits.

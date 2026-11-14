@@ -10806,7 +10806,7 @@
       "name": "Exact-parity recheck window optimization and frozen tuning export",
       "status": "in_progress",
       "tracking_issue": 638,
-      "branch": "board/tuner-recheck-window-7621dde5",
+      "branch": "board/tuner-recheck-window-e819e012",
       "size": "XL",
       "complexity": 4,
       "completion_pct": 20,
@@ -10846,20 +10846,23 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "Resumed after usage interruption on fresh branch from prior pushed plan. Plan1 clean0 retained; code0 unstarted. 2026-11-13 T1 #639 closed: 76ed0c72 (perf(tuner): restrict ordinary recheck signals to entry windows), fresh implementer; coordinator re-ran tuner suites 241 passed/1 skipped, typecheck clean, full backend 10294 passed with 10 failed + 1 error, all Windows-environment (atomic_yaml modes, payload_persistence modes, heston probe network guard, time.tzset), none importing tuner code. Jest not re-run by coordinator (no frontend files changed; implementer saw 3 locale-dependent pre-existing suite failures). Phase stays 20% until T2/T3 reach implementation. Not audited.",
+      "note": "2026-11-14: T1 corrected Linux full10307pass9skip; T2 current exporter/report41pass native/Linux; typecheck passed. Full Node20 frontend still running with failures; baseline edited-fields-sync reproduces21fail10pass, other failures not yet classified. T2 remains open, T3 not started; phase20, plan1clean0, code0/auditfalse; unfinished and not merge-ready.",
       "build_tickets": [
         {
           "issue": 639,
           "task": 1,
           "status": "done",
-          "completion_pct": 70,
-          "commit": "76ed0c72"
+          "completion_pct": 50,
+          "commit": "76ed0c72",
+          "validation_note": "T1 full Linux10307passed/9skip; fullfrontend pending, no70%claim."
         },
         {
           "issue": 640,
           "task": 2,
-          "status": "not_started",
-          "completion_pct": 20
+          "status": "in_progress",
+          "completion_pct": 50,
+          "commit": "0e1c2f14",
+          "validation_note": "Source checkpoint built; native and current Linux exporter/report41pass; fullfrontend/integrated/code gate pending."
         },
         {
           "issue": 641,
