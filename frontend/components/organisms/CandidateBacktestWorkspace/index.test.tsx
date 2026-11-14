@@ -506,6 +506,57 @@ describe('price styles and linked trade review', () => {
   expect(markerPoints().map((m: any) => m.id)).toEqual(['op:entry']);
  });
 
+ it('runs every performance, price and trade control together on a deep-frozen artifact: no mutation, no rebuild, identical series after round trips', () => {
+  const deepFreeze = (value: any): any => {if (value && typeof value === 'object' && !Object.isFrozen(value)) {Object.freeze(value); Object.values(value).forEach(deepFreeze);} return value;};
+  const clone = (value: unknown) => JSON.parse(JSON.stringify(value));
+  const pristine = clone(review);
+  const frozen = deepFreeze(clone(review)) as BacktestArtifact;
+  render(<CandidateBacktestWorkspace artifact={frozen}/>);
+  const before = cards();
+  const perf = pane(PERFORMANCE), drawdown = pane(DRAWDOWN);
+  const percentData = [lastData(perf.series[0]), lastData(perf.series[1])];
+  const drawdownCalls = drawdown.series[0].setData.mock.calls.length, drawdownData = lastData(drawdown.series[0]);
+  // Select a trade on page 2, then drive every display control while it stays selected.
+  fireEvent.click(screen.getByRole('button', {name: 'Next page'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t8'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Expand chart'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Index 100'}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /^Strategy equity/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /^Long buy-and-hold/}));
+  expect(screen.getByText('Both curves are hidden. Select a series above to display it.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Line'}));
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  act(() => useThemeStore.getState().toggle());
+  fireEvent.click(screen.getByRole('button', {name: 'Last year'}));
+  fireEvent.change(screen.getByLabelText('Order'), {target: {value: 'best'}});
+  expect(row('t8')).toHaveAttribute('aria-current', 'true');
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /^Strategy equity/}));
+  fireEvent.click(screen.getByRole('checkbox', {name: /^Long buy-and-hold/}));
+  fireEvent.click(screen.getByRole('button', {name: 'OHLC bars'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Candles'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Return %'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Reduce chart'}));
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t8'})).toBeInTheDocument();
+  expect(markerPoints().find((m: any) => m.id === 't8:entry').size).toBeGreaterThan(markerPoints().find((m: any) => m.id === 't1:entry').size);
+  fireEvent.keyDown(screen.getByRole('button', {name: 'Inspect trade t8'}), {key: 'Escape'});
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  expectRange(YEAR);
+  // Same three chart instances; identical recorded series after the round trips; drawdown never re-derived.
+  expect(mockCharts).toHaveLength(3);
+  expect([lastData(perf.series[0]), lastData(perf.series[1])]).toEqual(percentData);
+  const lastVisibility = (series: any) => series.applyOptions.mock.calls.map((c: any[]) => c[0]).filter((o: any) => 'visible' in o).at(-1);
+  expect(lastVisibility(perf.series[0])).toEqual({visible: true});
+  expect(lastVisibility(perf.series[1])).toEqual({visible: true});
+  expect(lastData(perf.series[0])).toEqual(review.detail.equity.map(r => ({time: r.time, value: r.strategy_index - 100})));
+  expect(drawdown.series[0].setData).toHaveBeenCalledTimes(drawdownCalls);
+  expect(lastData(drawdown.series[0])).toEqual(drawdownData);
+  expect(activePrice().type).toBe('candles');
+  expect(lastData(activePrice())).toEqual(ohlc);
+  expect(cards()).toBe(before);
+  expect(frozen).toEqual(pristine);
+ });
+
  it('clears a stale selection when the artifact changes, even when trade ids repeat', () => {
   const {rerender} = render(<CandidateBacktestWorkspace artifact={review}/>);
   fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));

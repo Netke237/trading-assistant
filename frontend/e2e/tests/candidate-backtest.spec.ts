@@ -1,6 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import fs from 'fs';
 import { setupApiMocks } from '../fixtures/api-mocks';
+
+/** Only fixture routes answer: any other /api request and the live quote stream are blocked, never sent to a real service. */
+async function isolate(page: Page) {
+  await page.route(url => url.pathname.startsWith('/api/'), route => route.abort('blockedbyclient'));
+  await page.routeWebSocket(/\/chart\/stream\//, ws => {ws.close();});
+}
 
 // Generate these from the real detailed engine with the validation fixture script.
 const fixturePath = process.env.BACKTEST_BROWSER_FIXTURES;
@@ -11,7 +17,8 @@ for (const direction of ['Bullish', 'Bearish']) for (const theme of ['dark', 'li
     const artifact = fixtures[`${direction}-${width === 1280 ? '15m' : '1d'}`];
     await page.setViewportSize({width, height: 1000});
     await page.addInitScript(theme => localStorage.setItem('bamendjou:theme', JSON.stringify({state:{theme},version:0})), theme);
-    await setupApiMocks(page);
+    await isolate(page);
+  await setupApiMocks(page);
     let artifactReads = 0;
     const writes: string[] = [];
     page.on('request', request => {if (request.method() !== 'GET' && request.url().includes('/api/')) writes.push(request.url());});
@@ -32,7 +39,7 @@ for (const direction of ['Bullish', 'Bearish']) for (const theme of ['dark', 'li
     await expect(page.getByText(`Artifact ${artifact.artifact_id}`,{exact:false})).toBeVisible();
     await expect(page.getByText('Long buy-and-hold (gross; excludes fees)',{exact:false}).first()).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await page.screenshot({path:`/tmp/backtest-${direction}-${theme}-${width}.png`,fullPage:true});
+    await page.screenshot({path:test.info().outputPath(`backtest-${direction}-${theme}-${width}.png`),fullPage:true});
     await page.getByLabel('Evidence interval',{exact:true}).selectOption('1h');
     await expect(page.getByLabel('Historical candles',{exact:true})).toHaveCount(0);
     expect(artifactReads).toBe(1);
@@ -42,6 +49,7 @@ for (const direction of ['Bullish', 'Bearish']) for (const theme of ['dark', 'li
 
 test('successful zero trades keep curves; unsupported setup stays unavailable', async ({page}) => {
   await page.setViewportSize({width:1280,height:1000});
+  await isolate(page);
   await setupApiMocks(page);
   const artifact=fixtures.zero;
   await page.route('**/api/backtest-artifacts/**', route => route.fulfill({json:artifact}));
@@ -55,6 +63,7 @@ test('successful zero trades keep curves; unsupported setup stays unavailable', 
 
 test('explicit fresh run stays separate and preserves original evidence and scan inputs', async ({page}) => {
   await page.setViewportSize({width:1280,height:1000});
+  await isolate(page);
   await setupApiMocks(page);
   const original=fixtures['Bearish-1d'];
   const fresh=fixtures.fresh;
