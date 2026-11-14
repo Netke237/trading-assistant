@@ -2,11 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "board/tuner-recheck-window-f3774d77",
-      "claimed_at": "2026-11-14T10:07:23Z",
-      "expires_at": "2026-11-14T13:30:57Z",
-      "note": "Resume per user: fix all local tests then finish/audit/merge638",
-      "task": "TUNER-RECHECK-WINDOW"
+      "branch": "codex/backtest-review-99b03167",
+      "claimed_at": "2026-11-14T18:48:02Z",
+      "expires_at": "2026-11-14T21:48:02Z",
+      "note": "Implement631 approved recorded backtest chart redesign through tests audit and merge",
+      "task": "BACKTEST-REVIEW-VISUALISATION"
     }
   ]
 }
