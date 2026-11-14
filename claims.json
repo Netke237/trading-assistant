@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "codex/backtest-review-99b03167",
       "claimed_at": "2026-11-14T18:48:02Z",
-      "expires_at": "2026-11-14T21:51:05Z",
+      "expires_at": "2026-11-14T21:51:22Z",
       "note": "Implement631 approved recorded backtest chart redesign through tests audit and merge",
       "task": "BACKTEST-REVIEW-VISUALISATION"
     }
