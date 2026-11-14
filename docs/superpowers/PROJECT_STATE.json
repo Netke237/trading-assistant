@@ -10806,20 +10806,20 @@
       "name": "Exact-parity recheck window optimization and frozen tuning export",
       "status": "in_progress",
       "tracking_issue": 638,
-      "branch": "board/tuner-recheck-window-e819e012",
+      "branch": "board/tuner-recheck-window-f3774d77",
       "size": "XL",
       "complexity": 4,
       "completion_pct": 20,
       "plan": "docs/superpowers/plans/2026-11-12-tuner-recheck-window-plan.md",
-      "audit_rounds": 1,
+      "audit_rounds": 2,
       "audit_clean": false,
       "plan_audit_clean": true,
       "plan_stage": {
-        "rounds": 1,
+        "rounds": 2,
         "clean": true,
         "closed_by": "clean",
-        "reviewer": "tuner_plan_audit_1",
-        "plan_sha256": "7d0f8102121210416d0ca202c7d3f67ebff5eb6f4d3fbc80930a5498095e2ad0"
+        "reviewer": "tuner_plan_amendment_audit_2",
+        "plan_sha256": "1941a3aca2ba951a516baf7b3f2c6091e66650414f5aff5838822b99cb3b77fa"
       },
       "audit_history": [
         {
@@ -10834,6 +10834,20 @@
           "outstanding": [],
           "clean": true,
           "report": "docs/superpowers/plans/tuner-recheck-window/plan-audit-1.md"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "stage_round": 2,
+          "reviewer": "tuner_plan_amendment_audit_2",
+          "plan_sha256": "1941a3aca2ba951a516baf7b3f2c6091e66650414f5aff5838822b99cb3b77fa",
+          "scope": "Task2a amendment and interactions only; original plan1 retained",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/tuner-recheck-window/plan-amendment-audit-2.md"
         }
       ],
       "code_stage": {
@@ -10846,7 +10860,7 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "2026-11-14: T1 corrected Linux full10307pass9skip; T2 current exporter/report41pass native/Linux; typecheck passed. Full Node20 frontend still running with failures; baseline edited-fields-sync reproduces21fail10pass, other failures not yet classified. T2 remains open, T3 not started; phase20, plan1clean0, code0/auditfalse; unfinished and not merge-ready.",
+      "note": "2026-11-14 user expanded objective: fix local test failures and finish/merge only after all checks. Fresh plan2 amendment audit clean0, original plan1 retained; Task2a semantic test-query scoping approved. Fullfrontend57failed/6322passed beforefix; original backendT1/T2 built, T3pending; phase20, code0/auditfalse.",
       "build_tickets": [
         {
           "issue": 639,
