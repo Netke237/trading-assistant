@@ -34,7 +34,10 @@ VALID_STRATEGIES = {
 
 _DEFAULT_PATH = Path(__file__).parent.parent.parent / "config" / "strategy_watches.yaml"
 
-_DEFAULT_SCHEDULE = {"enabled": False, "mode": "eod", "eod_time": "16:30", "poll_hours": 4, "sustain_minutes": 0}
+# 21:30 ET (BG-SCHEDULE-MAINT): a daily bar is stored only once it settles at
+# 18:00 ET (historical_store._SETTLE) and the nightly download runs ~20:00 ET.
+# An EOD time before that evaluates yesterday's bar, one session late.
+_DEFAULT_SCHEDULE = {"enabled": False, "mode": "eod", "eod_time": "21:30", "poll_hours": 4, "sustain_minutes": 0}
 
 
 def _fresh_state() -> dict:

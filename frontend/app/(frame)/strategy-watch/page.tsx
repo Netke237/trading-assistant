@@ -154,7 +154,8 @@ export default function StrategyWatchPage() {
             </select>
             {schedule.mode === 'eod' ? (
               <input className={styles.input} type="time" value={schedule.eod_time}
-                     onChange={(e) => updateSched({ eod_time: e.target.value })} />
+                     onChange={(e) => updateSched({ eod_time: e.target.value })}
+                     title="New York time. A day's bar is final at 18:00 ET and the nightly download runs about 20:00 ET; an earlier time evaluates the previous day's bar." />
             ) : (
               <input className={styles.input} type="number" min={1} max={24} value={schedule.poll_hours}
                      onChange={(e) => updateSched({ poll_hours: Number(e.target.value) })} />

@@ -1,7 +1,7 @@
 schedule:
   enabled: true
   mode: eod
-  eod_time: '16:15'
+  eod_time: '21:30'
   poll_hours: 4
   sustain_minutes: 0
 watches:
