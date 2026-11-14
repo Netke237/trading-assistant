@@ -1,16 +1,17 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import CandidateBacktestWorkspace from './index';
 import type { BacktestArtifact } from '@/types/backtest';
 import { useThemeStore } from '@/lib/theme';
 const mockCharts: any[] = [];
+const mockMarkers: any[] = [];
 jest.mock('lightweight-charts', () => ({
- CandlestickSeries: 'candles', LineSeries: 'line',
- createSeriesMarkers: jest.fn(() => ({detach: jest.fn(),setMarkers:jest.fn()})),
+ CandlestickSeries: 'candles', LineSeries: 'line', BarSeries: 'bars',
+ createSeriesMarkers: jest.fn((series: any, points: any) => {const m = {series, initial: points, detach: jest.fn(), setMarkers: jest.fn()}; mockMarkers.push(m); return m;}),
  createChart: jest.fn((container: HTMLElement, options: any) => {
   const series: any[] = [];
-  const scale = {subscribeVisibleTimeRangeChange: jest.fn(), unsubscribeVisibleTimeRangeChange: jest.fn(), setVisibleRange: jest.fn(), getVisibleLogicalRange: jest.fn(() => ({from:1,to:2})), setVisibleLogicalRange: jest.fn(), fitContent: jest.fn()};
-  const chart = {container, options, series, scale, addSeries: jest.fn((type: string, opts: any) => {const s = {type, opts, setData: jest.fn(), applyOptions: jest.fn()}; series.push(s); return s;}), timeScale: () => scale, applyOptions: jest.fn(), remove: jest.fn(), subscribeClick: jest.fn(), unsubscribeClick: jest.fn(), subscribeCrosshairMove: jest.fn(), unsubscribeCrosshairMove: jest.fn(), setCrosshairPosition: jest.fn(), clearCrosshairPosition: jest.fn()};
+  const scale = {subscribeVisibleTimeRangeChange: jest.fn(), unsubscribeVisibleTimeRangeChange: jest.fn(), setVisibleRange: jest.fn(), getVisibleRange: jest.fn(() => null), getVisibleLogicalRange: jest.fn(() => ({from:1,to:2})), setVisibleLogicalRange: jest.fn(), fitContent: jest.fn()};
+  const chart = {container, options, series, scale, addSeries: jest.fn((type: string, opts: any) => {const s = {type, opts, setData: jest.fn(), applyOptions: jest.fn()}; series.push(s); return s;}), timeScale: () => scale, applyOptions: jest.fn(), remove: jest.fn(), removeSeries: jest.fn((s: any) => {s.removed = true;}), subscribeClick: jest.fn(), unsubscribeClick: jest.fn(), subscribeCrosshairMove: jest.fn(), unsubscribeCrosshairMove: jest.fn(), setCrosshairPosition: jest.fn(), clearCrosshairPosition: jest.fn()};
   mockCharts.push(chart); return chart;
  }),
 }));
@@ -41,7 +42,7 @@ const withEquity = (equity: any[], summary: any = {}) => ({...timed, detail: {..
 const cards = () => screen.getByLabelText('Full-period performance summary').textContent;
 let fetchSpy: jest.Mock;
 beforeEach(() => {
- mockCharts.length=0; global.ResizeObserver = class {observe(){} disconnect(){} unobserve(){}} as any;
+ mockCharts.length=0; mockMarkers.length=0; global.ResizeObserver = class {observe(){} disconnect(){} unobserve(){}} as any;
  fetchSpy = jest.fn(); (global as any).fetch = fetchSpy;
 });
 afterEach(() => expect(fetchSpy).not.toHaveBeenCalled());
@@ -52,7 +53,7 @@ it('renders separate price/equity panes and keyboard-accessible exact trade fill
  fireEvent.click(screen.getByRole('button', {name:/Inspect trade a/}));
  expect(screen.getByText('43.125')).toBeInTheDocument();
  expect(screen.getByText('39.875')).toBeInTheDocument();
- expect(screen.getByText('Unknown (not recorded by engine)')).toBeInTheDocument();
+ expect(within(screen.getByLabelText('Trade inspector')).getByText('Unknown (not recorded by engine)')).toBeInTheDocument();
  expect(screen.getByText(/Long buy-and-hold \(gross; excludes fees\)/)).toBeInTheDocument();
  expect(screen.getByText(/ema_period/)).toBeInTheDocument();
 });
@@ -271,5 +272,230 @@ describe('performance comparison', () => {
   act(()=>useThemeStore.getState().toggle());
   for(const chart of mockCharts){expect(chart.scale.setVisibleRange).not.toHaveBeenCalled();expect(chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);}
   expect(mockCharts).toHaveLength(3);
+ });
+});
+
+describe('price styles and linked trade review', () => {
+ const DAY = 86400, D = (n: number) => at('2024-01-01T00:00:00Z') + n * DAY;
+ const days = [-400, ...Array.from({length: 60}, (_, n) => n)];
+ const candles = days.map((n, i) => ({time: D(n), open: 100 + i, high: 102.5 + i, low: 98.25 + i, close: 101.125 + i, volume: 1000 + i}));
+ const trade = (id: string, direction: string, entry: number, exit: number, net: number, extra: any = {}) => ({id, direction, entry_time: entry, exit_time: exit, entry_price: 100, exit_price: 101, size: 1, net_return_pct: net, commission: 0.5, exit_reason: 'unknown', ...extra});
+ const trades = [
+  trade('t1', 'Bullish', D(5), D(7), 2.5, {entry_price: 101.123456, exit_price: 103.987654, size: 10, commission: 2.0234, exit_reason: 'time'}),
+  trade('t2', 'Bearish', D(10), D(12) + 3600, 1.75, {entry_price: 99.5, exit_price: 97.25, size: -5, commission: 0.75}),
+  trade('t3', 'Bullish', D(14), D(16), -3), trade('t4', 'Bullish', D(18), D(20), 0),
+  trade('t5', 'Bullish', D(22), D(24), 4.25), trade('t6', 'Bearish', D(26), D(28), -1.5),
+  trade('t7', 'Bullish', D(32), D(34), 6), trade('t8', 'Bullish', D(50), D(52), -0.5),
+ ];
+ const review = {...timed, artifact_id: 'review', detail: {...timed.detail, candles, trades,
+  equity: days.map(n => ({time: D(n), equity: 1000, strategy_index: 100, benchmark_index: 100})),
+  open_positions: [{id: 'op', direction: 'Bullish', entry_time: D(55), entry_price: 120.5, size: 4, unrealized_pnl: 12}]}} as unknown as BacktestArtifact;
+ const ohlc = candles.map(({time, open, high, low, close}) => ({time, open, high, low, close}));
+ const ALL = {from: D(-400), to: D(59)}, YEAR = {from: at('2023-02-28T00:00:00Z'), to: D(59)};
+ const activePrice = () => {const live = pane(PRICE).series.filter((s: any) => !s.removed); expect(live).toHaveLength(1); return live[0];};
+ const liveMarkers = () => mockMarkers.at(-1);
+ const markerPoints = () => {const m = liveMarkers(); return m.setMarkers.mock.calls.length ? m.setMarkers.mock.calls.at(-1)[0] : m.initial;};
+ const lastRange = (label: string) => pane(label).scale.setVisibleRange.mock.calls.at(-1)[0];
+ const expectRange = (range: any) => {for (const label of [PRICE, PERFORMANCE, DRAWDOWN]) expect(lastRange(label)).toEqual(range);};
+ const inspector = () => screen.getByLabelText('Trade inspector');
+ const row = (id: string) => screen.getByRole('button', {name: `Inspect trade ${id}`}).closest('tr');
+ const clickMarker = (param: any) => act(() => pane(PRICE).subscribeClick.mock.calls[0][0](param));
+
+ it('gives candles, OHLC bars and line the identical recorded OHLC and closes, moving markers and sync to the active series', () => {
+  const {unmount} = render(<CandidateBacktestWorkspace artifact={review}/>);
+  expect(screen.getByRole('button', {name: 'Candles'})).toHaveAttribute('aria-pressed', 'true');
+  const candle = activePrice();
+  expect(candle.type).toBe('candles');
+  expect(lastData(candle)).toEqual(ohlc);
+  const firstMarkers = liveMarkers();
+  expect(firstMarkers.series).toBe(candle);
+  const ids = markerPoints().map((m: any) => m.id);
+  const scale = pane(PRICE).scale;
+  scale.setVisibleLogicalRange.mockClear();
+  fireEvent.click(screen.getByRole('button', {name: 'OHLC bars'}));
+  expect(screen.getByRole('button', {name: 'OHLC bars'})).toHaveAttribute('aria-pressed', 'true');
+  expect(pane(PRICE).removeSeries).toHaveBeenCalledWith(candle);
+  const bars = activePrice();
+  expect(bars.type).toBe('bars');
+  expect(lastData(bars)).toEqual(ohlc);
+  expect(firstMarkers.detach).toHaveBeenCalledTimes(1);
+  expect(liveMarkers().series).toBe(bars);
+  expect(markerPoints().map((m: any) => m.id)).toEqual(ids);
+  expect(scale.setVisibleLogicalRange).toHaveBeenLastCalledWith({from: 1, to: 2});
+  fireEvent.click(screen.getByRole('button', {name: 'Line'}));
+  const line = activePrice();
+  expect(line.type).toBe('line');
+  expect(lastData(line)).toEqual(candles.map(c => ({time: c.time, value: c.close})));
+  expect(liveMarkers().series).toBe(line);
+  expect(mockMarkers.filter(m => m.detach.mock.calls.length === 1)).toHaveLength(2);
+  expect(mockCharts).toHaveLength(3);
+  // The crosshair follows the new price series.
+  fireEvent.pointerEnter(screen.getByLabelText(PERFORMANCE));
+  act(() => pane(PERFORMANCE).subscribeCrosshairMove.mock.calls[0][0]({time: D(5)}));
+  expect(pane(PRICE).setCrosshairPosition).toHaveBeenLastCalledWith(candles[6].close, D(5), line);
+  // The evidence itself is untouched.
+  expect(review.detail.candles).toEqual(candles);
+  unmount();
+  for (const m of mockMarkers) expect(m.detach).toHaveBeenCalledTimes(1);
+ });
+
+ it('marks exact entries and exits only: direction-aware entry triangles, exit squares, no snapped or invented exits', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  const points = markerPoints();
+  const ids = points.map((m: any) => m.id);
+  expect(points.find((m: any) => m.id === 't1:entry')).toMatchObject({time: D(5), price: 101.123456, shape: 'arrowUp', position: 'atPriceMiddle'});
+  expect(points.find((m: any) => m.id === 't1:exit')).toMatchObject({time: D(7), price: 103.987654, shape: 'square', position: 'atPriceMiddle'});
+  expect(points.find((m: any) => m.id === 't2:entry')).toMatchObject({time: D(10), price: 99.5, shape: 'arrowDown'});
+  expect(ids).not.toContain('t2:exit');
+  expect(ids).toContain('op:entry');
+  expect(ids).not.toContain('op:exit');
+  expect(points.every((m: any) => !m.text)).toBe(true);
+  // Every price style keeps visible markers on the scale (a fill above the plotted closes in Line mode would vanish otherwise); off-candle fills do not count.
+  for (const style of ['Candles', 'OHLC bars', 'Line']) {
+   fireEvent.click(screen.getByRole('button', {name: style}));
+   const provider = activePrice().opts.autoscaleInfoProvider;
+   expect(provider(() => ({priceRange: {minValue: 120, maxValue: 121}}))).toEqual({priceRange: {minValue: 99.5, maxValue: 121}});
+   expect(provider(() => null)).toBeNull();
+  }
+  pane(PRICE).scale.getVisibleRange.mockReturnValueOnce({from: D(4), to: D(6)});
+  expect(activePrice().opts.autoscaleInfoProvider(() => ({priceRange: {minValue: 100, maxValue: 101}}))).toEqual({priceRange: {minValue: 100, maxValue: 101.123456}});
+  expect(screen.getByText(/Some fills have no exact original candle timestamp/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  expect(markerPoints()).toEqual([]);
+  expect(activePrice().opts.autoscaleInfoProvider(() => ({priceRange: {minValue: 120, maxValue: 121}}))).toEqual({priceRange: {minValue: 120, maxValue: 121}});
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  expect(markerPoints().map((m: any) => m.id)).toEqual(ids);
+ });
+
+ it('shows readable rows, keeps full recorded precision in the inspector and labels recorded exit reasons truthfully', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  expect(screen.getByText('Select “Inspect” in the trade table or click a chart marker to connect a trade with the price history.')).toBeInTheDocument();
+  expect(within(row('t1')!).getByText('101.12 / 103.99')).toBeInTheDocument();
+  expect(within(row('t1')!).getByText('+2.50%')).toBeInTheDocument();
+  expect(within(row('t1')!).getByText('Time exit (holding limit)')).toBeInTheDocument();
+  expect(within(row('t1')!).getByText('2024-01-06 00:00')).toBeInTheDocument();
+  expect(within(row('t2')!).getByText('Unknown (not recorded by engine)')).toBeInTheDocument();
+  expect(within(row('t2')!).getByText('2024-01-13 01:00')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));
+  const t1 = within(inspector());
+  for (const text of ['Bullish', new Date(D(5) * 1000).toISOString(), new Date(D(7) * 1000).toISOString(), '101.123456', '103.987654', '10', '2.0234', '2.5', 'Time exit (holding limit)']) expect(t1.getByText(text)).toBeInTheDocument();
+  expect(screen.getByText(/Trade #t1 · Bullish · 2024-01-06 00:00 → 2024-01-08 00:00 · Recorded net return \+2\.50% · Time exit \(holding limit\)/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t2'}));
+  const t2 = within(inspector());
+  for (const text of ['Bearish', new Date((D(12) + 3600) * 1000).toISOString(), '99.5', '97.25', '-5', '0.75', '1.75', 'Unknown (not recorded by engine)']) expect(t2.getByText(text)).toBeInTheDocument();
+  expect(t2.getByText('Not marked: no candle has this exact timestamp')).toBeInTheDocument();
+  expect(t2.getByText('Marked at the exact candle')).toBeInTheDocument();
+ });
+
+ it('keeps selection by stable id across pagination and sorting, and handles the partial last page', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  expect(screen.getByText('1–6 of 8 trades')).toBeInTheDocument();
+  expect(screen.queryByRole('button', {name: 'Inspect trade t8'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Next page'}));
+  expect(screen.getByText('7–8 of 8 trades')).toBeInTheDocument();
+  expect(screen.getAllByRole('button', {name: /^Inspect trade/}).map(b => b.getAttribute('aria-label'))).toEqual(['Inspect trade t7', 'Inspect trade t8']);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t8'}));
+  expect(row('t8')).toHaveAttribute('aria-current', 'true');
+  fireEvent.change(screen.getByLabelText('Order'), {target: {value: 'best'}});
+  // Highest return first: t7, t5, t1, t2, t4, t8 | t6, t3 — the selected trade stays selected and visible.
+  expect(screen.getAllByRole('button', {name: /^Inspect trade/}).map(b => b.getAttribute('aria-label')?.slice(14))).toEqual(['t7', 't5', 't1', 't2', 't4', 't8']);
+  expect(row('t8')).toHaveAttribute('aria-current', 'true');
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t8'})).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Order'), {target: {value: 'worst'}});
+  expect(screen.getAllByRole('button', {name: /^Inspect trade/}).map(b => b.getAttribute('aria-label')?.slice(14))).toEqual(['t3', 't6', 't8', 't4', 't2', 't1']);
+  fireEvent.change(screen.getByLabelText('Order'), {target: {value: 'newest'}});
+  expect(screen.getAllByRole('button', {name: /^Inspect trade/})[0]).toHaveAccessibleName('Inspect trade t8');
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t8'})).toBeInTheDocument();
+ });
+
+ it('zooms every pane around the inspected trade, clamped to recorded bounds, and Clear returns to the last broad range', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  expectRange(ALL);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));
+  expectRange({from: D(-15), to: D(27)});
+  expect(screen.getByText(/Showing the selected trade and surrounding dates\./)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+  expectRange(ALL);
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', {name: 'Inspect trade t1'})).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', {name: 'Last year'}));
+  expectRange(YEAR);
+  fireEvent.click(screen.getByRole('button', {name: 'Next page'}));
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t8'}));
+  expectRange({from: D(30), to: D(59)});
+  // Changing units, theme or price style keeps the selection and the zoom.
+  for (const chart of mockCharts) chart.scale.setVisibleRange.mockClear();
+  fireEvent.click(screen.getByRole('button', {name: 'Index 100'}));
+  act(() => useThemeStore.getState().toggle());
+  fireEvent.click(screen.getByRole('button', {name: 'Line'}));
+  for (const chart of mockCharts) expect(chart.scale.setVisibleRange).not.toHaveBeenCalled();
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t8'})).toBeInTheDocument();
+  expect(markerPoints().find((m: any) => m.id === 't8:entry').size).toBeGreaterThan(markerPoints().find((m: any) => m.id === 't1:entry').size);
+  fireEvent.keyDown(screen.getByRole('button', {name: 'Inspect trade t8'}), {key: 'Escape'});
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  expectRange(YEAR);
+  expect(screen.getByRole('button', {name: 'Last year'})).toHaveAttribute('aria-pressed', 'true');
+ });
+
+ it('lets a broad range button override a trade zoom while keeping the selection', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));
+  fireEvent.click(screen.getByRole('button', {name: 'All history'}));
+  expectRange(ALL);
+  expect(screen.getByText(/Showing all recorded history\./)).toBeInTheDocument();
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t1'})).toBeInTheDocument();
+ });
+
+ it('gives a marker click the same selection and zoom as the Inspect button, ignoring open positions and unknown ids', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  clickMarker({hoveredObjectId: 't8:exit', time: D(52)});
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t8'})).toBeInTheDocument();
+  expectRange({from: D(30), to: D(59)});
+  // The table follows to the page holding the selected trade.
+  expect(row('t8')).toHaveAttribute('aria-current', 'true');
+  expect(screen.getByText('7–8 of 8 trades')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+  for (const chart of mockCharts) chart.scale.setVisibleRange.mockClear();
+  clickMarker({hoveredObjectId: 'op:entry', time: D(55)});
+  clickMarker({hoveredObjectId: 'nope', time: undefined});
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  for (const chart of mockCharts) expect(chart.scale.setVisibleRange).not.toHaveBeenCalled();
+  // A click on a candle that holds a visible marker selects that trade; with markers hidden it does not.
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  clickMarker({time: D(5)});
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', {name: 'Trade markers'}));
+  clickMarker({time: D(5)});
+  expect(within(inspector()).getByRole('heading', {name: 'Trade t1'})).toBeInTheDocument();
+  expectRange({from: D(-15), to: D(27)});
+ });
+
+ it('describes a hovered marker from its recorded fill, and an open position without an exit', () => {
+  render(<CandidateBacktestWorkspace artifact={review}/>);
+  fireEvent.pointerEnter(screen.getByLabelText(PRICE));
+  const cross = pane(PRICE).subscribeCrosshairMove.mock.calls[0][0];
+  act(() => cross({time: D(5), hoveredObjectId: 't1:entry'}));
+  expect(screen.getByText(`Trade #t1 · Bullish entry · ${new Date(D(5) * 1000).toISOString()} · recorded fill 101.123456 · click to inspect`)).toBeInTheDocument();
+  act(() => cross({time: D(55), hoveredObjectId: 'op:entry'}));
+  expect(screen.getByText(`Open position #op · Bullish entry · ${new Date(D(55) * 1000).toISOString()} · recorded fill 120.5 · no exit recorded`)).toBeInTheDocument();
+  act(() => cross({time: D(6)}));
+  expect(screen.queryByText(/· recorded fill /)).not.toBeInTheDocument();
+  expect(screen.getByText(/^▲ Long entry · ▼ Short entry · ■ Exit/)).toBeInTheDocument();
+ });
+
+ it('handles zero trades without pagination or a fabricated row', () => {
+  render(<CandidateBacktestWorkspace artifact={{...review, detail: {...review.detail, trades: []}} as BacktestArtifact}/>);
+  expect(screen.getByText('No closed trades recorded for this run.')).toBeInTheDocument();
+  expect(screen.queryByRole('navigation', {name: 'Pagination'})).not.toBeInTheDocument();
+  expect(markerPoints().map((m: any) => m.id)).toEqual(['op:entry']);
+ });
+
+ it('clears a stale selection when the artifact changes, even when trade ids repeat', () => {
+  const {rerender} = render(<CandidateBacktestWorkspace artifact={review}/>);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));
+  expect(screen.getByLabelText('Trade inspector')).toBeInTheDocument();
+  rerender(<CandidateBacktestWorkspace artifact={{...review, artifact_id: 'review-2'} as BacktestArtifact}/>);
+  expect(screen.queryByLabelText('Trade inspector')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', {name: 'Candles'})).toHaveAttribute('aria-pressed', 'true');
  });
 });

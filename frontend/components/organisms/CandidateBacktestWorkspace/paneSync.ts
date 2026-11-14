@@ -12,9 +12,10 @@ export interface LinkedPane {
 /**
  * Links panes by actual UTC timestamp, never by logical bar index. Only the pane the pointer is
  * in broadcasts its visible range and crosshair, so programmatic updates to the other panes can
- * never echo back (no feedback loops). Returns the cleanup that removes every subscription.
+ * never echo back (no feedback loops). `onHover` also receives the hovered chart object id (for
+ * example a price marker) from the pane in use. Returns the cleanup that removes every subscription.
  */
-export function linkPanes(panes: LinkedPane[], onHover: (time: number | null) => void): () => void {
+export function linkPanes(panes: LinkedPane[], onHover: (time: number | null, hoveredObjectId?: unknown) => void): () => void {
  let active: LinkedPane | null = null;
  let release: (() => void) | null = null;
  const others = (source: LinkedPane) => panes.filter(pane => pane !== source);
@@ -41,7 +42,7 @@ export function linkPanes(panes: LinkedPane[], onHover: (time: number | null) =>
   const onCross = (param: MouseEventParams<Time>) => {
    if (active !== pane) return;
    const time = typeof param.time === 'number' && Number.isFinite(param.time) ? param.time : null;
-   onHover(time);
+   onHover(time, param.hoveredObjectId);
    for (const other of others(pane)) {
     const sample = time === null ? null : other.sampleAt(time);
     if (sample) other.chart.setCrosshairPosition(sample.value, time as UTCTimestamp, sample.series);

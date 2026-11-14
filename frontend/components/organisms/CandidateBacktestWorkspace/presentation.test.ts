@@ -1,5 +1,5 @@
 import type { DetailedBacktestResult, BacktestTrade } from '@/types/backtest';
-import { performanceSeries, performanceSummary, sampledDrawdown, displayBounds, clampBounds, exactSample, tradePage, formatValue, formatSigned, formatPerformance, performanceComparison, legendReadout, drawdownReadout } from './presentation';
+import { performanceSeries, performanceSummary, sampledDrawdown, displayBounds, clampBounds, exactSample, tradePage, formatValue, formatSigned, formatPerformance, performanceComparison, legendReadout, drawdownReadout, exitReasonLabel, tradeWindow, pageOfTrade, formatUtcMinute } from './presentation';
 
 const time = (iso: string) => Date.parse(iso) / 1000;
 function freeze<T>(value: T): T {
@@ -114,4 +114,45 @@ test('drawdown readout reports latest and deepest sampled values, unavailable wh
  expect(readout.latest).toBeCloseTo(-10,12);expect(readout.deepest).toBeCloseTo(-10,12);
  expect(drawdownReadout(sampledDrawdown({...detail,equity:[{...detail.equity[0],equity:850},detail.equity[1],detail.equity[2]]})).deepest).toBeCloseTo(-15,12);
  expect(drawdownReadout(null)).toEqual({latest:null,deepest:null});
+});
+
+describe('trade review helpers', () => {
+ const DAY=86400, D=(n:number)=>1704067200+n*DAY;
+ const daily=freeze<DetailedBacktestResult>({...detail,
+  candles:Array.from({length:60},(_,n)=>({time:D(n),open:1,high:1,low:1,close:1,volume:1})),
+  equity:Array.from({length:60},(_,n)=>({time:D(n),equity:1000,strategy_index:100,benchmark_index:100}))});
+ const trade=(id:string,entry:number,exit:number,net=0):BacktestTrade=>({id,direction:'Bullish',entry_time:entry,exit_time:exit,entry_price:1,exit_price:1,size:1,net_return_pct:net,commission:0,exit_reason:'unknown'});
+ test('labels only the two recorded exit reasons, never an invented stop or target',()=>{
+  expect(exitReasonLabel('time')).toBe('Time exit (holding limit)');
+  expect(exitReasonLabel('unknown')).toBe('Unknown (not recorded by engine)');
+  expect(exitReasonLabel('stop' as never)).toBe('Unknown (not recorded by engine)');
+ });
+ test('zooms to the trade plus twenty recorded candle steps each side, clamped to recorded bounds',()=>{
+  expect(tradeWindow(daily,trade('a',D(30),D(32)))).toEqual({from:D(10),to:D(52)});
+  expect(tradeWindow(daily,trade('b',D(50),D(51)))).toEqual({from:D(30),to:D(59)});
+  expect(tradeWindow(daily,trade('c',D(2),D(3)))).toEqual({from:D(0),to:D(23)});
+  // A long trade pads by its own span instead.
+  expect(tradeWindow(daily,trade('d',D(20),D(45)))).toEqual({from:D(0),to:D(59)});
+  // Intraday steps are measured, not assumed daily.
+  const intraday={...daily,candles:daily.candles.map((c,n)=>({...c,time:D(0)+n*900})),equity:daily.equity.map((e,n)=>({...e,time:D(0)+n*900}))};
+  expect(tradeWindow(intraday,trade('e',D(0)+30*900,D(0)+31*900))).toEqual({from:D(0)+10*900,to:D(0)+51*900});
+  // One recorded sample: no step, the window is the clamped trade itself.
+  const single={...daily,candles:[daily.candles[5]],equity:[daily.equity[5]]};
+  expect(tradeWindow(single,trade('f',D(5),D(5)))).toEqual({from:D(5),to:D(5)});
+  expect(tradeWindow(daily,trade('g',NaN,D(5)))).toBeNull();
+  expect(tradeWindow({...daily,candles:[],equity:[]},trade('h',D(5),D(6)))).toBeNull();
+ });
+ test('finds the page of a trade by stable id after sorting; unknown ids and empty lists have none',()=>{
+  const trades=freeze([trade('t1',D(1),D(2),5),trade('t2',D(3),D(4),-1),trade('t3',D(5),D(6),9),trade('t4',D(7),D(8),2)]);
+  expect(pageOfTrade(trades,'entry_time','asc',2,'t3')).toBe(1);
+  expect(pageOfTrade(trades,'net_return_pct','desc',2,'t3')).toBe(0);
+  expect(pageOfTrade(trades,'net_return_pct','desc',2,'t2')).toBe(1);
+  expect(tradePage(trades,'net_return_pct','desc',pageOfTrade(trades,'net_return_pct','desc',2,'t2') as number,2).rows.map(r=>r.id)).toContain('t2');
+  expect(pageOfTrade(trades,'entry_time','asc',2,'missing')).toBeNull();
+  expect(pageOfTrade([],'entry_time','asc',2,'t1')).toBeNull();
+ });
+ test('formats row timestamps to the UTC minute without altering the recorded value',()=>{
+  expect(formatUtcMinute(Date.parse('2024-06-03T14:30:59Z')/1000)).toBe('2024-06-03 14:30');
+  expect(formatUtcMinute(NaN)).toBe('Unavailable');
+ });
 });

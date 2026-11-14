@@ -152,3 +152,48 @@ export function drawdownReadout(samples: ValueSample[] | null) {
  if (!samples?.length) return {latest: null, deepest: null};
  return {latest: samples[samples.length - 1].value, deepest: Math.min(...samples.map(row => row.value))};
 }
+
+/** Only the two reasons the engine records; anything else is unknown, never an invented stop or target. */
+export function exitReasonLabel(reason: BacktestTrade['exit_reason']): string {
+ return reason === 'time' ? 'Time exit (holding limit)' : 'Unknown (not recorded by engine)';
+}
+
+/** Smallest positive gap between consecutive recorded timestamps (candles first, then equity); 0 when unknown. */
+function recordedStep(detail: DetailedBacktestResult): number {
+ for (const rows of [detail.candles, detail.equity]) {
+  const times = rows.map(row => row.time).filter(Number.isFinite).sort((a, b) => a - b);
+  let step = Infinity;
+  for (let i = 1; i < times.length; i++) if (times[i] > times[i - 1]) step = Math.min(step, times[i] - times[i - 1]);
+  if (Number.isFinite(step)) return step;
+ }
+ return 0;
+}
+
+export const TRADE_CONTEXT_STEPS = 20;
+/**
+ * Display window around a trade: its own span padded each side by the larger of that span and
+ * twenty recorded timestamp steps, clamped to the recorded bounds. Display only; no data changes.
+ */
+export function tradeWindow(detail: DetailedBacktestResult, trade: Pick<BacktestTrade, 'entry_time' | 'exit_time'>): TimeBounds | null {
+ const {entry_time: entry, exit_time: exit} = trade;
+ if (!Number.isFinite(entry) || !Number.isFinite(exit)) return null;
+ const from = Math.min(entry, exit), to = Math.max(entry, exit);
+ const pad = Math.max(to - from, TRADE_CONTEXT_STEPS * recordedStep(detail));
+ return clampBounds({from: from - pad, to: to + pad}, recordedBounds(detail));
+}
+
+/** The page holding a trade id under the same ordering as tradePage, or null when it is absent. */
+export function pageOfTrade(trades: readonly BacktestTrade[], key: TradeSortKey, direction: 'asc' | 'desc', pageSize: number, id: string): number | null {
+ const all = tradePage(trades, key, direction, 0, Math.max(1, trades.length)).rows;
+ const index = all.findIndex(trade => trade.id === id);
+ if (index < 0) return null;
+ const size = Number.isFinite(pageSize) ? Math.max(1, Math.floor(pageSize)) : 10;
+ return Math.floor(index / size);
+}
+
+/** Readable UTC to the minute for table rows; the inspector keeps the full recorded timestamp. */
+export function formatUtcMinute(time: number): string {
+ if (!Number.isFinite(time)) return 'Unavailable';
+ const date = new Date(time * 1000);
+ return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 16).replace('T', ' ') : 'Unavailable';
+}
