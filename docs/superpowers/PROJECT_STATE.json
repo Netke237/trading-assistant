@@ -10879,6 +10879,55 @@
         "jest_tests": 45,
         "source": "merged frontend/backend byte-identical to approved PR627 head8ca50959"
       }
+    },
+    {
+      "id": "BG-SCHEDULE-MAINT",
+      "name": "Background schedule: artifact expiry sweep, weekly history health check, strategy-watch EOD at 21:30 ET",
+      "status": "built",
+      "size": "S",
+      "complexity": 2,
+      "completion_pct": 90,
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": null,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "e8eca1b6..c6a730bd",
+          "gate_findings": 1,
+          "findings": [
+            "F1: Friday 21:30 ET runs on a host already in Saturday; get_bars' host-date staleness reference (_prev_trading_day = Thursday) never fetched Friday's settled bar for symbols not yet stored, so Friday-close watch signals were dropped."
+          ],
+          "fixes": [
+            "4ab0bc08: get_bars(require_through=...) opt-in; the watch evaluator passes the ET date of last_settle_boundary(now)."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "c6a730bd..4ab0bc08",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Below-gate observation fixed after the round: test_p4b_watch_isolation_and_delivery's get_bars fake did not accept require_through (test-only)."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/history_health.py",
+        "pattern": "run_history_health_check",
+        "note": "Presence probe only; behaviour is pinned by tests/test_history_health.py and tests/test_historical_store_settle.py."
+      },
+      "note": "No plan stage: small change acting on a scheduling review in-session. Not merged until Kenneth approves the PR."
     }
   ],
   "already_shipped": [

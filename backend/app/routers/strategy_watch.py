@@ -44,7 +44,7 @@ class EnabledPatch(BaseModel):
 class ScheduleIn(BaseModel):
     enabled: bool
     mode: str = Field(pattern="^(eod|poll)$")
-    eod_time: str = "16:15"
+    eod_time: str = "21:30"  # ET; see strategy_watch_store._DEFAULT_SCHEDULE
     poll_hours: int = Field(default=4, ge=1, le=24)
     sustain_minutes: int = Field(default=0, ge=0, le=1440)
 
