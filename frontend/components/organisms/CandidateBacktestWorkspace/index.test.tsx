@@ -453,6 +453,47 @@ describe('price styles and linked trade review', () => {
   expect(screen.getByRole('button', {name: 'Last year'})).toHaveAttribute('aria-pressed', 'true');
  });
 
+ it('refits every pane to the chosen range, or the selection window, after its container changes width, and only then', () => {
+  let resize: (() => void) | null = null;
+  const disconnect = jest.fn();
+  global.ResizeObserver = class {constructor(cb: () => void) {resize = cb;} observe() {} unobserve() {} disconnect() {disconnect();}} as any;
+  const {unmount} = render(<CandidateBacktestWorkspace artifact={review}/>);
+  const labels = [PRICE, PERFORMANCE, DRAWDOWN];
+  const layout = (width: number) => {
+   for (const chart of mockCharts) {chart.scale.setVisibleRange.mockClear(); chart.applyOptions.mockClear();}
+   for (const label of labels) Object.defineProperty(pane(label).container, 'clientWidth', {configurable: true, value: width});
+   act(() => resize!());
+  };
+  const expectRefit = (width: number, range: any) => {
+   expectRange(range);
+   for (const label of labels) {
+    const chart = pane(label);
+    expect(chart.applyOptions).toHaveBeenCalledWith({width});
+    // The new width is applied first, so the chart fits the chosen dates to the new width.
+    expect(chart.applyOptions.mock.invocationCallOrder.at(-1)).toBeLessThan(chart.scale.setVisibleRange.mock.invocationCallOrder.at(-1));
+   }
+  };
+  layout(1300);
+  expectRefit(1300, ALL);
+  layout(1880);
+  expectRefit(1880, ALL);
+  // A callback without a width change (e.g. Expand chart changes only the height) leaves a manual pan/zoom alone.
+  layout(1880);
+  for (const chart of mockCharts) expect(chart.scale.setVisibleRange).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', {name: 'Last year'}));
+  layout(1500);
+  expectRefit(1500, YEAR);
+  fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));
+  layout(1700);
+  expectRefit(1700, {from: D(-15), to: D(27)});
+  fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+  layout(1300);
+  expectRefit(1300, YEAR);
+  expect(mockCharts).toHaveLength(3);
+  unmount();
+  expect(disconnect).toHaveBeenCalled();
+ });
+
  it('lets a broad range button override a trade zoom while keeping the selection', () => {
   render(<CandidateBacktestWorkspace artifact={review}/>);
   fireEvent.click(screen.getByRole('button', {name: 'Inspect trade t1'}));

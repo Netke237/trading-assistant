@@ -217,13 +217,24 @@ function Evidence({artifact}:{artifact:BacktestArtifact}) {
    if(fill?.source==='trade')inspectRef.current(fill.tradeId);
   };
   price.subscribeClick(click);
-  const containers=[priceRef.current,performanceRef.current,drawdownRef.current];
+  const sized:{chart:IChartApi;element:HTMLElement}[]=[{chart:price,element:priceRef.current},{chart:performance,element:performanceRef.current},...(drawdownChart&&drawdownRef.current?[{chart:drawdownChart,element:drawdownRef.current}]:[])];
+  // Unknown until the first layout, so the initial observation also fits the chosen dates.
+  const widths=new Map<HTMLElement,number>();
   const observer=new ResizeObserver(()=>{
-   if(priceRef.current)price.applyOptions({width:priceRef.current.clientWidth});
-   if(performanceRef.current)performance.applyOptions({width:performanceRef.current.clientWidth});
-   if(drawdownChart&&drawdownRef.current)drawdownChart.applyOptions({width:drawdownRef.current.clientWidth});
+   let changed=false;
+   for(const {chart,element} of sized){
+    const width=element.clientWidth;
+    if(widths.get(element)===width)continue;
+    widths.set(element,width);chart.applyOptions({width});changed=true;
+   }
+   // A wider pane keeps its bar spacing, leaving blank space; re-fit every pane to the chosen dates (the
+   // selection window or the broad range) after the new width. Only on a width change, so a height-only
+   // change or an unrelated re-render never overrides a manual pan or zoom.
+   if(!changed)return;
+   const {zoomBounds:chosen,range:current}=display.current;
+   if(chosen)applyBounds(chosen);else applyRange(current);
   });
-  for(const element of containers)if(element)observer.observe(element);
+  for(const {element} of sized)observer.observe(element);
   return()=>{view.current=null;unlink();observer.disconnect();price.unsubscribeClick(click);markers.detach();for(const chart of charts)chart.remove();setHover(null);setHoveredFill(null);};
  },[detail,curves,drawdown,fills]);
  // Display controls only adjust the existing charts: no rebuild, no run, no evidence change.

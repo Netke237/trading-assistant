@@ -489,16 +489,13 @@ test('/chart keeps the 1280px desktop gate: 1200px shows the overlay, not a usab
 });
 
 /*
- * KNOWN DEFECT, reported to the coordinator (T5) and deliberately not fixed while verifying:
- * after the chart containers widen (a 1920px first load, or a 1366 -> 1920 window resize) the panes
- * keep their old bar spacing, so "All history" (still pressed) leaves the left part of a pane blank
- * until a range button is clicked again (observed: the performance pane on a 1920px first load; the
- * price pane first, and the others, after a 1366 -> 1920 resize). Pixel equality with an explicit re-fit pins the
- * expected behaviour; test.fail() keeps the suite green until the defect is fixed, then flags it.
+ * Regression: after the chart containers widen (a 1920px first load, or a 1366 -> 1920 window resize)
+ * every pane must refit to the chosen range, so "All history" (still pressed) fills each pane. Before
+ * the fix the panes kept their old bar spacing and the left part of a pane stayed blank until a range
+ * button was clicked again. Pixel equality with an explicit re-fit pins the expected behaviour.
  */
 for (const start of [1920, 1366]) {
- test(`KNOWN DEFECT: All history fills every pane after the containers widen (start ${start}px, end 1920px)`, async ({page}) => {
-  test.fail(true, 'Panes keep their bar spacing on widening; All history is not re-applied (reported, not fixed in T5).');
+ test(`All history fills every pane after the containers widen (start ${start}px, end 1920px)`, async ({page}) => {
   const a = fixtures['Bearish-1d'];
   await openReport(page, a, 'dark', start);
   if (start !== 1920) await page.setViewportSize({width: 1920, height: 1000});
