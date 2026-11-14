@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "board/tuner-recheck-window-e819e012",
       "claimed_at": "2026-11-14T00:28:44Z",
-      "expires_at": "2026-11-14T04:15:23Z",
+      "expires_at": "2026-11-14T04:16:13Z",
       "note": "Resume638 preserve T2 checkpoint; canonical backend green, frontend validation and T3 pending",
       "task": "TUNER-RECHECK-WINDOW"
     },
