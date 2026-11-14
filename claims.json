@@ -4,7 +4,7 @@
       "agent": "claude",
       "branch": "codex/backtest-review-99b03167",
       "claimed_at": "2026-11-14T18:48:02Z",
-      "expires_at": "2026-11-14T22:34:29Z",
+      "expires_at": "2026-11-14T23:41:24Z",
       "note": "Claude takes over #631 from stopped Codex session (Kenneth reassigned)",
       "task": "BACKTEST-REVIEW-VISUALISATION"
     }
