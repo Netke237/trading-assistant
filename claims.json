@@ -15,6 +15,14 @@
       "expires_at": "2026-11-16T10:00:46Z",
       "note": "Resume #638: T2a/T2 verify, T3, T4 audit",
       "task": "TUNER-RECHECK-WINDOW"
+    },
+    {
+      "agent": "claude",
+      "branch": "claude/laughing-rubin-bf2yhr",
+      "claimed_at": "2026-11-16T07:01:49Z",
+      "expires_at": "2026-11-16T10:01:49Z",
+      "note": "main frontend CI red: step-7-position-card earnings-veto test; diagnose + fix",
+      "task": "MAIN-EARNINGS-VETO-TEST"
     }
   ]
 }
