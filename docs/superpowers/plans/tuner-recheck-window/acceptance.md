@@ -21,7 +21,7 @@ Tracking issue #638. The live issue and PROJECT_STATE retain authoritative progr
 - [x] Pair-specific workload projections and bounded AAPL/MSFT/NVDA fixture probe; report projection versus measured timing honestly.
 - [x] Mini-PC run-book: fixed inputs and persistent per-strategy output roots, below-normal scheduled task, no MEAS/nightly overlap.
 - [x] Full backend pytest, full frontend Jest and typecheck on integrated code; production configuration/simulator/signal functions/history writers remain unchanged.
-- [ ] Actual origin/main merged before independent complete code audit; per-stage cap and exact scope recorded.
+- [x] Actual origin/main merged before independent complete code audit; per-stage cap and exact scope recorded.
 - [ ] Exact-head CI/mergeability/ownership/hold checks; pending merge record before guarded self-merge; actual verified merge and separate shipped reconciliation.
 
 No completed application feature, independent code audit, green integrated suite or shipping result is claimed by baseline evidence.
@@ -131,3 +131,7 @@ All runs: container `ta-backend-test:latest`, Python 3.11.17, no network, an eph
 | Python 3.11; full backend tests green; plan audit and code audit clean (`audit_rule`) | Python 3.11.17 and 3.11.9; full backend green as above; plan stage clean at round 3 of 3. | code audit **not yet run** (code stage 0 of 3) |
 
 The phase is checked but not audited. It is not ready to merge until an independent code round comes back clean.
+
+## Code audit round 1 — 2026-11-16
+
+Fresh gate-auditor `tuner_code_audit_1` reviewed `45c95660..b5e4c385` (whole target, code round 1 of 3): **0 gate findings**, clean. Record: `code-audit-1.md`. `audit_clean: true`, phase built at 85 %. Remaining: PR, exact-head CI, self-merge conditions.
