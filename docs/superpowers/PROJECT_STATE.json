@@ -10874,7 +10874,7 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "2026-11-16 Kenneth chose option1 for the T2a plan defect: keep semantic scoping, finally-restore the dropped-stop cap, verify with --maxWorkers=2 at unchanged limits; B7 earnings-veto calendar failure is pre-existing on main and must pass after T4 merges origin/main. Plan round3 clean (stage 3/3, cap reached clean). Native ten-suite w2: 185pass/1fail(B7). T2a built 296ac66e, full Linux frontend w2 6378/6379 (B7 only); T3 pending; phase20, code0/auditfalse.",
+      "note": "2026-11-16 Kenneth chose option1 for the T2a plan defect: keep semantic scoping, finally-restore the dropped-stop cap, verify with --maxWorkers=2 at unchanged limits; B7 earnings-veto calendar failure is pre-existing on main and must pass after T4 merges origin/main. Plan round3 clean (stage 3/3, cap reached clean). Native ten-suite w2: 185pass/1fail(B7). T2a built 296ac66e, full Linux frontend w2 6378/6379 (B7 only); T2 verified (full backend 10332/0 fail); T3 pending; phase20, code0/auditfalse.",
       "build_tickets": [
         {
           "issue": 639,
@@ -10887,10 +10887,10 @@
         {
           "issue": 640,
           "task": 2,
-          "status": "in_progress",
+          "status": "done",
           "completion_pct": 50,
           "commit": "0e1c2f14",
-          "validation_note": "Source checkpoint built; exporter/report41pass; blocked by T2a #647 (frontend verification) and integrated/code gate."
+          "validation_note": "Linux Py3.11.17 at adaee9f9: focused 128 pass; full backend 10332 pass/9 skip/0 fail (run 1 had one Heston perf load-timing miss, passes alone); frontend via T2a. Not a code audit."
         },
         {
           "issue": 647,
