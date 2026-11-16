@@ -42,7 +42,7 @@ function fmtDate(iso: string): string {
 const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   TP_HIT:                 'Target reached',
   STOP_REACHED:           'Stop-loss breach',
-  STRUCTURAL_STOP_BREACHED: 'Structural stop breach',
+  STRUCTURAL_STOP_BREACHED: 'Structural level breach',
   // Names the TYPE, which covers options and both stock sides
   // (STOP-SEMANTICS-2026-10-02); a fired row is labelled by its stamped side.
   PREMIUM_STOP:           'Premium / stock stop',
