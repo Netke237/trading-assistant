@@ -45,3 +45,17 @@ No completed application feature, independent code audit, green integrated suite
 
 - Completed disposable diagnostic comparison on native Node20.20.2 glibc: original selected test timed out6703ms; execution/review-only scoping timed out5177ms; including ladder interaction scope passed2223ms against the unchanged5000ms limit. Final command selected one test (1passed/30notselected), not a suite-wide pass. Existing numerical/order assertions and default role visibility remained intact; only search scope changed in the disposable copy. Host frontend sources remained unchanged during diagnosis.
 - Fresh independent amendment plan review `tuner_plan_amendment_audit_2` reported zero gate findings at SHA2561941a3aca2ba951a516baf7b3f2c6091e66650414f5aff5838822b99cb3b77fa; record `plan-amendment-audit-2.md`. Original plan1 preserved, continuousround2/planstage2, code0. New Task2a implementation and full-suite verification remain pending.
+
+## T2a plan defect and plan round 3 — 2026-11-16
+
+- Resumed on the new branch `board/tuner-recheck-window-03e0fc95`, cut from `f3774d77` at head `09a4c4fa`. The claim had expired and was re-taken with exit 0. The item still carries `agent-in-progress` and names this branch.
+- Before T2a, the ten permitted suites on Windows 11 (native Node 22, 4 logical cores, default workers): **10 failed / 176 passed**, 199 s.
+- T2a implementer, semantic scoping only (permitted files plus `frontend/test-utils/tradeCardQueries.ts`, uncommitted): native **183/186**; Node 20 glibc container **179/186**. Residual failures:
+  - B7, a calendar failure;
+  - two `edited-fields-sync` timeouts, 5155 ms and 5054 ms, against the unchanged 5 s limit.
+  The dropped-stop test gave back the shared daily cap only on its last line, so in the container one timeout caused five follow-on failures. Run alone, the test takes about 2.7 s and the suite passes 31/31. The implementer reported this as a plan defect and committed nothing.
+- B7 ("B7 inherits the earnings veto…") is a pre-existing failure on `origin/main` `2f8b8dc1` (main CI: 1 failed / 6507 passed). Its fixture scan is dated 2026-10-05 with `earnings_days: 40`, so since 2026-11-15 `stockEarningsGate` treats the veto as expired. The fix belongs on main as a separate change, and this phase must see B7 pass after Task 4 merges `origin/main`.
+- Kenneth chose option 1: keep the scoping, restore the cap in `finally`, and verify with `--maxWorkers=2` at unchanged limits. The amendment was appended to the plan.
+- Coordinator check after adding the `finally`, native Node 22.23.2 with `--maxWorkers=2`: ten suites **185 passed / 1 failed (B7 only)**, 235 s. `npm run typecheck` was clean. This is a focused subset and does not close the full-frontend gate.
+- Plan round 3 (stage 3/3): fresh `gate-auditor` `tuner_plan_amendment_audit_3` on SHA256 `e0adace9657c3701df35ba41eee9ad41d86330b412d882e3997935103bda6af6`, **0 gate findings**. Record: `plan-amendment-audit-3.md`. The plan stage is at its cap and clean. Code stage: 0 rounds, `audit_clean: false`.
+- Still to do: the container ten-suite and full frontend Jest runs (`--maxWorkers=2`), the T2a commit, T2 tests, T3, and T4 (merge `origin/main`, integrated checks, code audit, PR).
