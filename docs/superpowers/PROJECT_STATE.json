@@ -10977,7 +10977,8 @@
         "jest_suites": 8,
         "jest_tests": 87,
         "scope": "CandidateBacktestWorkspace, BacktestTradeTable, CandidateChartWorkspace, FreshBacktestControls",
-        "source": "merged tree byte-identical to approved and CI-green PR648 head 30dce9ff"
+        "source": "merged tree byte-identical to approved and CI-green PR648 head 30dce9ff",
+        "main_ci_on_merge_commit": "failed: 1/6508 frontend test (step-7-position-card B7 earnings-veto) whose fixed 2026-10-05 scan date aged past its 40-day earnings window on 2026-11-15; unrelated to this phase (merge tree identical to CI-green head 30dce9ff). Fixed on main by #646 (merged e1552fb2)."
       }
     }
   ],
