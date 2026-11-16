@@ -2,6 +2,7 @@
 
 POST /api/data/ingest          → trigger an ingestion run (fire-and-forget)
 GET  /api/data/ingest/status   → current job state + single-provider symbols + Tiingo usage
+                                 + the latest persisted run (last_run)
 GET  /api/data/ingest/schedule → nightly schedule config
 POST /api/data/ingest/schedule → update nightly schedule config
 """
@@ -19,6 +20,7 @@ from app.services.ingestion_job import (
     single_provider_symbols,
     start_ingestion_task,
 )
+from app.services import ingestion_run_log
 from app.services.ingestion_schedule_store import ingestion_schedule_store
 from app.services import ingestion_scheduler
 from app.services.history_retention import effective_years
@@ -82,8 +84,16 @@ async def ingest_status() -> dict:
     except Exception as exc:
         logger.warning("ingest status: tiingo usage unavailable — %s", exc)
         usage_error = f"tiingo usage unavailable: {exc}"
+    # The latest persisted run (C1b): highest id. The live fields above are unchanged.
+    last_run, last_run_error = None, None
+    try:
+        last_run = await ingestion_run_log.latest_run()
+    except Exception as exc:
+        logger.warning("ingest status: last run unavailable — %s", exc)
+        last_run_error = f"last run unavailable: {exc}"
     return {**get_ingestion_state(), "single_provider_symbols": singles,
-            "tiingo_usage": usage, "tiingo_usage_error": usage_error}
+            "tiingo_usage": usage, "tiingo_usage_error": usage_error,
+            "last_run": last_run, "last_run_error": last_run_error}
 
 
 # ── Schedule endpoints ────────────────────────────────────────────────────────

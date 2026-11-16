@@ -1098,7 +1098,7 @@ export function StockPositionCard({
             </div>
             <Text size={11} tone="dim">
               Reference level only — the risk basis stays your STOP. Saved with the
-              position so STRUCTURAL STOP BREACHED can fire.
+              position so the Structural level alert can fire.
             </Text>
           </div>
         )}</section></EvidenceDisclosure>}
@@ -1246,7 +1246,7 @@ export function StockPositionCard({
             </div>
             <Text size={11} tone="dim">
               Reference level only — the risk basis stays your STOP. Saved with the
-              position so STRUCTURAL STOP BREACHED can fire.
+              position so the Structural level alert can fire.
             </Text>
           </div>
         )}</>}

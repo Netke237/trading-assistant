@@ -237,7 +237,11 @@ const EARNINGS_VETO_REASON = 'Earnings inside the reject window — no send';
 
 it('B7 inherits the earnings veto through the shared stock card and basket', async () => {
   const selected = { ...card('AAPL'), earnings_days: 40, earnings_veto: true } as PositionCardData;
-  useScanStore.getState().setStockScanResult({ ...scan([selected]), veto_days: 60 } as StockScanResult);
+  // Scanned today: earningsGate ages earnings_days by the scan's age, so the
+  // fixture's fixed 2026-10-05 scan put this print in the past from 2026-11-14
+  // on (aged distance < 0 reads as "unknown", not "veto") and the test expired.
+  useScanStore.getState().setStockScanResult(
+    { ...scan([selected]), timestamp: new Date().toISOString(), veto_days: 60 } as StockScanResult);
   useScanStore.getState().addToStockBasket(selected);
   render(<Step7PositionCardPage />);
   selectLadderAndBroker();

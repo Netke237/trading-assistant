@@ -68,8 +68,8 @@ describe('portfolioStore -- holdMaxDays', () => {
   const originalFetch = global.fetch;
   afterEach(() => { global.fetch = originalFetch; });
 
-  it('persist version is 7', () => {
-    expect(usePortfolioStore.persist.getOptions().version).toBe(7);
+  it('persist version is 8', () => {
+    expect(usePortfolioStore.persist.getOptions().version).toBe(8);
   });
 
   it('migrate v6 -> v7 sets holdMaxDays null on stored rows; a v7 row keeps its value', () => {

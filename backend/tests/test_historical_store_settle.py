@@ -318,3 +318,52 @@ def test_prev_trading_day_follows_utcnow(monkeypatch):
     monkeypatch.setattr(hs, "_utcnow", lambda: _et(D, 11).astimezone(timezone.utc))
     assert hs.most_recent_trading_day() == D
     assert hs._prev_trading_day() == D1
+
+
+# ── BG-SCHEDULE-MAINT: require_through on an evening-ET / next-day-host run ──
+
+FRI = date(2026, 6, 12)
+THU = date(2026, 6, 11)
+SAT = date(2026, 6, 13)
+
+
+@pytest_asyncio.fixture
+async def friday_evening(world, monkeypatch):
+    """Friday 21:30 ET on a host already in Saturday (Berlin: 03:30), Thursday stored."""
+    await _seed(world, [(d, _nightly(d)) for d in _weekdays(START, THU)])
+    world.now = _et(FRI, 21, 30)
+    monkeypatch.setattr(hs, "_host_today", lambda: SAT)
+    assert hs._prev_trading_day() == THU          # the host-date reference skips Friday
+    return world
+
+
+@pytest.mark.asyncio
+async def test_without_require_through_friday_is_not_fetched(friday_evening):
+    bars = await hs.get_bars("AAPL", START, SAT)
+    assert friday_evening.calls == []
+    assert bars[-1]["time"] == THU.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_require_through_fetches_the_settled_friday_bar(friday_evening):
+    settled = hs.last_settle_boundary(friday_evening.now).astimezone(ET).date()
+    assert settled == FRI
+    bars = await hs.get_bars("AAPL", START, SAT, require_through=settled)
+    assert friday_evening.calls == [("alpaca", FRI, SAT)]
+    assert bars[-1]["time"] == FRI.isoformat()
+    assert bars[-1]["close"] == _final_close(FRI)
+
+
+@pytest.mark.asyncio
+async def test_require_through_is_a_no_op_when_already_stored(world):
+    await _seed(world, [(d, _nightly(d)) for d in _weekdays(START, FRI)])
+    world.now = _et(FRI, 21, 30)
+    bars = await hs.get_bars("AAPL", START, SAT, require_through=FRI)
+    assert world.calls == []
+    assert bars[-1]["time"] == FRI.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_require_through_is_capped_at_end(friday_evening):
+    await hs.get_bars("AAPL", START, THU, require_through=FRI)
+    assert friday_evening.calls == []

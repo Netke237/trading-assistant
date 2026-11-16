@@ -1,0 +1,35 @@
+/* Candidate review page: recorded run identity first, fresh configuration as a secondary disclosure. */
+.review { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--bg-base); color: var(--text-primary); }
+.review > * { flex: none; }
+
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 20px 24px 12px; }
+.intro { min-width: 0; }
+.crumb { margin: 0 0 10px; }
+.title { margin: 0 0 6px; overflow-wrap: anywhere; }
+.titleSub { font-weight: 400; color: var(--text-secondary); }
+.question { margin: 0 0 6px; }
+.runLine { margin: 0; overflow-wrap: anywhere; }
+
+.actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.actionRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.chip { padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-surface); white-space: nowrap; }
+.chipFresh { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.freshToggle, .choice { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.freshToggle[aria-expanded='true'] { border-color: var(--accent); }
+.freshToggle:focus-visible, .choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.choices { display: flex; gap: 0; }
+.choice { font-size: 12px; padding: 6px 10px; border-radius: 0; }
+.choice:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.choice:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: 0; }
+.choiceOn { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.choice.choiceOn:last-child { border-left: 1px solid var(--accent); }
+
+.freshPanel { padding: 0 24px; }
+.freshPanel > section:not([hidden]) { margin-bottom: 12px; border-radius: var(--radius-md); }
+
+/* The frozen report scrolls with the page instead of in a nested pane. */
+.report { display: flex; flex-direction: column; }
+
+.status { margin: 0 24px 12px; font-size: 13px; color: var(--text-secondary); }
+/* The labelled live fallback keeps a usable chart height even with the configuration open. */
+.live { flex: 1 0 560px; min-height: 560px; display: flex; flex-direction: column; }
