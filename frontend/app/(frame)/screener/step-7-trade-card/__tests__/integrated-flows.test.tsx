@@ -11,6 +11,10 @@ import { classifyDirectFailure } from '@/lib/directOrder';
 import { responseFacts } from '@/lib/brokerReview';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
+// Role queries scoped to the section each test targets.
+import {
+  decisionRegion, findInDecision, findInProfitTargetMethods, profitTargetMethods,
+} from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * #584 — the whole Step 7 flow, card to server review to confirmation, for the
@@ -152,14 +156,14 @@ async function renderPage() {
 }
 async function openBasket() {
   fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /basket \(1\)/i }));
+  fireEvent.click(await findInDecision('button', { name: /basket \(1\)/i }));
   const dialog = await screen.findByRole('dialog', { name: 'Track basket in Portfolio' });
   await within(dialog).findByText('SERVER-RESOLVED');
   return within(dialog);
 }
 async function openBrokerReview() {
-  fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-  const btn = await screen.findByRole('button', { name: /place limit @/i });
+  fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+  const btn = await findInDecision('button', { name: /place limit @/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
   return screen.findByRole('region', { name: 'Broker order review' });
@@ -185,18 +189,18 @@ describe('#584 every exit method reaches the tracking review unchanged', () => {
     ['Ladder', 'ladder', async () => { fireEvent.click(screen.getByRole('radio', { name: 'Ladder' })); }],
     ['Arithmetic', 'arithmetic', async () => {
       fireEvent.click(screen.getByRole('checkbox', { name: 'Arithmetic' }));
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /compute arithmetic plan/i })); });
+      await act(async () => { fireEvent.click(profitTargetMethods().getByRole('button', { name: /compute arithmetic plan/i })); });
       await waitFor(() => expect(screen.getByRole('radio', { name: 'Arithmetic' })).toBeEnabled());
       fireEvent.click(screen.getByRole('radio', { name: 'Arithmetic' }));
     }],
     ['Monte Carlo', 'monte_carlo', async () => {
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i })); });
+      await act(async () => { fireEvent.click(profitTargetMethods().getByRole('button', { name: /run monte carlo estimate/i })); });
       await waitFor(() => expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeEnabled());
       fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
     }],
     ['Barrier Race shortcut', 'barrier_race', async () => {
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /run monte carlo estimate/i })); });
-      fireEvent.click(await screen.findByRole('button', { name: 'Use Barrier Race T25%' }));
+      await act(async () => { fireEvent.click(profitTargetMethods().getByRole('button', { name: /run monte carlo estimate/i })); });
+      fireEvent.click(await findInProfitTargetMethods('button', { name: 'Use Barrier Race T25%' }));
     }],
   ];
 
@@ -271,7 +275,7 @@ describe('#584 edits restored from the persisted slice, then reverted', () => {
     expect(after.getAttribute('data-fingerprint')).not.toBe(firstFingerprint);
     expect(Number(after.getAttribute('data-generation'))).toBeGreaterThan(firstGeneration);
 
-    fireEvent.click(await screen.findByRole('button', { name: /basket \(1\)/i }));
+    fireEvent.click(await findInDecision('button', { name: /basket \(1\)/i }));
     dialog = within(await screen.findByRole('dialog', { name: 'Track basket in Portfolio' }));
     await dialog.findByText('SERVER-RESOLVED');
     expect(previewBodies().at(-1)).toMatchObject({ stop: 140, stopIsUserSet: false, premiumStopDollar: 1.2 });

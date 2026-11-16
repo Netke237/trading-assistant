@@ -42,13 +42,15 @@ async function edit(label: string, value: string) {
   fireEvent.change(within(cell).getByRole('spinbutton'), { target: { value } });
   fireEvent.blur(within(cell).getByRole('spinbutton'));
 }
+/** The candidate navigation (Prev, Next and one button per candidate), re-queried on every call. */
+const candidates = () => within(screen.getByRole('navigation', { name: 'Position candidates' }));
 function selectLadderAndBroker() {
   fireEvent.click(screen.getByRole('radio', { name: 'Ladder' }));
   fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
 }
 function expectSelected(symbol: string) {
   expect(screen.getByRole('region', { name: `${symbol} position` })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: symbol })).toHaveAttribute('aria-current', 'true');
+  expect(candidates().getByRole('button', { name: symbol })).toHaveAttribute('aria-current', 'true');
   expect(useScanStore.getState().selectedSymbol).toBe(symbol);
 }
 beforeEach(() => {
@@ -68,11 +70,11 @@ afterEach(async () => { await act(async () => {}); global.fetch = originalFetch;
 
 it('honors Backtest selection, synchronizes Prev/Next and candidate buttons, and follows external selection', async () => {
   useScanStore.getState().setSelectedSymbol('MSFT'); render(<Step7PositionCardPage />);
-  expectSelected('MSFT'); expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Prev' })); expectSelected('AAPL');
-  expect(screen.getByRole('button', { name: 'Prev' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Next' })); expectSelected('MSFT');
-  fireEvent.click(screen.getByRole('button', { name: 'AAPL' })); expectSelected('AAPL');
+  expectSelected('MSFT'); expect(candidates().getByRole('button', { name: 'Next' })).toBeDisabled();
+  fireEvent.click(candidates().getByRole('button', { name: 'Prev' })); expectSelected('AAPL');
+  expect(candidates().getByRole('button', { name: 'Prev' })).toBeDisabled();
+  fireEvent.click(candidates().getByRole('button', { name: 'Next' })); expectSelected('MSFT');
+  fireEvent.click(candidates().getByRole('button', { name: 'AAPL' })); expectSelected('AAPL');
   act(() => useScanStore.getState().setSelectedSymbol('MSFT')); expectSelected('MSFT');
   await screen.findByText('Now: $151.00');
 });
@@ -83,7 +85,7 @@ it('preserves selection on reorder and recovers from removal, failed gate, empty
   const failed = card('MSFT'); failed.backtest.passes_gate = false;
   act(() => useScanStore.getState().setStockScanResult(scan([failed, card('NVDA')])));
   expectSelected('NVDA'); expect(screen.queryByRole('button', { name: 'MSFT' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  expect(candidates().getByRole('button', { name: 'Next' })).toBeDisabled();
   act(() => useScanStore.getState().setStockScanResult(scan([])));
   expect(screen.getByText(/No passing candidates/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /go back/i })).toHaveAttribute('href', '/screener/step-6-backtest');
@@ -110,9 +112,9 @@ it('preserves edits, allocations, completed evidence and explicit pick across na
   const view = render(<Step7PositionCardPage />); await edit('ENTRY', '152'); await edit('SHARES', '50');
   fireEvent.click(estimateButton()); await screen.findByText('62%');
   fireEvent.click(screen.getByRole('radio', { name: 'Monte Carlo' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  fireEvent.click(candidates().getByRole('button', { name: 'Next' }));
   expect(screen.queryByText('62%')).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: '150.00' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Prev' }));
+  fireEvent.click(candidates().getByRole('button', { name: 'Prev' }));
   expect(screen.getByText('62%')).toBeInTheDocument(); expect(screen.getByRole('radio', { name: 'Monte Carlo' })).toBeChecked();
   view.unmount(); render(<Step7PositionCardPage />);
   expect(screen.getByRole('button', { name: '152.00' })).toBeInTheDocument(); expect(screen.getByText('62%')).toBeInTheDocument();
@@ -138,7 +140,7 @@ it('opens the shared basket and preserves durable notes on remount and empty res
   useScanStore.getState().addToStockBasket(useScanStore.getState().stockScanResult!.candidates[0]);
   useDirectSendNotesStore.getState().addNote({ recId: 'old', kind: 'order-unknown', label: 'AAPL 30 sh', brokerLabel: 'IBKR Paper', orderId: null });
   const view = render(<Step7PositionCardPage />); fireEvent.click(screen.getByRole('button', { name: 'Send basket (1)' }));
-  expect(screen.getByRole('button', { name: /submit 1 order/i })).toBeInTheDocument();
+  expect(within(screen.getByRole('dialog')).getByRole('button', { name: /submit 1 order/i })).toBeInTheDocument();
   expect(screen.getByText(/AAPL 30 sh: order status UNKNOWN/i)).toBeInTheDocument();
   await act(async () => {}); view.unmount(); act(() => useScanStore.getState().setStockScanResult(scan([]))); render(<Step7PositionCardPage />);
   expect(screen.getByText(/AAPL 30 sh: order status UNKNOWN/i)).toBeInTheDocument();
@@ -178,20 +180,20 @@ describe('shared send integration behind the validation boundary', () => {
   it('finishes an in-flight order for its origin after navigation and remount without duplicates', async () => {
     const pending = deferred<{ order_id: string }>(); (api.postStockOrder as jest.Mock).mockReturnValueOnce(pending.promise);
     const view = render(<Step7PositionCardPage />); selectLadderAndBroker(); fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
-    await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1)); fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(api.postStockOrder).toHaveBeenCalledTimes(1)); fireEvent.click(candidates().getByRole('button', { name: 'Next' }));
     expectSelected('MSFT'); expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
-    view.unmount(); render(<Step7PositionCardPage />); fireEvent.click(screen.getByRole('button', { name: 'Prev' }));
+    view.unmount(); render(<Step7PositionCardPage />); fireEvent.click(candidates().getByRole('button', { name: 'Prev' }));
     expect(screen.getByRole('button', { name: 'Placing…' })).toBeDisabled();
     await act(async () => pending.resolve({ order_id: 'ORIGIN' }));
     expect(usePortfolioStore.getState().positions[0].symbol).toBe('AAPL'); expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'AAPL' })); fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
+    fireEvent.click(candidates().getByRole('button', { name: 'AAPL' })); fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
     expect(api.postStockOrder).toHaveBeenCalledTimes(1);
   });
   it('preserves ambiguous outcomes and notes through navigation, replacement and empty results', async () => {
     (api.postStockOrder as jest.Mock).mockRejectedValueOnce(new Error('API /broker/stock-order → 504: Gateway Timeout'));
     const view = render(<Step7PositionCardPage />); selectLadderAndBroker(); fireEvent.click(screen.getByRole('button', { name: /limit @/i }));
     await screen.findByText(/AAPL 30 sh: order status UNKNOWN/i);
-    fireEvent.click(screen.getByRole('button', { name: 'Next' })); fireEvent.click(screen.getByRole('button', { name: 'Prev' }));
+    fireEvent.click(candidates().getByRole('button', { name: 'Next' })); fireEvent.click(candidates().getByRole('button', { name: 'Prev' }));
     expect(screen.getByRole('button', { name: /limit @/i })).toBeDisabled();
     view.unmount(); act(() => useScanStore.getState().setStockScanResult(scan())); render(<Step7PositionCardPage />); selectLadderAndBroker();
     fireEvent.click(screen.getByRole('button', { name: /limit @/i })); expect(api.postStockOrder).toHaveBeenCalledTimes(1);
@@ -259,7 +261,7 @@ it('B7 inherits the earnings veto through the shared stock card and basket', asy
 // Method viewing is independent of the saved execution pick. Reveal the
 // calculation action explicitly without changing any navigation assertions.
 function estimateButton() {
-  const compare = screen.getByRole('button', { name: 'Compare' });
+  const compare = within(screen.getByRole('group', { name: 'View method results' })).getByRole('button', { name: 'Compare' });
   if (compare.getAttribute('aria-pressed') !== 'true') fireEvent.click(compare);
-  return screen.getByRole('button', { name: /^estimate$/i });
+  return within(screen.getByRole('region', { name: 'Monte Carlo evidence' })).getByRole('button', { name: /^estimate$/i });
 }

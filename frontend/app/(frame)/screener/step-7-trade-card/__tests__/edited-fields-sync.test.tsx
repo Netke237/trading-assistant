@@ -10,16 +10,11 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import type { TradeCardData, MethodPick } from '@/types/domain';
+// #583 confirmReview, and role queries scoped to the section each test targets.
+import {
+  confirmReview, decisionRegion, findInBasketDialog, findInDecision, profitTargetMethods,
+} from '../../../../../test-utils/tradeCardQueries';
 
-
-/** #583 — a direct send opens the server review first; its final action saves
- *  and sends. A send refused before the review (a gate, a quote warning)
- *  opens none, and nothing is clicked. */
-async function confirmReview() {
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
-  if (confirm) fireEvent.click(confirm);
-}
 
 // Phase G piece 5, build step 4 — this suite is about the edited-field sync
 // paths, not the method-pick gate, so every fixture below stamps a satisfied
@@ -209,7 +204,7 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     // Idempotent: the section's own toggle collapses it again, and whether it
     // starts open varies with what else has re-rendered the card.
     if (screen.queryByLabelText('Edit Invalidation')) return;
-    fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+    fireEvent.click(profitTargetMethods().getByRole('button', { name: /fixed % ladder plan/i }));
   }
 
   /** Type a new value into one of the card's EditableKV fields and commit it. */
@@ -221,8 +216,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
   }
 
   async function placeLimit() {
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -308,8 +303,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
 
     // HALF TWO — and so does the wire. The button label is a promise about
     // what the click will do, so it has to move too.
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.50/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @ \$2\.50/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -352,9 +347,9 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     editField('Limit', String(CARD_LIMIT), '2.71');
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     // The label is a promise about what the click will do; it has to move too.
-    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.71/i });
+    const limitBtn = await findInDecision('button', { name: /place limit @ \$2\.71/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -402,8 +397,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132');
 
     // ...the button PROMISES them...
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.71/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @ \$2\.71/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -423,9 +418,9 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     editField('Limit', String(CARD_LIMIT), '2.71');
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent('2.71'));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
-    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+    fireEvent.click(await findInDecision('button', { name: /^Arm —/ }));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledWith(
       expect.objectContaining({ limit_price: 2.71 }),
@@ -445,9 +440,9 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     editField('Invalidation', String(CARD_INVALIDATION), '132');
     await waitFor(() => expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent('132'));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
-    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+    fireEvent.click(await findInDecision('button', { name: /^Arm —/ }));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
     const body = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
@@ -464,9 +459,9 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
-    fireEvent.click(await screen.findByRole('button', { name: /^Arm —/ }));
+    fireEvent.click(await findInDecision('button', { name: /^Arm —/ }));
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalled());
     const body = (api.armAutoTrade as jest.Mock).mock.calls[0][0];
@@ -490,8 +485,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
     fireEvent.click(screen.getByLabelText('Next candidate'));
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: new RegExp(`place limit @ \\$${BBB_LIMIT.toFixed(2)}`, 'i') });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: new RegExp(`place limit @ \\$${BBB_LIMIT.toFixed(2)}`, 'i') });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -521,8 +516,8 @@ describe('step-7-trade-card — edited card fields reach the order', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toHaveTextContent(CARD_LIMIT.toFixed(2)));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @ \$2\.50/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @ \$2\.50/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -680,7 +675,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
   function expandLadder() {
     if (screen.queryByLabelText('Edit Invalidation')) return;
-    fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+    fireEvent.click(profitTargetMethods().getByRole('button', { name: /fixed % ladder plan/i }));
   }
   /** Click the field open and commit a value. Addresses the input by its own
    *  label rather than by its current display text, so it does not depend on
@@ -773,8 +768,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       .toEqual(['AAA', 'BBB']);
 
     // And the order path stores AAA's own premium, never BBB's.
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -787,8 +782,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   it('the direct order path and the basket path store the SAME edited values', async () => {
     // ── Path 1: Place Limit, straight from the active card.
     await editAllThree();
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limitBtn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -822,8 +817,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     //    resolveBasketCards -> positionFromOrder, a different card object.
     await editAllThree();
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
@@ -882,8 +877,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -916,8 +911,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     expect(screen.queryByRole('button', { name: /place limit @/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -944,33 +939,38 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     // Two sends here; the daily-recommendation cap (5) is shared by every
     // basket test in this file and nothing resets it, so give back what this
     // test consumes or the later ones are refused before they send.
+    // The give-back sits in `finally` so a failure or timeout here cannot leak
+    // the consumed cap into the later basket tests and fail them too.
     const dailyBefore = useRiskStore.getState().dailyRecommendations;
-    await editAllThree();
-    fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    let submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
-    await waitFor(() => expect(submit).toBeEnabled());
-    fireEvent.click(submit);
-    const NOTE = /AAA: Premium stop of \$0\.90\/share could not be applied/;
-    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    try {
+      await editAllThree();
+      fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+      let submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+      const NOTE = /AAA: Premium stop of \$0\.90\/share could not be applied/;
+      expect(await screen.findByText(NOTE)).toBeInTheDocument();
 
-    // Navigate: the disclosure stays.
-    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
-    await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Previous candidate' }));
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
+      // Navigate: the disclosure stays.
+      fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+      await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
+      expect(screen.getByText(NOTE)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Previous candidate' }));
+      expect(screen.getByText(NOTE)).toBeInTheDocument();
 
-    // The next send (BBB, no typed premium stop) starts by clearing it.
-    fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
-    fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
-    submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
-    await waitFor(() => expect(submit).toBeEnabled());
-    fireEvent.click(submit);
-    await waitFor(() => expect(screen.queryByText(NOTE)).not.toBeInTheDocument());
-    await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
-    act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
+      // The next send (BBB, no typed premium stop) starts by clearing it.
+      fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
+      fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
+      fireEvent.click(await findInDecision('button', { name: /track basket/i }));
+      submit = await findInBasketDialog('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
+      await waitFor(() => expect(submit).toBeEnabled());
+      fireEvent.click(submit);
+      await waitFor(() => expect(screen.queryByText(NOTE)).not.toBeInTheDocument());
+      await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(2));
+    } finally {
+      act(() => { useRiskStore.setState({ dailyRecommendations: dailyBefore }); });
+    }
   });
 
   it('shows the rejection banner for a BASKET order with no broker selected', async () => {
@@ -983,8 +983,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     render(<Step7TradeCardPage />);
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
@@ -1008,8 +1008,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       render(<Step7TradeCardPage />);
       await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-      fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-      let submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+      fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+      let submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
       await waitFor(() => expect(submit).toBeEnabled());
       fireEvent.click(submit);
       expect(await screen.findByText(/Some orders were not saved/)).toBeInTheDocument();
@@ -1020,8 +1020,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
         ok: true, json: async () => ({}),
       }) as unknown as typeof fetch);
       fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-      fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-      submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+      fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+      submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
       await waitFor(() => expect(submit).toBeEnabled());
       fireEvent.click(submit);
 
@@ -1049,8 +1049,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   };
   async function sendBasket() {
     fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
   }
@@ -1097,8 +1097,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       expect(await screen.findByText(BANNER)).toBeInTheDocument();
 
       acceptAll();
-      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-      const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+      fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+      const limitBtn = await findInDecision('button', { name: /place limit @/i });
       await waitFor(() => expect(limitBtn).toBeEnabled());
       fireEvent.click(limitBtn);
       await confirmReview();
@@ -1118,8 +1118,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       expect(await screen.findByText(BANNER)).toBeInTheDocument();
 
       acceptAll();
-      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-      const marketBtn = await screen.findByRole('button', { name: /right now — market/i });
+      fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+      const marketBtn = await findInDecision('button', { name: /right now — market/i });
       await waitFor(() => expect(marketBtn).toBeEnabled());
       fireEvent.click(marketBtn);
       await confirmReview();
@@ -1132,9 +1132,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
 
   it('a DIRECT-path error still clears on Prev/Next (A8b left its lifetime per-card)', async () => {
     await renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('broker down'));
-    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    const limitBtn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -1159,9 +1159,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     const dailyBefore = useRiskStore.getState().dailyRecommendations;
     try {
       await renderPage();
-      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
       (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(new Error('broker down'));
-      const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+      const limitBtn = await findInDecision('button', { name: /place limit @/i });
       await waitFor(() => expect(limitBtn).toBeEnabled());
       fireEvent.click(limitBtn);
       await confirmReview();
@@ -1203,9 +1203,9 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
     it(`an IBKR confirmation question (502) on ${label} shows as an error and creates no position`, async () => {
       acceptAll();
       await renderPage();
-      fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+      fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
       (api.postOptionOrder as jest.Mock).mockRejectedValueOnce(CONFIRM_502());
-      const btn = await screen.findByRole('button', { name: button });
+      const btn = await findInDecision('button', { name: button });
       await waitFor(() => expect(btn).toBeEnabled());
       fireEvent.click(btn);
 
@@ -1222,7 +1222,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       expect(usePortfolioStore.getState().positions).toHaveLength(0);
       expect(screen.queryByText(/Order placed/)).not.toBeInTheDocument();
       // Nothing was placed, so the user can send again.
-      await waitFor(() => expect(screen.getByRole('button', { name: button })).toBeEnabled());
+      await waitFor(() => expect(decisionRegion().getByRole('button', { name: button })).toBeEnabled());
     });
   }
   /* Fix #5 (review, D6). The basket places NO broker order: it only saves
@@ -1231,7 +1231,7 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
   it('an EMPTY basket labels the (disabled) main button "Track basket", never "Send to broker"', async () => {
     acceptAll();
     await renderPage();
-    const btn = await screen.findByRole('button', { name: /^Track basket$/ });
+    const btn = await findInDecision('button', { name: /^Track basket$/ });
     expect(btn).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^Send to broker$/ })).not.toBeInTheDocument();
   });
@@ -1258,8 +1258,8 @@ describe('spec §8 #8 — the two send paths cannot disagree', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
       await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
       fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-      fireEvent.click(await screen.findByRole('button', { name: /basket \(2\)/i }));
-      const submit = await screen.findByRole('button', { name: /^(Add 2 to Portfolio|Override & Submit)$/ });
+      fireEvent.click(await findInDecision('button', { name: /basket \(2\)/i }));
+      const submit = await findInBasketDialog('button', { name: /^(Add 2 to Portfolio|Override & Submit)$/ });
       await waitFor(() => expect(submit).toBeEnabled());
       fireEvent.click(submit);
 

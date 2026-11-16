@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 import Step7TradeCardPage from '../page';
 import { useScanStore } from '@/lib/scanStore';
 import { emptyCardEdits } from '@/lib/cardEdits';
@@ -10,6 +10,10 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick, PortfolioPosition } from '@/types/domain';
+// Role queries scoped to the section each test targets.
+import {
+  BROKER_ORDER_REVIEW, decisionRegion, executionPanel, findInBasketDialog, findInDecision,
+} from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * P1b-i (P1-CARD-SAVE-FIRST-SEND-TRIMMED-2026-09-25) — Step 7's two direct
@@ -155,21 +159,22 @@ async function renderPage() {
 }
 
 async function send(kind: 'LMT' | 'MKT' = 'LMT') {
-  fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-  const btn = await screen.findByRole('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
+  fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+  const btn = await findInDecision('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
   // #583 — the server review opens first; its final action saves and sends.
   // A refusal before the review (e.g. a contract already tracked) opens none.
-  await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
+  await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  const review = screen.queryByRole('region', { name: BROKER_ORDER_REVIEW });
+  const confirm = review ? within(review).queryByRole('button', { name: /^Send to / }) : null;
   if (confirm) fireEvent.click(confirm);
 }
 
 /** Send, then wait until the send has fully finished (both buttons enabled). */
 async function sendAndSettle(kind: 'LMT' | 'MKT' = 'LMT') {
   await send(kind);
-  await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+  await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit @/i })).toBeEnabled());
   await settle();
 }
 
@@ -184,14 +189,14 @@ async function goPrev() {
 
 async function sendBasket() {
   fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /track basket/i }));
-  const submit = await screen.findByRole('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
+  fireEvent.click(await findInDecision('button', { name: /track basket/i }));
+  const submit = await findInBasketDialog('button', { name: /^(Add \d to Portfolio|Override & Submit)$/ });
   await waitFor(() => expect(submit).toBeEnabled());
   fireEvent.click(submit);
 }
 
 const noteText = (re: RegExp) => screen.queryByText(re);
-const removeBtn = (label: string) => screen.getByRole('button', { name: `Remove (${label})` });
+const removeBtn = (label: string) => executionPanel().getByRole('button', { name: `Remove (${label})` });
 
 let confirmSpy: jest.SpyInstance;
 let dailyBefore: number;
@@ -549,7 +554,7 @@ describe('P1b-i — the green line and the entry price', () => {
   it('12. Tastytrade paper: the Market button is disabled, with the refusal as its title', async () => {
     await renderPage();
     act(() => { useAutoTradeStore.setState({ selectedBroker: 'tastytrade_paper' } as any); });
-    const market = await screen.findByRole('button', { name: /right now — market/i });
+    const market = await findInDecision('button', { name: /right now — market/i });
     expect(market).toBeDisabled();
     expect(market).toHaveAttribute('title', 'Tastytrade paper accepts limit orders only — use Place Limit.');
   });

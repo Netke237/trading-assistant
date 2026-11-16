@@ -9,16 +9,10 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { ExitPlan, MethodPick, TradeCardData } from '@/types/domain';
-
-
-/** #583 — a direct send opens the server review first; its final action saves
- *  and sends. A send refused before the review (a gate, a quote warning)
- *  opens none, and nothing is clicked. */
-async function confirmReview() {
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
-  if (confirm) fireEvent.click(confirm);
-}
+// #583 confirmReview, and role queries scoped to the section each test targets.
+import {
+  confirmReview, decisionRegion, findInBasketDialog, findInDecision,
+} from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * #581 (TC-REVIEW-06) — the Step 7 review renders the SAME draft the send
@@ -182,9 +176,9 @@ describe('#581 Step 7 submission review', () => {
     expect(reviewValue('Effective target alert')).toHaveTextContent('Unresolved until server review');
     expect(reviewValue('Place Limit')).toHaveTextContent('Select a paper broker');
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     await waitFor(() => expect(reviewValue('Place Limit')).toHaveTextContent('IBKR Paper · BUY to open 3 × AAA|150|2026-05-15|C · LMT $2.71 · DAY'));
-    const btn = await screen.findByRole('button', { name: /place limit @/i });
+    const btn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
     await confirmReview();
@@ -205,8 +199,8 @@ describe('#581 Step 7 submission review', () => {
     expect(reviewValue('Stock stop')).toHaveTextContent('$140.00 stock · plan-derived');
     expect(reviewValue('Arithmetic plan attached')).toHaveTextContent(/Yes/);
     fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-    const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+    fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+    const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     await waitFor(() => expect(persistBodies()).toHaveLength(1));
@@ -250,7 +244,7 @@ describe('#581 Step 7 submission review', () => {
     editField('Invalidation', '133');
     await waitFor(() => expect(generation()).toBeGreaterThan(g1));
     const g2 = generation();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(generation()).toBeGreaterThan(g2));
     expect(reviewValue('Method')).toHaveTextContent('Not selected');
     expect(reviewValue('Intended basis')).toHaveTextContent('No method recorded');
@@ -289,8 +283,8 @@ describe('#581 Step 7 submission review', () => {
 it('groups the broker picker, both direct sends and Track basket in one action row', async () => {
   setup([makeCard('AAA')]);
   render(<Step7TradeCardPage />);
-  fireEvent.click(await screen.findByRole('button', { name: 'IBKR Paper' }));
-  const limit = await screen.findByRole('button', { name: /^Place Limit @/ });
+  fireEvent.click(await findInDecision('button', { name: 'IBKR Paper' }));
+  const limit = await findInDecision('button', { name: /^Place Limit @/ });
   const actions = limit.closest<HTMLElement>('[data-decision-part="actions"]')!;
   expect(actions).not.toBeNull();
   expect(within(actions).getByRole('button', { name: /Track basket/ })).toBeInTheDocument();

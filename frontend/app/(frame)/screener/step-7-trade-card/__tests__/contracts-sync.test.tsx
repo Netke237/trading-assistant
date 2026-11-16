@@ -8,16 +8,10 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
-
-
-/** #583 — a direct send opens the server review first; its final action saves
- *  and sends. A send refused before the review (a gate, a quote warning)
- *  opens none, and nothing is clicked. */
-async function confirmReview() {
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
-  if (confirm) fireEvent.click(confirm);
-}
+// #583 confirmReview, and role queries scoped to the section each test targets.
+import {
+  confirmReview, decisionRegion, findInDecision,
+} from '../../../../../test-utils/tradeCardQueries';
 
 // Phase G piece 5, build step 4 — this suite is about the shared Contracts
 // map, not the method-pick gate, so every fixture stamps a satisfied pick
@@ -190,7 +184,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     fireEvent.click(screen.getByTitle('Pin to basket'));
 
     // Open the basket dialog.
-    fireEvent.click(screen.getByRole('button', { name: /track basket \(2\)/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /track basket \(2\)/i }));
 
     await waitFor(() => expect(screen.getByLabelText('Contracts for AAA')).toBeInTheDocument());
     expect(screen.getByLabelText('Contracts for AAA')).toHaveValue(3);
@@ -225,9 +219,9 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     editContracts('4');
     await waitFor(() => expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('4'));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
 
-    const limitBtn = await screen.findByRole('button', { name: /place limit @/i });
+    const limitBtn = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
 
@@ -240,7 +234,7 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     // Market button is also gated on `limitPlacing`, so clicking it too early
     // (right after postOptionOrder was merely CALLED, not yet resolved end to
     // end) would silently no-op on a still-disabled button.
-    const marketBtn = screen.getByRole('button', { name: /right now/i });
+    const marketBtn = decisionRegion().getByRole('button', { name: /right now/i });
     await waitFor(() => expect(marketBtn).toBeEnabled());
 
     (api.postOptionOrder as jest.Mock).mockClear();
@@ -264,10 +258,10 @@ describe('step-7-trade-card — shared per-symbol Contracts map (Feature 7)', ()
     editContracts('7');
     await waitFor(() => expect(screen.getByLabelText('Edit Contracts')).toHaveTextContent('7'));
 
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
     fireEvent.click(await screen.findByText(/armed — fire on next qualifying condition/i));
 
-    const armBtn = await screen.findByRole('button', { name: /^Arm —/ });
+    const armBtn = await findInDecision('button', { name: /^Arm —/ });
     fireEvent.click(armBtn);
 
     await waitFor(() => expect(api.armAutoTrade).toHaveBeenCalledWith(
