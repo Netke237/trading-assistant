@@ -11,6 +11,12 @@ from app.services.scheduling_tz import get_or_rebuild_scheduler
 logger = logging.getLogger(__name__)
 
 _JOB_ID = "ingestion_nightly"
+# Weekly read-only history health check (BG-SCHEDULE-MAINT). It checks what the
+# nightly job stored, so it lives and dies with the nightly job's enabled flag.
+# Sunday 03:00 operator time: no market, no other job, and the week's last
+# download (Saturday 02:00 operator time = Friday evening ET) is in.
+_WEEKLY_HEALTH_JOB_ID = "history_health_weekly"
+_WEEKLY_HEALTH_TRIGGER = {"day_of_week": "sun", "hour": 3, "minute": 0}
 _scheduler: AsyncIOScheduler | None = None
 _scheduler_tz_key: str | None = None
 
@@ -44,7 +50,8 @@ async def _run_nightly() -> None:
 async def _run_nightly_maintenance() -> None:
     """Audit-log rotation/pruning (Part 2) + scheduled-scan-run retention
     (Part 3), both driven by the same settings.yaml-backed retention knobs,
-    + the 40-day Tiingo usage-ledger prune."""
+    + the 40-day Tiingo usage-ledger prune + the backtest-artifact expiry
+    sweep (BG-SCHEDULE-MAINT)."""
     import asyncio
     from app.services.audit import rotate_audit_log, prune_audit_log_archives
     from app.services.scheduling_tz import _load_settings as _load_scheduling_settings
@@ -69,14 +76,37 @@ async def _run_nightly_maintenance() -> None:
     except Exception as exc:
         logger.error("ingestion_scheduler: provider usage pruning failed — %s", exc)
 
+    # Expired backtest artifacts keep their payload until something clears it;
+    # nothing did before BG-SCHEDULE-MAINT. Reads already treat an expired row
+    # as gone (ArtifactExpired), so clearing the payload changes no response.
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.backtest_artifacts import cleanup_expired
+        async with AsyncSessionLocal() as db:
+            cleared = await cleanup_expired(db)
+        logger.info("ingestion_scheduler: cleared %s expired backtest artifact payload(s)", cleared)
+    except Exception as exc:
+        logger.error("ingestion_scheduler: backtest-artifact expiry sweep failed — %s", exc)
+
+
+async def _run_weekly_health() -> None:
+    logger.info("ingestion_scheduler: weekly history health check starting")
+    try:
+        from app.services.history_health import run_and_notify
+        await run_and_notify()
+    except Exception as exc:
+        logger.error("ingestion_scheduler: weekly history health check failed — %s", exc)
+
 
 def configure(enabled: bool, time_str: str) -> None:
-    """Install or remove the nightly cron job. Safe to call while scheduler is running."""
+    """Install or remove the nightly cron job and the weekly history health
+    check that rides on it. Safe to call while scheduler is running."""
     sched = _get()
-    try:
-        sched.remove_job(_JOB_ID)
-    except Exception:
-        pass
+    for job_id in (_JOB_ID, _WEEKLY_HEALTH_JOB_ID):
+        try:
+            sched.remove_job(job_id)
+        except Exception:
+            pass
     if enabled:
         try:
             hour, minute = map(int, time_str.split(":"))
@@ -89,7 +119,14 @@ def configure(enabled: bool, time_str: str) -> None:
             id=_JOB_ID,
             replace_existing=True,
         )
-        logger.info("ingestion_scheduler: scheduled daily at %02d:%02d", hour, minute)
+        sched.add_job(
+            _run_weekly_health,
+            CronTrigger(**_WEEKLY_HEALTH_TRIGGER),
+            id=_WEEKLY_HEALTH_JOB_ID,
+            replace_existing=True,
+        )
+        logger.info("ingestion_scheduler: scheduled daily at %02d:%02d, "
+                    "history health check Sundays 03:00", hour, minute)
     else:
         logger.info("ingestion_scheduler: disabled")
 

@@ -10980,6 +10980,123 @@
         "source": "merged tree byte-identical to approved and CI-green PR648 head 30dce9ff",
         "main_ci_on_merge_commit": "failed: 1/6508 frontend test (step-7-position-card B7 earnings-veto) whose fixed 2026-10-05 scan date aged past its 40-day earnings window on 2026-11-15; unrelated to this phase (merge tree identical to CI-green head 30dce9ff). Fixed on main by #646 (merged e1552fb2)."
       }
+    },
+    {
+      "id": "BG-SCHEDULE-MAINT",
+      "name": "Background schedule: artifact expiry sweep, weekly history health check, strategy-watch EOD at 21:30 ET",
+      "status": "built",
+      "size": "S",
+      "complexity": 2,
+      "completion_pct": 90,
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": null,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "e8eca1b6..c6a730bd",
+          "gate_findings": 1,
+          "findings": [
+            "F1: Friday 21:30 ET runs on a host already in Saturday; get_bars' host-date staleness reference (_prev_trading_day = Thursday) never fetched Friday's settled bar for symbols not yet stored, so Friday-close watch signals were dropped."
+          ],
+          "fixes": [
+            "4ab0bc08: get_bars(require_through=...) opt-in; the watch evaluator passes the ET date of last_settle_boundary(now)."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "c6a730bd..4ab0bc08",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Below-gate observation fixed after the round: test_p4b_watch_isolation_and_delivery's get_bars fake did not accept require_through (test-only)."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/history_health.py",
+        "pattern": "run_history_health_check",
+        "note": "Presence probe only; behaviour is pinned by tests/test_history_health.py and tests/test_historical_store_settle.py."
+      },
+      "note": "No plan stage: small change acting on a scheduling review in-session. Not merged until Kenneth approves the PR."
+    },
+    {
+      "id": "STRUCTURAL-LEVEL-LABEL",
+      "name": "Rename visible STRUCTURAL_STOP_BREACHED alert text to 'Structural level'",
+      "owner": "agent",
+      "status": "built",
+      "branch": "claude/structural-level-label",
+      "size": "XS",
+      "complexity": 1,
+      "completion_pct": 85,
+      "summary": "User-visible text only: Telegram/email headline 'Structural level hit', backend+frontend reason 'Structural level breached', Alerts page, Portfolio EditDrawer toggle/field/hint/MC warning/footer, StockPositionCard note. Internal ids (STRUCTURAL_STOP_BREACHED, structural_stop, structuralStop, dedup keys, alertOverrides) unchanged. Pre-trade TradeCard/SubmissionReview/trackingReview/BrokerOrderReview labels deliberately out of scope.",
+      "plan": null,
+      "plan_audit_clean": null,
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "236bec67e+uncommitted diff (8 files) later committed in e2337050",
+          "gate_findings": 1,
+          "findings": [
+            "Non-blocking: docs/superpowers/plans/stocks-reference-alignment/verify-preservation.py asserted the old StockPositionCard sentence 'position so STRUCTURAL STOP BREACHED can fire.' verbatim and failed."
+          ],
+          "fixes": [
+            "Added an adapted mapping for that sentence, matched on its ASCII tail so the verifier passes under cp1252 and UTF-8 default decoding."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "verify-preservation.py fix and its interactions, committed in e2337050",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Mutation checks (sentence removed, em-dash prefix changed, unrelated text removed) all still fail the verifier under both encodings; acceptance.md counts (151 exact / 1 adapted) are now historical: script reports 150 exact / 2 adapted."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 3,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "b01dc351 (test-only CI fix added after round 2)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "B7 earnings-veto test in step-7-position-card page.test.tsx had a fixed 2026-10-05 scan date; earnings_days 40 aged past on 2026-11-14/15 so the veto correctly lifted and the test failed on main 2f8b8dc1. Fix dates this test's scan now; veto assertions unchanged. Auditor confirmed wiring via StockPositionCard and StockSendDialog, no masking, no sibling time bombs. Below gate: comment says 2026-11-14 (UTC+ zones fail from 11-15)."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/notifications/alert_notifier.py",
+        "pattern": "'STRUCTURAL_STOP_BREACHED': 'Structural level hit'",
+        "note": "PRESENCE ONLY: label exists; not proof of behaviour."
+      },
+      "validation": "Backend 580 alert/notifier tests PASS (py3.11.9); tsc clean; Jest affected suites 538/540 - the 2 failures are pre-existing/env: referenceFlow '2,000' vs de-DE '2.000' (fails identically on origin/main), presentation 5s timeout under load (passes in isolation). | After merging main bbd87238: tsc clean, EditDrawer/alert suites 347/347; Step 7 position-card page tests 14/14 after b01dc351.",
+      "implementation_commit": "e2337050c57886cbcf66bf01e1b6db26b78d76cc",
+      "note": "Not merged. The B7 test fix (b01dc351) is superseded: main fixed the same test identically in a0becefd and the merge keeps main's version. Ticket #630 was implemented separately by PR #645."
     }
   ],
   "already_shipped": [

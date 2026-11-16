@@ -164,7 +164,7 @@ async def test_structural_stop_breached_fires(db_session):
     structural_alerts = [a for a in alerts if a.alertType == "STRUCTURAL_STOP_BREACHED"]
     assert len(structural_alerts) == 1
     assert structural_alerts[0].kind == "Critical"
-    assert "Structural stop breached" in structural_alerts[0].reason
+    assert "Structural level breached" in structural_alerts[0].reason
 
 
 # ── Test 2c: STRUCTURAL_STOP_BREACHED does not fire when unset (optional field) ─

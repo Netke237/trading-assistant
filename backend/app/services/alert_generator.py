@@ -295,7 +295,7 @@ async def generate_alerts(
                 id=f"a{counter}",
                 kind="Critical",
                 symbol=symbol,
-                reason=f"Structural stop breached — {symbol} {'above' if is_bearish else 'below'} ${pos.structural_stop:.2f} (price ${price:.2f})",
+                reason=f"Structural level breached — {symbol} {'above' if is_bearish else 'below'} ${pos.structural_stop:.2f} (price ${price:.2f})",
                 timestamp=now_iso,
                 recId=pos.rec_id,
                 alertType="STRUCTURAL_STOP_BREACHED",
