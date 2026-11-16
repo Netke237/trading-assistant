@@ -3,7 +3,7 @@ import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import CandidateChartWorkspace from '..';
 
-jest.mock('@/components/organisms/FreshBacktestControls',()=>({__esModule:true,default:({onResult}:any)=><button onClick={()=>onResult({artifact_id:'fresh-b',provenance:'fresh'})}>Mock fresh result</button>}));
+jest.mock('@/components/organisms/FreshBacktestControls',()=>({__esModule:true,default:({onResult}:any)=><button onClick={()=>onResult({artifact_id:'fresh-b',provenance:'fresh',identity:{symbol:'AAA'},detail:{status:'success'}})}>Mock fresh result</button>}));
 jest.mock('next/navigation', () => ({useSearchParams: jest.fn()}));
 jest.mock('@/lib/api', () => ({BacktestArtifactError: jest.requireActual('@/lib/api').BacktestArtifactError, api: {getOriginalBacktest:jest.fn()}}));
 jest.mock('@/components/organisms/ChartWorkspace', () => ({__esModule:true, default: function Probe() {

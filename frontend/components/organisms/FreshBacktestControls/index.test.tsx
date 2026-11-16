@@ -74,3 +74,32 @@ test.each(['direction','strategy','params','commission','window','sizing'])('rej
  expect(screen.getByRole('status')).toHaveTextContent('Fresh run unavailable: invalid_evidence');
  expect(accept).not.toHaveBeenCalled();
 });
+
+test('controlled disclosure: the caller owns the trigger, fields survive closing and an external close cancels a run',async()=>{
+ const accept=jest.fn();(api.runFreshBacktest as jest.Mock).mockImplementation(()=>new Promise(()=>{}));
+ const view=render(<FreshBacktestControls symbol="AAA" original={null} onResult={accept} open={false} onOpenChange={()=>{}}/>);
+ expect(screen.queryByRole('button',{name:'Configure a fresh run'})).not.toBeInTheDocument();
+ expect(screen.getByLabelText('Fresh backtest configuration',{selector:'section'})).not.toBeVisible();
+ expect(api.getFreshBacktestConfiguration).not.toHaveBeenCalled();
+ view.rerender(<FreshBacktestControls symbol="AAA" original={null} onResult={accept} open onOpenChange={()=>{}}/>);
+ await act(async()=>{});
+ fireEvent.change(screen.getByLabelText('Evaluation start'),{target:{value:'2024-01-01'}});
+ view.rerender(<FreshBacktestControls symbol="AAA" original={null} onResult={accept} open={false} onOpenChange={()=>{}}/>);
+ view.rerender(<FreshBacktestControls symbol="AAA" original={null} onResult={accept} open onOpenChange={()=>{}}/>);
+ expect(screen.getByLabelText('Evaluation start')).toHaveValue('2024-01-01');
+ fireEvent.change(screen.getByLabelText('Fresh strategy'),{target:{value:'pullback_ema'}});
+ fireEvent.change(screen.getByLabelText('Fresh direction'),{target:{value:'Bullish'}});
+ fireEvent.change(screen.getByLabelText('Evaluation end (exclusive)'),{target:{value:'2024-12-31'}});
+ fireEvent.change(screen.getByLabelText('Commission per leg (fraction)'),{target:{value:'0.002'}});
+ fireEvent.change(screen.getByLabelText('Maximum hold days (null for none)'),{target:{value:'10'}});
+ fireEvent.change(screen.getByLabelText('Minimum closed trades'),{target:{value:'5'}});
+ fireEvent.change(screen.getByLabelText('Minimum win rate (fraction)'),{target:{value:'0.5'}});
+ fireEvent.change(screen.getByLabelText('Complete strategy parameters (JSON)'),{target:{value:'{"ema_period":50}'}});
+ fireEvent.click(screen.getByLabelText(/I reviewed the strategy/));
+ fireEvent.click(screen.getByRole('button',{name:'Run fresh backtest'}));
+ const signal=(api.runFreshBacktest as jest.Mock).mock.calls[0][1];
+ view.rerender(<FreshBacktestControls symbol="AAA" original={null} onResult={accept} open={false} onOpenChange={()=>{}}/>);
+ expect(signal.aborted).toBe(true);
+ expect(screen.getByRole('status')).toHaveTextContent('Fresh run cancelled. Original evidence is unchanged.');
+ expect(accept).not.toHaveBeenCalled();
+});
