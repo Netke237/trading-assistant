@@ -11085,7 +11085,7 @@
       },
       "validation": "Backend 580 alert/notifier tests PASS (py3.11.9); tsc clean; Jest affected suites 538/540 - the 2 failures are pre-existing/env: referenceFlow '2,000' vs de-DE '2.000' (fails identically on origin/main), presentation 5s timeout under load (passes in isolation). | After merging main bbd87238: tsc clean, EditDrawer/alert suites 347/347; Step 7 position-card page tests 14/14 after b01dc351.",
       "implementation_commit": "e2337050c57886cbcf66bf01e1b6db26b78d76cc",
-      "note": "Not merged. Also fixes main's red frontend CI (B7 test time bomb). Ticket #630 was implemented separately by PR #645."
+      "note": "Not merged. The B7 test fix (b01dc351) is superseded: main fixed the same test identically in a0becefd and the merge keeps main's version. Ticket #630 was implemented separately by PR #645."
     }
   ],
   "already_shipped": [
