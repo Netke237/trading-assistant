@@ -9,6 +9,10 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
+// Role queries scoped to the section each test targets.
+import {
+  BROKER_ORDER_REVIEW, decisionRegion, findInDecision,
+} from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * #583 (TC-REVIEW-08) — a direct send is reviewed against the server's
@@ -133,14 +137,14 @@ async function renderPage() {
 }
 
 async function openReview(kind: 'LMT' | 'MKT' = 'LMT', broker = /ibkr paper/i) {
-  fireEvent.click(screen.getByRole('button', { name: broker }));
-  const btn = await screen.findByRole('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
+  fireEvent.click(decisionRegion().getByRole('button', { name: broker }));
+  const btn = await findInDecision('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
   return screen.findByRole('region', { name: 'Broker order review' });
 }
 const reviewRegion = () => within(screen.getByRole('region', { name: 'Broker order review' }));
-const confirmBtn = () => screen.getByRole('button', { name: /^Send to / });
+const confirmBtn = () => reviewRegion().getByRole('button', { name: /^Send to / });
 const exactRequest = () => screen.getByTestId('broker-request').textContent ?? '';
 
 function editField(label: string, to: string) {
@@ -314,7 +318,7 @@ describe('#583 — the broker receives exactly the reviewed request', () => {
   it('a broker change after review blocks the send; it is never re-routed silently', async () => {
     await renderPage();
     await openReview();
-    fireEvent.click(screen.getByRole('button', { name: /tradier paper/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /tradier paper/i }));
     await waitFor(() => expect(reviewRegion().getByText(/Changed since this review/)).toBeInTheDocument());
     expect(confirmBtn()).toBeDisabled();
     expect(confirmBtn()).toHaveTextContent(/^Send to IBKR Paper/);
@@ -379,7 +383,8 @@ describe('#583 — nothing later rebuilds or bypasses the reviewed request', () 
       }) as any);
     });
     await settle();
-    const stillOpen = screen.queryByRole('button', { name: /^Send to / });
+    const review = screen.queryByRole('region', { name: BROKER_ORDER_REVIEW });
+    const stillOpen = review ? within(review).queryByRole('button', { name: /^Send to / }) : null;
     if (stillOpen) fireEvent.click(stillOpen);
     await settle();
     expect(persistCalls()).toHaveLength(0);
@@ -413,8 +418,8 @@ describe('#583 — nothing later rebuilds or bypasses the reviewed request', () 
       return original(url, init);
     });
     await renderPage();
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limit = await screen.findByRole('button', { name: /place limit @/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limit = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limit).toBeEnabled());
     fireEvent.click(limit);
     await waitFor(() => expect(previewBodies()).toHaveLength(1));
@@ -430,8 +435,8 @@ describe('#583 — nothing later rebuilds or bypasses the reviewed request', () 
 
 describe('#583 — a refused or unreachable server review writes nothing', () => {
   async function clickPlaceLimit() {
-    fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-    const limit = await screen.findByRole('button', { name: /place limit @/i });
+    fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+    const limit = await findInDecision('button', { name: /place limit @/i });
     await waitFor(() => expect(limit).toBeEnabled());
     fireEvent.click(limit);
   }
@@ -478,7 +483,7 @@ describe('#583 — retry identity', () => {
     await openReview();
     fireEvent.click(confirmBtn());
     await waitFor(() => expect(api.deletePortfolioPosition).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+    await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit @/i })).toBeEnabled());
     await settle();
     await openReview();
     await waitFor(() => expect(previewBodies()).toHaveLength(2));
@@ -497,9 +502,9 @@ describe('#583 — retry identity', () => {
     fireEvent.click(confirmBtn());
     await waitFor(() => expect(useDirectSendNotesStore.getState().notes).toHaveLength(1));
     await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));
-    await waitFor(() => expect(screen.getByRole('button', { name: /place limit @/i })).toBeEnabled());
+    await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit @/i })).toBeEnabled());
     await settle();
-    fireEvent.click(screen.getByRole('button', { name: /place limit @/i }));
+    fireEvent.click(decisionRegion().getByRole('button', { name: /place limit @/i }));
     expect(await screen.findByText(/already tracked in Portfolio/)).toBeInTheDocument();
     expect(previewBodies()).toHaveLength(1);
     expect(api.postOptionOrder).toHaveBeenCalledTimes(1);

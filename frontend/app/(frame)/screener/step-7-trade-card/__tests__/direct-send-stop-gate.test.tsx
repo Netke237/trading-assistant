@@ -8,16 +8,10 @@ import { useSettingsStore } from '@/lib/settingsStore';
 import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
-
-
-/** #583 — a direct send opens the server review first; its final action saves
- *  and sends. A send refused before the review (a gate, a quote warning)
- *  opens none, and nothing is clicked. */
-async function confirmReview() {
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
-  if (confirm) fireEvent.click(confirm);
-}
+// #583 confirmReview, and role queries scoped to the section each test targets.
+import {
+  confirmReview, decisionRegion, findInDecision, profitTargetMethods,
+} from '../../../../../test-utils/tradeCardQueries';
 
 // Phase G piece 5, build step 4 — this suite is isolating the INVALIDATION
 // gate, so every fixture also needs a satisfied METHOD PICK gate or the new
@@ -177,14 +171,14 @@ function mount(
 
 /** Pick the paper broker, which is what reveals the two direct buttons. */
 async function selectBroker() {
-  fireEvent.click(screen.getByRole('button', { name: /ibkr paper/i }));
-  await screen.findByRole('button', { name: /place limit/i });
+  fireEvent.click(decisionRegion().getByRole('button', { name: /ibkr paper/i }));
+  await findInDecision('button', { name: /place limit/i });
 }
 
 /** The Invalidation field lives inside the collapsed ladder section. */
 function expandLadder() {
   if (screen.queryByLabelText('Edit Invalidation')) return;
-  fireEvent.click(screen.getByRole('button', { name: /fixed % ladder plan/i }));
+  fireEvent.click(profitTargetMethods().getByRole('button', { name: /fixed % ladder plan/i }));
 }
 
 describe('step-7-trade-card — the direct buttons refuse a card with no stop', () => {
@@ -207,15 +201,15 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     mount(140, { extra: { direction: 'Bearish', isEtf: true, regimeGate: { headwindCautionPct: -15, headwindRejectPct: -40 } } });
     await selectBroker();
     for (const name of [/place limit/i, /right now — market/i]) {
-      const button = screen.getByRole('button', { name });
+      const button = decisionRegion().getByRole('button', { name });
       expect(button).toBeDisabled();
       expect(button).toHaveAttribute('title', BEARISH_REASON);
       fireEvent.click(button);
     }
     fireEvent.click(screen.getByText('Execution requirements, tracking & auto-trade'));
-    fireEvent.click(screen.getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
-    expect(screen.getByRole('button', { name: /^Arm —/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);
+    fireEvent.click(decisionRegion().getByRole('button', { name: 'Armed — fire on next qualifying condition' }));
+    expect(decisionRegion().getByRole('button', { name: /^Arm —/ })).toBeDisabled();
+    expect(decisionRegion().getByRole('button', { name: /^Arm —/ })).toHaveAttribute('title', BEARISH_REASON);
     expect(screen.getAllByText(BEARISH_REASON).length).toBeGreaterThan(0);
     await act(async () => {});
     expect(api.postOptionOrder).not.toHaveBeenCalled();
@@ -229,8 +223,8 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
 
-    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
-    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    const limitBtn  = decisionRegion().getByRole('button', { name: /place limit/i });
+    const marketBtn = decisionRegion().getByRole('button', { name: /right now — market/i });
     expect(limitBtn).toBeDisabled();
     expect(marketBtn).toBeDisabled();
 
@@ -272,9 +266,9 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
       expect(screen.getByLabelText('Edit Invalidation')).toHaveTextContent(String(TYPED_STOP)));
 
     await selectBroker();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
-    expect(screen.getByRole('button', { name: /right now — market/i })).toBeEnabled();
+    expect(decisionRegion().getByRole('button', { name: /right now — market/i })).toBeEnabled();
     expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument();
 
     fireEvent.click(limitBtn);
@@ -292,7 +286,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no stop', 
     await selectBroker();
 
     expect(screen.queryByText(REFUSAL)).not.toBeInTheDocument();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
 
     fireEvent.click(limitBtn);
@@ -327,8 +321,8 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
 
-    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
-    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    const limitBtn  = decisionRegion().getByRole('button', { name: /place limit/i });
+    const marketBtn = decisionRegion().getByRole('button', { name: /right now — market/i });
     expect(limitBtn).toBeDisabled();
     expect(marketBtn).toBeDisabled();
 
@@ -356,7 +350,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     await selectBroker();
 
     expect(screen.queryByText(/Method pick required/)).not.toBeInTheDocument();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
   });
 
@@ -369,7 +363,7 @@ describe('step-7-trade-card — the direct buttons refuse a card with no method 
     mount(140, { withPick: true });
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -413,8 +407,8 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
 
-    const limitBtn  = screen.getByRole('button', { name: /place limit/i });
-    const marketBtn = screen.getByRole('button', { name: /right now — market/i });
+    const limitBtn  = decisionRegion().getByRole('button', { name: /place limit/i });
+    const marketBtn = decisionRegion().getByRole('button', { name: /right now — market/i });
     expect(limitBtn).toBeDisabled();
     expect(marketBtn).toBeDisabled();
     expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
@@ -443,9 +437,9 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
 
-    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    const disarm = await findInDecision('button', { name: 'Disarm' });
     expect(disarm).toBeEnabled();
-    const fire = screen.getByRole('button', { name: 'Fire now' });
+    const fire = decisionRegion().getByRole('button', { name: 'Fire now' });
     expect(fire).toBeDisabled();
     expect(fire).toHaveAttribute('title', VETO_REASON);
 
@@ -460,7 +454,7 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     // mount() resets the store to manual mode; Arm shows in armed mode only.
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
 
-    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    const arm = await findInDecision('button', { name: /^Arm —/ });
     expect(arm).toBeDisabled();
     expect(arm).toHaveAttribute('title', VETO_REASON);
     fireEvent.click(arm);
@@ -474,9 +468,9 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     await selectBroker();
 
     expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
-    expect(screen.getByRole('button', { name: /right now — market/i })).toBeEnabled();
+    expect(decisionRegion().getByRole('button', { name: /right now — market/i })).toBeEnabled();
     expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
   });
 
@@ -486,7 +480,7 @@ describe('step-7-trade-card — earnings veto blocks the send', () => {
     await selectBroker();
 
     expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     await waitFor(() => expect(limitBtn).toBeEnabled());
     expect(screen.getByRole('button', { name: /pin to basket/i })).toBeEnabled();
 
@@ -544,9 +538,9 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     mountScannedAgo(3, { earningsDays: 23, earningsVeto: false, isEtf: false });
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     expect(limitBtn).toBeDisabled();
-    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(decisionRegion().getByRole('button', { name: /right now — market/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /pin to basket/i })).toBeDisabled();
     expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
   });
@@ -556,7 +550,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
     expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+    await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit/i })).toBeEnabled());
   });
 
   it('F8: a single stock with unknown earnings cannot be armed, but can still be sent manually', async () => {
@@ -564,7 +558,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
-    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    const arm = await findInDecision('button', { name: /^Arm —/ });
     expect(arm).toBeDisabled();
     expect(arm.getAttribute('title')).toMatch(UNKNOWN_ARM);
     expect(screen.getByText(UNKNOWN_ARM)).toBeInTheDocument();
@@ -579,7 +573,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     mountScannedAgo(0, { earningsDays: null, earningsUnknown: true, isEtf: false, finalStatus: 'CAUTION' });
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
-    const disarm = await screen.findByRole('button', { name: 'Disarm' });
+    const disarm = await findInDecision('button', { name: 'Disarm' });
     expect(disarm).toBeEnabled();
     fireEvent.click(disarm);
     await waitFor(() => expect(api.disarmAutoTrade).toHaveBeenCalledTimes(1));
@@ -590,7 +584,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
     act(() => { useAutoTradeStore.setState({ autoMode: 'armed' }); });
-    const arm = await screen.findByRole('button', { name: /^Arm —/ });
+    const arm = await findInDecision('button', { name: /^Arm —/ });
     expect(arm.getAttribute('title') ?? '').not.toMatch(UNKNOWN_ARM);
   });
 
@@ -615,10 +609,10 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
   async function expectVetoed() {
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
-    const limitBtn = screen.getByRole('button', { name: /place limit/i });
+    const limitBtn = decisionRegion().getByRole('button', { name: /place limit/i });
     expect(limitBtn).toBeDisabled();
     expect(limitBtn).toHaveAttribute('title', VETO_REASON);
-    expect(screen.getByRole('button', { name: /right now — market/i })).toBeDisabled();
+    expect(decisionRegion().getByRole('button', { name: /right now — market/i })).toBeDisabled();
     expect(screen.getByText(VETO_REASON)).toBeInTheDocument();
     fireEvent.click(limitBtn);
     await confirmReview();
@@ -647,7 +641,7 @@ describe('audit round 1 F4/F8 — the earnings gate is judged as of today', () =
     await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
     await selectBroker();
     expect(screen.queryByText(VETO_REASON)).not.toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: /place limit/i })).toBeEnabled());
+    await waitFor(() => expect(decisionRegion().getByRole('button', { name: /place limit/i })).toBeEnabled());
   });
 });
 

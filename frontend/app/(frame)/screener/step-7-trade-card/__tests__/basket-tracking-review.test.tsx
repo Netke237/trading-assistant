@@ -10,6 +10,8 @@ import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { useRiskStore } from '@/lib/riskStore';
 import { api } from '@/lib/api';
 import type { MethodPick, TradeCardData } from '@/types/domain';
+// Role queries scoped to the section each test targets.
+import { findInDecision } from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * #582 (TC-REVIEW-07) — Step 7's Track basket confirms exactly the values the
@@ -133,7 +135,7 @@ async function openBasketWithBoth() {
   fireEvent.click(screen.getByRole('button', { name: 'Next candidate' }));
   await waitFor(() => expect(screen.getByText('BBB Inc.')).toBeInTheDocument());
   fireEvent.click(await screen.findByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /basket \(2\)/i }));
+  fireEvent.click(await findInDecision('button', { name: /basket \(2\)/i }));
 }
 
 describe('#582 Step 7 — Track basket confirms server-reviewed values', () => {

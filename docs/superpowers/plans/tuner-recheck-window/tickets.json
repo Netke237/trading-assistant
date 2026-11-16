@@ -1,0 +1,107 @@
+{
+  "phase": "TUNER-RECHECK-WINDOW",
+  "tracking_issue": 638,
+  "branch": "board/tuner-recheck-window-11f71bdb",
+  "plan_sha256": "7d0f8102121210416d0ca202c7d3f67ebff5eb6f4d3fbc80930a5498095e2ad0",
+  "tickets": [
+    {
+      "task": 1,
+      "number": 639,
+      "id": 6360165226,
+      "url": "https://github.com/Netke237/trading-assistant/issues/639",
+      "blockers": [],
+      "size": "M",
+      "complexity": 4,
+      "verified_labels": [
+        "agent-in-progress",
+        "size:M",
+        "complexity:4",
+        "tuner-recheck-window"
+      ],
+      "verified_blockers": []
+    },
+    {
+      "task": 2,
+      "number": 640,
+      "id": 6360169477,
+      "url": "https://github.com/Netke237/trading-assistant/issues/640",
+      "blockers": [
+        1
+      ],
+      "size": "M",
+      "complexity": 4,
+      "verified_labels": [
+        "size:M",
+        "complexity:4",
+        "tuner-recheck-window"
+      ],
+      "verified_blockers": [
+        639
+      ]
+    },
+    {
+      "task": 3,
+      "number": 641,
+      "id": 6360173035,
+      "url": "https://github.com/Netke237/trading-assistant/issues/641",
+      "blockers": [
+        2
+      ],
+      "size": "M",
+      "complexity": 3,
+      "verified_labels": [
+        "size:M",
+        "complexity:3",
+        "tuner-recheck-window"
+      ],
+      "verified_blockers": [
+        640
+      ]
+    },
+    {
+      "task": 4,
+      "number": 642,
+      "id": 6360176584,
+      "url": "https://github.com/Netke237/trading-assistant/issues/642",
+      "blockers": [
+        1,
+        2,
+        3
+      ],
+      "size": "M",
+      "complexity": 4,
+      "verified_labels": [
+        "size:M",
+        "complexity:4",
+        "tuner-recheck-window"
+      ],
+      "verified_blockers": [
+        639,
+        640,
+        641
+      ]
+    }
+  ],
+  "links": [
+    "sub:639",
+    "sub:640",
+    "dep:640:639",
+    "sub:641",
+    "dep:641:640",
+    "sub:642",
+    "dep:642:639",
+    "dep:642:640",
+    "dep:642:641"
+  ],
+  "comments": [
+    639,
+    640,
+    641,
+    642
+  ],
+  "parent_rated": true,
+  "parent_commented": true,
+  "verified": true,
+  "resume_branch": "board/tuner-recheck-window-7621dde5",
+  "resume_note": "2026-11-13: prior claim expired after usage interruption; no prior implementer changes; resume from pushed def10ef4 preserving plan hash/counters. Live parent Branch is authoritative."
+}

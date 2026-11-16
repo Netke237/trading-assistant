@@ -11,16 +11,10 @@ import { useAutoTradeStore } from '@/lib/autoTradeStore';
 import { useDirectSendNotesStore } from '@/lib/directSendNotesStore';
 import { api } from '@/lib/api';
 import type { TradeCardData, MethodPick } from '@/types/domain';
-
-
-/** #583 — a direct send opens the server review first; its final action saves
- *  and sends. A send refused before the review (a gate, a quote warning)
- *  opens none, and nothing is clicked. */
-async function confirmReview() {
-  await waitFor(() => expect(screen.queryByRole('button', { name: 'Placing…' })).not.toBeInTheDocument());
-  const confirm = screen.queryByRole('button', { name: /^Send to / });
-  if (confirm) fireEvent.click(confirm);
-}
+// #583 confirmReview, and role queries scoped to the section each test targets.
+import {
+  confirmReview, decisionRegion, findInBasketDialog, findInDecision,
+} from '../../../../../test-utils/tradeCardQueries';
 
 /*
  * #581 — OUTBOUND PAYLOAD PARITY GUARD.
@@ -203,8 +197,8 @@ async function editAll(quantity?: string) {
 }
 
 async function direct(kind: 'LMT' | 'MKT', broker: RegExp) {
-  fireEvent.click(screen.getByRole('button', { name: broker }));
-  const btn = await screen.findByRole('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
+  fireEvent.click(decisionRegion().getByRole('button', { name: broker }));
+  const btn = await findInDecision('button', { name: kind === 'LMT' ? /place limit @/i : /right now — market/i });
   await waitFor(() => expect(btn).toBeEnabled());
   fireEvent.click(btn);
   await confirmReview();
@@ -214,8 +208,8 @@ async function direct(kind: 'LMT' | 'MKT', broker: RegExp) {
 
 async function basket() {
   fireEvent.click(screen.getByRole('button', { name: /pin to basket/i }));
-  fireEvent.click(await screen.findByRole('button', { name: /track basket \(1\)/i }));
-  const submit = await screen.findByRole('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
+  fireEvent.click(await findInDecision('button', { name: /track basket \(1\)/i }));
+  const submit = await findInBasketDialog('button', { name: /^(Add 1 to Portfolio|Override & Submit)$/ });
   await waitFor(() => expect(submit).toBeEnabled());
   fireEvent.click(submit);
   await waitFor(() => expect(usePortfolioStore.getState().positions).toHaveLength(1));

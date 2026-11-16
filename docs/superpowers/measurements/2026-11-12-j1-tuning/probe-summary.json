@@ -1,0 +1,278 @@
+{
+ "command": [
+  "python",
+  "backend/scripts/tune_horizons.py",
+  "--probe",
+  "--symbols",
+  "AAPL,MSFT,NVDA",
+  "--workers",
+  "3",
+  "--probe-json",
+  "docs/superpowers/measurements/2026-11-12-j1-tuning/probe-summary.json"
+ ],
+ "python": "3.11.9",
+ "code": {
+  "git_commit": "e236b69602e1472a5316a73fa221368b6d59d520",
+  "uncommitted_tuner_changes": [
+   " M backend/scripts/tune_horizons.py"
+  ],
+  "sources": {
+   "backend/scripts/tune_horizons.py": "55c5bd7b891950526c474b7fb6094c28fa8274f68a03bb5c1ed1bd919dfb410b",
+   "backend/app/services/horizon_tuning/__init__.py": "c9b7a617a323b8a7f7b86db4ff67f5eb726303603899f9a367e643bfa3dc8f7c",
+   "backend/app/services/horizon_tuning/basket.py": "043dd302b82c8214e552b5d1e30ed4416fa496f96d9e7e69f38ae06eb8003cd2",
+   "backend/app/services/horizon_tuning/cache.py": "8d898a869cb7ec017f48278ec43d4c3d7ce5c7ccdf8f897aa4e725c7a1975846",
+   "backend/app/services/horizon_tuning/gates.py": "b54f679961dc5bf2d5b74398b8ca86bc47c059f701e504c212b26376e4ef5a6d",
+   "backend/app/services/horizon_tuning/report.py": "583bbd10e02f4069c171a65a4e1c57f9f027f6e0c08643cdbf581808118bbad2",
+   "backend/app/services/horizon_tuning/signals.py": "cf0faba8438eb52bf082f8bc3818938e156e66874766a2930fc383666f4e7acf",
+   "backend/app/services/horizon_tuning/simulate.py": "ab411a954e42222c8109f51a6708eef2e640e9675495d7a0d2e1e3342f3f07a2",
+   "backend/app/services/horizon_tuning/walk_forward_cell.py": "03c7f1beeb38cbd5f56d53f37f3e2119f0b81407b46eb9feea3cb2da928b7d65"
+  },
+  "signal_sources": {
+   "app.services.strategy_engine": "3821eeee4059ad40cc788d94182336c4b2c35f43161116fc2ddb49932f257006",
+   "app.services.setup_entries": "c8e2db2a068cec58122165e79b723502a9735cbd10c27f643806677b846595e3",
+   "app.services.horizon_tuning.signals": "cf0faba8438eb52bf082f8bc3818938e156e66874766a2930fc383666f4e7acf",
+   "app.services.horizon_tuning.simulate": "ab411a954e42222c8109f51a6708eef2e640e9675495d7a0d2e1e3342f3f07a2"
+  }
+ },
+ "symbols": [
+  "AAPL",
+  "MSFT",
+  "NVDA"
+ ],
+ "bars_dir": "C:\\GitHub\\trading-assistant\\backend\\tests\\fixtures",
+ "workers": 3,
+ "cells": 60,
+ "fixtures": {
+  "AAPL": {
+   "file": "AAPL_candles.json",
+   "sha256": "59d88b1635b5a6d118c6b33d2defcd4f8163e3c38b7dde6d140a8a890288ef28",
+   "ohlcv_hash": "8884aa99c6619a68a28fdcbfb7db2227b008638e073835403968f46cd6fa771c",
+   "bars": 251,
+   "first": "2024-04-30",
+   "last": "2025-04-30"
+  },
+  "MSFT": {
+   "file": "MSFT_candles.json",
+   "sha256": "940513c885b36e2fe7790b7e882e671532a03ca63daf7e138dc70c9eb9635bf7",
+   "ohlcv_hash": "258aba6b2917b6ea8dfa504557b7e4de746ae5e833897d34878a221dabedb47c",
+   "bars": 251,
+   "first": "2024-04-30",
+   "last": "2025-04-30"
+  },
+  "NVDA": {
+   "file": "NVDA_candles.json",
+   "sha256": "dcd3309a1b1cc58f92282aff0f8531a503aec5cef74ba92548d27e6d445fb330",
+   "ohlcv_hash": "8d1b6494e1664234912563f6a7fc6e03d59f42b30eb27f04b002818436b022c2",
+   "bars": 251,
+   "first": "2024-04-30",
+   "last": "2025-04-30"
+  }
+ },
+ "assumptions": {
+  "end": "2026-11-16",
+  "end_source": "assumed: today (no export manifest.json in the bars directory)",
+  "bars_per_symbol": 4280,
+  "basket": 110,
+  "trade_universe": 498,
+  "recheck_universe": 512,
+  "folds": {
+   "Swing": 51,
+   "Position": 51,
+   "Quarterly": 38,
+   "SemiAnnual": 18,
+   "Annual": 11
+  }
+ },
+ "pairs": {
+  "breakout_base|Bearish": {
+   "cells": 5,
+   "sample_calls": 143007480,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 2065634,
+   "combos": 308,
+   "signal_ms_per_call": 0.11287517352482407,
+   "sim_ms_per_window": 0.15194000443443656,
+   "signals_h": 1.6905601943421091,
+   "simulation_h": 0.08718123308886748,
+   "total_h": 1.7777414274309766
+  },
+  "breakout_base|Bullish": {
+   "cells": 5,
+   "sample_calls": 143007480,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 2065634,
+   "combos": 308,
+   "signal_ms_per_call": 0.18221545138254036,
+   "sim_ms_per_window": 0.20459999796003103,
+   "signals_h": 2.7290871790656035,
+   "simulation_h": 0.11739686449615853,
+   "total_h": 2.846484043561762
+  },
+  "ma_crossover|Bearish": {
+   "cells": 5,
+   "sample_calls": 93326310,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1251194,
+   "combos": 201,
+   "signal_ms_per_call": 0.2657020833996487,
+   "sim_ms_per_window": 0.11913999915122986,
+   "signals_h": 2.757229341464784,
+   "simulation_h": 0.041407570027228856,
+   "total_h": 2.798636911492013
+  },
+  "ma_crossover|Bullish": {
+   "cells": 5,
+   "sample_calls": 93326310,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1251194,
+   "combos": 201,
+   "signal_ms_per_call": 0.24771041666503557,
+   "sim_ms_per_window": 0.17691999673843384,
+   "signals_h": 2.5705271869772868,
+   "simulation_h": 0.06148923288865222,
+   "total_h": 2.632016419865939
+  },
+  "mean_reversion_bb|Bearish": {
+   "cells": 5,
+   "sample_calls": 51074100,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 292186062,
+   "sim_windows": 873674,
+   "combos": 110,
+   "signal_ms_per_call": 0.25268975686129935,
+   "sim_ms_per_window": 0.12050000950694084,
+   "signals_h": 1.6336151321982002,
+   "simulation_h": 0.029243812584990845,
+   "total_h": 1.662858944783191
+  },
+  "mean_reversion_bb|Bullish": {
+   "cells": 5,
+   "sample_calls": 51074100,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 292186062,
+   "sim_windows": 873674,
+   "combos": 110,
+   "signal_ms_per_call": 0.20977430540369824,
+   "sim_ms_per_window": 0.11883999686688185,
+   "signals_h": 1.356170839334615,
+   "simulation_h": 0.028840948728521144,
+   "total_h": 1.385011788063136
+  },
+  "mean_reversion_multi|Bearish": {
+   "cells": 5,
+   "sample_calls": 91004760,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 359451918,
+   "sim_windows": 1635974,
+   "combos": 196,
+   "signal_ms_per_call": 0.5440548610648774,
+   "sim_ms_per_window": 0.14680000022053719,
+   "signals_h": 5.528787659554084,
+   "simulation_h": 0.06671138432244253,
+   "total_h": 5.595499043876527
+  },
+  "mean_reversion_multi|Bullish": {
+   "cells": 5,
+   "sample_calls": 91004760,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 359451918,
+   "sim_windows": 1635974,
+   "combos": 196,
+   "signal_ms_per_call": 0.40525225702165496,
+   "sim_ms_per_window": 0.1455599907785654,
+   "signals_h": 4.118249533222321,
+   "simulation_h": 0.06614787787610354,
+   "total_h": 4.184397411098424
+  },
+  "mean_reversion_rsi|Bearish": {
+   "cells": 5,
+   "sample_calls": 85897350,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 336329280,
+   "sim_windows": 1397714,
+   "combos": 185,
+   "signal_ms_per_call": 0.09819687491269885,
+   "sim_ms_per_window": 0.15184000367298722,
+   "signals_h": 0.9514569616002952,
+   "simulation_h": 0.05895247191494046,
+   "total_h": 1.0104094335152358
+  },
+  "mean_reversion_rsi|Bullish": {
+   "cells": 5,
+   "sample_calls": 85897350,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 336329280,
+   "sim_windows": 1397714,
+   "combos": 185,
+   "signal_ms_per_call": 0.11839687491980537,
+   "sim_ms_per_window": 0.20064000273123384,
+   "signals_h": 1.1471804064469302,
+   "simulation_h": 0.07789926132707882,
+   "total_h": 1.225079667774009
+  },
+  "pullback_ema|Bearish": {
+   "cells": 5,
+   "sample_calls": 148579200,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1679534,
+   "combos": 320,
+   "signal_ms_per_call": 0.08335989595151558,
+   "sim_ms_per_window": 0.14292000560089946,
+   "signals_h": 1.29150774244965,
+   "simulation_h": 0.06667750241302807,
+   "total_h": 1.358185244862678
+  },
+  "pullback_ema|Bullish": {
+   "cells": 5,
+   "sample_calls": 148579200,
+   "winner_calls": 7941108,
+   "final_calls": 10805760,
+   "legacy_recheck_calls": 365758092,
+   "sim_windows": 1679534,
+   "combos": 320,
+   "signal_ms_per_call": 0.08369201380749776,
+   "sim_ms_per_window": 0.1195400021970272,
+   "signals_h": 1.2966532956861396,
+   "simulation_h": 0.05576986056943941,
+   "total_h": 1.352423156255579
+  }
+ },
+ "gate_ms_per_bar": {
+  "Bearish": 2.382586000021547,
+  "Bullish": 1.8276215001242235
+ },
+ "gate_bars": {
+  "Bearish": 4382720,
+  "Bullish": 4382720
+ },
+ "totals": {
+  "sample_calls": 1225778400,
+  "winner_calls": 95293296,
+  "final_calls": 129669120,
+  "legacy_recheck_calls": 4170483072,
+  "sim_windows": 17807448,
+  "new_recheck_calls": 224962416
+ },
+ "projection": {
+  "signals_h": 27.071025472342022,
+  "gates_h": 1.708533390281377,
+  "simulation_h": 0.7577180202374519,
+  "total_h": 29.537276882860844
+ }
+}
