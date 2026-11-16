@@ -13,14 +13,14 @@ Tracking issue #638. The live issue and PROJECT_STATE retain authoritative progr
 
 ## Required integrated acceptance (pending)
 
-- [ ] Exact independent full-series versus optimized re-check equality: all six ordinary tuned strategies, both directions/costs, trades/stats/fires/drop counts/verdict.
-- [ ] Stateful setup strategies keep complete series; final parameters and sample-grid search unchanged.
-- [ ] Scoped/full/cache-window isolation, cold/warm/cache-disabled, worker prewarm and real multiprocessing smoke.
-- [ ] Adjusted read-only single-snapshot export, manifests/hashes/missing data and no overwrite/partial publication.
-- [ ] Same export with fixed code/config/universe input shares data/run identity across dates; finished cells skip actual work; tampering invalidates resume.
-- [ ] Pair-specific workload projections and bounded AAPL/MSFT/NVDA fixture probe; report projection versus measured timing honestly.
-- [ ] Mini-PC run-book: fixed inputs and persistent per-strategy output roots, below-normal scheduled task, no MEAS/nightly overlap.
-- [ ] Full backend pytest, full frontend Jest and typecheck on integrated code; production configuration/simulator/signal functions/history writers remain unchanged.
+- [x] Exact independent full-series versus optimized re-check equality: all six ordinary tuned strategies, both directions/costs, trades/stats/fires/drop counts/verdict.
+- [x] Stateful setup strategies keep complete series; final parameters and sample-grid search unchanged.
+- [x] Scoped/full/cache-window isolation, cold/warm/cache-disabled, worker prewarm and real multiprocessing smoke.
+- [x] Adjusted read-only single-snapshot export, manifests/hashes/missing data and no overwrite/partial publication.
+- [x] Same export with fixed code/config/universe input shares data/run identity across dates; finished cells skip actual work; tampering invalidates resume.
+- [x] Pair-specific workload projections and bounded AAPL/MSFT/NVDA fixture probe; report projection versus measured timing honestly.
+- [x] Mini-PC run-book: fixed inputs and persistent per-strategy output roots, below-normal scheduled task, no MEAS/nightly overlap.
+- [x] Full backend pytest, full frontend Jest and typecheck on integrated code; production configuration/simulator/signal functions/history writers remain unchanged.
 - [ ] Actual origin/main merged before independent complete code audit; per-stage cap and exact scope recorded.
 - [ ] Exact-head CI/mergeability/ownership/hold checks; pending merge record before guarded self-merge; actual verified merge and separate shipped reconciliation.
 
@@ -101,3 +101,33 @@ All runs: container `ta-backend-test:latest`, Python 3.11.17, no network, an eph
   6. The run-book wrapper runs one cell per call, with STOP-file and deadline checks, then a group-level `--resume` pass.
   7. The final-parameter count includes evidence-only symbols.
 - All three build units now exist (T1, T2 with T2a, and T3). Status is `built` and completion 50 %. Still to do in T4: merge `origin/main` (it must include the B7 date fix), integrated full checks, the complete-target independent code audit (0 rounds so far, `audit_clean: false`), and the PR.
+
+## T4 #642 integrated checks — 2026-11-16
+
+- Actual `origin/main` (`45c95660`, 56 commits, including the B7 date fix `a0becefd`) merged with no rebase as `9708e04c`. The only conflict was in `PROJECT_STATE.json`. It was resolved by keeping main's file and appending this phase's record unchanged. `step-7-position-card/__tests__/page.test.tsx` auto-merged with both sides' edits. Every other phase file is byte-identical to `ae894666`, and every main file is byte-identical to `origin/main`.
+- Net phase diff against `origin/main`: 31 files. These are the three planned tuning modules (`horizon_tuning/cache.py`, `report.py`, `signals.py`), the two scripts, the five backend test files, docs and evidence, the T2a frontend test files and `frontend/test-utils/tradeCardQueries.ts`.
+- Byte-identical to `origin/main` (no diff): `strategy_engine.py`, `strategy_backtest.py`, `walk_forward.py`, `strategy_param_optimizer.py`, `horizon_tuning/simulate.py`, `gates.py`, `basket.py`, `walk_forward_cell.py`, all of `backend/config/`, models, migrations, data adapters and the broker/order/auto-trade paths. Whether sample-grid selection inside `tune_horizons.py` is semantically unchanged is left to the code audit.
+- Frontend typecheck (`tsc --noEmit`), Node 20.20.2 glibc container, HEAD `9708e04c`, no network: **passed**.
+- Full frontend Jest, same container, `--maxWorkers=2` on the command line, unchanged config, limits and assertions: **354/354 suites, 6508/6508 tests passed** in 732 s. B7 passes. No test was skipped or retried.
+- Full backend pytest, Python 3.11.17 Linux container, HEAD `9708e04c`, no network, isolated DB: **10393 passed, 9 skipped, 0 failed** in 1572 s.
+- Targeted rerun, native Python 3.11.9, HEAD `9708e04c`: **256 passed**, broken down as:
+  - `test_tuner_recheck_window` 109;
+  - `test_export_tuning_bars` 24;
+  - `test_tuner_projection` 19;
+  - `test_horizon_tuning_report` 17;
+  - `test_horizon_tuning_core` 42;
+  - `test_setup_tuning` 45.
+- No real J1 run, DB mutation, parameter adoption or provider/broker network call was made.
+
+### #638 acceptance inventory (at `9708e04c`)
+
+| #638 checkbox | Evidence | State |
+|---|---|---|
+| Parity test proves identical re-check outputs with and without the fix for all tuned strategies, both directions | `test_real_strategy_windows_equal_the_full_reference` checks every tuned strategy plus `mean_reversion_vwap`, both directions and 8 windows, against the full reference. `test_real_fixture_recheck_exact` checks every tuned strategy and both directions on real fixtures, matching trades, stats, fires, drops and verdict. `test_planted_recheck_exact_trades_stats_fires_drops_and_verdict` and `test_windows_outside_history_and_verdict_threshold_boundaries` add planted cases. All pass. | met, pending audit |
+| Setup strategies verified to use the full series | `test_setup_window_keeps_full_series_with_pending_origin_before_window` and `test_setup_recheck_uses_full_series` both pass. | met, pending audit |
+| Export script + manifest; same export ⇒ same `data_hash`; `--resume` skips finished cells across runs | `test_export_tuning_bars.py` passes 24/24, including `test_repeated_export_is_byte_identical_and_does_not_add_today`. `test_resume_skips_a_finished_cell` and `test_frozen_export_resume_across_days_and_tampered_bars` also pass. | met, pending audit |
+| Probe on the AAPL/MSFT/NVDA fixtures shows the re-check share reduced and per-strategy projections | `measurements/2026-11-12-j1-tuning/probe.txt` and `probe-summary.json` show re-check calls at 0.054× and per-pair projections; these are model figures, not measured runtimes. `test_tuner_projection.py` passes 19/19. | met, pending audit |
+| Run-book committed | `measurements/2026-11-12-j1-tuning/runbook.md` | met, pending audit |
+| Python 3.11; full backend tests green; plan audit and code audit clean (`audit_rule`) | Python 3.11.17 and 3.11.9; full backend green as above; plan stage clean at round 3 of 3. | code audit **not yet run** (code stage 0 of 3) |
+
+The phase is checked but not audited. It is not ready to merge until an independent code round comes back clean.
