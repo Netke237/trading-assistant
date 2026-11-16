@@ -7,14 +7,6 @@
       "expires_at": "2026-11-16T18:14:27Z",
       "note": "resume T2a amendment (option 1)",
       "task": "TUNER-RECHECK-WINDOW"
-    },
-    {
-      "agent": "claude",
-      "branch": "fix/jest-locale-est-total",
-      "claimed_at": "2026-11-16T15:44:04Z",
-      "expires_at": "2026-11-16T18:44:04Z",
-      "note": "#651 locale-independent number assertions in 3 frontend tests",
-      "task": "JEST-LOCALE-NUMBERS"
     }
   ]
 }
