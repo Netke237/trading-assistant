@@ -2,27 +2,11 @@
   "claims": [
     {
       "agent": "claude",
-      "branch": "feat/background-schedule-maintenance",
-      "claimed_at": "2026-11-16T06:40:22Z",
-      "expires_at": "2026-11-16T09:40:22Z",
-      "note": "PR #646 open: background schedule maintenance; awaiting Kenneth's review",
-      "task": "BG-SCHEDULE-MAINT"
-    },
-    {
-      "agent": "claude",
       "branch": "board/tuner-recheck-window-03e0fc95",
-      "claimed_at": "2026-11-16T07:00:46Z",
-      "expires_at": "2026-11-16T10:10:36Z",
-      "note": "Resume #638: T2a/T2 verify, T3, T4 audit",
+      "claimed_at": "2026-11-16T12:30:57Z",
+      "expires_at": "2026-11-16T15:30:57Z",
+      "note": "resume T2a amendment (option 1)",
       "task": "TUNER-RECHECK-WINDOW"
-    },
-    {
-      "agent": "claude",
-      "branch": "claude/laughing-rubin-bf2yhr",
-      "claimed_at": "2026-11-16T07:01:49Z",
-      "expires_at": "2026-11-16T10:01:49Z",
-      "note": "main frontend CI red: step-7-position-card earnings-veto test; diagnose + fix",
-      "task": "MAIN-EARNINGS-VETO-TEST"
     }
   ]
 }
