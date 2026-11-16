@@ -694,8 +694,11 @@ describe('the inline disclosure', () => {
 
   it('shows the assumptions strip outside it', () => {
     const { container } = renderCard();
-    // #651: nPaths is formatted with the runtime default locale.
-    const strip = screen.getByText(`${(2000).toLocaleString()} paths · each row sums to 100%`);
+    // #651: nPaths is formatted with the runtime default locale. getByText
+    // collapses the rendered text's whitespace (fr-FR groups with U+202F,
+    // ru-RU with U+00A0) but not the expected string, so collapse it too.
+    const paths = (2000).toLocaleString().replace(/\s/g, ' ');
+    const strip = screen.getByText(`${paths} paths · each row sums to 100%`);
     expect(details(container).contains(strip)).toBe(false);
     expect(screen.getByText('Edge before commissions')).toBeInTheDocument();
   });

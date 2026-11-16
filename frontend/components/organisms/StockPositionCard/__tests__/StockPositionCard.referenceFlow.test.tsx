@@ -90,7 +90,10 @@ it('keeps scanned strategy, chronology and complete Arithmetic race in closed me
   screen.getAllByRole('meter').forEach(meter => expect(meter).not.toBeVisible());
   const race = open('Which comes first · graphical outcomes & full details');
   expect(within(race).getAllByRole('meter').map(m => m.getAttribute('value'))).toEqual(['0.4', '0.34', '0.26']);
-  for (const text of ['Target first 40% (~7.5 trading days)', 'Stock stop first 34% (~6.5 trading days)', 'neither 26% (~$152.40)', `${(2000).toLocaleString()} simulated paths` /* #651: runtime default locale */, 'every path is counted once']) expect(race).toHaveTextContent(text);
+  // #651: nPaths uses the runtime default locale; toHaveTextContent collapses
+  // the rendered whitespace (U+202F / U+00A0 group separators) but not ours.
+  const paths = (2000).toLocaleString().replace(/\s/g, ' ');
+  for (const text of ['Target first 40% (~7.5 trading days)', 'Stock stop first 34% (~6.5 trading days)', 'neither 26% (~$152.40)', `${paths} simulated paths`, 'every path is counted once']) expect(race).toHaveTextContent(text);
   const latest = open('Latest calculation');
   expect(latest).toHaveTextContent('Stop 144.00 · risk/share 6.00 · 10 trading days');
   expect(latest).toHaveTextContent('T1 162.00 · 41% · ~7.5 trading days');
