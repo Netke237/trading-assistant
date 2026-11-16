@@ -12,7 +12,7 @@
       "agent": "claude",
       "branch": "board/tuner-recheck-window-03e0fc95",
       "claimed_at": "2026-11-16T07:00:46Z",
-      "expires_at": "2026-11-16T10:00:46Z",
+      "expires_at": "2026-11-16T10:10:36Z",
       "note": "Resume #638: T2a/T2 verify, T3, T4 audit",
       "task": "TUNER-RECHECK-WINDOW"
     },
