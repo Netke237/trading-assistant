@@ -10883,10 +10883,10 @@
     {
       "id": "BACKTEST-REVIEW-VISUALISATION",
       "name": "Readable recorded backtest performance and linked trade review",
-      "status": "built",
+      "status": "shipped",
       "size": "XL",
       "complexity": 4,
-      "completion_pct": 85,
+      "completion_pct": 100,
       "branch": "codex/backtest-review-99b03167",
       "plan": "docs/superpowers/plans/2026-11-12-backtest-review-visualisation-plan.md",
       "audit_rounds": 2,
@@ -10934,7 +10934,7 @@
         "reviewer": "backtest_code_audit_1",
         "diff": "e8eca1b60075701be75ea208894bfb1bf48f29bc..eecaa5c0dfb0c6d2e58c77639309faec071c5184"
       },
-      "note": "2026-11-15 Claude coordinator took over from stopped Codex session (Kenneth reassigned 2026-11-14). Build 4/4 (T1 690b034b, T2 1d168cb8, T3 454dd82b, T4 82e7275b) + integrated verification a68ba532 + resize fix eecaa5c0. Plan round 1 clean (hash unchanged; Codex's draft locale-test amendment not adopted). Code round 1 (continuous round 2) clean, zero gate findings. Built, unmerged: 85%. Host-only baseline Jest failures (en-DE locale trio, step-7 load timeouts) are green in main CI. Next: PR exact-head CI (95%), merge on Kenneth's go, post-merge checks (100%).",
+      "note": "2026-11-15 Claude coordinator took over from stopped Codex session (Kenneth reassigned 2026-11-14). Build 4/4 (T1 690b034b, T2 1d168cb8, T3 454dd82b, T4 82e7275b) + integrated verification a68ba532 + resize fix eecaa5c0. Plan round 1 clean (hash unchanged; Codex's draft locale-test amendment not adopted). Code round 1 (continuous round 2) clean, zero gate findings. PR648 exact-head CI green on 30dce9ff (backend, frontend, test); merged after explicit user approval at 2f8b8dc1 (merge commit, head-pinned). Merged tree byte-identical to approved head; post-merge typecheck clean and 8 suites/87 tests passed. Plan1/code1 clean, no counters reset. Host-only baseline Jest failures (en-DE locale trio, step-7 load timeouts) are green in main CI.",
       "verify": {
         "kind": "present",
         "path": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
@@ -10946,29 +10946,39 @@
         {
           "issue": 632,
           "task": 1,
-          "status": "built",
-          "completion_pct": 85
+          "status": "shipped",
+          "completion_pct": 100
         },
         {
           "issue": 633,
           "task": 2,
-          "status": "built",
-          "completion_pct": 85
+          "status": "shipped",
+          "completion_pct": 100
         },
         {
           "issue": 634,
           "task": 3,
-          "status": "built",
-          "completion_pct": 85
+          "status": "shipped",
+          "completion_pct": 100
         },
         {
           "issue": 635,
           "task": 4,
-          "status": "built",
-          "completion_pct": 85
+          "status": "shipped",
+          "completion_pct": 100
         }
       ],
-      "coordinator_ticket": 636
+      "coordinator_ticket": 636,
+      "pull_request": 648,
+      "merge_commit": "2f8b8dc19a759baacf2ed0755a80a6ad658dbb01",
+      "merged_at": "2026-11-16T06:35:43Z",
+      "post_merge_verification": {
+        "typecheck": "passed",
+        "jest_suites": 8,
+        "jest_tests": 87,
+        "scope": "CandidateBacktestWorkspace, BacktestTradeTable, CandidateChartWorkspace, FreshBacktestControls",
+        "source": "merged tree byte-identical to approved and CI-green PR648 head 30dce9ff"
+      }
     }
   ],
   "already_shipped": [
