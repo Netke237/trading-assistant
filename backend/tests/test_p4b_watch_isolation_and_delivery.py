@@ -118,7 +118,7 @@ async def test_a_failing_composite_watch_skips_only_itself():
     bad["symbol"] = "BAD"
     store = _Store([good_a, bad, good_b])
 
-    async def _get_bars(symbol, start, end):
+    async def _get_bars(symbol, start, end, **_kw):
         # every bar's close is garbage for BAD, so float(bars[-1]["close"]) raises
         # however many trailing bars a completed-bar trim removes
         if symbol == "BAD":

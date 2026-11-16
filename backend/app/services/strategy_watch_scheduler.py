@@ -55,7 +55,7 @@ class StrategyWatchScheduler:
 
         mode = cfg.get("mode", "eod")
         if mode == "eod":
-            hh, mm = (int(x) for x in str(cfg.get("eod_time", "16:15")).split(":"))
+            hh, mm = (int(x) for x in str(cfg.get("eod_time", "21:30")).split(":"))
             if now.weekday() >= 5:
                 return False
             if now.time() < dtime(hh, mm):
