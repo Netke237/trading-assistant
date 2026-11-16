@@ -1,0 +1,128 @@
+TUNER-RECHECK-WINDOW Task 3 (#641): bounded fixture probe, per-pair projection
+==============================================================================
+
+Command (repo root, Windows 11, PYTHONUTF8=1):
+  backend\.venv\Scripts\python.exe -u backend\scripts\tune_horizons.py --probe --symbols AAPL,MSFT,NVDA --workers 3 --probe-json docs\superpowers\measurements\2026-11-12-j1-tuning\probe-summary.json
+Python 3.11.9. Code: HEAD e236b69602e1472a5316a73fa221368b6d59d520 plus the uncommitted Task 3
+change to backend/scripts/tune_horizons.py, committed unchanged as
+"perf(tuner): project scoped rechecks by strategy and document frozen runs"; the exact
+LF-normalized source sha256 of every file the probe ran is in probe-summary.json ("code").
+Inputs: the three controlled fixture files backend/tests/fixtures/{AAPL,MSFT,NVDA}_candles.json
+(251 bars each, 2024-04-30 .. 2025-04-30; byte sha256 and ohlcv_hash in probe-summary.json).
+No market database, provider, network, optimization run or large synthetic grid: the probe
+times one baseline-parameter signal series per (strategy, direction) on these 3 x 251 bars,
+5 simulated windows per pair and one 200-bar gate mask per direction, then multiplies by
+counts from a model. Wall time for the whole probe: about 14 s.
+
+What is measured and what is projected
+--------------------------------------
+* Measured (this machine, this load, 251-bar windows): ms per signal call per pair, ms per
+  simulated window per pair, ms per gate-mask bar per direction. These are environment-
+  specific; a rerun on the same machine gives visibly different per-pair numbers (compare
+  the two runs below).
+* Projected, not measured: everything in hours. The history is synthetic: 4280 bars/symbol
+  (--bars-per-symbol default) on business days ending 2026-11-16, an ASSUMED end (today; the
+  fixture directory has no export manifest). With --bars-dir pointing at an
+  export_tuning_bars.py export, the probe uses the manifest's fixed end date instead.
+  Universe sizes come from the current configuration (trade 498, trade + fire-rate 512,
+  sample 110), not from stored history.
+* The re-check is counted at one distinct winner per fold, every fold winning: a cold-cache
+  upper bound. Ordinary winners only on the eligible bars of their fold's test-entry window
+  (from the 60th bar); setup winners and the final parameters on full series; the final
+  parameters on every trade- and fire-rate-universe symbol (evidence-only symbols included).
+* Not claimed: that the 688 h or 540 h figures quoted for the real J1 run have been measured
+  down. Nothing here ran on real history. The sample-grid signal work (full history, all
+  valid combinations on 110 sample symbols) is unchanged by Task 1 and is now the dominant
+  residual; simulation and gate masks are smaller residuals. All hours are projections,
+  not runtime guarantees.
+
+Per-pair projection after this change (new model)
+------------------------------------------------
+probe: AAPL (251 bars), MSFT (251 bars), NVDA (251 bars) from C:\GitHub\trading-assistant\backend\tests\fixtures
+basket 110 symbols (10 x 11 sectors), trade universe 498, re-check universe 512 (trade + fire-rate), workers 3
+projected history (not measured): 4280 bars/symbol, business days ending 2026-11-16 (assumed: today (no export manifest.json in the bars directory))
+folds per horizon: Swing 51, Position 51, Quarterly 38, SemiAnnual 18, Annual 11
+strategy              direction   ms/call  ms/sim  combos   sample calls   winner calls   final calls    old recheck  projected h
+breakout_base         Bearish       0.113   0.152     308    143,007,480      7,941,108    10,805,760    365,758,092         1.78
+breakout_base         Bullish       0.182   0.205     308    143,007,480      7,941,108    10,805,760    365,758,092         2.85
+ma_crossover          Bearish       0.266   0.119     201     93,326,310      7,941,108    10,805,760    365,758,092         2.80
+ma_crossover          Bullish       0.248   0.177     201     93,326,310      7,941,108    10,805,760    365,758,092         2.63
+mean_reversion_bb     Bearish       0.253   0.121     110     51,074,100      7,941,108    10,805,760    292,186,062         1.66
+mean_reversion_bb     Bullish       0.210   0.119     110     51,074,100      7,941,108    10,805,760    292,186,062         1.39
+mean_reversion_multi  Bearish       0.544   0.147     196     91,004,760      7,941,108    10,805,760    359,451,918         5.60
+mean_reversion_multi  Bullish       0.405   0.146     196     91,004,760      7,941,108    10,805,760    359,451,918         4.18
+mean_reversion_rsi    Bearish       0.098   0.152     185     85,897,350      7,941,108    10,805,760    336,329,280         1.01
+mean_reversion_rsi    Bullish       0.118   0.201     185     85,897,350      7,941,108    10,805,760    336,329,280         1.23
+pullback_ema          Bearish       0.083   0.143     320    148,579,200      7,941,108    10,805,760    365,758,092         1.36
+pullback_ema          Bullish       0.084   0.120     320    148,579,200      7,941,108    10,805,760    365,758,092         1.35
+re-check signal calls (call-count model): new 224,962,416 = winners 95,293,296 + final 129,669,120; old full-span model 4,170,483,072 (0.054 x); sample grids 1,225,778,400 (full history, unchanged)
+gate mask: Bearish 2.383 ms/bar, Bullish 1.828 ms/bar
+simulated windows: 17,807,448 (60 cells, sample 110, trade universe 498; grids before invalid combinations are skipped)
+projected runtime: 29.54 h at 3 workers = signals 27.07 h + gate masks 1.71 h (process pool: divided by 3 workers) + simulation 0.76 h (in-process: not divided); signal series and gate masks are cached afterwards
+  breakout_base Bearish: signals 1.69 h + simulation 0.09 h
+  breakout_base Bullish: signals 2.73 h + simulation 0.12 h
+  ma_crossover Bearish: signals 2.76 h + simulation 0.04 h
+  ma_crossover Bullish: signals 2.57 h + simulation 0.06 h
+  mean_reversion_bb Bearish: signals 1.63 h + simulation 0.03 h
+  mean_reversion_bb Bullish: signals 1.36 h + simulation 0.03 h
+  mean_reversion_multi Bearish: signals 5.53 h + simulation 0.07 h
+  mean_reversion_multi Bullish: signals 4.12 h + simulation 0.07 h
+  mean_reversion_rsi Bearish: signals 0.95 h + simulation 0.06 h
+  mean_reversion_rsi Bullish: signals 1.15 h + simulation 0.08 h
+  pullback_ema Bearish: signals 1.29 h + simulation 0.07 h
+  pullback_ema Bullish: signals 1.30 h + simulation 0.06 h
+  (a projection, not a runtime guarantee: each strategy/direction is weighted with its own measured cost; the full-universe re-check is counted at one distinct winner per fold, a cold-cache upper bound (identical cached series reduce the actual work), an ordinary winner only on its fold's entry-window bars, a setup winner and the final parameters on full series)
+note: these bars give windows of at most 251 bars; live and tuned signals use 400, so per-call cost on stored history is higher (about x1.6 if linear in the window)
+
+Columns: ms/call and ms/sim are this pair's own measured costs; "sample calls" = unique grid
+combinations x 110 sample symbols x 4221 eligible bars; "winner calls" = sum over folds of
+eligible entry-window bars x 498 trade symbols (the same for every ordinary pair, since all
+tuned pairs share the five horizons' folds); "final calls" = 512 symbols x 4221 bars per
+horizon cell; "old recheck" = the pre-window model (min(folds, combos) + 1) x 498 x 4221 per
+cell; "projected h" = that pair's signals (divided by 3 workers) + simulation (in-process).
+Gate masks (1.71 h) are per direction and not in the per-pair column.
+
+Old / new call-count model (same cells, same synthetic history)
+---------------------------------------------------------------
+  re-check signal calls, old full-span model : 4,170,483,072
+  re-check signal calls, new windowed model  :   224,962,416  (winners 95,293,296 + final 129,669,120)
+  ratio                                       :         0.054
+  sample-grid signal calls (unchanged)        : 1,225,778,400
+  all signal calls, old -> new                : 5,396,261,472 -> 1,450,740,816 (0.269 x)
+The final-parameter count is higher per cell than the old model's "+1" term because it now
+includes the evidence-only (fire-rate) symbols the re-check really computes (512, not 498).
+
+Baseline: the same probe command at HEAD e236b696, before this change (old model)
+----------------------------------------------------------------------------------
+Run on the same machine earlier the same day (no --probe-json flag existed). It averaged
+signal cost across strategies for the re-check, timed the gate mask and the simulation
+for one strategy/direction only, counted every fold winner on the full universe history,
+and used the full union (534) as the trade universe:
+
+probe: AAPL (251 bars), MSFT (251 bars), NVDA (251 bars) from C:\GitHub\trading-assistant\backend\tests\fixtures
+basket 110 symbols (10 x 11 sectors), 4280 bars/symbol, workers 3
+strategy              direction   ms/call  combos  projected h
+breakout_base         Bearish       0.201     308         2.67
+breakout_base         Bullish       0.189     308         2.50
+ma_crossover          Bearish       0.501     201         4.33
+ma_crossover          Bullish       0.468     201         4.04
+mean_reversion_bb     Bearish       0.350     110         1.66
+mean_reversion_bb     Bullish       0.359     110         1.70
+mean_reversion_multi  Bearish       0.628     196         5.29
+mean_reversion_multi  Bullish       0.588     196         4.96
+mean_reversion_rsi    Bearish       0.134     185         1.07
+mean_reversion_rsi    Bullish       0.344     185         2.73
+pullback_ema          Bearish       0.089     320         1.22
+pullback_ema          Bullish       0.070     320         0.96
+projected signal time (sample grids): 33.12 h at 3 workers
+gate mask: 1.655 ms/bar; simulation: 0.142 ms per window (251-bar series)
+folds per horizon on 4280 bars: Swing 51, Position 51, Quarterly 38, SemiAnnual 18, Annual 11
+simulated windows: 17,957,784 (60 cells, sample 110, universe 534; grids before invalid combinations are skipped)
+projected runtime: 181.64 h at 3 workers = signals 179.53 h + gate masks 1.40 h (process pool) + simulation 0.71 h (in-process); signal series and gate masks are cached afterwards
+  (upper bound: the full-universe re-check is counted at one distinct winner per fold, and a combination shared by several horizons' grids at once per horizon)
+note: these bars give windows of at most 251 bars; live and tuned signals use 400, so per-call cost on stored history is higher (about x1.6 if linear in the window)
+
+Reading the two runs: the per-call costs differ between them (for example ma_crossover
+Bullish 0.468 vs 0.248 ms) although the code timed is the same, so the hour totals are not
+a like-for-like speed measurement; the call counts are. Both runs project 251-bar windows;
+stored history uses 400-bar windows, so real per-call costs are higher (the note above).
