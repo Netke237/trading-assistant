@@ -32,7 +32,10 @@ it('uses matching shared edits for totals, saved levels, allocation, snapshot an
   usePortfolioStore.setState({ addPosition: add });
   mount();
   expect(screen.getByText('$149.00')).toBeInTheDocument();
-  expect(screen.getByText(/Est total/).textContent).toContain('4,470');
+  // #651: the dialog formats with the runtime default locale (bare
+  // toLocaleString), so build the expected digits the same way; '4,470' fails
+  // on a German-locale machine, where the dialog renders '4.470'.
+  expect(screen.getByText(/Est total/).textContent).toContain(`$${(4470).toLocaleString()}`);
   fireEvent.change(screen.getByLabelText('Shares for AAPL'), { target: { value: '60' } });
   expect(useScanStore.getState().stockExecution[identity].overlay?.sharesT1).toBe(20);
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /submit 1 order/i })));
