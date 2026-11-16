@@ -80,3 +80,24 @@ All runs: container `ta-backend-test:latest`, Python 3.11.17, no network, an eph
 - Full backend run 1: **10331 passed, 9 skipped, 1 failed**, 1815 s. The failure was `test_heston_perf::test_first_calibration_under_500ms` at 0.551 s against its 0.5 s limit. That test alone: 5/5 passed. The phase changes no Heston code. The same load-timing behaviour is already recorded in PROJECT_STATE from an earlier phase, and the limit was not changed.
 - Full backend run 2, on an idle machine: **10332 passed, 9 skipped, 0 failed**, 1621 s.
 - With T2a's full frontend result (6378/6379, B7 only) and a clean typecheck, T2's required checks are met. T3 and T4 (integrated checks after merging `origin/main`, code audit) are still pending. Phase completion stays at 20 %. Code stage: 0 rounds, `audit_clean: false`.
+
+## T3 #641 built and verified — 2026-11-16
+
+- Fresh implementer commit `2cc705e6 perf(tuner): project scoped rechecks by strategy and document frozen runs`. It touches exactly the five Task 3 files: `tune_horizons.py`, the new `test_tuner_projection.py`, and `runbook.md`, `probe.txt` and `probe-summary.json`. `report.py` is unchanged. There are no simulator, strategy-engine or config changes since `236bec67`.
+- Red first: all 19 new projection tests failed on the old code. The weighting test failed for the reason the plan predicts: `total_h` 0.00507 against 0.00789 expected, from averaging across strategies, timing Bullish only and counting full-span winners. A resumed run with nothing pending also timed an unrelated strategy.
+- Coordinator's own native Python 3.11.9 rerun (projection, core, report, setup, export and recheck-window suites): **256 passed**. The Task 1 parity tests are unchanged and still pass.
+- Full backend, Python 3.11.17 Linux container, head `2cc705e6`, no network: **10351 passed, 9 skipped, 0 failed**, 2281 s.
+- The fixture probe (AAPL/MSFT/NVDA, 3 workers, assumed end 2026-11-16 because the fixtures have no manifest) reports call-count **model** figures:
+  - recheck calls fall from 4.17 B to 0.225 B (0.054×);
+  - all signal calls fall from 5.40 B to 1.45 B, and the unchanged sample grid (1.23 B) now dominates;
+  - the projection is 29.5 h at 3 workers.
+  These are projections, not measured runtimes. The 688 h and 540 h figures were not measured down.
+- Deviations the implementer reported, for the code audit to check:
+  1. Preflight folds now come from the sample calendar, as `tune_cell` uses.
+  2. A probe-only `--probe-json` flag.
+  3. Cells with no valid parameters or no folds project zero recheck and simulation work.
+  4. Simulation cost is timed per pair and gate cost per direction.
+  5. The probe uses the trade and fire-rate universes (498 and 512) instead of the full union.
+  6. The run-book wrapper runs one cell per call, with STOP-file and deadline checks, then a group-level `--resume` pass.
+  7. The final-parameter count includes evidence-only symbols.
+- All three build units now exist (T1, T2 with T2a, and T3). Status is `built` and completion 50 %. Still to do in T4: merge `origin/main` (it must include the B7 date fix), integrated full checks, the complete-target independent code audit (0 rounds so far, `audit_clean: false`), and the PR.

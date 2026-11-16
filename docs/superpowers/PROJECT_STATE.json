@@ -10804,12 +10804,12 @@
     {
       "id": "TUNER-RECHECK-WINDOW",
       "name": "Exact-parity recheck window optimization and frozen tuning export",
-      "status": "in_progress",
+      "status": "built",
       "tracking_issue": 638,
       "branch": "board/tuner-recheck-window-03e0fc95",
       "size": "XL",
       "complexity": 4,
-      "completion_pct": 20,
+      "completion_pct": 50,
       "plan": "docs/superpowers/plans/2026-11-12-tuner-recheck-window-plan.md",
       "audit_rounds": 3,
       "audit_clean": false,
@@ -10874,7 +10874,7 @@
         "pattern": "--bars-dir",
         "note": "Final planned run-book presence only, not proof of parity, code audit or merge."
       },
-      "note": "2026-11-16 Kenneth chose option1 for the T2a plan defect: keep semantic scoping, finally-restore the dropped-stop cap, verify with --maxWorkers=2 at unchanged limits; B7 earnings-veto calendar failure is pre-existing on main and must pass after T4 merges origin/main. Plan round3 clean (stage 3/3, cap reached clean). Native ten-suite w2: 185pass/1fail(B7). T2a built 296ac66e, full Linux frontend w2 6378/6379 (B7 only); T2 verified (full backend 10332/0 fail); T3 pending; phase20, code0/auditfalse.",
+      "note": "2026-11-16: all build units exist (T1 76ed0c72, T2 0e1c2f14 + T2a 296ac66e, T3 2cc705e6); status built, 50%. Plan stage clean at cap (3/3). Full frontend Linux w2 6378/6379 (B7 only, pre-existing main calendar failure); full backend 10351/0 fail at 2cc705e6. Pending T4: merge origin/main incl. B7 fix, integrated checks, complete-target code audit (0 rounds, audit_clean false), PR.",
       "build_tickets": [
         {
           "issue": 639,
@@ -10903,8 +10903,10 @@
         {
           "issue": 641,
           "task": 3,
-          "status": "not_started",
-          "completion_pct": 20
+          "status": "done",
+          "completion_pct": 50,
+          "commit": "2cc705e6",
+          "validation_note": "Native focused 256 pass (coordinator rerun); full backend Linux Py3.11.17 10351 pass/9 skip/0 fail at 2cc705e6. Projections only, not measured runtime. Not a code audit."
         }
       ],
       "coordinator_ticket": 642
