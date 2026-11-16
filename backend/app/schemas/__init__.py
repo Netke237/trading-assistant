@@ -1439,6 +1439,7 @@ class PortfolioPositionSchema(BaseModel):
     # Live fields — populated by GET /portfolio via Tradier option quote
     currentPrice: float = 0.0
     currentStockPrice: Optional[float] = None   # live underlying price (options only; equals currentPrice for stock legs)
+    entryStockPrice: Optional[float] = None     # underlying stock price at entry (options: from entry_stock_price; stocks: mirrors entryPrice)
     pnlDollar: float = 0.0
     pnlPct: float = 0.0
     # True when GET /portfolio got no quote for this position (NO-LIVE-QUOTE
@@ -1480,6 +1481,8 @@ class PortfolioPositionSchema(BaseModel):
 
     @classmethod
     def from_orm_model(cls, obj) -> "PortfolioPositionSchema":
+        is_stock = bool(getattr(obj, "contract", None) and str(getattr(obj, "contract", "")).endswith("|STOCK"))
+        entry_stock_price = obj.entry_price if is_stock else getattr(obj, "entry_stock_price", None)
         return cls(
             id=str(obj.id),
             recId=obj.rec_id,
@@ -1487,6 +1490,7 @@ class PortfolioPositionSchema(BaseModel):
             contract=obj.contract,
             direction=obj.direction,
             entryPrice=obj.entry_price,
+            entryStockPrice=entry_stock_price,
             qty=obj.qty,
             entryDate=obj.entry_date,
             stop=obj.stop,

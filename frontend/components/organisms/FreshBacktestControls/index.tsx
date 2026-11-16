@@ -4,7 +4,11 @@ import {api} from '@/lib/api';
 import type {BacktestArtifact,FreshBacktestConfiguration,FreshBacktestRequest} from '@/types/backtest';
 import styles from './FreshBacktestControls.module.css';
 
-interface Props {symbol:string; original:BacktestArtifact|null; onResult:(artifact:BacktestArtifact)=>void;}
+interface Props {
+ symbol:string; original:BacktestArtifact|null; onResult:(artifact:BacktestArtifact)=>void;
+ /** Controlled disclosure: when given, the caller owns the open trigger and this section shows only the panel and status. */
+ open?:boolean; onOpenChange?:(open:boolean)=>void;
+}
 const supported=['pullback_ema','breakout_base','ma_crossover','mean_reversion_rsi','mean_reversion_bb','mean_reversion_multi'];
 const sizing={initial_cash:100000,order_size:.9999999999999998,margin:1,spread:0,exclusive_orders:true,
  trade_on_close:false,finalize_trades:false,sizing:'fraction of available equity; whole units'} as const;
@@ -28,9 +32,12 @@ function matchesRequest(artifact:BacktestArtifact,request:FreshBacktestRequest,o
 export default function FreshBacktestControls(props:Props){
  return <FreshForm key={`${props.symbol}:${props.original?.artifact_id??''}`} {...props}/>;
 }
-function FreshForm({symbol,original,onResult}:Props){
+function FreshForm({symbol,original,onResult,open:openProp,onOpenChange}:Props){
  const known=original?.detail.configuration;
- const [open,setOpen]=useState(false);
+ const controlled=openProp!==undefined;
+ const [localOpen,setLocalOpen]=useState(false);
+ const open=controlled?openProp:localOpen;
+ const setOpen=(next:boolean)=>{if(controlled)onOpenChange?.(next);else setLocalOpen(next);};
  const [configuration,setConfiguration]=useState<FreshBacktestConfiguration|null>(null);
  const [strategy,setStrategy]=useState(original&&supported.includes(original.identity.strategy)?original.identity.strategy:'');
  const [direction,setDirection]=useState(original?.identity.direction??'');
@@ -64,6 +71,11 @@ function FreshForm({symbol,original,onResult}:Props){
   }catch{return null;}
  },[symbol,strategy,direction,params,start,end,commission,hold,minTrades,minWinRate]);
  const cancel=()=>{active.current?.controller.abort();active.current=null;setRunning(false);setStatus('Fresh run cancelled. Original evidence is unchanged.');};
+ const cancelRef=useRef(cancel);
+ cancelRef.current=cancel;
+ // Closing the panel from outside (a controlled trigger) cancels an in-flight run exactly like Close configuration.
+ // Field values, consent and status live in this component and survive closing; only the inputs unmount.
+ useEffect(()=>{if(!open&&active.current)cancelRef.current();},[open]);
  const run=async()=>{
   if(!request||!confirmed||running)return;
   const task={controller:new AbortController()};active.current=task;setRunning(true);setStatus('Running a separate fresh backtest…');
@@ -77,10 +89,11 @@ function FreshForm({symbol,original,onResult}:Props){
    if(mounted.current&&active.current===task)setStatus(`Fresh run unavailable: ${error instanceof Error?error.message:'failed'}. Original evidence is unchanged.`);
   }finally{if(mounted.current&&active.current===task){active.current=null;setRunning(false);}}
  };
- return <section className={styles.controls} aria-label="Fresh backtest configuration">
-  <h2>Separate fresh backtest</h2>
-  <p>Configure a supported daily Stocks strategy for {symbol}. This creates a new result; it never replaces scan evidence, confidence, gates or trading inputs. Setup strategies are not mapped to Stocks strategies.</p>
-  {!open?<button onClick={()=>setOpen(true)}>Configure a fresh run</button>:<>
+ const collapsed=controlled&&!open;
+ return <section className={styles.controls} aria-label="Fresh backtest configuration" hidden={collapsed&&!status}>
+  {!collapsed&&<><h2>Separate fresh backtest</h2>
+  <p>Configure a supported daily Stocks strategy for {symbol}. This creates a new result; it never replaces scan evidence, confidence, gates or trading inputs. Setup strategies are not mapped to Stocks strategies.</p></>}
+  {collapsed?null:!open?<button onClick={()=>setOpen(true)}>Configure a fresh run</button>:<>
    <button onClick={()=>{if(running)cancel();setOpen(false);}}>Close configuration</button>
    <fieldset disabled={running||!configuration} onChange={()=>setConfirmed(false)}><legend>Explicit configuration review</legend>
     <label>Fresh strategy<select aria-label="Fresh strategy" value={strategy} onChange={e=>{setStrategy(e.target.value);setParams('');}}><option value="">Choose a supported strategy</option>{(configuration?.strategies??supported).map(s=><option key={s} value={s}>{s}</option>)}</select></label>

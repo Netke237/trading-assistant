@@ -1,5 +1,6 @@
 .workspace { overflow: auto; padding: 16px; color: var(--text-primary); background: var(--bg-surface); height: 100%; }
 .workspace h1 { font-size: 20px; }
+.workspace .runTitle { font-size: 18px; margin: 0 0 4px; }
 .workspace h2 { font-size: 16px; margin-top: 20px; }
 .workspace h3 { font-size: 14px; }
 .workspace p { font-size: 13px; color: var(--text-secondary); }
@@ -8,10 +9,75 @@
 .workspace dl { display: grid; grid-template-columns: 180px 1fr; gap: 8px; font-size: 13px; }
 .workspace dd { margin: 0; font-variant-numeric: tabular-nums; }
 .workspace pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
-.price { height: 360px; border: 1px solid var(--border-subtle); }
-.equity { height: 220px; border: 1px solid var(--border-subtle); }
+.price { height: 360px; margin: 0 12px; }
+
+/* Full-period summary cards */
+.metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin: 16px 0; background: var(--bg-surface); }
+.metric { padding: 14px 16px; border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.metric:last-child { border-right: 0; }
+.metricValue { overflow-wrap: anywhere; }
+.metricNote { display: block; }
+
+/* 01 / Performance */
+.panel { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin: 16px 0; background: var(--bg-surface); overflow: hidden; }
+.panelHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 16px 20px 12px; }
+.eyebrow { letter-spacing: 1.5px; margin-bottom: 6px; }
+.workspace .panelTitle { font-size: 16px; margin: 0 0 4px; }
+.workspace .subtitle { margin: 4px 0 0; }
+.controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.workspace .toggle { font-size: 11px; padding: 6px 10px; border-radius: var(--radius-sm); }
+.workspace .toggleOn { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-surface)); }
+.separator { width: 1px; height: 22px; background: var(--border-subtle); margin: 0 4px; }
+.workspace .comparison { margin: 0 20px 8px; padding: 9px 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); font-size: 12px; color: var(--text-primary); }
+.comparison strong { font-weight: 600; }
+.workspace .disclosure { margin: 0 20px 10px; }
+.legend { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 0 20px 8px; font-size: 12px; }
+.legendItem { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.legendItem input { accent-color: var(--accent); }
+.swatchStrategy, .swatchBenchmark { display: inline-block; width: 22px; height: 0; }
+.swatchStrategy { border-top: 3px solid var(--accent); }
+.swatchBenchmark { border-top: 2px dashed var(--text-secondary); }
+.readout { margin-left: auto; }
+.workspace .axisTitle { margin: 0 20px 4px; }
+.performance, .performanceExpanded, .drawdown { margin: 0 12px; }
+.performance { height: 320px; }
+.performanceExpanded { height: 520px; }
+.drawdown { height: 130px; }
+.workspace .empty { text-align: center; margin: 8px 20px; }
+.drawdownTitle { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 20px 4px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.workspace .caption { margin: 8px 20px 12px; }
+.help { padding: 12px 20px; border-top: 1px solid var(--border-subtle); }
+.help summary { cursor: pointer; }
+.help summary:focus-visible { outline: 2px solid var(--accent); }
+
+/* 02 / Price & executions */
+.priceHead { border-bottom: 1px solid var(--border-subtle); margin-bottom: 10px; }
+.check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.check input:focus-visible { outline: 2px solid var(--accent); }
+.selection { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 0 20px 12px; padding: 10px 12px; min-height: 40px; background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); border-radius: var(--radius-sm); }
+
+/* 03 / Trades */
+.select { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 6px 8px; font-size: 12px; }
+.select:focus-visible { outline: 2px solid var(--accent); }
+.tableFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 4px 16px; }
+.inspector { margin: 0 20px 16px; padding: 12px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.workspace .inspector h3 { margin: 0 0 10px; }
+
+@media (max-width: 1100px) {
+  .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metric:nth-child(3) { border-right: 0; }
+  .metric:nth-child(-n+3) { border-bottom: 1px solid var(--border-subtle); }
+  .readout { margin-left: 0; }
+}
 
 .scope { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .navigation { display: flex; align-items: center; gap: 16px; padding: 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-primary); }
 .navigation a { color: var(--accent); }
 .navigation input, .navigation select { color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 6px; }
+
+/* Supporting disclosures: calculation basis, then complete provenance */
+.supporting { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); margin: 12px 0; padding: 12px 20px; background: var(--bg-surface); }
+.supporting summary { cursor: pointer; font-size: 13px; color: var(--text-primary); }
+.supporting summary:focus-visible { outline: 2px solid var(--accent); }
+.supporting strong { color: var(--text-primary); font-weight: 500; }

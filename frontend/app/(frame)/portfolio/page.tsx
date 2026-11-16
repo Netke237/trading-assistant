@@ -360,13 +360,30 @@ export default function PortfolioPage() {
                     {p.direction === 'Bullish' ? 'Bull' : 'Bear'}
                   </span>
                   <DTEProgressBar daysRemaining={p.dteRemaining} totalDays={p.dteTotal} />
-                  <div className={styles.priceCell}>
-                    <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
-                    <Text size={11} tone="dim">→</Text>
-                    {p.quoteUnavailable ? (
-                      <Data size={12} weight={500} title="Quote unavailable">—</Data>
-                    ) : (
-                      <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                  <div
+                    className={styles.priceCell}
+                    title={
+                      p.contract.endsWith('|STOCK')
+                        ? `Stock at entry: $${p.entryPrice.toFixed(2)}`
+                        : `Stock at entry: ${p.entryStockPrice != null ? `$${p.entryStockPrice.toFixed(2)}` : '— (not recorded)'}\nOption at entry: $${p.entryPrice.toFixed(2)} per share`
+                    }
+                  >
+                    <div className={styles.pricePair}>
+                      <Data size={12}>${p.entryPrice.toFixed(2)}</Data>
+                      <Text size={11} tone="dim">→</Text>
+                      {p.quoteUnavailable ? (
+                        <Data size={12} weight={500} title="Quote unavailable">—</Data>
+                      ) : (
+                        <Data size={12} weight={500}>${p.currentPrice.toFixed(2)}</Data>
+                      )}
+                    </div>
+                    {!p.contract.endsWith('|STOCK') && (
+                      <div className={styles.stockEntrySub}>
+                        <Text size={10} tone="dim">Stock: </Text>
+                        <Data size={10} tone="secondary">
+                          {p.entryStockPrice != null ? `$${p.entryStockPrice.toFixed(2)}` : '—'}
+                        </Data>
+                      </div>
                     )}
                   </div>
                   {p.quoteUnavailable ? (
