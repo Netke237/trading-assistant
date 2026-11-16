@@ -16,7 +16,9 @@ Runs as a single idempotent operation:
      Every carry-over between nights is read from stored rows and ``ohlcv_history_state``;
      the queue only decides *when* a symbol runs, and it is classified again at its turn.
   3. Prune rows older than `years` years to bound table size.
-  4. Update the ingestion state singleton (incl. the run counters) so callers can track progress.
+  4. Update the ingestion state singleton (incl. the run counters) so callers can track progress,
+     and persist the run's summary (``ingestion_run_log``, fail-open) so the latest run
+     survives a backend restart.
 
 Entry point: `await run_ingestion(symbols)` (configured horizon, default 17 years).
 
@@ -40,6 +42,7 @@ from app.database import AsyncSessionLocal
 from app.data.alpaca import fetch_daily_bars_batch, get_alpaca_client
 from app.models.ohlcv_daily import OhlcvDailyModel, OhlcvHistoryStateModel
 from app.services import history_incremental as hi
+from app.services import ingestion_run_log
 from app.services.historical_store import _last_stored_date, most_recent_trading_day
 from app.services.history_backfill import (
     HistorySeamMismatch,
@@ -348,6 +351,8 @@ async def run_ingestion(
         **{key: 0 for key in RUN_COUNTERS if key not in _LEDGER_COUNTERS},
         **dict.fromkeys(_LEDGER_COUNTERS),
     })
+    # Persist the run (C1b); fail-open, never changes the run. None if the insert failed.
+    run_id = await ingestion_run_log.record_start(_state["started_at"])
 
     errors: list[str] = []
     tally = {"alpaca": 0, "gapfill": 0}
@@ -547,6 +552,7 @@ async def run_ingestion(
                 len(symbols), tally["alpaca"], tally["gapfill"], pruned, _state["failed"],
                 ", ".join(f"{key}={_state[key]}" for key in RUN_COUNTERS),
             )
+            await ingestion_run_log.record_finish(run_id, get_ingestion_state())
 
         except Exception as exc:
             requests, size = _ledger_counters(usage)
@@ -559,6 +565,7 @@ async def run_ingestion(
             })
             logger.error("ingestion crashed: %s", exc, exc_info=True)
             errors.append(f"crash: {exc}")
+            await ingestion_run_log.record_finish(run_id, get_ingestion_state())
 
     return IngestionResult(
         total=len(symbols),

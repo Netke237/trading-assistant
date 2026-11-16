@@ -7,9 +7,9 @@
 .directNoteRemove { padding: 4px 12px; background: transparent; color: var(--reject); border: 1px solid var(--reject); border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; }
 .directNoteRemove:disabled { opacity: .5; cursor: wait; }
 
+/* The summary row itself is the shared disclosure row (#610 G13,
+   styles/disclosure.module.css); this only sets the body's type. */
 .pageExplanation { font-size: 12px; color: var(--text-secondary); }
-.pageExplanation > summary { cursor: pointer; color: var(--accent); }
-.pageExplanation[open] > summary { margin-bottom: var(--space-2); }
 
 .presentationPage { min-width: 0; }
 
@@ -17,9 +17,13 @@
    boundary. The shared frame and every other route retain their own rules. */
 :global(div):has(> :global(main#workspace) .presentationPage) { min-width: 1200px; }
 
+/* #608 — one column: the broker execution panel now sits inside the
+   TradeCard's decision section, so no separate execution rail remains. The
+   panel only stands below the card column while a selected contract's plan
+   is being prepared (no TradeCard is mounted then). */
 .presentationLayout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 280px);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--space-4);
   min-width: 0;
@@ -40,17 +44,6 @@
 .decisionAnchor { min-width: 0; }
 .paperButtons { flex-wrap: wrap; }
 
-/* Reserve room for both the frame rail and the methods' probability columns.
-   The same controls flow below the card when usable width cannot hold both. */
-@media (max-width: 1440px) {
-  .presentationLayout { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* BrokerPicker is the original sibling after the controlled decision anchor.
-   Its unchanged flex row wraps within the execution panel rather than squeezing
-   configured/disabled labels into a few pixels. */
-.decisionAnchor + :global(div) > :global(div) { flex-wrap: wrap; }
-.decisionAnchor + :global(div) :global(button) {
-  flex: 1 1 180px;
-  min-width: 0;
-}
+.paperSection { margin-top: 0; padding-top: var(--space-3); gap: var(--space-2); }
+.paperButtons, .executionActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.paperBtnLimit, .paperBtnMarket { min-height: 36px; padding: var(--space-2) var(--space-3); }

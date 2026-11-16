@@ -58,3 +58,16 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.wrap { padding: 0; border: 0; background: none; gap: var(--space-3); }
+.row { align-items: stretch; gap: var(--space-2); }
+.row > button { flex: 1 1 100px; justify-content: center; align-items: center; padding: var(--space-2); }
+.methodRow { flex-wrap: nowrap; }
+.methodRow > button { flex: 1 1 0; min-width: 0; padding: var(--space-2) var(--space-1); overflow-wrap: normal; }
+.methodRow > button > span { white-space: normal; }
+.targetRows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 100px), 1fr));
+  gap: var(--space-2);
+}
+.targetRows > button { min-width: 0; padding: var(--space-2); }

@@ -1,0 +1,452 @@
+{
+  "schema": "preview-preservation-coverage-links/1",
+  "scope": "Associated meaningful test definitions plus coordinator evidence discovery; not test results and not per-entry runtime proof. Every625 runtime status remains pending.",
+  "test_associations": [
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx",
+      "line": 85,
+      "test_name_or_case_family": "distinguishes entered quantity, recommendation, snapshot exposure and arithmetic loss",
+      "ids": [
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        "N05",
+        "N08",
+        "N36",
+        "N37"
+      ],
+      "scope": "Entered quantity/budget/exposure/Arithmetic estimate distinction and explicit Apply.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx",
+      "line": 99,
+      "test_name_or_case_family": "keeps percent/dollar override, zero-fit refusal and Use default",
+      "ids": [
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        "N08"
+      ],
+      "scope": "Override modes, zero-fit disabled Apply and default restoration.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx",
+      "line": 127,
+      "test_name_or_case_family": "clears prior candidate budget draft",
+      "ids": [
+        "N08",
+        "H18"
+      ],
+      "scope": "Candidate-keyed editor reset; no old draft applied to next candidate.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx",
+      "line": 120,
+      "test_name_or_case_family": "retains clear-to-inherit entry and execution stops",
+      "ids": [
+        139,
+        337,
+        338,
+        340,
+        "N05",
+        "N06",
+        "H18"
+      ],
+      "scope": "Real editable clear-to-inherit paths.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx",
+      "line": 155,
+      "test_name_or_case_family": "keeps missing contract/basis unavailable and a genuine returned zero loss visible",
+      "ids": [
+        "N36",
+        "N37"
+      ],
+      "scope": "Unavailable versus genuine zero loss.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx",
+      "line": 159,
+      "test_name_or_case_family": "review values follow row changes and quantity edits",
+      "ids": [
+        "N23",
+        "N47",
+        "N48",
+        "N49"
+      ],
+      "scope": "Selected same-row premium/probability/time/quantity gross outcomes.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx",
+      "line": 223,
+      "test_name_or_case_family": "ambiguous and unmatched stored targets say so",
+      "ids": [
+        "N23",
+        "N47",
+        "N48",
+        "N49",
+        "H23"
+      ],
+      "scope": "No borrowed current evidence for ambiguous/unmatched persisted pair.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx",
+      "line": 236,
+      "test_name_or_case_family": "a restored Monte Carlo estimate prints no figures",
+      "ids": [
+        386,
+        "N23",
+        "N49",
+        "H22"
+      ],
+      "scope": "Restored not-re-run selected review.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx",
+      "line": 244,
+      "test_name_or_case_family": "choosing a basis changes no Exit Plan setting",
+      "ids": [
+        403,
+        404,
+        405,
+        "N23",
+        "N50"
+      ],
+      "scope": "Judged-on semantics preserve both stop channels and settings.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 122,
+      "test_name_or_case_family": "labels a target-dependent stop value",
+      "ids": [
+        "N18",
+        "N19",
+        "H22"
+      ],
+      "scope": "Guarded target-associated race-time consequence; no arbitrary first-row use.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 136,
+      "test_name_or_case_family": "restored: an earlier saved race never supplies",
+      "ids": [
+        "N18",
+        "N19",
+        "H22"
+      ],
+      "scope": "Restored race consequence unavailable.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 148,
+      "test_name_or_case_family": "stale then re-run: a moved barrier hides",
+      "ids": [
+        "N18",
+        "N20",
+        "H22"
+      ],
+      "scope": "Visible moved-barrier warning and rerun restoration.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 164,
+      "test_name_or_case_family": "keeps the fallback-volatility caution visible",
+      "ids": [
+        330,
+        "N20"
+      ],
+      "scope": "Fallback-IV warning remains visible while nested race is closed.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 273,
+      "test_name_or_case_family": "keeps returned stock-stop risk %s honest",
+      "ids": [
+        "N18",
+        "N19",
+        "H22"
+      ],
+      "scope": "Parameterized signed negative, zero and missing returned risk in per-contract headline.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "line": 281,
+      "test_name_or_case_family": "keeps a sparse race with invalid repricing time %s renderable",
+      "ids": [
+        "N18",
+        "N19",
+        "H22"
+      ],
+      "scope": "Undefined,NaN,negative,Infinity time stays unavailable and renderable; these are test variants, not browser-covered states.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx",
+      "line": 332,
+      "test_name_or_case_family": "a Barrier Race row records a NULL stock price",
+      "ids": [
+        397,
+        401,
+        402,
+        "N23",
+        "N27",
+        "N48"
+      ],
+      "scope": "Race never borrows option premium into stock target persistence.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx",
+      "line": 504,
+      "test_name_or_case_family": "selected arithmetic overrides latest fresh MC",
+      "ids": [
+        "N23",
+        "N25",
+        "H23"
+      ],
+      "scope": "Explicit method choice never replaced with latest different calculation.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/molecules/MethodPickSelector/__tests__/MethodPickSelector.test.tsx",
+      "line": 186,
+      "test_name_or_case_family": "keeps same-row display evidence separate from the stored option target",
+      "ids": [
+        401,
+        402,
+        "N27"
+      ],
+      "scope": "Display-only option/time evidence does not mutate recorded pair; explicit missing versus omitted fallback.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/SubmissionReview/__tests__/SubmissionReview.test.tsx",
+      "line": 195,
+      "test_name_or_case_family": "keeps provisional/server resolution, missing-selection and route refusals visible",
+      "ids": [
+        "N23",
+        "N28",
+        "N29",
+        "N50"
+      ],
+      "scope": "Material inline warnings remain outside closed request details.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/SubmissionReview/__tests__/SubmissionReview.test.tsx",
+      "line": 208,
+      "test_name_or_case_family": "keeps spread and race fallback scope visible",
+      "ids": [
+        "N23",
+        "N29",
+        "N50"
+      ],
+      "scope": "Selected-contract-only spread submission and no borrowed race stock target.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/app/(frame)/screener/step-7-trade-card/__tests__/submission-review.test.tsx",
+      "line": 163,
+      "test_name_or_case_family": "shows the actual execution inputs once, in the decision section, and they are what is sent",
+      "ids": [
+        "N05",
+        "N06",
+        "N23",
+        "N29",
+        "N50"
+      ],
+      "scope": "Actual page review/request value parity; calculator stop not substituted.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/app/(frame)/screener/step-7-trade-card/__tests__/submission-review.test.tsx",
+      "line": 259,
+      "test_name_or_case_family": "a late quote for the previous contract never replaces",
+      "ids": [
+        "N28",
+        "N29",
+        "H29"
+      ],
+      "scope": "Late async quote isolation.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/app/(frame)/screener/step-7-trade-card/__tests__/submission-review.test.tsx",
+      "line": 289,
+      "test_name_or_case_family": "groups the broker picker, both direct sends and Track basket",
+      "ids": [
+        406,
+        417,
+        418,
+        419,
+        "N26",
+        "N29"
+      ],
+      "scope": "One live action row with same destination handlers.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx",
+      "line": 128,
+      "test_name_or_case_family": "retains the current-time source and units for returned loss %s",
+      "ids": [
+        "N13",
+        "N40",
+        "H23"
+      ],
+      "scope": "Arithmetic positive/zero/signed/nonfinite current-time source; contract headline and exact per-share detail.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx",
+      "line": 106,
+      "test_name_or_case_family": "has a four-slot stop context with an explicit current-time Black-Scholes basis",
+      "ids": [
+        "N13",
+        "N40"
+      ],
+      "scope": "Concise visible current-time basis and exact long basis paragraph reachable in provenance details.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx",
+      "line": 99,
+      "test_name_or_case_family": "keeps account %s concise while retaining",
+      "ids": [
+        "N29",
+        "N30",
+        "H29"
+      ],
+      "scope": "Supplied/missing account values remain visible; exact credential/no-echo qualification remains reachable in details.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx",
+      "line": 111,
+      "test_name_or_case_family": "makes the outlay estimate easy to scan",
+      "ids": [
+        "N29",
+        "N30",
+        "H29"
+      ],
+      "scope": "Limit outlay bound and original fill qualification stay visible together.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx",
+      "line": 135,
+      "test_name_or_case_family": "a market review keeps the unknown fill visible",
+      "ids": [
+        "N29",
+        "N30",
+        "H29"
+      ],
+      "scope": "Unknown market fill remains explicit beside requested market order.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    },
+    {
+      "kind": "associated-test-definition",
+      "source_path": "frontend/components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx",
+      "line": 119,
+      "test_name_or_case_family": "keeps the changed-since-review and server-change warnings visible",
+      "ids": [
+        "N29",
+        "N30",
+        "H29"
+      ],
+      "scope": "Server-change/stale review still visibly blocks confirm and preserves refresh callback.",
+      "execution_status": "not-independently-executed-by-this-source-reviewer; coordinator result evidence required before test-covered status"
+    }
+  ],
+  "browser_evidence_discovery": [
+    {
+      "coordinator_output_directory": "/workspace/step7-accepted-layout",
+      "status": "in-progress/unreviewed at source reviewer snapshot",
+      "observed_files": [
+        "1200-dark-exit-plan.png",
+        "1200-dark-identity.png",
+        "1200-dark-initial.png"
+      ],
+      "claims": []
+    },
+    {
+      "coordinator_output_directory": "/workspace/step7-accepted-states",
+      "status": "in-progress/unreviewed at source reviewer snapshot",
+      "observed_files": [],
+      "claims": []
+    },
+    {
+      "coordinator_output_directory": "/workspace/step7-accepted-reviews",
+      "status": "in-progress/unreviewed at source reviewer snapshot",
+      "observed_files": [],
+      "claims": []
+    }
+  ],
+  "coordinator_full_test_run": {
+    "path": "/tmp/610-full-serial.log",
+    "status": "in-progress; source reviewer has not accepted aggregate result; no passed-test status inferred"
+  },
+  "remaining_runtime": "Await complete coordinator check reports and reviewed states; do not infer conditional coverage from screenshot filenames or all625 from a matrix."
+}

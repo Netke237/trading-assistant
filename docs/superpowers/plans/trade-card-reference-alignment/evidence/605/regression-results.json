@@ -1,0 +1,23 @@
+{
+  "implementation": "2df60eb649da6790cc144979c4098737f80f81ef",
+  "typecheck": "passed",
+  "expected_red": {
+    "failed": 2,
+    "passed": 19
+  },
+  "full_run": {
+    "suites_passed": 333,
+    "suites_failed": 3,
+    "tests_passed": 6224,
+    "tests_failed": 4,
+    "tests_total": 6228,
+    "seconds": 639.052
+  },
+  "unchanged_serial_rerun": {
+    "suites_passed": 3,
+    "tests_passed": 84,
+    "seconds": 142.288
+  },
+  "remaining_failures": 0,
+  "production_changed_after_browser": false
+}

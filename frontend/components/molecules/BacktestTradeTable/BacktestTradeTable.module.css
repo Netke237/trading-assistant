@@ -1,0 +1,14 @@
+/*
+ * BacktestTradeTable — readable recorded trades; selected row tinted with the accent.
+ */
+.wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; white-space: nowrap; text-align: left; }
+.th { font-weight: 400; font-size: 10px; color: var(--text-secondary); padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-2); }
+.td { padding: 9px 12px; border-bottom: 1px solid var(--border-subtle); }
+.row:hover, .selected { background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); }
+.selected .td:first-child { border-left: 3px solid var(--accent); }
+.empty { padding: 16px; text-align: center; }
+.inspect { font-size: 11px; padding: 4px 8px; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); cursor: pointer; }
+.inspect:hover { border-color: var(--accent); color: var(--accent); }
+.inspect:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrapCell { white-space: normal; min-width: 120px; }

@@ -1,10 +1,10 @@
 {
   "_README": "SINGLE SOURCE OF TRUTH for stop-model work across sessions and accounts. Every session reads this first and updates it before ending. Do NOT restate this status in prose anywhere else -- a second copy is how drift starts. `python3 scripts/state.py` renders it as a table AND verifies every `verify` probe below against the real code, failing loudly when a claim and the codebase disagree. | `active_phase` names the phase OR the `already_shipped` entry (by its `name`) that the working branch is currently building -- BOTH pools, since 2026-09-16, because a scoped piece is not a phase and had nowhere to point. scripts/state.py's audit-bookkeeping probe scopes its git comparison to THAT target: rounds counted from `origin/main..HEAD` belong to the work this branch is doing, and to nothing else. Update it when the branch moves to new work. If it is missing, or names something in neither list, the probe NO LONGER STAYS SILENT -- it reports the rounds git can see as UNAUDITED work (a warning below three rounds, drift at three, matching audit_rule's HARD CAP). Silence there is exactly how four rounds ran under a rendered \"No drift\". | The probe takes its base ref FROM GIT, never from the `main` field below: that field is prose for a human reader, and when it stopped being a sha at 2242f36 the probe went silently dead for a week.",
-  "updated": "2026-11-07",
-  "updated_by": "TRADE-CARD-DECISION-REVIEW plan audit and publication wiring",
-  "main": "REGIME-SERIES-LENGTH merged via PR #568 at c23bd303 (2026-10-31, board self-merge conditions verified): one settled, adjusted daily regime DB history (>=800 bars) shared by Options, Stocks, Analysis and auto-trade Fire, explicit 'Regime: Unmeasured' disclosure; plan2/code round4 clean, exact-head CI passed. || PREVIOUS: OHLCV-ALPACA-DAY-HOLES merged via PR #566 at 915ddc6d (2026-10-25, board self-merge conditions verified): Alpaca default feed upgraded to SIP, pure Python NYSE trading calendar gap detector, CLI detector, and targeted Alpaca SIP backfill script with batch timestamp pinning; plan r3 closed by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25, code r3 clean; all CI checks passed. || PREVIOUS: APP-AUDIT-INTEGRATION merged via PR #556 at 56f12789 (2026-10-24, board self-merge conditions verified): Lane K cross-mode integration audit and Programme #348 culmination; complete 52,308-row inventory reconciled (4,577 verified, 33,330 asserted, 14,261 ambiguous, 140 not-run); 48-defect registry unified; 4 cross-mode user journeys verified under rapid switching, stale-async isolation, and persistence recovery; three separate verdicts rendered. Plan2/code2 clean, exact-head CI passed before merge. || PREVIOUS: REGIME-SERIES-LENGTH evidence merged via PR #540 at 4399e924 (2026-10-24, board self-merge conditions verified): read-only probe, M1-M3 evidence and report; Window B achieves 100% exact numerical identity with 5-year Window C (0 deltas, 0 flips across 2,012 measured cells); Window A has 43.70% unmeasured rate and 288 silent gate bypasses; options 1-4 measured on 540 universe symbols; decision pending with Kenneth on #534. Plan1/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: HESTON-RR-OVERPRICING evidence merged via PR #527 at 8e1e3b0a (2026-10-22, board self-merge conditions verified): read-only probe, M1-M4 evidence and report; 0 of 10 real Heston cards change Step 7 grade; options A-D measured on 326 fits; decision pending with Kenneth on #335. Plan3/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: EXACT-STRIKE merged via PR #512 at 34b00b37 (2026-10-22, board self-merge conditions verified): fractional option strikes carried exactly through chain rows, contract ids, quote matching, scan cards, Watchlist grading and the Step 6 rescue; integer-strike ids byte-identical; read-only persisted-id check script. Plan2/code1 clean, exact-head CI passed before merge. || PREVIOUS: Verified merges: APP-AUDIT-B-SAVE-FEEDBACK PR #500 at a9d138d3354a065c91fe44eaef3dd9964d528b25 (2026-10-22), exact-head CI all success; post-merge TypeScript/97 frontend tests passed. User-authorized HISTORY-INCREMENTAL-NIGHTLY-B #499 at70e48af2 and cloud setup #122 atbf0b3b54 also verified;176 mocked backend and7 cloud preservation post-merge tests passed. Market-cap #368/#454 reconciliation included from documentation PR #455; original main record preserved below. || PREVIOUS: APP-AUDIT-B-STOCK-FILTERS merged via PR #452 at 809f883e (2026-10-21, board self-merge conditions verified): Step 2 universe price and market cap filters propagated to stocks manual and scheduled requests (#380); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-RUN-GATE merged via PR #420 at be45fcf4 (2026-10-19, board self-merge conditions verified): direction-aligned REJECT confirmation dialog hoisted to gate stocks, prebreakout, and options modes before scan/navigation in RunScanButton (#387); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-VIX-WINDOW merged via PR #411 at b5e665cf (2026-10-19, board self-merge conditions verified): 252-day VIX percentile prior window bounded to vix_closes[-253:-1]; plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-INVENTORY report/tooling merged via PR #405 at1a83551b (2026-10-17, board self-merge conditions verified): inventory ownership/state contracts and isolated navigation evidence; plan2/code2clean. Documentation paths intentionally excluded from Actions; exact-head0applicable checks, local source/runtime/omission verifiers/typecheck/34focused tests passed. Domain B-I/J acceptance and rail UI fixes395 pending. || PREVIOUS: BROKER-PATH-RESIDUALS merged via PR #323 at 2cd5daa8 (2026-10-15, user authorized in chat): durable broker attempts with no automated redispatch of unknown outcomes, serialized portfolio saves, weighted added-fill booking, exposure holds; Alembic merge revision c29a451f911c. Plan3/code3 clean; exact-head backend/frontend/browser CI passed. Previous: CANDIDATE-BACKTEST-CHART merged via PR #333 at2d04dbf3 (2026-10-15, user authorized): frozen original candidate artifacts, exact fill markers, indexed strategy/gross long benchmark and separate explicit fresh runs; plan1/code2 clean; exact-head backend/frontend/browser CI passed after one permitted Google Fonts flake retry. Previous: STOCKS-HORIZON-T4 merged via PR #325 at1031a82f (2026-10-15, user authorized): confirmed Pre-Breakout/Fibonacci backtests and per-horizon research tuning; plan2/code2 clean; exact-head backend/frontend/browser CI passed. Previous: STATE-MULTI-PLAN-STAGE merged via PR #316 at e70d37a6 (2026-10-14, user authorized in chat): explicit authorized additional plan stages retain per-stage caps and complete-tail opening checks; historical approval tests work in shallow CI. Plan2clean; original code stage3notclean preserved; authorized code stage2round2clean, continuous7. Exact-head89db4975 backend/frontend/Playwright CI passed before merge. || PREVIOUS: YAML-DEPTH-BOUND phase A merged via PR #309 at d23b1588 (2026-10-14): depth32 persisted request bounds, transactional store mutations, guarded options restore. Plan3/code1clean; local backend8652passed/9skip, frontend5254tests/252suites/typecheckpassed; exact-head backend/frontend/browser CIpassed. Phase B deferred. || PREVIOUS: b10db25b — verified Options presentation PR #277 merge; SCAN-REPORT-ISOLATION merged via PR #275 on 2026-10-13 at 51b4821465e298eaee611be10b18513dc9654e50; verified MERGED, plan3/code1 clean, exact-head backend/frontend/Playwright CI all passed. || PREVIOUS: STOCKS-PIPELINE-INSPECTOR merged via PR #231 (user authorized): Stocks Backtest shared inspector, legacy residual counting and exclusions; plan1/code3 clean, integrated frontend4994PASS/buildPASS/production-browser2PASS/CIallPASS. Origin/main and local main synchronized per user clarification. || PREVIOUS: PR #225 merged STOCK-PRES-P2-POSITION on 2026-10-11 at 28c738bac69a0968ab3316ec0994272d5c338f90; independent audits clean and exact-head backend/frontend/Playwright CI passed. || PREVIOUS: PR #219 merged AGENT-SELF-MERGE on 2026-10-11 at 5bfb7b1107bd045584401198ca8dd23d4955fcae with explicit chat authorization; independent plan/code reviews clean. || PREVIOUS: PR #204 merged seven audited waiting-merge board items with explicit chat approval at b741f6104f68cf252be265af18d32ae5f045215c; all seven frozen source heads verified on main; original PRs merged and board issues closed. Independent integration audit clean in two code rounds, 93 scheduler/cancellation/quote regression tests passed, final combined CI green. || PREVIOUS: STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
+  "updated": "2026-11-12",
+  "updated_by": "TRADE-CARD-QUALIFICATION-PLACEMENT verified shipping record",
+  "main": "STOCKS-REFERENCE-ALIGNMENT merged via PR #628 at c348c4e9abfbb7136160533f34198956767379b8 (explicit user approval): complete Stocks reference flow and independent method comparison; integrated scanner main with state-only conflicts, both audited application sources unchanged; plan1/code1 clean0, combined347suites/6379tests and40browser cases green, exact-head CI success, post-merge typecheck/24tests/source equality verified. || PREVIOUS: SETUP-SCANNER-REFERENCE-ALIGNMENT merged via PR #627 at f63c130b570a61f48815c5c99dc4b99550455792 (user approved): all three scanner modes aligned with approved reference; plan1/code1 clean0, exact-head CI green, post-merge typecheck/45 route tests and source equality passed. || PREVIOUS: TRADE-CARD-QUALIFICATION-PLACEMENT merged via PR #619 at 798f4934004fde8a5935523fa6e0535f40e11480 (2026-11-11): Contract Qualification directly beneath Stock Qualification under Contract Details, both default collapsed, complete content and saved preferences preserved; plan1/code1 clean, exact-head CI success, post-merge typecheck/13tests/source pins verified. || PREVIOUS: TRADE-CARD-REFERENCE-ALIGNMENT merged via PR #615 at a6c74b0cc53bac1f0dd457b64ce8c6469004f818 (2026-11-10, board self-merge conditions verified): agreed preview layout, full explanatory text preserved in expansions,625-ID/full-paragraph verification, plan3/code1clean; exact-head backend/frontend/browser CI passed, postmerge typecheck/19 numeric-payload regressions and evidence integrity passed. || PREVIOUS: REGIME-SERIES-LENGTH merged via PR #568 at c23bd303 (2026-10-31, board self-merge conditions verified): one settled, adjusted daily regime DB history (>=800 bars) shared by Options, Stocks, Analysis and auto-trade Fire, explicit 'Regime: Unmeasured' disclosure; plan2/code round4 clean, exact-head CI passed. || PREVIOUS: OHLCV-ALPACA-DAY-HOLES merged via PR #566 at 915ddc6d (2026-10-25, board self-merge conditions verified): Alpaca default feed upgraded to SIP, pure Python NYSE trading calendar gap detector, CLI detector, and targeted Alpaca SIP backfill script with batch timestamp pinning; plan r3 closed by decision OHLCV-ALPACA-DAY-HOLES-DECISION-2026-10-25, code r3 clean; all CI checks passed. || PREVIOUS: APP-AUDIT-INTEGRATION merged via PR #556 at 56f12789 (2026-10-24, board self-merge conditions verified): Lane K cross-mode integration audit and Programme #348 culmination; complete 52,308-row inventory reconciled (4,577 verified, 33,330 asserted, 14,261 ambiguous, 140 not-run); 48-defect registry unified; 4 cross-mode user journeys verified under rapid switching, stale-async isolation, and persistence recovery; three separate verdicts rendered. Plan2/code2 clean, exact-head CI passed before merge. || PREVIOUS: REGIME-SERIES-LENGTH evidence merged via PR #540 at 4399e924 (2026-10-24, board self-merge conditions verified): read-only probe, M1-M3 evidence and report; Window B achieves 100% exact numerical identity with 5-year Window C (0 deltas, 0 flips across 2,012 measured cells); Window A has 43.70% unmeasured rate and 288 silent gate bypasses; options 1-4 measured on 540 universe symbols; decision pending with Kenneth on #534. Plan1/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: HESTON-RR-OVERPRICING evidence merged via PR #527 at 8e1e3b0a (2026-10-22, board self-merge conditions verified): read-only probe, M1-M4 evidence and report; 0 of 10 real Heston cards change Step 7 grade; options A-D measured on 326 fits; decision pending with Kenneth on #335. Plan3/code1 clean, independent recompute agreed, exact-head CI passed. || PREVIOUS: EXACT-STRIKE merged via PR #512 at 34b00b37 (2026-10-22, board self-merge conditions verified): fractional option strikes carried exactly through chain rows, contract ids, quote matching, scan cards, Watchlist grading and the Step 6 rescue; integer-strike ids byte-identical; read-only persisted-id check script. Plan2/code1 clean, exact-head CI passed before merge. || PREVIOUS: Verified merges: APP-AUDIT-B-SAVE-FEEDBACK PR #500 at a9d138d3354a065c91fe44eaef3dd9964d528b25 (2026-10-22), exact-head CI all success; post-merge TypeScript/97 frontend tests passed. User-authorized HISTORY-INCREMENTAL-NIGHTLY-B #499 at70e48af2 and cloud setup #122 atbf0b3b54 also verified;176 mocked backend and7 cloud preservation post-merge tests passed. Market-cap #368/#454 reconciliation included from documentation PR #455; original main record preserved below. || PREVIOUS: APP-AUDIT-B-STOCK-FILTERS merged via PR #452 at 809f883e (2026-10-21, board self-merge conditions verified): Step 2 universe price and market cap filters propagated to stocks manual and scheduled requests (#380); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-RUN-GATE merged via PR #420 at be45fcf4 (2026-10-19, board self-merge conditions verified): direction-aligned REJECT confirmation dialog hoisted to gate stocks, prebreakout, and options modes before scan/navigation in RunScanButton (#387); plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-B-VIX-WINDOW merged via PR #411 at b5e665cf (2026-10-19, board self-merge conditions verified): 252-day VIX percentile prior window bounded to vix_closes[-253:-1]; plan1/code1 clean, exact-head CI passed before merge. || PREVIOUS: APP-AUDIT-INVENTORY report/tooling merged via PR #405 at1a83551b (2026-10-17, board self-merge conditions verified): inventory ownership/state contracts and isolated navigation evidence; plan2/code2clean. Documentation paths intentionally excluded from Actions; exact-head0applicable checks, local source/runtime/omission verifiers/typecheck/34focused tests passed. Domain B-I/J acceptance and rail UI fixes395 pending. || PREVIOUS: BROKER-PATH-RESIDUALS merged via PR #323 at 2cd5daa8 (2026-10-15, user authorized in chat): durable broker attempts with no automated redispatch of unknown outcomes, serialized portfolio saves, weighted added-fill booking, exposure holds; Alembic merge revision c29a451f911c. Plan3/code3 clean; exact-head backend/frontend/browser CI passed. Previous: CANDIDATE-BACKTEST-CHART merged via PR #333 at2d04dbf3 (2026-10-15, user authorized): frozen original candidate artifacts, exact fill markers, indexed strategy/gross long benchmark and separate explicit fresh runs; plan1/code2 clean; exact-head backend/frontend/browser CI passed after one permitted Google Fonts flake retry. Previous: STOCKS-HORIZON-T4 merged via PR #325 at1031a82f (2026-10-15, user authorized): confirmed Pre-Breakout/Fibonacci backtests and per-horizon research tuning; plan2/code2 clean; exact-head backend/frontend/browser CI passed. Previous: STATE-MULTI-PLAN-STAGE merged via PR #316 at e70d37a6 (2026-10-14, user authorized in chat): explicit authorized additional plan stages retain per-stage caps and complete-tail opening checks; historical approval tests work in shallow CI. Plan2clean; original code stage3notclean preserved; authorized code stage2round2clean, continuous7. Exact-head89db4975 backend/frontend/Playwright CI passed before merge. || PREVIOUS: YAML-DEPTH-BOUND phase A merged via PR #309 at d23b1588 (2026-10-14): depth32 persisted request bounds, transactional store mutations, guarded options restore. Plan3/code1clean; local backend8652passed/9skip, frontend5254tests/252suites/typecheckpassed; exact-head backend/frontend/browser CIpassed. Phase B deferred. || PREVIOUS: b10db25b — verified Options presentation PR #277 merge; SCAN-REPORT-ISOLATION merged via PR #275 on 2026-10-13 at 51b4821465e298eaee611be10b18513dc9654e50; verified MERGED, plan3/code1 clean, exact-head backend/frontend/Playwright CI all passed. || PREVIOUS: STOCKS-PIPELINE-INSPECTOR merged via PR #231 (user authorized): Stocks Backtest shared inspector, legacy residual counting and exclusions; plan1/code3 clean, integrated frontend4994PASS/buildPASS/production-browser2PASS/CIallPASS. Origin/main and local main synchronized per user clarification. || PREVIOUS: PR #225 merged STOCK-PRES-P2-POSITION on 2026-10-11 at 28c738bac69a0968ab3316ec0994272d5c338f90; independent audits clean and exact-head backend/frontend/Playwright CI passed. || PREVIOUS: PR #219 merged AGENT-SELF-MERGE on 2026-10-11 at 5bfb7b1107bd045584401198ca8dd23d4955fcae with explicit chat authorization; independent plan/code reviews clean. || PREVIOUS: PR #204 merged seven audited waiting-merge board items with explicit chat approval at b741f6104f68cf252be265af18d32ae5f045215c; all seven frozen source heads verified on main; original PRs merged and board issues closed. Independent integration audit clean in two code rounds, 93 scheduler/cancellation/quote regression tests passed, final combined CI green. || PREVIOUS: STOCKS-T1-FOLLOWUPS (PR #143) merged 2026-10-10 (Kenneth authorized): #129 test isolation (main CI green again) and time exits shown on Step 6; plan 2 + code 1 rounds clean. || PREVIOUS: STOCKS-HORIZON-T1 (PR #138) merged 2026-10-09 (Kenneth authorized): per-horizon tuning machinery H0a-H10 (400-bar signal window, backtest time exit, real multi backtest, per-horizon profiles, stock/watch TIME_STOP, tuner + tune_horizons CLI); code audit clean after 3 code rounds; CI red only on pre-existing #129. || PREVIOUS: STATE-PER-STAGE-CAP (#111) merged 2026-10-09 at eca429ec (Kenneth authorised one code round 4 past the cap; it came back clean): state.py's hard cap counts plan and code rounds separately via a phase's plan_stage. || PREVIOUS: STOCKS-HORIZON-HISTORY PR #130 merged 2026-10-09 at aedb2f42 with user approval. Plan 2/code 3 rounds clean; 12 SQLite/PostgreSQL semantics, 192 focused regressions and 26 independent tests passed. CI frontend/Playwright passed; backend 6465 passed/8 skipped/1 unchanged commission fixture failure (#129). D3 #114 is next, mini PC only and unrun. || PREVIOUS: STOCKS-HORIZON-P0A (PR #88), STATE-AUDIT-MULTI-PHASE (PR #90) and STOCKS-HORIZON-P0B (PR #91) merged 2026-10-09 in that order (Kenneth authorized): shared exclusion list + honest confidence; audit checker sibling-phase fix; bearish Unvalidated block + earnings veto over the hold. All audit-clean. C4 continues with STOCKS-HORIZON-T1. || PREVIOUS: STOCKS-STEP-MERGE-S2 merged2026-10-06 (Kenneth authorized): W1-W4 shared execution session, unified Backtest, full Position navigation and basket parity. Plan3/code1clean, frontend4728tests208suitesPASS, independent88tests12suitesPASS. C4 remains separate. || PREVIOUS: TRADING-REVIEW-PHASE-C-HYGIENE merged via PR #69 (2026-10-05, Kenneth authorized): the seven Phase C logged items; plan 2 + code 2 rounds clean. || PREVIOUSLY: TRADING-REVIEW-PHASE-C-RR merged via PR #68 (2026-10-05, Kenneth authorized): options R/R on the full-premium basis; plan 1 + code 2 rounds clean. || PREVIOUSLY: main TRADING-REVIEW-PHASE-C merged via PR #55 (2026-10-05, Kenneth authorized): consistent bar basis, stale adj_factor refresh, net-of-cost WFO with pooled 20-trade/3-symbol floor, DAY backtest limits, setup_window_bars, b2 cache versioning, After-scan PASS-only, read-only evidence harness. Code stage clean after 3 code rounds (audit_rounds 6, audit_clean true). Branch: backend 6038 passed (Windows baseline failures only), frontend typecheck clean, Jest 4665/4666 (locale test), CI backend/frontend/test passed. T9 continues as TRADING-REVIEW-PHASE-C-RR (not started). || PREVIOUSLY: STOCKS-STEP-MERGE-S1 merged via PR #42 (2026-10-04, Kenneth authorized): Stocks path is 6 steps, one strategy picker on Step 4, Step 5 redirects. Plan r2 + code r1 clean, audit_rounds 3/audit_clean true. Branch: frontend typecheck clean, jest 4614/4615 locally (only the en-DE BarrierRaceCard locale test), CI backend/frontend/test passed. || PREVIOUSLY: WATCH-RESEND-PER-CHANNEL merged at 9a745c1a (2026-10-03, Kenneth authorized), then integrated with main 851aeae (PREMIUM-STOP-FALLBACK-ALIGN). Plan r2 + code r1 clean, audit_rounds3/audit_clean true. Merged main: backend 4762 passed/1 skipped (Python 3.11). || PREVIOUSLY: PREMIUM-STOP-FALLBACK-ALIGN merged at 9e0d8a3 (2026-10-03, Kenneth authorized). Plan r2 + code r1 CLEAN, audit_rounds3/audit_clean true. Merged main: backend 4719 passed/1 skipped (Python 3.11.15), frontend 183 suites/4491 tests passed, typecheck clean. || PREVIOUSLY: POSITION-WRITER-O4-CLEANUP merged at eac249e (2026-10-03, Kenneth authorized). Code round1 CLEAN, audit_rounds1/audit_clean true. Merged main: backend 4713 passed/1 skipped (Python 3.11), frontend 183 suites/4487 tests passed, typecheck clean. || PREVIOUSLY: WATCH-RESEND-EXPIRY-ON-REENABLE merged at 13009bae (2026-10-03, user authorized). Plan round1 and code round1 clean, audit_rounds2/audit_clean true. Backend4638 passed/1 skipped/1 unchanged inherited shortlist-prefix failure; frontend183 suites/4462 tests and typecheck passed. || PREVIOUSLY: Authorized ALERT-INDICATOR-ID-MAP + ALERT-INDICATOR-SEED-PARITY merge prepared on work after integrating origin/main68ac3292. Independent split reviews2 clean; original capped3-round record preserved. Final frontend4462/typecheck/build passed; backend4590 passed,1 skipped,1 inherited shortlist-prefix failure reproduced on unchanged main, already separately claimed as SHORTLIST-PREFIX-DRIFT. Written before the immediately following --no-ff merge and push.",
   "working_branch": null,
-  "active_phase": "DIRECT-SEND-EXPIRY-PLACEHOLDER",
+  "active_phase": "BACKTEST-REVIEW-VISUALISATION",
   "audit_rule": "NOTHING counts as done until an adversarial round comes back clean AT THE GATE BELOW. Rewritten 2026-09-07 (AUDIT-RULE-V2) after Phase A ran SIX rounds without converging and Phase D took THIRTEEN. The intent is unchanged -- do not ship uncontrolled -- but the previous version could not terminate. Three defects, three fixes. || (1) THE GATE IS THE ONLY THING THAT COUNTS, AND THE REVIEWER IS TOLD SO. A finding blocks only if it can put a WRONG NUMBER in front of a user or on a broker order, or CORRUPT PERSISTED DATA. Everything else -- wording, comments, test hygiene, dead code, stale records, latent defects with no reachable path -- is not a finding for this purpose, and the audit brief must instruct the reviewer NOT TO REPORT IT AT ALL. Round 6 returned 16 findings of which 5 were real bugs; the other 11 cost triage time and are now recorded forever. An adversarial reviewer with no severity floor ALWAYS finds something, so 'clean' was unreachable by construction. || (2) THE TARGET SHRINKS, IT DOES NOT GROW. Round 1 reviews the whole change. Round N>1 reviews ONLY what changed since round N-1 -- the previous round's fixes -- plus any interaction those fixes have with already-reviewed code. Re-auditing the cumulative diff every round is what turned each round's fixes into the next round's findings: 9 of round 5's 15 findings sat in round 3-4 FIX CODE, including BOTH BLOCKING, while the original Phase A implementation produced ZERO BLOCKING across rounds 4 and 5. The feature was converging; the fixing was not. || (3) THE EXIT IS OBJECTIVE, NOT THE REVIEWER'S SILENCE. audit_clean is true when a round returns ZERO gate-level findings. Such a round triggers no fixes, so there is nothing new for a further round to look at -- and the round that reviewed the last batch of fixes was already the second look. One zero-finding round ends it. || HARD CAP: if a phase reaches THREE rounds without going clean, STOP AUDITING AND TELL KENNETH. (COUNTED PER STAGE -- decision AUDIT-CAP-PER-STAGE-2026-09-25: the PLAN rounds and the CODE rounds each have their own cap of three; a clean plan round closes the plan stage and the code stage starts at round 1 of 3. Phase records keep numbering rounds continuously, e.g. 'round 3 (code round 1)'.) That is evidence the batch is too big to audit, not that it needs a fourth round. || BATCH SIZE is the root cause the gate merely exposes. Phase A was 62 files across every layer of the app; nothing that size audits to clean. Split work so one change touches one layer, or roughly 500 lines. A change that size clears in one round. || FIXING: only gate-level findings are fixed in-branch. Nothing else -- not 'while I am here', not a one-line nit. Everything else is logged against main. Rounds 4 and 5 fixed 10 and 12 findings against a rule that already said this, and that non-compliance is a large part of why the loop stayed alive. || audit_rounds counts rounds RUN. A phase with status=shipped and audit_clean=false is NOT finished. This applies to `already_shipped` entries identically -- being written in that list means the CODE is done, never that the WORK is. || *** (1b) THE COMMENT-TRUTH EXCEPTION -- NARROWED, AND WRITTEN DOWN FOR THE FIRST TIME. Kenneth, 2026-09-22, answering pending_kenneth on AUTOTRADE-2B-MEASUREMENT-CORE: 'fix the rule, not the target'. *** Clause (1) above excludes 'wording, comments' from the gate, but PRACTICE HAD OPENED AN UNWRITTEN EXCEPTION TO IT: round 1 of the measurement core faulted F-5 on a comment claim, and from then on every round of that target counted comment claims as gate-level BY PRECEDENT, with no clause anywhere saying so and no bound on what qualified. UNBOUNDED, IT REPRODUCED AUDIT-RULE-V1'S NON-TERMINATION THROUGH THE ONE DOORWAY V2 LEFT OPEN -- three rounds, three findings, each an under-qualified claim inside the very comment written to correct the previous under-qualified claim (F-5 -> F2-1 -> F3-1). A dense docstring manufactures one finding per round forever, because each correction adds new prose carrying new claims. || THE EXCEPTION IS KEPT, BECAUSE A COMMENT THAT MISSTATES MECHANISM GETS ACTED ON, AND IT IS NOW BOUNDED: A COMMENT CLAIM IS GATE-LEVEL ONLY IF A COMPETENT READER, ACTING ON IT, WOULD WRITE A WRONG CHANGE -- i.e. only when it misstates MECHANISM: what the code does, which function is authoritative, what a guard is actually testing, which failure mode is live, or what is safe to change. THOSE STILL BLOCK, and the price-probe-versus-hours-test confusion that started this whole target is exactly one of them. || A COMMENT CLAIM IS *NOT* GATE-LEVEL when it is an ARITHMETIC WORKED-EXAMPLE, an ENUMERATION, or an ILLUSTRATIVE FIGURE inside a RESIDUALS, LIMITATIONS or WORKED-EXAMPLE block -- host-offset tables, DST hour counts, 'four hours daily', sample timestamps. Those ILLUSTRATE a mechanism stated elsewhere; they do not state it. PER CLAUSE (1), THE AUDIT BRIEF MUST INSTRUCT THE REVIEWER NOT TO REPORT THEM AT ALL. The one carve-back: if such a figure is wrong AND no correct statement of the mechanism appears nearby, the reader has nothing right to act on, so it IS a mechanism finding and blocks. THE TEST IS WHAT THE READER WOULD DO, NOT WHETHER THE ARITHMETIC CHECKS OUT. || THE TIEBREAK, so this is not re-litigated every round: IF A REVIEWER CANNOT DECIDE WHICH SIDE A CLAIM FALLS ON, IT IS NOT GATE-LEVEL -- log it against main, do not fix it in-branch. AND A PROSE FINDING NEVER BY ITSELF KEEPS A TARGET OPEN WHOSE BEHAVIOURAL AUDIT HAS ALREADY CONVERGED. || COROLLARY ON THE HARD CAP, which follows from the above and is flagged as an addition beyond the literal words Kenneth approved -- STRIKE THIS SENTENCE IF UNWANTED: the cap's stated reason is 'the batch is too big to audit'. WHEN A TARGET'S BEHAVIOURAL AUDIT HAS RETURNED ZERO GATE-LEVEL FINDINGS AND THE ONLY UNCONVERGED FINDINGS ARE PROSE, THE CAP'S USUAL REMEDY (SPLIT THE BATCH) IS A MISDIAGNOSIS. Say so and take it to Kenneth rather than splitting. Acting on a misdiagnosis is how a fifth split gets invented.",
   "phases": [
     {
@@ -6764,19 +6764,19 @@
       ],
       "summary": "Nightly daily-bar ingestion fetches only recent bars; the Tiingo prefix is re-downloaded only on an adjustment change (detected from Alpaca factors), an incomplete history or an unverifiable seam; all four Tiingo limits enforced from a persisted ledger. history_years stays 17.",
       "name": "Incremental nightly history ingestion",
-      "status": "in_progress",
+      "status": "built",
       "audit_rounds": 5,
       "audit_clean": false,
       "branch": "claude/history-incremental-a-42b11ff4 (stage A); plan on claude/fervent-davinci-ded941",
       "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
       "tracking_issue": 413,
       "verify": {
-        "kind": "absent",
+        "kind": "present",
         "path": "frontend/components/molecules/TiingoBudget/index.tsx",
         "pattern": "TiingoBudget",
-        "note": "PRESENCE ONLY of the Stage C Settings -> Data molecule (the phase's last stage); absent until Stage C. Stage-level probes: HISTORY-INCREMENTAL-NIGHTLY-A / -B. Correctness requires tests and the per-stage audits."
+        "note": "PRESENCE ONLY of the Stage C Settings -> Data molecule (the phase's last stage). Stage-level probes: HISTORY-INCREMENTAL-NIGHTLY-A / -B / -C. Correctness requires tests and the per-stage audits."
       },
-      "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C.",
+      "notes": "Plan APPROVED 2026-10-19: plan stage 1 (rounds 1-3) capped with R3-F1 open and R3-F2 accepted residual (HISTORY-INCREMENTAL-LAG-RESIDUAL-2026-10-19); plan stage 2 (rounds 4-5, HISTORY-INCREMENTAL-STAGE2-2026-10-19) fixed R3-F1 and R4-F1, round 5 CLEAN. Section-8 decisions: HISTORY-INCREMENTAL-DECISIONS-2026-10-19. Build started 2026-10-21 on Kenneth's go (relayed by the parent session, his words: 'start building #413 with the ticket coordinator, Stage A (Tiingo usage ledger) first'). PR #390/#459/#465 merged. Each stage is its own code-audit target: HISTORY-INCREMENTAL-NIGHTLY-A (ledger), later -B, -C. 2026-11-06: Stage C (HISTORY-INCREMENTAL-NIGHTLY-C) built on claude/history-incremental-c-147f51; all three stages now exist in code (A, B merged; C unmerged). 2026-11-13: Stage C code audit clean (HISTORY-INCREMENTAL-NIGHTLY-C round 3); every stage (A, B, C) now has a clean code audit. Stage C unmerged.",
       "audit_history": [
         {
           "round": 1,
@@ -6988,6 +6988,85 @@
       ],
       "completion_pct": 100,
       "merge_commit": "70e48af266210928540518f9a7a1d7ea2232f34f"
+    },
+    {
+      "id": "HISTORY-INCREMENTAL-NIGHTLY-C",
+      "owner": "agent",
+      "name": "Incremental nightly, Stage C: Settings -> Data Tiingo budget + last-run line",
+      "summary": "Frontend only (decision D5): getIngestionStatus type in lib/api.ts, TiingoBudget molecule (four Tiingo limit meters used/limit with nightly stop, last ingestion run summary from the existing run counters), rendered in Settings -> Data. Plan section 5 Stage C (C1).",
+      "status": "built",
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "depends_on": [
+        "HISTORY-INCREMENTAL-NIGHTLY",
+        "HISTORY-INCREMENTAL-NIGHTLY-A",
+        "HISTORY-INCREMENTAL-NIGHTLY-B"
+      ],
+      "plan": "docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md",
+      "tracking_issue": 413,
+      "branch": "claude/history-incremental-c-147f51",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/components/molecules/TiingoBudget/index.tsx",
+        "pattern": "export function TiingoBudget",
+        "note": "PRESENCE ONLY of the Stage C molecule. Correctness requires tests and the independent stage audit."
+      },
+      "notes": "Stage C of the approved plan; own code-audit target, cap 3 code rounds. Started 2026-11-06 from origin/main c8f3b8a2 (Stage A PR #484 and Stage B PR #499 merged). Tickets #572 C1, #573 C2 (coordinator). C1 #572 c801994e committed and coordinator-verified (typecheck clean; full Jest 6055 passed, the 4 failures are the de-DE locale baseline BarrierRaceCard/StockSendDialog.session and a TradeCard.methodPick load flake that passes in isolation). Built, NOT audited: code audit pending (#573). 2026-11-12: branch merged with origin/main 236bec67 (742b768e); claim retaken. Scope added by HISTORY-INCREMENTAL-C-LAST-RUN-2026-11-12: C1b, a persisted last-run summary (plan amended at a4717194). Plan round 1 (C1b amendment only) is running. The earlier code round-1 auditor was cut off by an app exit and never reported, so it does not count. The code stage restarts at round 1 over the whole Stage C diff. C1b plan stage CLEAN at round 2 (plan text bfa97d07). Code stage starts at round 3 (code round 1) over the whole Stage C diff after #643 is built. C1b #643 c2181e3e committed and coordinator-verified (new table ingestion_run, migration d6a2f9c4e017 on b7d4e2a9c816, single head; backend full suite 10207 passed, failures Windows baseline only incl. heston probe network-guard x4; Jest 6426 passed, de-DE locale baseline only; typecheck clean). Built, code audit pending (#573). Code stage: round 3 (code round 1) CLEAN over 236bec67..df892f2b. The previous code round-1 auditor (2026-11-06) was cut off by an app exit and never reported, so it is not counted.",
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent af1318a452fbcf4e2 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 742b768e a4717194 -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (C1b scope addition) against ingestion_job.py, routers/ingestion.py, provider_usage/env.py pattern, conftest, C1 frontend",
+          "findings": [
+            "P1-F1 (Medium) a failed finish write left a 'running' row displayed as 'the backend stopped' for a run that completed",
+            "P1-F2 (Medium) a failed start insert skipped the finish write, so an older run was shown under 'Last ingestion run ... whichever ran last'",
+            "P1-F3 (Low) newest-row order and retention keyed on wall-clock started_at (clock steps) instead of the autoincrement id; retention could prune the just-inserted row"
+          ],
+          "fixes": "fixed at bfa97d07: neutral 'Not finalised' text, finish UPDATE retried once and a full-row INSERT when the start insert failed, heading 'Latest run recorded in storage', order/retention by id only; below-gate folded in: UTC offset on SQLite read, no json default=, 10 s write timeout",
+          "outstanding": [],
+          "clean": false,
+          "below_gate_logged": [
+            "WEB_CONCURRENCY>1 (unsupported, logged as error) would show another worker's live run as not finalised"
+          ]
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "gate-auditor subagent a9f9952192528ffc9 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff a4717194 bfa97d07 -- docs/superpowers/plans/2026-10-19-history-incremental-nightly-plan.md (round-1 fixes P1-F1..F3) plus interactions with ingestion_job.py, routers/ingestion.py, TiingoBudget",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "every _state value type at finish shown JSON-serializable (incl. rebuild_details, seam_ratios float, years int); retried UPDATE idempotent under the one-run guard; id order = start order via start_ingestion_task for all three entry points; TimeoutError swallowed; UTC tagging on SQLite read; display rule matches C1 noRun",
+          "below_gate_logged": [
+            "start insert committed but timed out -> orphan running row plus the complete finish row (only the complete one shown)",
+            "'Not finalised' omits a run still going in another backend process (multi-worker unsupported)",
+            "cancelled aiosqlite write may still land later (same values)",
+            "10 s timeout should be injectable for tests",
+            "json.dumps allow_nan=True (ratio finite by construction)"
+          ]
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "reviewer": "gate-auditor subagent a1d16f2d676a07b64 (fresh, bmad-review-adversarial-general)",
+          "scope": "git diff 236bec67 df892f2b -- backend frontend (whole Stage C: C1 #572 TiingoBudget/api/DataForm + C1b #643 ingestion_run model, ingestion_run_log, migration d6a2f9c4e017, env.py, ingestion_job/router wiring, tests, stored-run display) against plan section 5 Stage C C1 + C1b (bfa97d07) and tickets #572/#643",
+          "findings": [],
+          "fixes": "none needed",
+          "outstanding": [],
+          "clean": true,
+          "sanity_check": "every displayed value traced to its endpoint/row field; meterTone matches tiingo_budget._first_exhausted/stop_at; formatBytes boundaries and 2^53 headroom; live-vs-stored switch (live state set before record_start awaits); fail-open on every write path incl. retry, fallback INSERT and timeouts; _prune compiled for PostgreSQL and SQLite; UTC handling naive/aware; migration single head; 106 backend + 50 Jest focused tests run",
+          "below_gate_logged": [
+            "symbols_per_month caution text 'the nightly run stops here' overstates: at the stop already-seen symbols are still admitted",
+            "hung DB can delay a run up to 10 s at start and 2x10 s at finish (bounded, no data change)",
+            "duration rounded to the second while bytes truncate (presentation)",
+            "start insert committed-but-timed-out leaves an orphan running row below the finished row",
+            "refresh right after Run now may show the previous run (labelled with its as-of time)"
+          ]
+        }
+      ]
     },
     {
       "id": "APP-AUDIT-INVENTORY",
@@ -10297,6 +10376,729 @@
       ],
       "pr": 613,
       "merge_commit": "9067538f7d992b2fdf74efb387e963acc77a6ffe"
+    },
+    {
+      "id": "TRADE-CARD-REFERENCE-ALIGNMENT",
+      "name": "Trade card durable-reference presentation alignment (#603)",
+      "owner": "agent",
+      "status": "shipped",
+      "summary": "Verified PR615 merge at a6c74b0c; all exact-head CI and merged-source regressions passed; complete explanations preserved.",
+      "tracking_issue": 603,
+      "branch": "board/trade-card-reference-alignment-8b8ee0c6",
+      "plan": "docs/superpowers/plans/2026-11-09-trade-card-reference-alignment-plan.md",
+      "size": "XL",
+      "complexity": 4,
+      "completion_pct": 100,
+      "audit_rounds": 4,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "plan_stage": {
+        "rounds": 3,
+        "clean": true,
+        "closed_by": "clean",
+        "closure_evidence": "alignment_plan_remaining_review checked added Tasks2–7 and interactions with Task1 against frozen reference and source: zero gate findings; plan stage closed clean at cap3."
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "amendment_ticket_plan_audit",
+          "scope": "Seven-ticket publication manifest, GitHub #604–610 and frozen reference d8245e66; historical review from publication session",
+          "gate_findings": 0,
+          "outcome": "clean"
+        },
+        {
+          "round": 2,
+          "stage": "plan",
+          "reviewer": "alignment_plan_detail_audit",
+          "scope": "Added Task1 detail in 2026-11-09-trade-card-reference-alignment-plan.md against TradeCard/selector/disclosures/reference D01–D03",
+          "gate_findings": 0,
+          "outcome": "clean"
+        },
+        {
+          "round": 3,
+          "stage": "plan",
+          "reviewer": "alignment_plan_remaining_review",
+          "scope": "Remaining execution details Tasks2–7 in 2026-11-09-trade-card-reference-alignment-plan.md against source and frozen d8245e66 reference",
+          "gate_findings": 0,
+          "outcome": "clean"
+        },
+        {
+          "round": 4,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "alignment_code_audit_fresh",
+          "reviewed_range": "9067538f7d992b2fdf74efb387e963acc77a6ffe..79d5027ecd149394790a66b1160789480ea0d6f2",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "outcome": "clean",
+          "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/code-audit-1.md"
+        }
+      ],
+      "note": "SHIPPED after GitHub MERGED verification, exactee3189df backend/frontend/browser CI SUCCESS, identical merged frontend tree, postmergeTSC+2suites19tests+source/text/evidence integrity PASS. Complete original explanations are retained in expandable contexts; one MC approximation qualifier was restored before shipping. Plan3/code1clean (continuous4); no prior counters reset. This administrative record follows the real merge and never predicts success.",
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md",
+        "pattern": "TRADE-CARD-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
+        "note": "Phase completion marker reserved for #610 integrated acceptance. One built ticket does not prove all seven amendments exist."
+      },
+      "build_tickets": [
+        {
+          "issue": 604,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "651f89d2c863d6d84333063fc6674a6b3313709e",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/604-acceptance.md"
+        },
+        {
+          "issue": 605,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "2df60eb649da6790cc144979c4098737f80f81ef",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/605-acceptance.md"
+        },
+        {
+          "issue": 606,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "b77a83390933760efc256696c9d1f57e4f5391f0",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/606-acceptance.md"
+        },
+        {
+          "issue": 607,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "c8fd126dafbc3ed86777d6d3a73eca195902f744",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/607-acceptance.md"
+        },
+        {
+          "issue": 608,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "1a29fcde06c543b6b4cc372c10abb1ec2c6995cd",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/608-acceptance.md"
+        },
+        {
+          "issue": 609,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "564d656c28eb97022f0cdd99e44e3b01ad7da764",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/609-acceptance.md"
+        },
+        {
+          "issue": 610,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "02169adf213693309404a9c0f166089f820320ae",
+          "evidence": "docs/superpowers/plans/trade-card-reference-alignment/final-acceptance.md"
+        }
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "alignment_code_audit_fresh",
+        "audited_head": "79d5027ecd149394790a66b1160789480ea0d6f2",
+        "reviewed_range": "9067538f7d992b2fdf74efb387e963acc77a6ffe..79d5027ecd149394790a66b1160789480ea0d6f2",
+        "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/code-audit-1.md"
+      },
+      "acceptance_reviews": [
+        {
+          "kind": "visual, separate from formal gate",
+          "reviewer": "accept_final_rendered_preview",
+          "verdict": "ACCEPT",
+          "source": "02169adf",
+          "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/visual-qualifier-recheck.md"
+        },
+        {
+          "kind": "complete paragraph/label preservation, separate from formal gate",
+          "reviewer": "verify_all_explanation_text",
+          "before_findings": 1,
+          "resolved": "Original MC Stock-price equivalent (display approximation) restored in existing closed provenance and concise approximate header",
+          "remaining_unique_explanation_losses": 0,
+          "source": "02169adf",
+          "report": "docs/superpowers/plans/trade-card-reference-alignment/evidence/610/final/information-preservation/paragraph-preservation-final-report.md"
+        }
+      ],
+      "non_qualifying_audit_attempts": [
+        {
+          "reviewer": "alignment_code_audit_1",
+          "stage": "code",
+          "reason": "Usage limit before any verdict; independent replacement performed full target review",
+          "counted_as_round": false
+        }
+      ],
+      "self_merge_pending": {
+        "pull_request": 615,
+        "url": "https://github.com/Netke237/trading-assistant/pull/615",
+        "audited_head": "79d5027ecd149394790a66b1160789480ea0d6f2",
+        "application_commit": "02169adf213693309404a9c0f166089f820320ae",
+        "pre_pending_head": "f902a1404d9382679cc36bf003df3732898a8b51",
+        "state": "FULFILLED by verified PR615 merge at a6c74b0cc53bac1f0dd457b64ce8c6469004f818"
+      },
+      "merge_result": {
+        "pull_request": 615,
+        "state": "MERGED",
+        "commit": "a6c74b0cc53bac1f0dd457b64ce8c6469004f818",
+        "merged_at": "2026-11-10T22:35:37Z",
+        "checked_head": "ee3189df758de475d498f655d2a68854f0c0854e",
+        "ci": {
+          "backend": "SUCCESS",
+          "frontend": "SUCCESS",
+          "browser": "SUCCESS"
+        },
+        "post_merge": {
+          "frontend_tree_identical_to_checked_head": true,
+          "typecheck": "PASS",
+          "suites": 2,
+          "tests": 19,
+          "evidence_integrity": "PASS",
+          "remaining_unique_explanation_losses": 0
+        },
+        "evidence": "docs/superpowers/plans/trade-card-reference-alignment/evidence/post-merge/README.md"
+      },
+      "shipping_record_branch": "board/trade-card-reference-alignment-cee10756"
+    },
+    {
+      "id": "TRADE-CARD-QUALIFICATION-PLACEMENT",
+      "name": "Group trade-card qualifications beneath Contract Details (#617)",
+      "owner": "agent",
+      "status": "shipped",
+      "summary": "Verified PR619 merge; collapsed qualifications grouped beneath Contract Details, all information preserved; post-merge checks passed.",
+      "tracking_issue": 617,
+      "branch": "board/trade-card-qualification-placement-37f624d5",
+      "plan": "docs/superpowers/plans/2026-11-11-trade-card-qualification-placement-plan.md",
+      "size": "XS",
+      "complexity": 1,
+      "completion_pct": 100,
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "reviewer": "qualification_plan_audit",
+          "reviewed_head": "fff9011f5ee07c432d2331f4c4bc121d16251b09",
+          "gate_findings": 0,
+          "findings": [],
+          "outstanding": [],
+          "outcome": "clean"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "qualification_code_audit",
+          "reviewed_range": "1f861cbf68897ec9ecbfd4c34982508d7bf0e8b8..0b0d556989b863b67f0654d9c9e58e0fff3fa965",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "outcome": "clean"
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/plans/trade-card-qualification-placement/acceptance.md",
+        "pattern": "QUALIFICATION-PLACEMENT-VERIFIED"
+      },
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "qualification_plan_audit",
+        "reviewed_head": "fff9011f5ee07c432d2331f4c4bc121d16251b09"
+      },
+      "implementation_commit": "1c15c200382d415fa88159dbf5b082523f9f2a96",
+      "acceptance": "docs/superpowers/plans/trade-card-qualification-placement/acceptance.md",
+      "validation": {
+        "typecheck": "passed",
+        "full_frontend": {
+          "suites_passed": 343,
+          "suites_total": 345,
+          "tests_passed": 6363,
+          "tests_total": 6365,
+          "failures": "Two 5000-ms timeouts under parallel load; both suites passed unchanged serially."
+        },
+        "isolated_retest": {
+          "suites_passed": 2,
+          "tests_passed": 40
+        },
+        "browser": {
+          "themes": [
+            "light",
+            "dark"
+          ],
+          "width": 1366,
+          "assertions_per_theme": 23,
+          "page_errors": 0
+        }
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "qualification_code_audit",
+        "audited_head": "0b0d556989b863b67f0654d9c9e58e0fff3fa965",
+        "reviewed_range": "1f861cbf68897ec9ecbfd4c34982508d7bf0e8b8..0b0d556989b863b67f0654d9c9e58e0fff3fa965",
+        "report": "docs/superpowers/plans/trade-card-qualification-placement/code-audit.md"
+      },
+      "pr": 619,
+      "merge_status": "MERGED verified via GitHub PR619",
+      "merge": {
+        "pr": 619,
+        "commit": "798f4934004fde8a5935523fa6e0535f40e11480",
+        "merged_at": "2026-11-11T09:05:58Z",
+        "ci_head": "9962bc24bcb363a6e682aea5b2fdf6a95e57e63d",
+        "checks": [
+          "backend SUCCESS",
+          "frontend SUCCESS",
+          "browser SUCCESS"
+        ],
+        "post_merge_checks": "typecheck,2qualification suites/13tests, all capture-source pins passed",
+        "record": "docs/superpowers/plans/trade-card-qualification-placement/shipping.md"
+      },
+      "ci_retry": {
+        "head": "9962bc24bcb363a6e682aea5b2fdf6a95e57e63d",
+        "first_frontend_job": 130381298729,
+        "frontend_suites": 345,
+        "frontend_tests": 6365,
+        "all_frontend_tests_passed": true,
+        "failure_step": "Run frontend build",
+        "failure": "next/font Google loader TypeError: Cannot read properties of null (reading 1), loader.js:122",
+        "prior_record": "PROJECT_STATE.json phase CANDIDATE-BACKTEST-CHART ci.retry, PR333",
+        "allowed_retry_limit": 1,
+        "retries_started": 1,
+        "waiting": null,
+        "backend": "SUCCESS",
+        "result": "SUCCESS"
+      },
+      "ci_frontend": {
+        "suites": 345,
+        "tests": 6365,
+        "build": "SUCCESS after single recorded font-loader flake retry",
+        "head": "9962bc24bcb363a6e682aea5b2fdf6a95e57e63d"
+      }
+    },
+    {
+      "id": "STOCKS-REFERENCE-ALIGNMENT",
+      "name": "Align terminal Stocks presentation with approved November 11 reference",
+      "status": "shipped",
+      "tracking_issue": 621,
+      "size": "L",
+      "complexity": 3,
+      "completion_pct": 100,
+      "plan": "docs/superpowers/plans/2026-11-11-stocks-reference-alignment-plan.md",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "stocks_plan_audit_1",
+          "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/stocks-reference-alignment/plan-audit-1.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "stocks_code_audit_1",
+          "reviewed_diff": "0a453f1940a077015949e760d02ef5a6d921f62a..9e59c7503eb8fbe577d19c44b266eb9d63a08c39",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/stocks-reference-alignment/code-audit-1.md"
+        }
+      ],
+      "build_tickets": [
+        {
+          "issue": 623,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "414c5621",
+          "evidence": "docs/superpowers/plans/stocks-reference-alignment/first-build-checkpoint.md"
+        },
+        {
+          "issue": 624,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "3d5eb929bf70c95139d13254f16e06fb02770e1d",
+          "evidence": "docs/superpowers/plans/stocks-reference-alignment/acceptance.md"
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/plans/stocks-reference-alignment/acceptance.md",
+        "pattern": "STOCKS-REFERENCE-ALIGNMENT-FINAL-VERIFIED",
+        "note": "Completion marker reserved for integrated acceptance of all planned build tasks."
+      },
+      "note": "PR628 verified MERGED at c348c4e9abfbb7136160533f34198956767379b8 after explicit user approval. Integrated main conflicts only PROJECT_STATE; both audited sources unchanged. Combined typecheck,347suites/6379tests,40browser cases and exact-head CI all passed. Post-merge typecheck,24tests and source equality passed. Plan1/code1 clean0; no audit counters reset. State recorded after actual merge verification.",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "stocks_plan_audit_1",
+        "plan_sha256": "076be833a14f65825385f5dc5317e048d56602218bec1573797772cba7afc85c",
+        "closed_by": "clean"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "stocks_code_audit_1",
+        "reviewed_diff": "0a453f1940a077015949e760d02ef5a6d921f62a..9e59c7503eb8fbe577d19c44b266eb9d63a08c39",
+        "closed_by": "clean"
+      },
+      "pull_request": 628,
+      "supersedes_pull_request": 625,
+      "self_merge_pending": {
+        "pull_request": 628,
+        "audited_head": "9e59c7503eb8fbe577d19c44b266eb9d63a08c39",
+        "base_main": "f63c130b570a61f48815c5c99dc4b99550455792",
+        "note": "SELF-MERGE PENDING, PR #628, audited head9e59c7503eb8fbe577d19c44b266eb9d63a08c39. User explicitly approved merge. Integrated PR627/currentmain with conflicts in PROJECT_STATE only; phase app source unchanged. Final combined-head CI and local integration checks pending; no Stocks merge claimed.",
+        "state": "verified MERGED; historical pending record retained"
+      },
+      "integration": {
+        "merged_main": "f63c130b570a61f48815c5c99dc4b99550455792",
+        "conflict_files": [
+          "docs/superpowers/PROJECT_STATE.json"
+        ],
+        "stocks_source_unchanged_since_audit": true,
+        "scanner_source_matches_main": true,
+        "user_approved_merge": true,
+        "local_jest_suites": 347,
+        "local_jest_tests": 6379,
+        "browser_cases": 40,
+        "ci_head": "6e1abc39ea63f9469cb2123b792901f5f4897a90",
+        "ci_runs": [
+          43243769661,
+          43243769683
+        ],
+        "ci_result": "all SUCCESS"
+      },
+      "merge_commit": "c348c4e9abfbb7136160533f34198956767379b8",
+      "merged_at": "2026-11-12T15:14:39Z",
+      "post_merge_verification": {
+        "typecheck": "passed",
+        "jest_suites": 2,
+        "jest_tests": 24,
+        "source": "merged frontend/backend byte-identical to approved integrated head6e1abc39",
+        "report": "docs/superpowers/plans/stocks-reference-alignment/merge-verification.md"
+      }
+    },
+    {
+      "id": "SETUP-SCANNER-REFERENCE-ALIGNMENT",
+      "name": "Align Pre-Breakout, EMA and Fib scanner presentation with approved reference",
+      "status": "shipped",
+      "tracking_issue": 622,
+      "size": "L",
+      "complexity": 3,
+      "completion_pct": 100,
+      "plan": "docs/superpowers/plans/2026-11-11-setup-scanner-reference-alignment-plan.md",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "scanner_plan_audit_1",
+          "plan_sha256": "bce5c617c733bedcb34b69094d8dedb08e1c07de630964eb534e36dc7dcc1441",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/setup-scanner-reference-alignment/plan-audit-1.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "scanner_code_audit_1",
+          "reviewed_range": "0a453f1940a077015949e760d02ef5a6d921f62a..1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/setup-scanner-reference-alignment/code-audit-1.md"
+        }
+      ],
+      "build_tickets": [
+        {
+          "issue": 626,
+          "status": "shipped",
+          "completion_pct": 100,
+          "commit": "47c229a1ab85d9bdf2ffca0f2697506475039d57",
+          "evidence": "docs/superpowers/plans/setup-scanner-reference-alignment/acceptance.md"
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "docs/superpowers/plans/setup-scanner-reference-alignment/acceptance.md",
+        "pattern": "SETUP-SCANNER-REFERENCE-ALIGNMENT-LOCAL-VERIFIED",
+        "note": "Local acceptance marker establishes built source, not independent audit or merge/shipping."
+      },
+      "note": "PR627 verified MERGED at f63c130b570a61f48815c5c99dc4b99550455792 after explicit user approval. Exact-head CI all green; merged source byte-identical to approved head; post-merge typecheck and 4 route suites /45tests passed. Plan1/code1 clean0; actual merge recorded after verification, no counters reset.",
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "scanner_plan_audit_1",
+        "plan_sha256": "bce5c617c733bedcb34b69094d8dedb08e1c07de630964eb534e36dc7dcc1441"
+      },
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "reviewer": "scanner_code_audit_1",
+        "audited_head": "1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "reviewed_range": "0a453f1940a077015949e760d02ef5a6d921f62a..1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "report": "docs/superpowers/plans/setup-scanner-reference-alignment/code-audit-1.md"
+      },
+      "pull_request": 627,
+      "self_merge_pending": {
+        "pull_request": 627,
+        "audited_head": "1fdecb736e3e37c7a27608f13b2ed6a91271081e",
+        "state": "verified MERGED; historical pending record retained"
+      },
+      "merge_commit": "f63c130b570a61f48815c5c99dc4b99550455792",
+      "merged_at": "2026-11-12T15:01:55Z",
+      "post_merge_verification": {
+        "typecheck": "passed",
+        "jest_suites": 4,
+        "jest_tests": 45,
+        "source": "merged frontend/backend byte-identical to approved PR627 head8ca50959"
+      }
+    },
+    {
+      "id": "BACKTEST-REVIEW-VISUALISATION",
+      "name": "Readable recorded backtest performance and linked trade review",
+      "status": "shipped",
+      "size": "XL",
+      "complexity": 4,
+      "completion_pct": 100,
+      "branch": "codex/backtest-review-99b03167",
+      "plan": "docs/superpowers/plans/2026-11-12-backtest-review-visualisation-plan.md",
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": true,
+      "plan_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "backtest_plan_audit_1",
+        "plan_sha256": "caa13e6829f32d7016e78aab1ffae148addc1a1092a32ff11aa100d3fa55f51a"
+      },
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "plan",
+          "stage_round": 1,
+          "reviewer": "backtest_plan_audit_1",
+          "plan_sha256": "caa13e6829f32d7016e78aab1ffae148addc1a1092a32ff11aa100d3fa55f51a",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/backtest-review-visualisation/plan-audit.md"
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "backtest_code_audit_1",
+          "diff": "e8eca1b60075701be75ea208894bfb1bf48f29bc..eecaa5c0dfb0c6d2e58c77639309faec071c5184",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "report": "docs/superpowers/plans/backtest-review-visualisation/code-audit.md"
+        }
+      ],
+      "code_stage": {
+        "rounds": 1,
+        "clean": true,
+        "closed_by": "clean",
+        "reviewer": "backtest_code_audit_1",
+        "diff": "e8eca1b60075701be75ea208894bfb1bf48f29bc..eecaa5c0dfb0c6d2e58c77639309faec071c5184"
+      },
+      "note": "2026-11-15 Claude coordinator took over from stopped Codex session (Kenneth reassigned 2026-11-14). Build 4/4 (T1 690b034b, T2 1d168cb8, T3 454dd82b, T4 82e7275b) + integrated verification a68ba532 + resize fix eecaa5c0. Plan round 1 clean (hash unchanged; Codex's draft locale-test amendment not adopted). Code round 1 (continuous round 2) clean, zero gate findings. PR648 exact-head CI green on 30dce9ff (backend, frontend, test); merged after explicit user approval at 2f8b8dc1 (merge commit, head-pinned). Merged tree byte-identical to approved head; post-merge typecheck clean and 8 suites/87 tests passed. Plan1/code1 clean, no counters reset. Host-only baseline Jest failures (en-DE locale trio, step-7 load timeouts) are green in main CI.",
+      "verify": {
+        "kind": "present",
+        "path": "frontend/components/organisms/CandidateBacktestWorkspace/index.tsx",
+        "pattern": "Strategy versus buying",
+        "note": "Presence of the new comparison heading only; not proof of behavior, independent code audit or shipping. Refine the location if the approved implementation extracts its summary component."
+      },
+      "tracking_issue": 631,
+      "build_tickets": [
+        {
+          "issue": 632,
+          "task": 1,
+          "status": "shipped",
+          "completion_pct": 100
+        },
+        {
+          "issue": 633,
+          "task": 2,
+          "status": "shipped",
+          "completion_pct": 100
+        },
+        {
+          "issue": 634,
+          "task": 3,
+          "status": "shipped",
+          "completion_pct": 100
+        },
+        {
+          "issue": 635,
+          "task": 4,
+          "status": "shipped",
+          "completion_pct": 100
+        }
+      ],
+      "coordinator_ticket": 636,
+      "pull_request": 648,
+      "merge_commit": "2f8b8dc19a759baacf2ed0755a80a6ad658dbb01",
+      "merged_at": "2026-11-16T06:35:43Z",
+      "post_merge_verification": {
+        "typecheck": "passed",
+        "jest_suites": 8,
+        "jest_tests": 87,
+        "scope": "CandidateBacktestWorkspace, BacktestTradeTable, CandidateChartWorkspace, FreshBacktestControls",
+        "source": "merged tree byte-identical to approved and CI-green PR648 head 30dce9ff",
+        "main_ci_on_merge_commit": "failed: 1/6508 frontend test (step-7-position-card B7 earnings-veto) whose fixed 2026-10-05 scan date aged past its 40-day earnings window on 2026-11-15; unrelated to this phase (merge tree identical to CI-green head 30dce9ff). Fixed on main by #646 (merged e1552fb2)."
+      }
+    },
+    {
+      "id": "BG-SCHEDULE-MAINT",
+      "name": "Background schedule: artifact expiry sweep, weekly history health check, strategy-watch EOD at 21:30 ET",
+      "status": "built",
+      "size": "S",
+      "complexity": 2,
+      "completion_pct": 90,
+      "audit_rounds": 2,
+      "audit_clean": true,
+      "plan_audit_clean": null,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "e8eca1b6..c6a730bd",
+          "gate_findings": 1,
+          "findings": [
+            "F1: Friday 21:30 ET runs on a host already in Saturday; get_bars' host-date staleness reference (_prev_trading_day = Thursday) never fetched Friday's settled bar for symbols not yet stored, so Friday-close watch signals were dropped."
+          ],
+          "fixes": [
+            "4ab0bc08: get_bars(require_through=...) opt-in; the watch evaluator passes the ET date of last_settle_boundary(now)."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "gate-auditor (fresh subagent, bmad-review-adversarial-general)",
+          "reviewed_range": "c6a730bd..4ab0bc08",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Below-gate observation fixed after the round: test_p4b_watch_isolation_and_delivery's get_bars fake did not accept require_through (test-only)."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/history_health.py",
+        "pattern": "run_history_health_check",
+        "note": "Presence probe only; behaviour is pinned by tests/test_history_health.py and tests/test_historical_store_settle.py."
+      },
+      "note": "No plan stage: small change acting on a scheduling review in-session. Not merged until Kenneth approves the PR."
+    },
+    {
+      "id": "STRUCTURAL-LEVEL-LABEL",
+      "name": "Rename visible STRUCTURAL_STOP_BREACHED alert text to 'Structural level'",
+      "owner": "agent",
+      "status": "built",
+      "branch": "claude/structural-level-label",
+      "size": "XS",
+      "complexity": 1,
+      "completion_pct": 85,
+      "summary": "User-visible text only: Telegram/email headline 'Structural level hit', backend+frontend reason 'Structural level breached', Alerts page, Portfolio EditDrawer toggle/field/hint/MC warning/footer, StockPositionCard note. Internal ids (STRUCTURAL_STOP_BREACHED, structural_stop, structuralStop, dedup keys, alertOverrides) unchanged. Pre-trade TradeCard/SubmissionReview/trackingReview/BrokerOrderReview labels deliberately out of scope.",
+      "plan": null,
+      "plan_audit_clean": null,
+      "audit_rounds": 3,
+      "audit_clean": true,
+      "audit_history": [
+        {
+          "round": 1,
+          "stage": "code",
+          "stage_round": 1,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "236bec67e+uncommitted diff (8 files) later committed in e2337050",
+          "gate_findings": 1,
+          "findings": [
+            "Non-blocking: docs/superpowers/plans/stocks-reference-alignment/verify-preservation.py asserted the old StockPositionCard sentence 'position so STRUCTURAL STOP BREACHED can fire.' verbatim and failed."
+          ],
+          "fixes": [
+            "Added an adapted mapping for that sentence, matched on its ASCII tail so the verifier passes under cp1252 and UTF-8 default decoding."
+          ],
+          "outstanding": [],
+          "clean": false
+        },
+        {
+          "round": 2,
+          "stage": "code",
+          "stage_round": 2,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "verify-preservation.py fix and its interactions, committed in e2337050",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "Mutation checks (sentence removed, em-dash prefix changed, unrelated text removed) all still fail the verifier under both encodings; acceptance.md counts (151 exact / 1 adapted) are now historical: script reports 150 exact / 2 adapted."
+        },
+        {
+          "round": 3,
+          "stage": "code",
+          "stage_round": 3,
+          "reviewer": "fresh gate-auditor subagent (bmad-review-adversarial-general)",
+          "reviewed_range": "b01dc351 (test-only CI fix added after round 2)",
+          "gate_findings": 0,
+          "findings": [],
+          "fixes": [],
+          "outstanding": [],
+          "clean": true,
+          "note": "B7 earnings-veto test in step-7-position-card page.test.tsx had a fixed 2026-10-05 scan date; earnings_days 40 aged past on 2026-11-14/15 so the veto correctly lifted and the test failed on main 2f8b8dc1. Fix dates this test's scan now; veto assertions unchanged. Auditor confirmed wiring via StockPositionCard and StockSendDialog, no masking, no sibling time bombs. Below gate: comment says 2026-11-14 (UTC+ zones fail from 11-15)."
+        }
+      ],
+      "verify": {
+        "kind": "present",
+        "path": "backend/app/services/notifications/alert_notifier.py",
+        "pattern": "'STRUCTURAL_STOP_BREACHED': 'Structural level hit'",
+        "note": "PRESENCE ONLY: label exists; not proof of behaviour."
+      },
+      "validation": "Backend 580 alert/notifier tests PASS (py3.11.9); tsc clean; Jest affected suites 538/540 - the 2 failures are pre-existing/env: referenceFlow '2,000' vs de-DE '2.000' (fails identically on origin/main), presentation 5s timeout under load (passes in isolation). | After merging main bbd87238: tsc clean, EditDrawer/alert suites 347/347; Step 7 position-card page tests 14/14 after b01dc351.",
+      "implementation_commit": "e2337050c57886cbcf66bf01e1b6db26b78d76cc",
+      "note": "Not merged. The B7 test fix (b01dc351) is superseded: main fixed the same test identically in a0becefd and the merge keeps main's version. Ticket #630 was implemented separately by PR #645."
     }
   ],
   "already_shipped": [
@@ -12154,6 +12956,11 @@
       "id": "TC-REVIEW-PIN-MAIN-DEFER-MINIPC-2026-11-07",
       "target": "TRADE-CARD-DECISION-REVIEW",
       "decision": "User in this chat directed resume using freshly fetched main c8f3b8a2cb5f0fa7e74fc0da407d1716a381fc6b as baseline, mini-PC comparison deferred in #576, finish inventory and proceed in dependency order; required independent audits retained."
+    },
+    {
+      "id": "HISTORY-INCREMENTAL-C-LAST-RUN-2026-11-12",
+      "target": "HISTORY-INCREMENTAL-NIGHTLY-C",
+      "decision": "Kenneth in chat 2026-11-12 (relayed by the parent session, his words: 'ok do we need a ticket for it or you can spawn a sup agent to finis it in another session'), agreeing to finish Stage C and persist the ingestion last-run summary so it survives a backend restart. Scope addition to the approved plan: plan section 5 Stage C, C1b (a4717194), with its own independent plan round before it is built."
     }
   ],
   "pending_kenneth": [
@@ -12378,7 +13185,7 @@
     "commit": "a0ea55cd",
     "note": "Every code commit reachable from main has had at least one adversarial round AT ITS OWN SCOPE. Phase B: batch 1 clean after 2 rounds (through 1bf9a599), B2 clean after 2 (through 4ffdef62), B3 clean after 2 (through 62a01cfa) -- merged at 53c671b0. The three deferred UI builds, each audited ALONE per audit_rule v2's shrinking-target clause rather than as a branch diff: EDITED-FLAG clean after 2 rounds, TARGET-VINTAGE clean after 1, ALERT-THRESHOLD-STAMP clean after 1 -- merged at 0b057b0a. Phase C merged at 430bdb24; DIRECT-SEND-STOP-GATE at ebf5296; Phase E clean after 2 rounds (round 1 over the whole build at 3e887a4, round 2 scoped to the FIXES ONLY) -- merged at 24374dd1; CONCENTRATION-FLAG clean after 1 -- merged at 9f6b38f2. || PHASE F1 (the Heston pricer's Fourier inversion): clean after 2 rounds, merged at a0ea55cd. Round 1 over the whole build (cf3da087) returned three MAJOR findings, all fixed at 188e2526. Round 2 was scoped to THAT FIX COMMIT ALONE per the shrinking-target clause -- not the cumulative branch diff -- and returned ZERO gate-level findings; its probes are recorded in the F1 phase note and in 210d66d4's commit message so the absence is auditable. || NOT a claim that main is defect-free. audit_clean means a round returned zero GATE-LEVEL findings -- a wrong number in front of a user or on a broker order, or corrupted persisted data. The open_questions list holds everything found and deliberately NOT fixed in-branch, including F1 round 2's two false heston.py comment claims."
   },
-  "active_phase_note": "Options numbers, contracts and reports audit (Lane C, #351). Code round 1 clean.",
+  "active_phase_note": "TRADE-CARD-QUALIFICATION-PLACEMENT shipped; independent plan1/code1 clean, exact-head CI passed, verified merge and post-merge checks recorded.",
   "closed_questions": {
     "_note": "APPENDED 2026-10-03: open_questions[39] (P6 unit A ArmRequest.entry_premium unbounded) closed by TRADING-REVIEW-FIXES-A-AUDIT; positions after it shifted by 1. || APPENDED 2026-10-03: open_questions[26..35] (the ten LOGGED BY O4 STEP 1..6 entries) closed by POSITION-WRITER-O4-CLEANUP; positions after 26 shifted by 10, and six residuals appended at the end. || APPENDED 2026-10-02: open_questions[54] (stock resize: rungs + close drawer) closed by STOCK-POSITION-RESIZE; positions after it shifted by 1. || APPENDED 2026-10-01: five open_questions (26, 27, 47, 53, 54) closed by DCG-SEMANTICS-VISIBILITY; open_questions positions after 26 shifted by up to 5. || APPENDED 2026-09-30: seven items by WP0-HOUSEKEEPING -- five open_questions closed as already done by shipped phases (WATCH-DIRECTION-TO-EVALUATOR, SETTLE-2H, WATCH-DIRECTION-TO-EVALUATOR, HESTON-SCAN-TEST-INTERMITTENT, W2-STRUCT); open_questions positions after them shifted by up to 5; one pending_kenneth entry closed as fully answered (pending_kenneth positions after it shifted by 1); and the MEAS branch's one closed item rescued verbatim. || APPENDED 2026-09-27: one entry closed as already done by P3a (STOCK-SENDS session; pending_kenneth positions after it shifted by 1). || APPENDED 2026-09-27: four entries closed by P3C-SCAN-SIZING-LEFTOVERS (open_questions positions after them shifted by up to 4). || APPENDED 2026-09-26: two entries closed by P4A-CHART-ALERT-RULES (open_questions positions after them shifted by up to 2). || 2026-09-25 BACKLOG AUDIT: 64 entries verified DONE or OBSOLETE were moved here from pending_kenneth / open_questions / *_followups.items, each prefixed with its verdict, evidence and FORMER position. POSITIONS SHIFTED: any 'open_questions[N]' / 'pending_kenneth[N]' reference written before this date points at the old numbering. || PREVIOUS NOTE: Bucket A of the 2026-09-08 triage, approved by Kenneth. Six entries that were no longer questions: three self-declared closed or corrections-to-the-record, three verified DEAD against the real code on the day of the triage (the verification is appended to each). Moved OUT of open_questions rather than deleted -- three of them say 'kept for the record' in their own text, and the record is the point. Nothing here is awaiting anyone. || APPENDED 2026-09-13: two more entries, from F1 round 2. Both were false CLAIMS IN COMMENTS in heston.py -- below the audit gate (no wrong number, no corrupted data), so audit_rule kept them out of the in-branch fix set. They were corrected on main afterwards at Kenneth's direction, as a separate comment-only commit, which is why they are closed rather than open. || APPENDED 2026-09-25: one entry closed by COMPOSITE-WATCH-KEYERROR.",
     "items": [

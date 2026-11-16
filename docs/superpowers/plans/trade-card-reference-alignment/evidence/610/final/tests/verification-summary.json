@@ -1,0 +1,48 @@
+{
+  "application_commit": "e98f4d88226b8c03004aaa0f58889914dcc8260a",
+  "full_baseline": {
+    "suites": 345,
+    "passed_suites": 330,
+    "failed_suites": 15,
+    "tests": 6365,
+    "passed_tests": 6314,
+    "failed_tests": 51,
+    "report": "full-baseline.log.gz",
+    "sha256": "a0ff722d3c1880e324b120211ef2a731f15e62b0a33d8464106cc457703be964"
+  },
+  "final_corrected_suite_union": {
+    "passed_suites": 27,
+    "passed_tests": 623,
+    "covers_every_baseline_failure": true,
+    "baseline_failures": [
+      "app/(frame)/screener/step-4-prebreakout/__tests__/presentationShell.test.tsx",
+      "app/(frame)/screener/step-4-stocks/__tests__/autoExecute.methodPickExempt.test.tsx",
+      "app/(frame)/screener/step-4-stocks/__tests__/readableScanError.test.tsx",
+      "app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx",
+      "app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx",
+      "app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx",
+      "app/(frame)/screener/step-7-trade-card/__tests__/integrated-flows.test.tsx",
+      "app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx",
+      "components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx"
+    ],
+    "timeouts_unchanged": true,
+    "application_changes_during_finishing": 0
+  },
+  "interpretation": "Full baseline completed, then every changed/failed suite passed in the final union; this is not a claim that the original full invocation passed.",
+  "final_application_commit": "02169adf213693309404a9c0f166089f820320ae",
+  "qualifier_correction": {
+    "application_commit": "02169adf213693309404a9c0f166089f820320ae",
+    "application_diff": "exactly two text changes; no model/handler/formatter/persistence expression changed",
+    "suites_passed": 11,
+    "tests_passed": 168,
+    "report": "610-approx-tests.log",
+    "typecheck": "610-approx-typecheck.log",
+    "assertions_and_timeouts": "all numeric/safety/payload goldens/timeouts unchanged; one existing header expected string updated"
+  }
+}

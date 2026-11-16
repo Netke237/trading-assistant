@@ -1,0 +1,65 @@
+{
+  "baseline": "0a453f1940a077015949e760d02ef5a6d921f62a",
+  "scope": "Source accounting; not independent audit or proof of every rendered state",
+  "inventoryRecords": 1153,
+  "modules": [
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "baselineSha256": "bb6eedddec03f927b53b306bdcb6161623cb8a12a5c415efbc7a4078ccc913ac",
+      "currentSha256": "3141a44b4f1b8309ad103b31fcd16bec99549f9ba12612d014ed6a67916243ff",
+      "unchanged": false
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "baselineSha256": "07e8fb9271d0e92a1386240abb3af1811aa81c8a2fdcca8eef5316820c109e7a",
+      "currentSha256": "07e8fb9271d0e92a1386240abb3af1811aa81c8a2fdcca8eef5316820c109e7a",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
+      "baselineSha256": "4119e8977fe6daa3b0487fa44f051e8a8d82ba6101a6d5fdd33b354f1a76e6fd",
+      "currentSha256": "4119e8977fe6daa3b0487fa44f051e8a8d82ba6101a6d5fdd33b354f1a76e6fd",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "baselineSha256": "e652bdcf55126b6b07aba7908ea7125c062e49a2fe4de2fbd66af8a1de5bf9e3",
+      "currentSha256": "e652bdcf55126b6b07aba7908ea7125c062e49a2fe4de2fbd66af8a1de5bf9e3",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
+      "baselineSha256": "2f35e7b2ce629477a2d3edd7a67a53c564c166032bc3912bce75db09208de5de",
+      "currentSha256": "2f35e7b2ce629477a2d3edd7a67a53c564c166032bc3912bce75db09208de5de",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/scanChartLines.ts",
+      "baselineSha256": "1ba022948d6ac8c60988f9d057844826dff7f9737d0d20a68dca7294fac2c09c",
+      "currentSha256": "1ba022948d6ac8c60988f9d057844826dff7f9737d0d20a68dca7294fac2c09c",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/scanThresholds.ts",
+      "baselineSha256": "5b94f8d83376f6e2e1bbd8f09c6876c91ebe0dd4789a31afbc3ec63e2a59abf7",
+      "currentSha256": "5b94f8d83376f6e2e1bbd8f09c6876c91ebe0dd4789a31afbc3ec63e2a59abf7",
+      "unchanged": true
+    },
+    {
+      "file": "frontend/app/(frame)/screener/step-4-prebreakout/RawEvidence.tsx",
+      "baselineSha256": "9e55e906e659468d507c393ed96eda9d84ad906fbedf4baa9d18acdefc9961f2",
+      "currentSha256": "9e55e906e659468d507c393ed96eda9d84ad906fbedf4baa9d18acdefc9961f2",
+      "unchanged": true
+    }
+  ],
+  "controllerAndSelectionBeforeChartUnchanged": true,
+  "uniqueJsxTextUnits": 124,
+  "missingText": [],
+  "eventHandlerAttributes": 21,
+  "missingHandlerAttributes": [],
+  "fullComponentContentRetained": true,
+  "styleSha256": "bde897b1bb78bd2a86518f0cb623474fd2c1291fc52293ee17552e4681ba6505",
+  "permittedPresentationRenames": [
+    "Generic Confidence headers now identify Setup, Historical signal and Fib proximity confidence"
+  ]
+}

@@ -324,53 +324,6 @@ export default function Step4PreBreakoutPage() {
             Trending stocks that have pulled back to EMA {pullbackEmaParams.emaPeriod} (confirmed by EMA {pullbackEmaParams.trendEma} trend). Results are ranked by stock score.
           </Text>
 
-          <details className={styles.paramsPanel}>
-            <summary className={styles.paramsSummary}>
-              <Text size={12} tone="secondary">Scan parameters</Text>
-            </summary>
-            <div className={styles.pullbackParamsGrid}>
-              <label className={styles.paramLabel}>
-                <Text size={11} tone="dim">Signal MA — EMA {pullbackEmaParams.emaPeriod}</Text>
-                <Text size={10} tone="dim">
-                  Price must pull back to within 4% of this EMA from above (bullish) or bounce up to within 4% from below (bearish).
-                  ↑ Higher period → longer-term support level · ↓ Lower → faster-reacting MA
-                </Text>
-                <div className={styles.paramInput}>
-                  <input
-                    type="number"
-                    value={pullbackEmaParams.emaPeriod}
-                    min={5} max={200} step={1}
-                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, emaPeriod: Number(e.target.value) }))}
-                  />
-                  <Text size={11} tone="dim">periods</Text>
-                </div>
-              </label>
-              <label className={styles.paramLabel}>
-                <Text size={11} tone="dim">Trend MA — EMA {pullbackEmaParams.trendEma}</Text>
-                <Text size={10} tone="dim">
-                  Confirms the overall trend direction. Signal EMA must be above this for bullish, below for bearish.
-                  ↑ Higher period → filters for stronger established trends only
-                </Text>
-                <div className={styles.paramInput}>
-                  <input
-                    type="number"
-                    value={pullbackEmaParams.trendEma}
-                    min={20} max={500} step={5}
-                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, trendEma: Number(e.target.value) }))}
-                  />
-                  <Text size={11} tone="dim">periods</Text>
-                </div>
-              </label>
-              <button
-                type="button"
-                className={styles.resetBtn}
-                onClick={() => setPullbackEmaParams({ emaPeriod: 50, trendEma: 100 })}
-              >
-                Reset to defaults
-              </button>
-            </div>
-          </details>
-
           <div className={styles.inputRow}>
             <textarea
               className={styles.symbolInput}
@@ -400,7 +353,7 @@ export default function Step4PreBreakoutPage() {
                 <Text size={11} tone="dim" weight={500}>Dir</Text>
                 <Text size={11} tone="dim" weight={500}>Score</Text>
                 <Text size={11} tone="dim" weight={500}>Price</Text>
-                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <Text size={11} tone="dim" weight={500}>Historical signal confidence</Text>
                 <span />
               </div>
               {pullbackResults.map((row) => (
@@ -467,12 +420,6 @@ export default function Step4PreBreakoutPage() {
             </button>
           </div>
 
-          <FibPullbackParamsPanel
-            params={fibParams}
-            setParams={setFibParams}
-            onReset={() => setFibParams({ ...FIB_PULLBACK_DEFAULTS })}
-          />
-
           {error && <Text size={12} tone="reject">{error}</Text>}
           <SelectedSentimentFundamentals context={selectedContext}/>
 
@@ -485,7 +432,7 @@ export default function Step4PreBreakoutPage() {
                 <Text size={11} tone="dim" weight={500}>Fib Level</Text>
                 <Text size={11} tone="dim" weight={500}>Distance</Text>
                 <Text size={11} tone="dim" weight={500}>At Level</Text>
-                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <Text size={11} tone="dim" weight={500}>Fib proximity confidence</Text>
                 <span />
               </div>
               {fibResults.map((row) => (
@@ -559,12 +506,6 @@ export default function Step4PreBreakoutPage() {
             </button>
           </div>
 
-          <PreBreakoutParamsPanel
-            params={params}
-            setParams={setParams}
-            onReset={() => setParams({ ...PREBREAKOUT_DEFAULTS })}
-          />
-
           {error && <Text size={12} tone="reject">{error}</Text>}
           <SelectedSentimentFundamentals context={selectedContext}/>
 
@@ -574,7 +515,7 @@ export default function Step4PreBreakoutPage() {
               <div className={styles.tableHeader}>
                 <Text size={11} tone="dim" weight={500}>Symbol / Company</Text>
                 <Text size={11} tone="dim" weight={500}>Dir</Text>
-                <Text size={11} tone="dim" weight={500}>Confidence</Text>
+                <Text size={11} tone="dim" weight={500}>Setup confidence</Text>
                 <Text size={11} tone="dim" weight={500}>ATR Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Vol Ratio</Text>
                 <Text size={11} tone="dim" weight={500}>Proximity %</Text>
@@ -638,8 +579,89 @@ export default function Step4PreBreakoutPage() {
         </>
       )}
 
-      <SelectedStockScores context={selectedContext}/>
-      <SelectedStockNews symbol={selected?.symbol ?? null}/>
+      <details className={styles.researchPanel}>
+        <summary className={styles.researchSummary}>
+          <Text size={14} weight={500}>Stock Qualification</Text>
+          <Text size={11} tone="secondary">
+            {selectedContext.mode === 'pullback' && selected && 'stock_score' in selected
+              ? `Original Pullback EMA scan evidence · ${selected.symbol} · ${selected.direction} · ${applied?.scope.horizon ?? 'Captured horizon unavailable'}`
+              : selectedContext.live
+                ? `Separately fetched ${selectedContext.live.data.symbol} stock context · supplementary pullback_ema · ${selectedContext.live.request.direction} · requested horizon ${selectedContext.live.request.horizon}`
+                : selectedContext.reason}
+          </Text>
+          {selected && scanMode !== 'pullback' && <Text size={11} tone="dim">Supplementary pullback_ema analysis does not qualify the selected Pre-Breakout/Fib setup.</Text>}
+        </summary>
+        <div className={styles.researchBody}><SelectedStockScores context={selectedContext}/></div>
+      </details>
+
+      {scanMode === 'pullback' ? (
+          <details className={styles.paramsPanel}>
+            <summary className={styles.paramsSummary}>
+              <Text size={12} tone="secondary">Scan parameters</Text>
+            </summary>
+            <div className={styles.pullbackParamsGrid}>
+              <label className={styles.paramLabel}>
+                <Text size={11} tone="dim">Signal MA — EMA {pullbackEmaParams.emaPeriod}</Text>
+                <Text size={10} tone="dim">
+                  Price must pull back to within 4% of this EMA from above (bullish) or bounce up to within 4% from below (bearish).
+                  ↑ Higher period → longer-term support level · ↓ Lower → faster-reacting MA
+                </Text>
+                <div className={styles.paramInput}>
+                  <input
+                    type="number"
+                    value={pullbackEmaParams.emaPeriod}
+                    min={5} max={200} step={1}
+                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, emaPeriod: Number(e.target.value) }))}
+                  />
+                  <Text size={11} tone="dim">periods</Text>
+                </div>
+              </label>
+              <label className={styles.paramLabel}>
+                <Text size={11} tone="dim">Trend MA — EMA {pullbackEmaParams.trendEma}</Text>
+                <Text size={10} tone="dim">
+                  Confirms the overall trend direction. Signal EMA must be above this for bullish, below for bearish.
+                  ↑ Higher period → filters for stronger established trends only
+                </Text>
+                <div className={styles.paramInput}>
+                  <input
+                    type="number"
+                    value={pullbackEmaParams.trendEma}
+                    min={20} max={500} step={5}
+                    onChange={(e) => setPullbackEmaParams((p) => ({ ...p, trendEma: Number(e.target.value) }))}
+                  />
+                  <Text size={11} tone="dim">periods</Text>
+                </div>
+              </label>
+              <button
+                type="button"
+                className={styles.resetBtn}
+                onClick={() => setPullbackEmaParams({ emaPeriod: 50, trendEma: 100 })}
+              >
+                Reset to defaults
+              </button>
+            </div>
+          </details>
+      ) : scanMode === 'fib' ? (
+          <FibPullbackParamsPanel
+            params={fibParams}
+            setParams={setFibParams}
+            onReset={() => setFibParams({ ...FIB_PULLBACK_DEFAULTS })}
+          />
+      ) : (
+          <PreBreakoutParamsPanel
+            params={params}
+            setParams={setParams}
+            onReset={() => setParams({ ...PREBREAKOUT_DEFAULTS })}
+          />
+      )}
+
+      <details className={styles.researchPanel}>
+        <summary className={styles.researchSummary}>
+          <Text size={14} weight={500}>Stock &amp; industry news</Text>
+          <Text size={11} tone="secondary">{selected?.symbol ?? 'Select a candidate'} · Headlines · publisher · date · original link</Text>
+        </summary>
+        <div className={styles.researchBody}><SelectedStockNews symbol={selected?.symbol ?? null}/></div>
+      </details>
 
       {alertTarget && (
         <CompositeAlertDialog

@@ -14,7 +14,7 @@ const analysis=(symbol='AAA',direction='Bearish'):StockAnalysis=>({symbol,direct
 function select(symbol='AAA'){fireEvent.click(screen.getByRole('button',{name:`Select ${symbol}`}));}
 beforeEach(()=>{jest.clearAllMocks();useUniverseStore.setState({pick:'SP500'});const r=rows();rememberScan(r,snapshot);useScanStore.setState({context:null,preBreakoutResults:r,fibPullbackResults:[]});useRiskStore.setState({limits:{...useRiskStore.getState().limits,portfolioValue:54321,maxLossPerTradePct:.007}});(api.analyzeStock as jest.Mock).mockResolvedValue(analysis());});
 test('scoped live request uses selected direction/captured horizon and real risk; panels follow amended placement',async()=>{
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(api.analyzeStock).toHaveBeenCalledWith(expect.objectContaining({symbol:'AAA',direction:'Bearish',horizon:'Position',strategy:'pullback_ema',account_size:54321,risk_pct:.007}));
  const top=screen.getByRole('region',{name:'Selected sentiment and fundamentals'}),score=screen.getByRole('region',{name:'Selected stock score context'});
  expect(screen.getByRole('button',{name:'Run Scan'}).compareDocumentPosition(top)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -25,15 +25,15 @@ test('scoped live request uses selected direction/captured horizon and real risk
  expect(within(top).getByText(/Market backdrop.*Bullish.*CAUTION/)).toBeInTheDocument();
  expect(screen.getAllByText(/Score below minimum/).length).toBeGreaterThan(0);
 });
-test('legacy scope never falls back to live controls or launches analysis',async()=>{useScanStore.setState({preBreakoutResults:rows()});render(<Page/>);await act(async()=>select());expect(api.analyzeStock).not.toHaveBeenCalled();expect(screen.getAllByText(/Captured horizon unavailable/).length).toBeGreaterThan(0);});
+test('legacy scope never falls back to live controls or launches analysis',async()=>{useScanStore.setState({preBreakoutResults:rows()});renderPage();await act(async()=>select());expect(api.analyzeStock).not.toHaveBeenCalled();expect(screen.getAllByText(/Captured horizon unavailable/).length).toBeGreaterThan(0);});
 test('late response and stale fields are refused across symbol and result-array identity',async()=>{
- const pending:Array<(a:StockAnalysis)=>void>=[];(api.analyzeStock as jest.Mock).mockImplementation(()=>new Promise(resolve=>pending.push(resolve)));render(<Page/>);await act(async()=>select());await act(async()=>select('BBB'));
+ const pending:Array<(a:StockAnalysis)=>void>=[];(api.analyzeStock as jest.Mock).mockImplementation(()=>new Promise(resolve=>pending.push(resolve)));renderPage();await act(async()=>select());await act(async()=>select('BBB'));
  await act(async()=>pending[0](analysis()));expect(screen.queryByText('Company AAA')).not.toBeInTheDocument();await act(async()=>pending[1](analysis('BBB','Bullish')));expect(screen.getAllByText(/Company BBB/).length).toBeGreaterThan(0);
  const replacement=rows();rememberScan(replacement,snapshot);act(()=>useScanStore.setState({preBreakoutResults:replacement}));expect(screen.queryByText(/Company BBB/)).not.toBeInTheDocument();
  await act(async()=>{});await act(async()=>pending[2](analysis('BBB','Bullish')));expect(screen.getAllByText(/Company BBB/).length).toBeGreaterThan(0);
 });
-test.each([analysis('OTHER'),analysis('AAA','Bullish')])('mismatched response identity exposes no fields',async(response)=>{(api.analyzeStock as jest.Mock).mockResolvedValue(response);render(<Page/>);await act(async()=>select());expect(screen.queryByText(/Stock score: 0/)).not.toBeInTheDocument();expect(screen.getAllByText(/Response identity mismatch/).length).toBeGreaterThan(0);});
-test('live horizon control changes cannot relabel existing captured context',async()=>{render(<Page/>);await act(async()=>select());act(()=>useScanStore.setState({context:{direction:'Bullish',horizon:'Intraday'} as never}));expect(api.analyzeStock).toHaveBeenCalledTimes(1);expect(screen.getAllByText(/requested horizon Position/).length).toBeGreaterThan(0);});
+test.each([analysis('OTHER'),analysis('AAA','Bullish')])('mismatched response identity exposes no fields',async(response)=>{(api.analyzeStock as jest.Mock).mockResolvedValue(response);renderPage();await act(async()=>select());expect(screen.queryByText(/Stock score: 0/)).not.toBeInTheDocument();expect(screen.getAllByText(/Response identity mismatch/).length).toBeGreaterThan(0);});
+test('live horizon control changes cannot relabel existing captured context',async()=>{renderPage();await act(async()=>select());act(()=>useScanStore.setState({context:{direction:'Bullish',horizon:'Intraday'} as never}));expect(api.analyzeStock).toHaveBeenCalledTimes(1);expect(screen.getAllByText(/requested horizon Position/).length).toBeGreaterThan(0);});
 
 import {compatibleExplanation, SelectedStockScores, SelectedSentimentFundamentals} from '../SelectedStockContext';
 import type {StockExplanation} from '@/types/domain';
@@ -58,7 +58,7 @@ test('original Pullback evidence wins over live data and fundamentals safety/zer
  expect(screen.getByText('Stock score: 0 / 100')).toBeInTheDocument();expect(screen.queryByText(/Stock score: 99/)).not.toBeInTheDocument();expect(screen.getByText('Historical signal confidence: 0')).toBeInTheDocument();
  expect(screen.getAllByText(/negative equity/).length).toBeGreaterThan(0);expect(screen.getAllByText(/Strong Bearish/).length).toBeGreaterThan(0);expect(screen.getByText('Raw data: Complete original Pullback disclosure').parentElement).toHaveTextContent('Unvalidated original');
 });
-test('zero supplied risk is refused instead of defaulting to positive analysis sizing',async()=>{useRiskStore.setState({limits:{...useRiskStore.getState().limits,maxLossPerTradePct:0}});render(<Page/>);await act(async()=>select());expect(api.analyzeStock).not.toHaveBeenCalled();expect(screen.getAllByText(/positive account size and risk/).length).toBeGreaterThan(0);});
+test('zero supplied risk is refused instead of defaulting to positive analysis sizing',async()=>{useRiskStore.setState({limits:{...useRiskStore.getState().limits,maxLossPerTradePct:0}});renderPage();await act(async()=>select());expect(api.analyzeStock).not.toHaveBeenCalled();expect(screen.getAllByText(/positive account size and risk/).length).toBeGreaterThan(0);});
 test('missing original Pullback components stay unavailable alongside distinctly scoped live components and total',()=>{
  const original={...analysis(),stock_score:15,stock_explanation:null,strategy:{strategy:'pullback_ema'},backtest:{passes_gate:false},confidence:0,shares:1,dollar_risk:1,dollar_size:1} as never;
  const c={row:original,mode:'pullback' as const,snapshot:{...snapshot,scope:{...snapshot.scope,mode:'pullback' as const}},reason:'',live:{request:{symbol:'AAA',direction:'Bearish' as const,horizon:'Position' as const,strategy:'pullback_ema' as const},data:{...analysis(),stock_explanation:evidence()},fetchedAt:'2026-10-14T00:00:00Z'}};
@@ -68,12 +68,12 @@ test('missing original Pullback components stay unavailable alongside distinctly
 });
 test('late failure cannot erase a newer symbol success',async()=>{
  let rejectOld!:(e:Error)=>void;(api.analyzeStock as jest.Mock).mockImplementationOnce(()=>new Promise((_resolve,reject)=>{rejectOld=reject;})).mockResolvedValueOnce(analysis('BBB','Bullish'));
- render(<Page/>);await act(async()=>select());await act(async()=>select('BBB'));await act(async()=>rejectOld(new Error('Old failure')));
+ renderPage();await act(async()=>select());await act(async()=>select('BBB'));await act(async()=>rejectOld(new Error('Old failure')));
  expect(screen.getAllByText(/Company BBB/).length).toBeGreaterThan(0);expect(screen.queryByText(/analysis request failed/)).not.toBeInTheDocument();
 });
 test('live sentiment for another horizon is unavailable while same-symbol fundamentals remain supplied',async()=>{
  const data={...analysis(),sentiment:{horizon:'Swing',timeframe:'Daily',state:'Bear',p_stay:0,stability:'Low',regime_age_days:0,avg_regime_duration:0,conviction_pct:-30,conviction_label:'Strong Bearish',interpretation:'Wrong horizon',hmm_state:null,alignment:'Unavailable',insufficient_data:false},fundamentals:{score:0,quality_label:'Weak',risk_label:'High',growth_score:0,quality_score:0,risk_score:0,safety_flags:[],detail:{observed:0}}};(api.analyzeStock as jest.Mock).mockResolvedValue(data);
- render(<Page/>);await act(async()=>select());expect(screen.queryByText(/Wrong horizon/)).not.toBeInTheDocument();expect(screen.getByText(/Selected-stock sentiment unavailable/)).toBeInTheDocument();expect(screen.getByText('Raw data: Complete fundamental evidence and safety flags').parentElement).toHaveTextContent('observed');
+ renderPage();await act(async()=>select());expect(screen.queryByText(/Wrong horizon/)).not.toBeInTheDocument();expect(screen.getByText(/Selected-stock sentiment unavailable/)).toBeInTheDocument();expect(screen.getByText('Raw data: Complete fundamental evidence and safety flags').parentElement).toHaveTextContent('observed');
 });
 test.each([[25,'Supports selected direction'],[-25,'Opposes selected direction']] as const)('Bearish source conviction %s is already direction-aligned',(conviction_pct,label)=>{
  const data={...analysis(),sentiment:{horizon:'Position',timeframe:'Daily',state:'Bear',p_stay:0,stability:'Low',regime_age_days:0,avg_regime_duration:0,conviction_pct,conviction_label:'Source conviction',interpretation:'Direction-aligned source',hmm_state:null,alignment:'Unavailable',insufficient_data:false}};
@@ -91,3 +91,5 @@ test('supplementary raw disclosure stays open for unchanged source and closes fo
  expect(summary().closest('details')!.open).toBe(false);
  expect(JSON.parse(summary().closest('details')!.querySelector('pre')!.textContent!).earnings_days).toBe(7);
 });
+
+function renderPage(){const view=render(<Page/>);fireEvent.click(screen.getByText('Stock Qualification'));return view;}

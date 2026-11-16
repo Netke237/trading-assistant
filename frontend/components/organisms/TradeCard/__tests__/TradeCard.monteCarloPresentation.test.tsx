@@ -35,25 +35,36 @@ const show = (ctx: FirstPassageContext | null = context, fp = estimate(), overri
 beforeEach(() => { localStorage.clear(); jest.clearAllMocks(); });
 it('shows the captured estimate basis, all returned premiums and outcomes rather than scan/order/live prices', () => {
   const region = show();
-  expect(region.getByText('$190.00 Call')).toBeVisible();
-  expect(region.getByText('Scan stock reference')).toBeVisible();
-  expect(region.getByText('$185.20')).toBeVisible();
-  expect(region.getByText(/Stored Monte Carlo run stock entry: unavailable/)).toBeVisible();
+  // #606: the premium basis the outcomes subtract stays visible beside them;
+  // the remaining basis, model and provenance prose sits in the closed
+  // disclosure — present, unchanged, one click away.
   expect(region.getByText('Captured request premium (rounded to cents)')).toBeVisible();
   expect(region.getByText('$4.00/share')).toBeVisible();
-  expect(region.getByText('$8.00/share')).toBeVisible();
-  expect(region.getByText(/2 entered contracts × 100 shares.*selected-contract full exit/)).toBeVisible();
+  // #610 G8: the quantity basis stays visible in the short footnote; its
+  // full sentence is in the model disclosure.
+  expect(region.getByText(/Outcome: 2 contracts × 100 shares, full exit, before costs/)).toBeVisible();
+  expect(region.getAllByText(/2 entered contracts × 100 shares, selected-contract full exit/).length).toBeGreaterThan(0);
   for (const amount of ['$200.00', '$400.00', '$600.00']) expect(region.getByText(amount)).toBeVisible();
-  expect(region.getAllByText('Option premium')).toHaveLength(3);
-  expect(region.getAllByText('Probability before expiry')).toHaveLength(3);
-  expect(region.getByText('~8 calendar days')).toBeVisible();
+  expect(region.getAllByRole('row')).toHaveLength(4);
+  expect(region.getByRole('columnheader', { name: 'Probability (independent touch)' })).toBeVisible();
+  expect(region.getByRole('columnheader', { name: 'Conditional time (calendar days)' })).toBeVisible();
+  expect(region.getByText('~8d')).toBeVisible();
   expect(region.getByText('Unavailable — no conditional median')).toBeVisible();
   expect(region.getByText('not reachable')).toBeVisible();
-  expect(region.getAllByText('Structural level found')).toHaveLength(3);
-  expect(region.getByText(/GBM simulated stock paths.*Black-Scholes option repricing/)).toBeVisible();
-  expect(region.getByText(/even if a stop is also reached/)).toBeVisible();
-  expect(region.getByText(/calendar-day steps to expiry.*24 DTE/)).toBeVisible();
-  expect(region.getByText(/Monte Carlo does not propose a stop/)).toBeVisible();
+  const provenance = region.getByText('Monte Carlo model, inputs & provenance').closest('details')!;
+  expect(provenance.open).toBe(false);
+  const inside = within(provenance);
+  expect(inside.getByText('$190.00 Call')).toBeInTheDocument();
+  expect(inside.getByText('Scan stock reference')).toBeInTheDocument();
+  expect(inside.getByText('$185.20')).toBeInTheDocument();
+  expect(inside.getByText(/Stored Monte Carlo run stock entry: unavailable/)).toBeInTheDocument();
+  expect(inside.getByText('$8.00/share')).toBeInTheDocument();
+  expect(inside.getByText(/2 entered contracts × 100 shares · selected-contract full exit/)).toBeInTheDocument();
+  expect(inside.getAllByText('Structural level found')).toHaveLength(1);
+  expect(inside.getByText(/GBM simulated stock paths.*Black-Scholes option repricing/)).toBeInTheDocument();
+  expect(inside.getByText(/even if a stop is also reached/)).toBeInTheDocument();
+  expect(inside.getByText(/calendar-day steps to expiry.*24 DTE/)).toBeInTheDocument();
+  expect(inside.getByText(/Monte Carlo does not propose a stop/)).toBeInTheDocument();
   expect(region.queryByText(/Heston/)).not.toBeInTheDocument();
 });
 it.each([null, { ...context, premium: 0 }, { ...context, premium: NaN }])('does not invent dollar outcomes with absent/invalid request premium %p', (ctx) => {
@@ -97,14 +108,14 @@ it('uses server-rounded cents at a half-cent captured request premium', () => {
   expect(region.getByText('Same-estimate echoed premium')).toBeVisible();
   expect(region.getByText('$4.12/share')).toBeVisible();
   expect(region.getByText('$210.00')).toBeVisible();
-  expect(region.getByText(/Captured request premium: \$4.125\/share/)).toBeVisible();
+  expect(region.getByText(/Captured request premium: \$4.125\/share/)).toBeInTheDocument();
   expect(region.queryByText('$4.13/share')).not.toBeInTheDocument();
 });
 it.each([3.5, 0, NaN])('guards mismatched or invalid same-estimate echo %p', (premiumUsed) => {
   const fp = estimate(); fp.race = echo(premiumUsed);
   const region = show(context, fp);
   expect(region.getAllByText('Unavailable — estimate premium basis missing')).toHaveLength(4);
-  expect(region.getAllByText('Option premium')).toHaveLength(3);
+  expect(region.getAllByRole('row')).toHaveLength(4);
 });
 it('allows the valid server half-cent echo despite binary floating residue', () => {
   const fp = estimate(); fp.race = echo(2.67); fp.targets = [{ ...fp.targets[0], optionPrice: 3.21 }];
@@ -118,19 +129,26 @@ it('preserves missing returned prices and medians instead of printing nonfinite 
   expect(region.getAllByText('Unavailable')).toHaveLength(4);
   expect(region.getByText('Unavailable — no conditional median')).toBeVisible();
 });
-it('matches the primary execution loss amount on the live global basis, separately from the old scan seed', () => {
+// #606: Monte Carlo no longer repeats the actual Exit Plan settings; the
+// execution loss amount is read once, in the shared Exit Plan, on the same
+// live-global and low-premium pinned rules.
+it('reads the execution loss amount once, in the Exit Plan, on the live global basis rather than the old scan seed', () => {
   const region = show();
-  const loss = within(region.getByText('Execution premium-stop loss amount').closest('div')!);
-  expect(loss.getByText('$5.40/share · global 60%')).toBeVisible();
-  expect(loss.queryByText(/3.12/)).not.toBeInTheDocument();
+  expect(region.queryByText('Execution premium-stop loss amount')).not.toBeInTheDocument();
+  const exitPlan = within(screen.getByRole('region', { name: 'Exit Plan' }));
+  expect(exitPlan.getByText('60% loss · global')).toBeVisible();
+  expect(exitPlan.getByLabelText('Edit Premium stop')).toHaveTextContent('5.40');
+  expect(exitPlan.getByLabelText('Edit Premium stop')).not.toHaveTextContent('3.12');
 });
-it('uses the primary low-premium global/pinned rules for execution loss amount', () => {
+it('uses the primary low-premium global/pinned rules for the Exit Plan loss amount, not repeated by Monte Carlo', () => {
   const { rerender } = render(<TradeCard data={card} liveMid={0.01} />);
-  let region = within(screen.getByText('Monte Carlo Profit Target').closest('section')!);
-  expect(region.getByText('Global loss allowance: 60% (fill-derived)')).toBeVisible();
+  let exitPlan = within(screen.getByRole('region', { name: 'Exit Plan' }));
+  expect(exitPlan.getByText('global (60%)')).toBeVisible();
+  expect(within(screen.getByText('Monte Carlo Profit Target').closest('section')!).queryByText(/Global loss allowance/)).not.toBeInTheDocument();
   rerender(<TradeCard data={{ ...card, contract: 'AAPL 200C 05/15' }} liveMid={0.01} initialPremiumStop={0.005} />);
-  region = within(screen.getByText('Monte Carlo Profit Target').closest('section')!);
-  expect(region.getByText('$0.01/share · pinned')).toBeVisible();
+  exitPlan = within(screen.getByRole('region', { name: 'Exit Plan' }));
+  expect(exitPlan.getByText('$0.01 (pinned)')).toBeVisible();
+  expect(within(screen.getByText('Monte Carlo Profit Target').closest('section')!).queryByText(/· pinned/)).not.toBeInTheDocument();
 });
 
 // ── #579: Monte Carlo pre-run state, barrier inputs versus settings, stale race ─
@@ -185,8 +203,10 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     expect(region.getByRole('button', { name: 'Run Monte Carlo Estimate' })).toBeEnabled();
     expect(region.getByText('Not yet estimated')).toBeVisible();
     expect(region.getByText(/No estimate yet\. Nothing runs automatically/)).toBeVisible();
-    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(2);
-    expect(region.queryByText('Probability before expiry')).not.toBeInTheDocument();
+    // Both run barriers and both barrier-time stop values (#606), stated once
+    // before any estimate (#610 G7).
+    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(1);
+    expect(region.queryByRole('table', { name: 'Monte Carlo targets' })).not.toBeInTheDocument();
     expect(screen.queryByText(/Same simulation as the Monte Carlo card above/)).not.toBeInTheDocument();
   });
 
@@ -194,11 +214,11 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     await run();
     const region = mcRegion();
     expect(region.queryByText(/No estimate yet/)).not.toBeInTheDocument();
-    expect(region.getAllByText('Probability before expiry')).toHaveLength(3);
+    expect(within(region.getByRole('table', { name: 'Monte Carlo targets' })).getAllByRole('row')).toHaveLength(4);
     for (const [label, premium, stock, prob, time] of [
-      ['T25%', '$6.50', '$194.10', '61%', '~7 calendar days'],
-      ['T50%', '$7.80', '$198.20', '42%', '~11 calendar days'],
-      ['T75%', '$9.10', '$202.30', '27%', '~15 calendar days'],
+      ['T25%', '$6.50', '$194.10', '61%', '~7d'],
+      ['T50%', '$7.80', '$198.20', '42%', '~11d'],
+      ['T75%', '$9.10', '$202.30', '27%', '~15d'],
     ]) {
       // The label's id cell, then the row body that holds that target's own values.
       const row = within(region.getByText(label).parentElement!.parentElement!);
@@ -209,14 +229,13 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     }
   });
 
-  it('labels the race barriers as simulation inputs, distinct from the actual Exit Plan settings', async () => {
+  it('labels the race barriers as simulation inputs and points to, rather than repeats, the actual Exit Plan settings', async () => {
     await run();
     const region = mcRegion();
-    const inputs = region.getByText('Simulation inputs (captured at Run)');
-    const settings = region.getByText('Actual Exit Plan settings (not changed by Monte Carlo)');
-    expect(inputs.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(region.getByText('Companion race stock barrier').parentElement).toHaveTextContent('$180.00 stock');
-    expect(region.getByText('Execution stock invalidation').parentElement).toHaveTextContent('$179.64 stock');
+    expect(region.getByText('Stop context · simulation inputs and barrier-time race values')).toBeVisible();
+    expect(region.getByText('Stock barrier (run input)').parentElement).toHaveTextContent('$180.00 stock');
+    expect(region.queryByText('Execution stock invalidation')).not.toBeInTheDocument();
+    expect(region.getByText(/differs from the Exit Plan invalidation \$179\.64/)).toBeVisible();
     const why = region.getByText(/Simulation inputs are what the last run raced against/);
     expect(why).toHaveTextContent(/Arithmetic Plan structural \+ ATR stop.*structural level.*Exit Plan stock invalidation/);
     expect(why).toHaveTextContent(/Premium stop field when you changed it to a loss below the run's premium, else the risk-rules default percentage/);
@@ -237,8 +256,8 @@ describe('Monte Carlo and Barrier Race (#579)', () => {
     expect(document.querySelector('details summary')?.textContent ?? '').not.toMatch(/Stop medians, full risk/);
     expect(screen.getByText(/stock-stop probability is unaffected by the premium stop: 30%/)).toBeInTheDocument();
     const region = mcRegion();
-    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(2);
-    expect(region.getAllByText('Probability before expiry')).toHaveLength(3);
+    expect(region.getAllByText('Unavailable — run or re-run estimate to confirm barriers')).toHaveLength(4);
+    expect(region.getAllByRole('row')).toHaveLength(4);
     expect(region.getByText('61%')).toBeVisible();
   });
 });

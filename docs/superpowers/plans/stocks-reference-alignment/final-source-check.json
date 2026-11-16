@@ -1,0 +1,67 @@
+{
+  "baseline": "0a453f1940a077015949e760d02ef5a6d921f62a",
+  "scope": "Full phase source accounting; not an independent audit",
+  "protectedContracts": [
+    {
+      "name": "concentrationFlag",
+      "unchanged": true
+    },
+    {
+      "name": "applyMethodPick",
+      "unchanged": true
+    },
+    {
+      "name": "methodPickOptions",
+      "unchanged": true
+    },
+    {
+      "name": "submit",
+      "unchanged": true
+    },
+    {
+      "name": "onEstimate",
+      "unchanged": true
+    },
+    {
+      "name": "onArithmeticPlan",
+      "unchanged": true
+    },
+    {
+      "name": "onCheckStructure",
+      "unchanged": true
+    },
+    {
+      "name": "onAddToPortfolio",
+      "unchanged": true
+    }
+  ],
+  "baselineRecords": 1681,
+  "uniqueBaselineTextUnits": 152,
+  "exactTextMatches": 151,
+  "adaptedText": {
+    "Original selects the editable ladder; the initial scanned strategy targets above remain separate.": "Original selects the editable ladder; the initial scanned strategy targets in the disclosure below remain separate."
+  },
+  "missingText": [],
+  "sourceFiles": [
+    {
+      "file": "frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx",
+      "sha256": "5b4e6d824eb5c16d9f9ae27e8296141e61c139877e7e2c2f12e738d6cb3faec2"
+    },
+    {
+      "file": "frontend/components/organisms/StockPositionCard/PositionEvidence.tsx",
+      "sha256": "21194cff7c33c3f47efe7f94de4eb0c144c69bc8b81a660f74a3f0e1dee78068"
+    },
+    {
+      "file": "frontend/components/organisms/StockPositionCard/StockMethodWorkspace.tsx",
+      "sha256": "5030e866638b8d2bbe53364f8b3ace4363759dc41b5d3dcbc788eebb57da84fb"
+    },
+    {
+      "file": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "sha256": "2864aa60eb56d2a827798c3e9d08c0bf7075479418b743c64b5895dfab5535d7"
+    },
+    {
+      "file": "frontend/components/organisms/StockPositionCard/StockPositionCard.module.css",
+      "sha256": "dc96a9f2588938c28321a5081034713c3877957525b57d17eae5acd94e007cab"
+    }
+  ]
+}

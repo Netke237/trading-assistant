@@ -12,7 +12,9 @@ export function PositionEvidence({ card, pickMissing, earningsVeto, ownership, c
   const request = useScanStore(s => s.stockScanRequest);
   const bt = card.backtest;
   return <div className={checklistOnly ? undefined : styles.qualification} id={checklistOnly ? undefined : "qualification"}>
-    {!checklistOnly && <><section className={styles.workspaceCard} aria-label="Stock Scorecard">
+    {!checklistOnly && <><details className={styles.evidenceDisclosure}>
+      <summary><span>Stock Qualification</span><span className={styles.summaryContext}>{card.stock_status} · {number(card.stock_score, 0)} / 100</span></summary>
+      <section className={styles.workspaceCard} aria-label="Stock Scorecard">
       <h3>Stock Scorecard</h3>
       <Text size={12}>Final verdict: {card.stock_status}</Text>
       <Data size={18}>{number(card.stock_score, 0)} / 100</Data>
@@ -26,7 +28,9 @@ export function PositionEvidence({ card, pickMissing, earningsVeto, ownership, c
           {c.detail && Object.keys(c.detail).length > 0 && <details className={styles.factorDetails}><summary>Observations</summary>{Object.entries(c.detail).map(([name, value]) => <Text key={name} size={11} tone="secondary">{name}: {value == null ? 'Unavailable' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</Text>)}</details>}
         </div>)}
       </> : <Text size={12} tone="dim">Scorer factors unavailable</Text>}
-    </section>
+    </section></details>
+    <details className={styles.evidenceDisclosure}>
+      <summary><span>Backtest Evidence</span><span className={styles.summaryContext}>{bt.passes_gate ? 'PASS' : 'REJECT'} · {number(bt.n_trades, 0)} trades · {number(bt.win_rate, 0, 100, '%')} win rate</span></summary>
     <section className={styles.workspaceCard} aria-label="Backtest evidence">
       <h3>Backtest evidence</h3>
       <div className={styles.evidenceGrid}>{[
@@ -40,7 +44,7 @@ export function PositionEvidence({ card, pickMissing, earningsVeto, ownership, c
       <Text size={11} tone="secondary">{request?.bt_min_trades != null && request.bt_min_win_rate != null
         ? `Scan thresholds: ≥ ${request.bt_min_trades} trades · ≥ ${number(request.bt_min_win_rate, 0, 100, '%')} win rate`
         : 'Scan thresholds unavailable'}</Text>
-    </section>
+    </section></details>
     </>}
     {checklistOnly && <section className={styles.workspaceCard} aria-label="Pre-trade checklist">
       <h3>Pre-trade checklist</h3>

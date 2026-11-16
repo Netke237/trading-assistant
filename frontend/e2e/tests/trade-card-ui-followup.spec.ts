@@ -66,7 +66,7 @@ for (const theme of ['dark', 'light']) {
     expect(Math.max(...orderValues) - Math.min(...orderValues)).toBeLessThan(2);
     const exitValues = await exit.locator('[class*="kvRow"]').evaluateAll(rows => rows.map(row => row.children[1].getBoundingClientRect().right));
     expect(Math.max(...exitValues) - Math.min(...exitValues)).toBeLessThan(2);
-    const final = page.getByText('Final Recommendation').locator('..').locator('..');
+    const final = page.getByRole('region', { name: 'Decision and execution' });
     await expect(final.getByRole('radiogroup', { name: 'Exit method for this trade' })).toBeVisible();
     const ladder = final.getByRole('radio', { name: 'Ladder', exact: true });
     await ladder.focus();

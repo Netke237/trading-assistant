@@ -470,6 +470,10 @@ export interface PortfolioPosition {
   dteRemaining:  number;
   dteTotal:      number;
   entryPrice:    number;
+  /** Underlying stock price at entry (#630). For options: read from
+   *  entry_stock_price (null on legacy rows opened before the field existed).
+   *  For stock positions: mirrors entryPrice. */
+  entryStockPrice?: number | null;
   currentPrice: number;
   /** Live underlying stock price, refreshed on every portfolio sync — distinct from
    *  `scanStockPrice` (the one-time anchor captured when the position was opened).

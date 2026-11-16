@@ -149,6 +149,7 @@ async function renderPage() {
   render(<Step7TradeCardPage />);
   await waitFor(() => expect(screen.getByLabelText('Edit Limit')).toBeInTheDocument());
   await settle();
+  fireEvent.click(screen.getByText('What Track basket and direct sends will submit'));
 }
 
 const sendButton = (kind: 'LMT' | 'MKT') =>

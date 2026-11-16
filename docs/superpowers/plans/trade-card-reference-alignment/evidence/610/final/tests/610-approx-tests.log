@@ -1,0 +1,53 @@
+
+> bamendjou-frontend@0.1.0 test
+> jest --runInBand --runTestsByPath components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodComparison.test.tsx components/organisms/TradeCard/__tests__/TradeCard.monteCarloPresentation.test.tsx components/organisms/TradeCard/__tests__/TradeCard.arithmeticComparison.test.tsx components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx
+
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx (38.78 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.monteCarloPresentation.test.tsx (5.843 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx (10.018 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx (12.099 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodComparison.test.tsx (9.073 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.arithmeticComparison.test.tsx
+PASS app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx (10.46 s)
+  ● Console
+
+    console.log
+      [AUDIT] {
+        timestamp: '2026-11-10T05:36:05.353Z',
+        event: 'APPROVE',
+        recId: 'REC-1794288964579-IXTA',
+        details: { symbol: 'AAA', contract: 'AAA 150C 05/15', contracts: 1 }
+      }
+
+      at logAudit (lib/audit.ts:31:11)
+
+    console.log
+      [AUDIT] {
+        timestamp: '2026-11-10T05:36:06.620Z',
+        event: 'APPROVE',
+        recId: 'REC-1794288965601-FA4O',
+        details: { symbol: 'AAA', contract: 'AAA 150C 05/15', contracts: 2 }
+      }
+
+      at logAudit (lib/audit.ts:31:11)
+
+    console.log
+      [AUDIT] {
+        timestamp: '2026-11-10T05:36:08.956Z',
+        event: 'APPROVE',
+        recId: 'REC-1794288968201-9LLI',
+        details: { symbol: 'AAA', contract: 'AAA 150C 05/15', contracts: 1 }
+      }
+
+      at logAudit (lib/audit.ts:31:11)
+
+PASS components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx (6.124 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx (6.127 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx
+
+Test Suites: 11 passed, 11 total
+Tests:       168 passed, 168 total
+Snapshots:   0 total
+Time:        112.115 s, estimated 119 s
+Ran all test suites within paths "components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.methodComparison.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.monteCarloPresentation.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.arithmeticComparison.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx", "components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx", "app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx".

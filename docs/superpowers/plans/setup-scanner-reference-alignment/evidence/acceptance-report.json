@@ -1,0 +1,81 @@
+{
+  "scope": "Setup Scanner presentation acceptance; independent code audit separate",
+  "matrix": {
+    "modes": [
+      "prebreakout",
+      "pullback",
+      "fib"
+    ],
+    "widths": [
+      1280,
+      1366,
+      1920
+    ],
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "matrix_cases": 18
+  },
+  "additional_cases": 10,
+  "browser_total": 28,
+  "browser_passed": 28,
+  "browser_duration": "1.6m",
+  "jest_suites": 346,
+  "jest_tests": 6368,
+  "jest_duration_seconds": 368.951,
+  "typecheck": "passed",
+  "retained_screenshots": [
+    {
+      "file": "prebreakout-1366-dark-initial.png",
+      "sha256": "bb232b693aa003b4e7f51cfb4a1600b081194faaf6dc96f8db8d87335eb4b754",
+      "mode": "prebreakout",
+      "width": 1366,
+      "theme": "dark",
+      "state": "initial"
+    },
+    {
+      "file": "prebreakout-1366-dark-expanded.png",
+      "sha256": "48769e9fda8319e77727701d4abaa0ff15f111ff061317c79e5c0d0281ea11f9",
+      "mode": "prebreakout",
+      "width": 1366,
+      "theme": "dark",
+      "state": "expanded"
+    },
+    {
+      "file": "pullback-1366-light-initial.png",
+      "sha256": "0a6e25dff28e385197c4cface10e57f5be4f4fbc24352863f227e98b5e57c41a",
+      "mode": "pullback",
+      "width": 1366,
+      "theme": "light",
+      "state": "initial"
+    },
+    {
+      "file": "pullback-1366-light-expanded.png",
+      "sha256": "575e78250804c1c2273c72cfac5ada1b191bf0a22b1fffd59caf23716873a572",
+      "mode": "pullback",
+      "width": 1366,
+      "theme": "light",
+      "state": "expanded"
+    },
+    {
+      "file": "fib-1920-dark-initial.png",
+      "sha256": "b161c3e2736bdaa36f093b843e2338c8472b3a95a1d79543b8608eb451fabf06",
+      "mode": "fib",
+      "width": 1920,
+      "theme": "dark",
+      "state": "initial"
+    },
+    {
+      "file": "fib-1920-dark-expanded.png",
+      "sha256": "988c3aca5253b32b800ce7a3281965bff2df18bc690787fd984183205eb2b112",
+      "mode": "fib",
+      "width": 1920,
+      "theme": "dark",
+      "state": "expanded"
+    }
+  ],
+  "generated_matrix_screenshots": 36,
+  "retained_count": 6,
+  "note": "6 representative screenshots retained from36; final browser run after faithful CORS/report fixtures. Earlier interrupted/unsupported-width runs are not passes."
+}

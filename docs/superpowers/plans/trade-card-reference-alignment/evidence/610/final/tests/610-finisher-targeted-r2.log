@@ -1,0 +1,13 @@
+
+> bamendjou-frontend@0.1.0 test
+> jest --runInBand --silent --runTestsByPath components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx --json --outputFile=/tmp/610-finisher-targeted-r2.json
+
+PASS components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx (17.974 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx (9.361 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx
+
+Test Suites: 3 passed, 3 total
+Tests:       49 passed, 49 total
+Snapshots:   0 total
+Time:        29.861 s
+Test results written to: ../../../tmp/610-finisher-targeted-r2.json

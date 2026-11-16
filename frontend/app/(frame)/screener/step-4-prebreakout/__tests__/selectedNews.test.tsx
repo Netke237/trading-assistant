@@ -29,7 +29,7 @@ beforeEach(()=>{
 });
 
 test('no selection: no fetch, explanatory empty state, scope/source and industry unavailability stated, placed below stock cards',()=>{
- render(<Page/>);
+ renderPage();
  expect(api.getNews).not.toHaveBeenCalled();
  const region=news();
  expect(within(region).getByText(/Select a candidate to load its headlines/)).toBeInTheDocument();
@@ -41,7 +41,7 @@ test('no selection: no fetch, explanatory empty state, scope/source and industry
 });
 
 test('selected symbol only is fetched; headline, publisher, date and a safe external original link render; sentiment never shown',async()=>{
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(api.getNews).toHaveBeenCalledTimes(1);expect(api.getNews).toHaveBeenCalledWith(['AAA']);
  const region=news();
  expect(within(region).getByText('AAA · Stock & industry news')).toBeInTheDocument();
@@ -60,7 +60,7 @@ test.each([
  ['missing',undefined],['null',null],['empty',''],['no host','https://'],
 ])('%s link is explicitly unavailable, never a constructed anchor',async(_label,url)=>{
  (api.getNews as jest.Mock).mockResolvedValue([item({url:url as string|null|undefined})]);
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  const region=news();
  expect(within(region).getByText('AAA wins contract')).toBeInTheDocument();
  expect(within(region).queryByRole('link')).not.toBeInTheDocument();
@@ -69,7 +69,7 @@ test.each([
 
 test('blank publisher and blank/unparseable date use explicit fallbacks without invented values',async()=>{
  (api.getNews as jest.Mock).mockResolvedValue([item({id:'a',source:'',timestamp:''}),item({id:'b',headline:'Second',source:'  ',timestamp:'not a date'})]);
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  const region=news();
  expect(within(region).getAllByText(/Publisher unavailable/)).toHaveLength(2);
  expect(within(region).getAllByText(/Date unavailable/)).toHaveLength(2);
@@ -77,13 +77,13 @@ test('blank publisher and blank/unparseable date use explicit fallbacks without 
 
 test('no news returned → local empty state',async()=>{
  (api.getNews as jest.Mock).mockResolvedValue([]);
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(within(news()).getByText(/No headlines returned for AAA/)).toBeInTheDocument();
 });
 
 test('upstream error is local: table, chart shell and stock context stay',async()=>{
  (api.getNews as jest.Mock).mockRejectedValue(new Error('boom'));
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(within(news()).getByText(/Headlines unavailable for AAA — news request failed/)).toBeInTheDocument();
  expect(screen.getByRole('button',{name:'Select AAA'})).toHaveAttribute('aria-pressed','true');
  expect(screen.getByRole('button',{name:'Select BBB'})).toBeInTheDocument();
@@ -94,7 +94,7 @@ test('upstream error is local: table, chart shell and stock context stay',async(
 test('loading state is local and late replies for a previous selection are ignored',async()=>{
  const pending:Array<{resolve:(v:NewsItem[])=>void;reject:(e:Error)=>void}>=[];
  (api.getNews as jest.Mock).mockImplementation(()=>new Promise((resolve,reject)=>pending.push({resolve,reject})));
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(within(news()).getByText(/Loading headlines for AAA/)).toBeInTheDocument();
  await act(async()=>select('BBB'));
  expect(api.getNews).toHaveBeenLastCalledWith(['BBB']);
@@ -110,7 +110,7 @@ test('loading state is local and late replies for a previous selection are ignor
 
 test('an item tagged with another ticker is labelled with its own symbol, not relabelled or dropped',async()=>{
  (api.getNews as jest.Mock).mockResolvedValue([item(),item({id:'m',symbol:'MSFT',headline:'Cross-listed story'})]);
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  const region=news();
  const other=within(region).getByText('Cross-listed story').closest('li') as HTMLElement;
  expect(other).toHaveTextContent(/Tagged MSFT/);expect(other).toHaveTextContent(/returned for requested AAA/);
@@ -119,7 +119,7 @@ test('an item tagged with another ticker is labelled with its own symbol, not re
 });
 
 test('mode change clears stale headlines; Fib mode selection loads its own symbol news',async()=>{
- render(<Page/>);await act(async()=>select());
+ renderPage();await act(async()=>select());
  expect(within(news()).getByText('AAA wins contract')).toBeInTheDocument();
  await act(async()=>fireEvent.click(screen.getByRole('button',{name:'Fib Pullback'})));
  expect(screen.queryByText('AAA wins contract')).not.toBeInTheDocument();
@@ -129,3 +129,5 @@ test('mode change clears stale headlines; Fib mode selection loads its own symbo
  expect(api.getNews).toHaveBeenLastCalledWith(['FFF']);
  expect(within(news()).getByText('FFF headline')).toBeInTheDocument();
 });
+
+function renderPage(){const view=render(<Page/>);fireEvent.click(screen.getByText('Stock Qualification'));fireEvent.click(screen.getByText('Stock & industry news'));return view;}

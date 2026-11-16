@@ -1,8 +1,18 @@
 /** OPT-PRES-05: actual target rows and matched calculation-premium outcomes. */
 import '@testing-library/jest-dom';
-import { render, screen, within } from '@testing-library/react';
+import { render as renderCard, screen, within , fireEvent } from '@testing-library/react';
 import { TradeCard } from '@/components/organisms/TradeCard';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -52,29 +62,36 @@ const show = (p = plan(), overrides: Partial<TradeCardData> = {}) => {
   return within(screen.getByText('Arithmetic Profit Target').closest('section')!);
 };
 beforeEach(() => { localStorage.clear(); jest.clearAllMocks(); });
-// #580: rows instead of a horizontally scrolling table, in Monte Carlo's field
-// order; the original arithmetic target and snap geometry sit in an expansion.
+// #607: one compact table in Monte Carlo's column order; the original
+// arithmetic target, snap geometry and pricing model sit in a closed expansion.
+const rowsOf = (region: ReturnType<typeof show>) =>
+  within(region.getByRole('table', { name: 'Arithmetic targets' })).getAllByRole('row').slice(1);
 it('shows every custom returned row with resolved stock target, model and calendar median', () => {
   const region = show();
-  const list = within(region.getByRole('list', { name: 'Arithmetic target comparison' }));
-  expect(list.getAllByRole('listitem')).toHaveLength(3);
-  for (const ratio of ['2.5:1 target', '3.5:1 target', '4.5:1 target']) expect(list.getByText(ratio)).toBeVisible();
-  const first = within(list.getAllByRole('listitem')[0]);
-  for (const value of ['$196.00', '$6.50', '60%', '~8 calendar days', 'Delta approximation', '$500.00']) expect(first.getAllByText(value)[0]).toBeVisible();
-  expect(first.getByText('$195.00')).toBeInTheDocument(); // original arithmetic target, in the expansion
-  expect(region.getByText(/2 entered contracts × 100 shares.*selected-contract full exit/)).toBeVisible();
-  expect(region.getByText(/Stored calculation stock entry: unavailable/)).toBeVisible();
+  const rows = rowsOf(region);
+  expect(rows).toHaveLength(3);
+  for (const [i, ratio] of ['2.5:1', '3.5:1', '4.5:1'].entries()) expect(within(rows[i]).getByText(ratio)).toBeVisible();
+  const first = within(rows[0]);
+  for (const value of ['$196.00', '$6.50', '60%', '~8d', '$500.00']) expect(first.getAllByText(value)[0]).toBeVisible();
+  // Model and original arithmetic target are in the geometry expansion.
+  expect(region.getAllByText('Delta approximation')[0]).toBeInTheDocument();
+  expect(region.getAllByText('$195.00')[0]).toBeInTheDocument();
+  // #610 G8: the quantity basis stays visible in the short footnote; the full
+  // sentences are in the card's disclosures.
+  expect(region.getByText(/Outcome: 2 contracts × 100 shares, full exit, before commissions/)).toBeVisible();
+  expect(region.getAllByText(/2 entered contracts × 100 shares.*selected-contract full exit/)[0]).toBeInTheDocument();
+  expect(region.getByText(/Stored calculation stock entry: unavailable/)).toBeInTheDocument();
   expect(first.getByText(/Bearish target capped/)).toBeVisible();
-  expect(first.getByText(/test_quality_reason/)).toBeInTheDocument();
-  expect(within(list.getAllByRole('listitem')[1]).getByText('$0.00')).toBeVisible();
-  expect(within(list.getAllByRole('listitem')[1]).getByText('Unavailable — no conditional median')).toBeVisible();
+  expect(region.getAllByText(/test_quality_reason/)[0]).toBeInTheDocument();
+  expect(within(rows[1]).getByText('$0.00')).toBeVisible();
+  expect(within(rows[1]).getByText('Unavailable — no conditional median')).toBeVisible();
 });
 it.each(['missing', 'zero', 'nonfinite', 'mismatched'])('does not borrow scan, edited or live premium with %s calculation provenance', (basis) => {
   const p = plan();
   if (basis === 'missing') p.stop.stopCost = undefined;
   else p.stop.stopCost = { ...p.stop.stopCost!, ...(basis === 'zero' ? { premium: 0 } : basis === 'nonfinite' ? { premium: NaN } : { stopPrice: 179 }) };
   const region = show(p);
-  const first = within(within(region.getByRole('list')).getAllByRole('listitem')[0]);
+  const first = within(rowsOf(region)[0]);
   expect(first.getByText('Unavailable — calculation premium basis missing')).toBeVisible();
   expect(region.getByText('Calculation premium used')).toBeVisible();
   expect(region.queryByText('$4.00/share')).not.toBeInTheDocument();
@@ -86,7 +103,7 @@ it('names spread results as selected-contract outcomes rather than whole-spread 
 it('retains absent estimates instead of inventing probability, time or profit', () => {
   const p = plan(); p.targets = [row(5, { probability: NaN, expectedDays: null, contractPrice: NaN })];
   const region = show(p);
-  const result = within(within(region.getByRole('list')).getAllByRole('listitem')[0]);
+  const result = within(rowsOf(region)[0]);
   // Option premium, dollar outcome and probability; time has its own wording.
   expect(result.getAllByText('Unavailable')).toHaveLength(3);
 });

@@ -147,6 +147,7 @@ export function buildPaperStockPosition(
     contract:     `${symbol}|STOCK`,
     direction,
     entryPrice:   price,
+    entryStockPrice: price,
     contracts:    shares,
     entryDate:    today,
     expiry:       '',

@@ -193,3 +193,55 @@ describe('#582 basket dialog — server review before confirmation', () => {
     expect(region('AAA').getByText(/Server review unavailable/)).toBeInTheDocument();
   });
 });
+
+/* #609 (TC-ALIGN-06) — each row's tracking review reads destination-first:
+ * Portfolio tracking (no broker order), the contract with its full expiry,
+ * quantity and tracked entry; the actual position settings with the ≤3 DTE
+ * time-exit alert (alerts, not broker orders); the target-alert basis. The
+ * review fingerprint and saved-row id sit in a closed disclosure; the
+ * changed-since-review warning stays visible. */
+describe('#609 basket row review — concise destination-first arrangement', () => {
+  const detailsOf = (symbol: string) => screen.getByRole('region', { name: `Server review ${symbol}` }).querySelector('details[data-review-details]') as HTMLDetailsElement;
+
+  it('groups destination and request, actual position settings and the target-alert basis, all visible', async () => {
+    renderDialog();
+    await waitFor(() => expect(region('AAA').getByText(/Portfolio tracking · no broker order/)).toBeInTheDocument());
+    const dest = within(region('AAA').getByRole('group', { name: 'Destination and request' }));
+    expect(dest.getByText(/Portfolio tracking · no broker order/)).toBeVisible();
+    for (const f of ['contract', 'qty', 'entry', 'value']) expect(line('AAA', f).closest('[role="group"]')).toHaveAttribute('aria-label', 'Destination and request');
+    expect(dest.getByText('Expiry')).toBeVisible();
+    expect(dest.getByText('2026-05-15 · 24 DTE')).toBeVisible();
+
+    const settings = within(region('AAA').getByRole('group', { name: 'Position settings' }));
+    for (const f of ['stop', 'structuralStop', 'premiumStop']) expect(line('AAA', f).closest('[role="group"]')).toHaveAttribute('aria-label', 'Position settings');
+    expect(settings.getByText('Time-exit alert')).toBeVisible();
+    expect(settings.getByText(/≤3 days to expiry/)).toBeVisible();
+    expect(settings.getByText(/No protective stop-loss or take-profit order is sent to a broker/)).toBeVisible();
+
+    for (const f of ['targets', 'targetAlert']) expect(line('AAA', f).closest('[role="group"]')).toHaveAttribute('aria-label', 'Target alert basis');
+    expect(line('AAA', 'targetAlert')).toBeVisible();
+  });
+
+  it('keeps the review fingerprint and saved-row id in a closed disclosure, still in the DOM', async () => {
+    renderDialog();
+    await waitFor(() => expect(region('AAA').getByText(/Portfolio tracking · no broker order/)).toBeInTheDocument());
+    const d = detailsOf('AAA');
+    expect(d).not.toBeNull();
+    expect(d.open).toBe(false);
+    expect(within(d).getByText('v1:REC-AAA:1')).not.toBeVisible();
+    expect(within(d).getByText('REC-AAA')).not.toBeVisible();
+  });
+
+  it('the changed-since-review warning stays visible outside the disclosure', async () => {
+    const onSubmit = jest.fn().mockImplementationOnce(async (orders: ReviewedTrackingOrder[]) => ({
+      reviewRequired: { AAA: { ...orders[0]!.preview, fingerprint: 'v1:new', position: { ...orders[0]!.preview.position, entryPrice: 2.9 } } },
+    }));
+    renderDialog(onSubmit);
+    const submit = screen.getByRole('button', { name: 'Add 1 to Portfolio' });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    const warning = await waitFor(() => region('AAA').getByText(/Changed since your review — nothing was saved/));
+    expect(warning).toBeVisible();
+    expect(detailsOf('AAA').contains(warning)).toBe(false);
+  });
+});

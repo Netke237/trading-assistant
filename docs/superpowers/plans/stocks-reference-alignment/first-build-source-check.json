@@ -1,0 +1,67 @@
+{
+  "baseline": "0a453f1940a077015949e760d02ef5a6d921f62a",
+  "stage": "Task 1 only; not full-phase acceptance or an independent audit",
+  "protectedContracts": [
+    {
+      "name": "concentrationFlag",
+      "unchanged": true
+    },
+    {
+      "name": "applyMethodPick",
+      "unchanged": true
+    },
+    {
+      "name": "methodPickOptions",
+      "unchanged": true
+    },
+    {
+      "name": "submit",
+      "unchanged": true
+    },
+    {
+      "name": "onEstimate",
+      "unchanged": true
+    },
+    {
+      "name": "onArithmeticPlan",
+      "unchanged": true
+    },
+    {
+      "name": "onCheckStructure",
+      "unchanged": true
+    },
+    {
+      "name": "onAddToPortfolio",
+      "unchanged": true
+    }
+  ],
+  "allProtectedPresent": true,
+  "controllerBeforePresentationUnchanged": true,
+  "uniqueBaselineJsxTextUnits": 152,
+  "exactTextMatches": 151,
+  "adaptedText": [
+    {
+      "old": "Original selects the editable ladder; the initial scanned strategy targets above remain separate.",
+      "new": "Original selects the editable ladder; the initial scanned strategy targets in the disclosure below remain separate.",
+      "reason": "Directional reference updated to match moved original-strategy disclosure; substantive distinction retained."
+    }
+  ],
+  "sourceFiles": [
+    {
+      "file": "index.tsx",
+      "sha256": "01b3061fe691986c923886bb68a2fd63ed185df24477c0cfd8e8e708d42248a0"
+    },
+    {
+      "file": "PositionEvidence.tsx",
+      "sha256": "21194cff7c33c3f47efe7f94de4eb0c144c69bc8b81a660f74a3f0e1dee78068"
+    },
+    {
+      "file": "StockPositionCard.module.css",
+      "sha256": "710b1cfdb04db89106f6cc5edca5e01bdd034e3473f45cbeaaedc4162b3147a2"
+    },
+    {
+      "file": "InitialStrategyTargets.tsx",
+      "sha256": "5b4e6d824eb5c16d9f9ae27e8296141e61c139877e7e2c2f12e738d6cb3faec2"
+    }
+  ]
+}

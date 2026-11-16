@@ -1,0 +1,248 @@
+
+> bamendjou-frontend@0.1.0 test
+> jest --runInBand --silent --runTestsByPath app/(frame)/screener/step-4-prebreakout/__tests__/presentationShell.test.tsx app/(frame)/screener/step-4-stocks/__tests__/autoExecute.methodPickExempt.test.tsx app/(frame)/screener/step-4-stocks/__tests__/readableScanError.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/broker-review.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/direct-send-expiry.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/integrated-flows.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx app/(frame)/screener/step-7-trade-card/__tests__/submission-review.test.tsx components/molecules/MethodPickSelector/__tests__/MethodPickSelector.test.tsx components/organisms/BarrierRaceCard/__tests__/BarrierRaceCard.test.tsx components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx components/organisms/SubmissionReview/__tests__/SubmissionReview.test.tsx components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodComparison.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx components/organisms/TradeCard/__tests__/TradeCard.submissionReview.test.tsx components/organisms/TradeCard/__tests__/TradeCard.test.tsx components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx --json --outputFile=/tmp/610-finisher-targeted-r1.json
+
+PASS app/(frame)/screener/step-7-trade-card/__tests__/direct-send-save-first.test.tsx (106.922 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/direct-send-stop-gate.test.tsx (20.365 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/contracts-sync.test.tsx (7.37 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodPick.test.tsx (25.846 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/submission-payload-golden.test.tsx (8.136 s)
+PASS app/(frame)/screener/step-4-prebreakout/__tests__/presentationShell.test.tsx
+PASS app/(frame)/screener/step-4-stocks/__tests__/autoExecute.methodPickExempt.test.tsx
+PASS app/(frame)/screener/step-4-stocks/__tests__/readableScanError.test.tsx
+PASS app/(frame)/screener/step-7-trade-card/__tests__/integrated-flows.test.tsx (11.427 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodSwitch.test.tsx
+FAIL components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx
+  ● G15 — editable fields carry an Editable tag › tags the Exit Plan and Order Entry editables, and not the read-only rows
+
+    TestingLibraryElementError: Unable to find an element with the text: Contracts. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+    Ignored nodes: comments, script, style
+    [36m<section[39m
+      [33maria-label[39m=[32m"Order Entry"[39m
+      [33mclass[39m=[32m"entryColumn"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"kvRow kvRowEditable"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"editLabel"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text s12 w400 toneSecondary"[39m
+          [36m>[39m
+            [0mLimit[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text s10 w400 toneAccent editableTag"[39m
+          [36m>[39m
+            [0mEditable[0m
+          [36m</span>[39m
+        [36m</span>[39m
+        [36m<span[39m
+          [33maria-label[39m=[32m"Edit Limit"[39m
+          [33mclass[39m=[32m"editValue"[39m
+          [33mdata-editable[39m=[32m"true"[39m
+          [33mrole[39m=[32m"button"[39m
+          [33mtabindex[39m=[32m"0"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"data s13 w500"[39m
+          [36m>[39m
+            [0m$2.50[0m
+          [36m</span>[39m
+        [36m</span>[39m
+        [36m<span[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"editRejectedEmpty"[39m
+        [36m/>[39m
+      [36m</div>[39m
+      [36m<span[39m
+        [33mclass[39m=[32m"text s12 w400"[39m
+      [36m>[39m
+        [0mOrder type [0m
+        [0mLimit[0m
+        [0m · Max fill $[0m
+        [0m2.63[0m
+      [36m</span>[39m
+    [36m</section>[39m
+
+      156 |     render(<TradeCard data={card} />);
+      157 |     const exit = screen.getByRole('region', { name: 'Exit Plan' });
+    > 158 |     const row = (root: HTMLElement, label: string) => within(root).getAllByText(label)
+          |                                                                    ^
+      159 |       .find((el) => el.classList.contains('toneSecondary'))!.closest('[class*="kvRow"]') as HTMLElement;
+      160 |     expect(within(row(exit, 'Invalidation')).getByText('Editable')).toHaveClass('toneAccent');
+      161 |     expect(within(row(exit, 'Premium stop')).getByText('Editable')).toBeInTheDocument();
+
+      at Object.getElementError (../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/config.js:37:19)
+      at ../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+      at ../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/query-helpers.js:109:15
+      at row (components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx:158:68)
+      at Object.<anonymous> (components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx:164:19)
+
+FAIL components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx (9.353 s)
+  ● editable versus read-only styling › read-only max fill, order type, time exit and computed values do not look editable
+
+    expect(received).toBeNull()
+
+    Received: <span aria-label="Edit Limit" data-editable="true" role="button" tabindex="0"><span class="">$5.20</span></span>
+
+      310 |     for (const label of [/Order type Limit · Max fill \$5\.40/, 'Time exit']) {
+      311 |       const row = screen.getByText(label).parentElement as HTMLElement;
+    > 312 |       expect(row.querySelector('[data-editable]')).toBeNull();
+          |                                                    ^
+      313 |       expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+      314 |     }
+      315 |     const list = exitPlan().getByRole('group', { name: 'Premium-loss values' });
+
+      at Object.<anonymous> (components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx:312:52)
+
+FAIL components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx (7.618 s)
+  ● keeps a sparse race with invalid repricing time NaN renderable
+
+    expect(element).toHaveTextContent()
+
+    Expected element to have text content:
+      Unavailable — could not reprice at the stop
+    Received:
+      Loss at stock stop (barrier time, per contract)Unavailable — differs by target; choose a Barrier Race target
+
+      285 |   render(<TradeCard data={card} />);
+      286 |   await run();
+    > 287 |   expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('Unavailable — could not reprice at the stop');
+          |                                                                 ^
+      288 |   expect(stopSlot().getByText(/Stock-stop repricing time unavailable/)).toBeVisible();
+      289 |   expect(kv('Stock barrier (run input)')).toHaveTextContent('$180.00 stock');
+      290 | });
+
+      at components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx:287:65
+
+PASS components/organisms/TradeCard/__tests__/TradeCard.verification.test.tsx (7.801 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodTargetTables.test.tsx (5.623 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.test.tsx (67.057 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/direct-send-expiry.test.tsx (14.896 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/broker-review.test.tsx (34.328 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.methodComparison.test.tsx (8.545 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.decisionGroup.test.tsx (7.616 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.orderBudget.test.tsx (5.847 s)
+PASS app/(frame)/screener/step-7-trade-card/__tests__/submission-review.test.tsx (6.874 s)
+PASS components/organisms/TradeCard/__tests__/TradeCard.submissionReview.test.tsx
+PASS components/organisms/BarrierRaceCard/__tests__/BarrierRaceCard.test.tsx
+PASS components/organisms/BrokerOrderReview/__tests__/BrokerOrderReview.test.tsx
+PASS components/organisms/SubmissionReview/__tests__/SubmissionReview.test.tsx
+PASS components/molecules/MethodPickSelector/__tests__/MethodPickSelector.test.tsx
+
+Summary of all failing tests
+FAIL components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx
+  ● G15 — editable fields carry an Editable tag › tags the Exit Plan and Order Entry editables, and not the read-only rows
+
+    TestingLibraryElementError: Unable to find an element with the text: Contracts. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+    Ignored nodes: comments, script, style
+    [36m<section[39m
+      [33maria-label[39m=[32m"Order Entry"[39m
+      [33mclass[39m=[32m"entryColumn"[39m
+    [36m>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"kvRow kvRowEditable"[39m
+      [36m>[39m
+        [36m<span[39m
+          [33mclass[39m=[32m"editLabel"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text s12 w400 toneSecondary"[39m
+          [36m>[39m
+            [0mLimit[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"text s10 w400 toneAccent editableTag"[39m
+          [36m>[39m
+            [0mEditable[0m
+          [36m</span>[39m
+        [36m</span>[39m
+        [36m<span[39m
+          [33maria-label[39m=[32m"Edit Limit"[39m
+          [33mclass[39m=[32m"editValue"[39m
+          [33mdata-editable[39m=[32m"true"[39m
+          [33mrole[39m=[32m"button"[39m
+          [33mtabindex[39m=[32m"0"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mclass[39m=[32m"data s13 w500"[39m
+          [36m>[39m
+            [0m$2.50[0m
+          [36m</span>[39m
+        [36m</span>[39m
+        [36m<span[39m
+          [33maria-live[39m=[32m"polite"[39m
+          [33mclass[39m=[32m"editRejectedEmpty"[39m
+        [36m/>[39m
+      [36m</div>[39m
+      [36m<span[39m
+        [33mclass[39m=[32m"text s12 w400"[39m
+      [36m>[39m
+        [0mOrder type [0m
+        [0mLimit[0m
+        [0m · Max fill $[0m
+        [0m2.63[0m
+      [36m</span>[39m
+    [36m</section>[39m
+
+      156 |     render(<TradeCard data={card} />);
+      157 |     const exit = screen.getByRole('region', { name: 'Exit Plan' });
+    > 158 |     const row = (root: HTMLElement, label: string) => within(root).getAllByText(label)
+          |                                                                    ^
+      159 |       .find((el) => el.classList.contains('toneSecondary'))!.closest('[class*="kvRow"]') as HTMLElement;
+      160 |     expect(within(row(exit, 'Invalidation')).getByText('Editable')).toHaveClass('toneAccent');
+      161 |     expect(within(row(exit, 'Premium stop')).getByText('Editable')).toBeInTheDocument();
+
+      at Object.getElementError (../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/config.js:37:19)
+      at ../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+      at ../../trading-assistant/frontend/node_modules/@testing-library/dom/dist/query-helpers.js:109:15
+      at row (components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx:158:68)
+      at Object.<anonymous> (components/organisms/TradeCard/__tests__/TradeCard.typography.test.tsx:164:19)
+
+FAIL components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx (9.353 s)
+  ● editable versus read-only styling › read-only max fill, order type, time exit and computed values do not look editable
+
+    expect(received).toBeNull()
+
+    Received: <span aria-label="Edit Limit" data-editable="true" role="button" tabindex="0"><span class="">$5.20</span></span>
+
+      310 |     for (const label of [/Order type Limit · Max fill \$5\.40/, 'Time exit']) {
+      311 |       const row = screen.getByText(label).parentElement as HTMLElement;
+    > 312 |       expect(row.querySelector('[data-editable]')).toBeNull();
+          |                                                    ^
+      313 |       expect(within(row).queryByRole('button')).not.toBeInTheDocument();
+      314 |     }
+      315 |     const list = exitPlan().getByRole('group', { name: 'Premium-loss values' });
+
+      at Object.<anonymous> (components/organisms/TradeCard/__tests__/TradeCard.exitSettings.test.tsx:312:52)
+
+FAIL components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx (7.618 s)
+  ● keeps a sparse race with invalid repricing time NaN renderable
+
+    expect(element).toHaveTextContent()
+
+    Expected element to have text content:
+      Unavailable — could not reprice at the stop
+    Received:
+      Loss at stock stop (barrier time, per contract)Unavailable — differs by target; choose a Barrier Race target
+
+      285 |   render(<TradeCard data={card} />);
+      286 |   await run();
+    > 287 |   expect(kv('Loss at stock stop (barrier time, per contract)')).toHaveTextContent('Unavailable — could not reprice at the stop');
+          |                                                                 ^
+      288 |   expect(stopSlot().getByText(/Stock-stop repricing time unavailable/)).toBeVisible();
+      289 |   expect(kv('Stock barrier (run input)')).toHaveTextContent('$180.00 stock');
+      290 | });
+
+      at components/organisms/TradeCard/__tests__/TradeCard.monteCarloEssentials.test.tsx:287:65
+
+
+Test Suites: 3 failed, 24 passed, 27 total
+Tests:       3 failed, 620 passed, 623 total
+Snapshots:   0 total
+Time:        375.695 s, estimated 911 s
+Test results written to: ../../../tmp/610-finisher-targeted-r1.json

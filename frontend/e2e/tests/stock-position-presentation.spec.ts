@@ -68,7 +68,7 @@ const candidate = (symbol = 'AAPL', direction: 'Bullish' | 'Bearish' = 'Bullish'
   stock_explanation: { status: 'PASS', components: Object.fromEntries(['trend', 'pullback', 'trigger', 'event', 'volatility'].map(name => [name, { name, raw_score: 80, measured: true, weight: .2, contribution: 16 }])) },
 });
 
-for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const) for (const direction of ['Bullish', 'Bearish'] as const) test(`Position workspace preserves ${direction} save payload at ${width}px in ${theme}`, async ({ page }, testInfo) => {
+for (const width of [1200, 1366, 1920]) for (const theme of ['dark', 'light'] as const) for (const direction of ['Bullish', 'Bearish'] as const) test(`Position workspace preserves ${direction} save payload at ${width}px in ${theme}`, async ({ page }, testInfo) => {
   const bullish = direction === 'Bullish';
   const stockTarget = bullish ? 160 : 140;
   const executionStop = bullish ? 145 : 155;
@@ -82,6 +82,7 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   test.setTimeout(90_000);
   await page.setViewportSize({ width, height: 1080 });
   const saves: Record<string, unknown>[] = [];
+  const calculations: string[] = [];
   await page.route('**/api/portfolio', async route => {
     if (route.request().method() === 'POST') {
       saves.push(route.request().postDataJSON());
@@ -92,8 +93,8 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
     const url = route.request().url();
     if (url.endsWith('/api/portfolio')) return route.fallback();
     if (url.includes('/quote')) return route.fulfill({ json: { price: 151 } });
-    if (url.includes('exit-plan')) return route.fulfill({ json: plan });
-    if (url.includes('first-passage')) return route.fulfill({ json: { targets: [{ price: stockTarget, probability: .62, expectedDays: 4.5 }], invalidation: { probability: .28, expectedDays: 6 }, horizonDays: 10, modelCaveat: 'Mock model evidence' } });
+    if (url.includes('exit-plan')) { calculations.push('arithmetic'); return route.fulfill({ json: plan }); }
+    if (url.includes('first-passage')) { calculations.push('monte-carlo'); return route.fulfill({ json: { targets: [{ price: stockTarget, probability: .62, expectedDays: 4.5 }], invalidation: { probability: .28, expectedDays: 6 }, horizonDays: 10, modelCaveat: 'Mock model evidence' } }); }
     if (route.request().method() !== 'GET') return route.fulfill({ status: 500, json: { detail: 'Unexpected test mutation' } });
     return route.fallback();
   });
@@ -107,11 +108,57 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.goto('/screener/step-7-position-card');
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
   await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible();
+  const views = page.getByRole('group', { name: 'View method results' });
+  const ladder = page.getByRole('region', { name: 'Original ladder evidence' });
+  const mc = page.getByRole('region', { name: 'Monte Carlo evidence' });
+  const arithmetic = page.getByRole('region', { name: 'Arithmetic evidence' });
+  await expect(views.getByRole('button', { name: 'Ladder', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(ladder).toBeVisible();
+  await expect(mc).toBeHidden();
+  await expect(arithmetic).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-initial.png`), fullPage: true });
+  await views.getByRole('button', { name: 'Monte Carlo', exact: true }).click();
+  await expect(mc).toBeVisible();
+  await views.getByRole('button', { name: 'Compare', exact: true }).click();
+  await expect(mc).toBeVisible();
+  await expect(arithmetic).toBeVisible();
+  await expect(ladder).toBeHidden();
+  expect(calculations).toEqual([]);
+  const checkPair = async () => {
+    const left = await mc.boundingBox();
+    const right = await arithmetic.boundingBox();
+    expect(left).not.toBeNull(); expect(right).not.toBeNull();
+    expect(Math.abs(left!.width - right!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(left!.height - right!.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(left!.y - right!.y)).toBeLessThanOrEqual(1);
+    const leftHeader = await mc.getByRole('columnheader', { name: 'Conditional median', exact: true }).boundingBox();
+    const rightHeader = await arithmetic.getByRole('columnheader', { name: 'Conditional median', exact: true }).boundingBox();
+    expect(Math.abs(leftHeader!.y - rightHeader!.y)).toBeLessThanOrEqual(1);
+  };
+  await checkPair();
+  await views.getByRole('button', { name: 'Ladder', exact: true }).click();
+  await expect(page.getByTestId('visible-method-card')).toHaveCount(3);
+  const third = await arithmetic.boundingBox();
+  const first = await ladder.boundingBox();
+  const second = await mc.boundingBox();
+  expect(Math.abs(first!.width - third!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(first!.width - second!.width)).toBeLessThanOrEqual(1);
+  expect(third!.y).toBeGreaterThan(first!.y);
+  const firstHeader = await ladder.getByRole('columnheader', { name: 'Conditional median', exact: true }).boundingBox();
+  const secondHeader = await mc.getByRole('columnheader', { name: 'Conditional median', exact: true }).boundingBox();
+  expect(Math.abs(firstHeader!.y - secondHeader!.y)).toBeLessThanOrEqual(1);
+  await views.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-compare-three.png`), fullPage: true });
+  await views.getByRole('button', { name: 'Ladder', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Stock Qualification/ }).click();
+  await page.locator('summary').filter({ hasText: /^Backtest Evidence/ }).click();
   await expect(page.getByText('Final verdict: CAUTION')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Backtest evidence' }).getByText('70%', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('Microsoft Corporation')).toBeVisible();
   await page.getByRole('button', { name: 'Prev', exact: true }).click();
+  // Candidate navigation remounts local viewing state; reveal both methods again.
+  await views.getByRole('button', { name: 'Compare', exact: true }).click();
   await page.getByText('How this page works', { exact: true }).focus();
   await page.keyboard.press('Enter');
   await page.getByText('Auto-trade execution', { exact: true }).focus();
@@ -120,16 +167,25 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.getByText('Auto-trade execution', { exact: true }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('link', { name: 'Calculations', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Latest calculation$/ }).click();
   await page.getByRole('button', { name: 'Estimate', exact: true }).click();
   await expect(page.getByText('Latest: Monte Carlo')).toBeVisible();
   await page.getByRole('button', { name: 'Arithmetic plan', exact: true }).click();
   await expect(page.getByText('Latest: Arithmetic')).toBeVisible();
+  expect(calculations).toEqual(['monte-carlo', 'arithmetic']);
+  await checkPair();
+  await expect(mc.getByRole('table').first()).toContainText('$300.00');
+  await expect(arithmetic.getByRole('table').first()).toContainText('$360.00');
+  await expect(arithmetic.getByRole('table').first()).toContainText('~7.5 trading days');
+  await views.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-compare-two.png`), fullPage: true });
   const summary = page.getByRole('region', { name: 'Selected stock plan' });
   await page.getByRole('radio', { name: 'Arithmetic', exact: true }).click();
   await page.getByRole('radio', { name: '2R', exact: true }).click();
   await expect(summary).toContainText('$360.00');
   await expect(summary).toContainText('7.5 trading days');
   await expect(summary).toContainText('Arithmetic final stop');
+  await page.locator('summary').filter({ hasText: /^Structure & Stops$/ }).click();
   await expect(page.getByRole('region', { name: 'Entered execution stop' })).toContainText(`$${executionStop.toFixed(2)}`);
   await page.getByRole('radio', { name: 'Ladder', exact: true }).click();
   await expect(summary).toContainText('Choose a target');
@@ -149,6 +205,7 @@ for (const width of [1200, 1920]) for (const theme of ['dark', 'light'] as const
   await page.evaluate(() => document.querySelectorAll('*').forEach(el => { el.scrollTop = 0; }));
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}.png`), fullPage: true });
   await page.getByRole('link', { name: 'Which comes first', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Which comes first · graphical outcomes & full details$/ }).click();
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-calculations.png`), fullPage: true });
   await page.getByRole('link', { name: 'Qualification', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath(`position-${direction}-${theme}-${width}-qualification.png`), fullPage: true });

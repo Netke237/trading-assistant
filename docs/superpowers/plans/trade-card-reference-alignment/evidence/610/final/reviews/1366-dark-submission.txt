@@ -1,0 +1,271 @@
+Skip to content
+BAMENDJOU
+Options Screener
+Last option scan: SP500 · Bullish · Swing (5–15d) · Nov 10 · 05:41 AM
+COMPLETED · STARTED NOV 10 · 05:41 AM
+PENDING
+CLOSED
+·
+opens 15:30 CET
+Config OK · 10 checks
+Market Regime
+Universe
+Direction + Horizon
+Stock Ranking
+Vol + Events
+Contracts
+7
+Trade Card
+← Exit Workflow
+COMPLETED
+05:41 AM
+Options
+Stocks
+Pre-Breakout
+STEP 7 OF 7
+Trade Card
+How this page works
+Market Sentiment
+Swing · Daily
+Conviction
++73%
+Bullish — Measured market context for this horizon.
+State Bullish · sticky 73% · ≈12 strides
+Alignment
+OMM/HMM Aligned
+Fundamental Health
+74
+Strong quality · Low risk
+Growth
+80
+Quality
+75
+Risk
+65
+High debt
+Score definitions & safety flags
+‹ Previous
+·
+AAPL
+1 / 2
+·
+Next ›
+☆ Pin to basket
+Basket — empty
+UNDERLYING
+📈
+AAPL
+Apple Inc.
+$185.20
+PASS
+BULLISH
+Final Status
+PASS
+SELECTED CONTRACT
+$185 Call
+Expires 18 December 2026
+75 days to expiry · Option mid $2.15 / share
+Contract Details
+Contract snapshot
+·
+AAPL|185|2026-12-18|C
+Stock and contract snapshots · live quotes, calculation results and order inputs are shown separately.
+Strike
+$185
+Expiry
+2026-12-18
+Right
+Call
+Mid
+$2.15
+Delta
+0.52
+Theta / day
+−$0.05
+IV
+42.0%
+DTE
+75d
+Capital at risk
+$215
+›
+Stock Qualification
+82/100 · PASS · backtested confidence 72%
+Exit Plan
+Invalidation · stock price
+EDITABLE
+$180.00
+Premium stop · loss / share
+EDITABLE
+$1.29
+60% loss · global
+Remaining: $0.86/share · $86.00 / contract
+Loss: $129.00 / contract
+Time exit
+3 days to expiry
+Alert at ≤3 DTE · no automatic close
+Exit Plan explanation · stop basis, premium & time exit
+Profit-target methods
+Monte Carlo
+Arithmetic
+Ladder
+Compare
+Display only — switching or comparing runs no calculation and does not change the decision’s exit method or the order and exit fields.
+Monte Carlo Profit Target
+Your percentage targets
+T1 profit %
+EDITABLE
+T2 profit %
+EDITABLE
+T3 profit %
+EDITABLE
+Run Monte Carlo Estimate
+No estimate yet. Nothing runs automatically — run the estimate to see target values, probabilities and times; the Barrier Race appears after it finishes.
+Premium basis (captured request premium, rounded to cents): Not yet estimated
+Stop context · simulation inputs and barrier-time race values
+Stock barrier, option-price barrier, and option value and loss at the stock stop (barrier time): Unavailable — run or re-run estimate to confirm barriers
+Barrier Race · graphical outcomes & details
+Monte Carlo model, inputs & provenance
+Entry & position size
+Existing fields
+Limit
+EDITABLE
+$2.10
+Order type Limit · Max fill $2.20
+Contracts
+EDITABLE
+1
+Full-premium exposure
+$215
+Max loss budget
+$3,750
+Account default
+Risk-derived size & budget override
+Decision & execution
+Exit method for this trade
+Ladder
+Arithmetic
+Monte Carlo
+Barrier Race
+Clear
+Arithmetic: Compute Arithmetic Plan first · Monte Carlo: Run Monte Carlo Estimate first · Barrier Race: Run Monte Carlo Estimate first
+Target row
+TP1
+$194.25 stock
+$3.50 option · Time not supplied
+TP2
+$195.00 stock
+$4.20 option · Time not supplied
+Judged on
+Stock stop
+Premium stop
+A record of which stop this trade was judged on. It does not change which alerts fire — the stock stop and the premium stop both keep firing exactly as they do today.
+Your selected target
+Chosen method
+Ladder
+Chosen target
+TP1
+Recorded stock target
+$194.25 stock
+Matched result option premium
+$3.50 /share
+Independent target probability before expiry
+Unavailable
+Conditional target median
+Unavailable
+Estimated dollar outcome (full position, before costs)
+Unavailable — no matched calculation premium basis
+Contracts
+1
+Recorded decision details
+Review the single Exit Plan ↑ — selecting a method or target does not replace those settings or run a calculation.
+What Track basket and direct sends will submit
+Submission review
+What Track basket and the direct sends submit for this card
+Destination & request
+Track basket
+Portfolio row only — no broker order · stored as AAPL|185|2026-12-18|C
+Place Limit
+Select a paper broker
+Right Now — Market
+Select a paper broker
+Contract
+AAPL 185C 12/18/26 · AAPL|185|2026-12-18|C
+Expiry
+2026-12-18 · 75 DTE
+Quantity
+1 contracts × 100 = 100 shares
+Entry limit
+$2.10/share · plan order type Limit · Place Limit posts it; Right Now — Market posts no limit
+Entry basis sent
+$2.15/share · live mid — provisional; the server re-quotes at save (not a fill)
+Saved entry, quantity and premium-stop fraction
+Unresolved until server review — the server re-quotes, applies the exposure check and derives the fraction at save
+Position settings · actual, submitted, distinct from model results
+Stock stop
+$180.00 stock · plan-derived (the server re-anchors it to the live price)
+Premium stop
+Global 60% of the saved entry — no dollar amount sent; the server resolves it against the fill
+Time-exit alert
+≤3 days to expiry — an alert, not a close; app-wide rule, not a per-position field
+Structural stop
+None attached
+Max-loss override
+None
+These are in-app alert settings on the Portfolio row. No protective stop-loss or take-profit order is sent to a broker.
+Recorded decision & target alert (the selection is not applied to the settings)
+Method
+Ladder
+Recorded stock target
+$194.25 stock
+Recorded option target
+None
+Judged on
+Stock stop — a recorded basis; the stock-stop and premium-stop alerts both stay armed
+Intended basis
+Live Ladder — follows the first Ladder target; no fixed price is stored
+Effective target alert
+Unresolved until server review
+Technical details and provenance
+Execute via
+IBKR Paper
+Tradier Paper
+NOT CONFIGURED
+Tastytrade Paper
+NOT CONFIGURED
+Track basket
+Entry basis is provisional — the server re-quotes at save; saved entry, quantity, premium-stop fraction and effective target alert remain unresolved until server review. Not a fill.
+Exit settings are in-app alerts; no protective stop-loss or take-profit order is sent to a broker.
+Live mid: $2.15
+Live stock: $185.20
+›
+Contract Qualification
+78/100 · PASS
+›
+Alternative contracts (1)
+View chart
+Export JSON
+REC-1794289271693-D472
+←
+Back: Contracts
+STEP 7 OF 7
+Done
+→
+PRE-TRADE CHECKLIST · AAPL
+Gates for this candidate. Portfolio-level checks live below.
+IV acceptable
+Score ≥ 55
+R:R ≥ 2.0
+Spread < 5% of price
+HISTORICAL ANALOGS
+Not yet available.
+WATCHLIST · TOP 5
+PORTFOLIO
+Positions
+0
+Deployed
+$0
+Open P&L
+$0
+Winners
+0 / 0

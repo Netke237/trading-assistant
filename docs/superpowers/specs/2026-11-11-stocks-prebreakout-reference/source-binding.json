@@ -1,0 +1,111 @@
+{
+  "application_baseline": "0a453f1940a077015949e760d02ef5a6d921f62a",
+  "proposal_commit": "c87227d4",
+  "scope": "Offline permanent HTML design references only; no application implementation or full preservation audit claimed.",
+  "application_source_pins": [
+    {
+      "path": "frontend/components/organisms/StockPositionCard/index.tsx",
+      "sha256": "33bef7bd599eb1a95c8807efb4186f2b9f9c0a9a27176c3e558befef8177ff17"
+    },
+    {
+      "path": "frontend/components/organisms/StockPositionCard/InitialStrategyTargets.tsx",
+      "sha256": "5b4e6d824eb5c16d9f9ae27e8296141e61c139877e7e2c2f12e738d6cb3faec2"
+    },
+    {
+      "path": "frontend/components/organisms/StockPositionCard/PositionEvidence.tsx",
+      "sha256": "5b8b049fa658cbbf63dd04c89a881b678854069c21f8e2248ca0fbf7130472a6"
+    },
+    {
+      "path": "frontend/components/organisms/StockSendDialog/index.tsx",
+      "sha256": "00dccb58cf0339fe730bcfa61c85596f21097b7908f880f9b6361ead7005f82e"
+    },
+    {
+      "path": "frontend/lib/stockExecutionSession.ts",
+      "sha256": "268578a21f6dca687f5697b82ae80a8dc55bf103d7853d9fac7ae52428ad7217"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-7-position-card/page.tsx",
+      "sha256": "080e469888b183503e99253362a9131baee8f95ee7f4315fed99544f34687801"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/page.tsx",
+      "sha256": "bb6eedddec03f927b53b306bdcb6161623cb8a12a5c415efbc7a4078ccc913ac"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/PreBreakoutRowDetails.tsx",
+      "sha256": "e652bdcf55126b6b07aba7908ea7125c062e49a2fe4de2fbd66af8a1de5bf9e3"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockContext.tsx",
+      "sha256": "07e8fb9271d0e92a1386240abb3af1811aa81c8a2fdcca8eef5316820c109e7a"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedStockNews.tsx",
+      "sha256": "4119e8977fe6daa3b0487fa44f051e8a8d82ba6101a6d5fdd33b354f1a76e6fd"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/SelectedSetupChart.tsx",
+      "sha256": "2f35e7b2ce629477a2d3edd7a67a53c564c166032bc3912bce75db09208de5de"
+    },
+    {
+      "path": "frontend/app/(frame)/screener/step-4-prebreakout/scanChartLines.ts",
+      "sha256": "1ba022948d6ac8c60988f9d057844826dff7f9737d0d20a68dca7294fac2c09c"
+    },
+    {
+      "path": "frontend/components/organisms/PreBreakoutParamsPanel/index.tsx",
+      "sha256": "9127292f15263ac6a74504cd62c37026297ebc3cddd0cddae8b01f6183258f83"
+    },
+    {
+      "path": "frontend/components/organisms/FibPullbackParamsPanel/index.tsx",
+      "sha256": "2c7462124eefc9ebe8033bc5041e9035d095edca00bdccbb7556c02258a92f4b"
+    }
+  ],
+  "preview_pins": [
+    {
+      "path": "index.html",
+      "sha256": "92875088a9ef3355532b6af52e55ce2b023b16ead55a81bf78538ac65abfdddd"
+    },
+    {
+      "path": "prebreakout-preview.html",
+      "sha256": "ba5bce311b37348d7a28e0cc5dd76fd97d98c51565ec828aee3f3d50ad747b95"
+    },
+    {
+      "path": "stocks-preview.html",
+      "sha256": "59f9cba5a3b41541ae39a3f986fcbec4311eff268d5a30cce73e505ce848108c"
+    }
+  ],
+  "harness_pin": {
+    "path": "verify-previews.cjs",
+    "sha256": "26c42632a2f4a321c17c73a88bcf80f25dc208ab19a218f0cfb87ec10961eb50"
+  },
+  "evidence_pins": [
+    {
+      "path": "evidence/browser-checks.json",
+      "sha256": "dfed4f43f52fa1c18cf70f6fd1e96e1d1f3d5ed3b7cdb1e4668c4ff6c71196ea"
+    },
+    {
+      "path": "evidence/scanner-1366-dark-initial.png",
+      "sha256": "b55699778bee3bca1a3eebb2adb8541bc168eb060be95b4ee835a0a42ecb2be1"
+    },
+    {
+      "path": "evidence/scanner-1366-light-ema-collapsed.png",
+      "sha256": "47864d3e6bbf30e2350147f132ad98011677fe7d5a779c454c006a58a39f11ba"
+    },
+    {
+      "path": "evidence/scanner-1366-light-fib-collapsed.png",
+      "sha256": "3e8417006ce65ff0d060dd0fbeaecc039de880f3cc3a4f17b7d2abf88d44a3bc"
+    },
+    {
+      "path": "evidence/stocks-1366-dark-compare.png",
+      "sha256": "232de5c8e60fde6b305917c17f2b8122291ae84b38bff29b6c1e26bdce2fd4cb"
+    },
+    {
+      "path": "evidence/stocks-1366-dark-initial.png",
+      "sha256": "651c7738abc3228e3cf20049de01081332232746d283ec903e2296c5529dcc6a"
+    },
+    {
+      "path": "evidence/stocks-1366-light-compare.png",
+      "sha256": "54e0b256cd39cd7ed3cc10cc5be955855f6928773f00bc715c7a3677c2ea11dc"
+    }
+  ]
+}

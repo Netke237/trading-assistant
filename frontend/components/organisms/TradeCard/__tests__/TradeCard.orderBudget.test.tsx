@@ -4,12 +4,24 @@
  * docs/superpowers/plans/2026-09-25-p2-premium-stop-position-editing-plan.md
  */
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render as renderCard, screen, fireEvent, within } from '@testing-library/react';
 import { TradeCard, EditableKV } from '@/components/organisms/TradeCard';
 import { api } from '@/lib/api';
 import { useRiskStore } from '@/lib/riskStore';
 import { useSettingsStore } from '@/lib/settingsStore';
 import type { TradeCardData } from '@/types/domain';
+
+// These existing calculation/flow tests exercise all methods explicitly.
+const render = (...args: Parameters<typeof renderCard>) => {
+  const view = renderCard(...args);
+  for (const name of ['Arithmetic', 'Ladder']) {
+    const toggle = screen.queryByRole('checkbox', { name });
+    if (toggle && toggle.getAttribute('aria-checked') !== 'true') fireEvent.click(toggle);
+  }
+  const summary = screen.getByText('Risk-derived size & budget override');
+  fireEvent.click(summary);
+  return view;
+};
 
 jest.mock('@/lib/api', () => ({
   api: {
@@ -44,11 +56,13 @@ const plan = {
   targets: [], atr: 3.5, computedAt: '2026-10-13T12:00:00Z',
 };
 const planned = () => card({ exit: { ...card().exit, exitPlan: plan } });
-const group = () => within(screen.getByRole('region', { name: 'Order inputs & risk budget' }));
+const group = () => within(screen.getByRole('region', { name: 'Entry & position size' }));
+const exit = () => within(screen.getByRole('region', { name: 'Exit Plan' }));
+const fields = (label: string) => ['Invalidation', 'Premium stop'].includes(label) ? exit() : group();
 const budget = () => within(group().getByRole('region', { name: 'Max loss budget' }));
 const edit = (label: string, value: string) => {
-  fireEvent.click(group().getByLabelText(`Edit ${label}`));
-  const input = group().getByLabelText(`Edit ${label}`);
+  fireEvent.click(fields(label).getByLabelText(`Edit ${label}`));
+  const input = fields(label).getByLabelText(`Edit ${label}`);
   fireEvent.change(input, { target: { value } });
   fireEvent.blur(input);
 };
@@ -57,16 +71,16 @@ beforeEach(() => {
   useSettingsStore.setState({ premiumStopPct: 0.6 });
   useRiskStore.setState({ limits: { ...useRiskStore.getState().limits, portfolioValue: 100000, maxLossPerTradePct: 0.0375 } });
 });
-it('groups one live set of entry, exit, budget and sizing controls before method results', () => {
+it('keeps one live set of exit controls before methods and entry, budget and sizing after methods', () => {
   render(<TradeCard data={planned()} contracts={2} />);
   for (const label of ['Limit', 'Contracts', 'Invalidation', 'Premium stop'])
-    expect(group().getByLabelText(`Edit ${label}`)).toBeVisible();
-  expect(group().getByText('Max fill')).toBeVisible();
-  expect(group().getByText('Time exit')).toBeVisible();
+    expect(fields(label).getByLabelText(`Edit ${label}`)).toBeVisible();
+  expect(group().getByText(/Order type Limit · Max fill \$5\.40/)).toBeVisible();
+  expect(exit().getByText('Time exit')).toBeVisible();
   expect(budget().getByText('$3,750 (account default)')).toBeVisible();
   expect(group().getByText(/Risk-derived size: 12 contracts \(12.50 exact\)/)).toBeVisible();
   expect(screen.getAllByRole('button', { name: 'Apply recommended contract size' })).toHaveLength(1);
-  expect(screen.getByRole('region', { name: 'Order inputs & risk budget' }).compareDocumentPosition(screen.getByText('Arithmetic Profit Target')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText('Arithmetic Profit Target').compareDocumentPosition(screen.getByRole('region', { name: 'Entry & position size' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 it('distinguishes entered quantity, recommendation, snapshot exposure and arithmetic loss and retains explicit Apply', () => {
   const change = jest.fn();
@@ -107,7 +121,7 @@ it('retains clear-to-inherit entry and execution stops', () => {
   render(<TradeCard data={planned()} liveMid={5.2} />);
   for (const [label, changed, original] of [['Limit', '6', '$5.20'], ['Invalidation', '180', '$179.64'], ['Premium stop', '2', '$3.12']]) {
     edit(label, changed); edit(label, '');
-    expect(group().getByLabelText(`Edit ${label}`)).toHaveTextContent(original);
+    expect(fields(label).getByLabelText(`Edit ${label}`)).toHaveTextContent(original);
   }
 });
 it('clears prior candidate budget draft and restores supplied quantity/override', () => {
@@ -123,8 +137,8 @@ it('clears prior candidate budget draft and restores supplied quantity/override'
 });
 it('keeps low-premium execution stop read-only and missing arithmetic loss unavailable', () => {
   render(<TradeCard data={card()} liveMid={0.01} />);
-  expect(group().queryByLabelText('Edit Premium stop')).not.toBeInTheDocument();
-  expect(group().getByText('global (60%)')).toBeVisible();
+  expect(exit().queryByLabelText('Edit Premium stop')).not.toBeInTheDocument();
+  expect(exit().getByText('global (60%)')).toBeVisible();
   expect(group().getByText(/Arithmetic stop-loss estimate unavailable/)).toBeVisible();
 });
 it('distinguishes selected-contract exposure from whole-spread debit and max loss', () => {
@@ -143,7 +157,22 @@ it('keeps missing contract/basis unavailable and a genuine returned zero loss vi
   expect(group().getByText('Full-premium exposure').parentElement).toHaveTextContent('—');
   expect(group().getByText(/Arithmetic stop-loss estimate unavailable/)).toBeVisible();
   rerender(<TradeCard key="zero" data={card({ exit: { ...card().exit, exitPlan: { ...plan, stop: { ...plan.stop, contractPrice: 5.2 } } } })} />);
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
   expect(group().getByText('$0.00')).toBeVisible();
   rerender(<TradeCard key="missing" data={card({ exit: { ...card().exit, exitPlan: { ...plan, stop: { ...plan.stop, contractPrice: Number.NaN } } } })} />);
+  fireEvent.click(screen.getByText('Risk-derived size & budget override'));
   expect(group().getByText(/Arithmetic stop-loss estimate unavailable/)).toBeVisible();
+});
+
+it('starts with one compact Entry & position size panel and a closed sizing explanation', () => {
+  renderCard(<TradeCard data={planned()} contracts={2} />);
+  const panel = screen.getByRole('region', { name: 'Entry & position size' });
+  expect(within(panel).getByLabelText('Edit Limit')).toBeVisible();
+  expect(within(panel).getByLabelText('Edit Contracts')).toBeVisible();
+  expect(within(panel).getByText('$1040')).toBeVisible();
+  const details = within(panel).getByText('Risk-derived size & budget override').closest('details')!;
+  expect(details).not.toHaveAttribute('open');
+  expect(within(panel).getByRole('button', { name: 'Apply recommended contract size', hidden: true })).not.toBeVisible();
+  fireEvent.click(within(panel).getByText('Risk-derived size & budget override'));
+  expect(within(panel).getByRole('button', { name: 'Apply recommended contract size' })).toBeEnabled();
 });

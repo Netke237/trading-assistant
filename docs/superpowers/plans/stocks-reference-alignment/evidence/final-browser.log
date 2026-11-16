@@ -1,0 +1,19 @@
+
+Running 12 tests using 1 worker
+
+(node:821) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1200px in dark (7.6s)
+  ✓   2 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1200px in dark (5.2s)
+  ✓   3 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1200px in light (5.1s)
+  ✓   4 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1200px in light (5.2s)
+  ✓   5 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1366px in dark (5.2s)
+  ✓   6 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1366px in dark (7.0s)
+  ✓   7 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1366px in light (5.5s)
+  ✓   8 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1366px in light (4.9s)
+  ✓   9 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1920px in dark (5.3s)
+  ✓  10 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1920px in dark (5.0s)
+  ✓  11 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bullish save payload at 1920px in light (5.3s)
+  ✓  12 e2e/tests/stock-position-presentation.spec.ts:71:150 › Position workspace preserves Bearish save payload at 1920px in light (4.7s)
+
+  12 passed (1.1m)
